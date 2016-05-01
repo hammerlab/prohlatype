@@ -37,23 +37,24 @@ let parse_data line =
 
 (* This 'could' be 2 separate types (for reference and non). *)
 type 'sr seq_elems =
-  | Start of int
+  | Start of int * string
   | End of int
   | Boundary of (int * int)   (* idx and pos *)
   | Nuc of (int * 'sr)        (* pos and what *)
   | Gap of (int * int)        (* pos and length *)
 
 let position = function
-  | Start p
+  | Start (p, _)
   | End p
   | Boundary (_, p)
   | Nuc (p, _)
   | Gap (p, _) -> p
 
 type 'sr parse_struct =
+  { allele    : string
   (* For now, it makes it easier to have some kind of sane delimiter to align
      and spot check these alignments. The "|" are the 'boundaries' *)
-  { boundary  : int
+  ; boundary  : int
   (* Where we are in the sequence, this starts from the first number specified
      in the file and increments as we read characters. *)
   ; position  : int
@@ -62,19 +63,22 @@ type 'sr parse_struct =
   ; in_data   : bool
   }
 
-let init_ps pos =
-  { boundary = 1
-  ; position = pos
-  ; sequence = Boundary (0, pos) :: []
+let init_ps allele position =
+  { allele
+  ; position
+  ; boundary = 0
+  ; sequence = []
   ; gaps     = []
   ; in_data  = false
   }
 
 let new_status ps datum =
   match ps.in_data, datum with
-  | false, true  -> { ps with in_data = true; sequence = Start ps.position :: ps.sequence }
+  | false, true  -> { ps with in_data = true
+                            ; sequence = Start (ps.position, ps.allele) :: ps.sequence }
   | false, false -> ps
-  | true, false  -> { ps with in_data = false; sequence = End ps.position :: ps.sequence }
+  | true, false  -> { ps with in_data = false
+                            ; sequence = End ps.position :: ps.sequence }
   | true, true   -> ps
 
 let update_ps ?incr ?(datum=true) insert_seq ps =
@@ -180,23 +184,28 @@ type 'sr result =
   ; alg_htbl  : (string, 'sr parse_struct) Hashtbl.t
   }
 
-let empty_result pos =
-  { start_pos = pos
-  ; reference = String.empty
+let empty_result ref_allele position =
+  { start_pos = position
+  ; reference = ref_allele
   ; ref_gaps  = []
   ; gap_until = min_int
-  ; ref_ps    = init_ps pos
+  ; ref_ps    = init_ps ref_allele position
   ; alg_htbl  = Hashtbl.create 100
   }
 
-let reverse_ps_sequence lst =
+let reverse_seq lst =
   List.rev lst
   |> List.map (function
-      | Nuc (n, sl) -> Nuc (n, List.rev sl |> String.of_character_list)
-      | Boundary b  -> Boundary b
-      | Gap g       -> Gap g
-      | Start s     -> Start s
-      | End e       -> End e)
+      | Nuc (n, sl)   -> Nuc (n, List.rev sl |> String.of_character_list)
+      | Boundary b    -> Boundary b
+      | Gap g         -> Gap g
+      | Start (p, s)  -> Start (p, s)
+      | End e         -> End e)
+
+let normalize_seq ps =
+  match ps.sequence with
+  | End _ :: _ -> reverse_seq ps.sequence
+  | _ ->          reverse_seq (End ps.position :: ps.sequence)
 
 type parse_state =
   | Header
@@ -207,8 +216,8 @@ let parse_ic ic =
   let update x = function
     | Position p     -> { x with start_pos = p }
     | Dash           -> x (* ignore dashes *)
-    | SeqData (a, s) ->
-      if String.is_empty x.reference || x.reference = a then
+    | SeqData (allele, s) ->
+      if x.reference = allele then
         let nref_ps = List.fold_left to_ref_seq_elems x.ref_ps s in
         (* Since the reference sequence is updated first, we can for the
            most recent gaps. *)
@@ -216,18 +225,18 @@ let parse_ic ic =
         let new_until = match new_gaps with | [] -> x.gap_until | (h,_) :: _ -> h in
         printf "new gaps: until %d \n" x.gap_until;
         List.iter (fun (p,l) -> printf "%d - %d\n" p l) new_gaps;
-        { x with reference = a
+        { x with reference = allele
                ; ref_ps    = nref_ps
                ; ref_gaps  = new_gaps
                ; gap_until = new_until
         }
       else
         let cur_ps =
-          try Hashtbl.find x.alg_htbl a
-          with Not_found -> init_ps x.start_pos
+          try Hashtbl.find x.alg_htbl allele
+          with Not_found -> init_ps allele x.start_pos
         in
         let cur_ps' = List.fold_left update_seq { cur_ps with gaps = x.ref_gaps } s in
-        Hashtbl.replace x.alg_htbl a cur_ps';
+        Hashtbl.replace x.alg_htbl allele cur_ps';
         x
   in
   let rec loop state acc =
@@ -259,15 +268,23 @@ let parse_ic ic =
           begin
             let d = parse_data line in
             match d with
-            | Position p -> loop (Data d) (empty_result p)
+            | Position p -> loop_header (Data d)
             | _          -> invalid_arg "First data not position."
           end
-      | _ -> invalid_arg "Invalid Header parsing."
+      | Data _ when String.is_empty line -> loop_header state 
+      | Data (Position p) -> 
+          begin
+            match parse_data line with
+            | SeqData (allele, _) as d -> let res = empty_result allele p in
+                                          loop (Data d) (update res d)
+            | _                        -> loop_header state
+          end
+      | Data _ -> loop_header state
   in
   let reversed = loop_header Header in
-  let ref_seq = reverse_ps_sequence reversed.ref_ps.sequence in
+  let ref_seq = normalize_seq reversed.ref_ps in
   let all_seq =
-    Hashtbl.fold (fun all ps acc -> (all, reverse_ps_sequence ps.sequence) :: acc)
+    Hashtbl.fold (fun all ps acc -> (all, normalize_seq ps) :: acc)
       reversed.alg_htbl []
   in
   reversed.reference, ref_seq, all_seq
