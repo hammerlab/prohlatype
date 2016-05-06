@@ -1,3 +1,5 @@
+(* ./test.native ../foreign/IMGTHLA/ *)
+open Printf 
 
 let to_suffix = function
   | `gen  -> "gen"
@@ -39,3 +41,13 @@ let to_fnames ?(suffix=`gen) dir =
     ; "alignments/V"
     ; "alignments/Y"
     ] 
+
+
+let () =
+  if !Sys.interactive || Array.length Sys.argv = 1 then
+    ()
+  else
+    to_fnames Sys.argv.(1)
+    |> List.iter (fun f ->
+        let _p = Mas_parser.from_file f in
+        Printf.printf "parsed %s\n" f)

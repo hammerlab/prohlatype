@@ -3,9 +3,10 @@
   Hashcons the strings?
 *)
 
+(* OCamlgraph *)
 open Graph
 open Printf
-open Parser
+open Mas_parser
 
 module String = Sosa.Native_string
 

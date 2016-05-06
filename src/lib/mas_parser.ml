@@ -1,23 +1,21 @@
-(*
-HLA-A Genomic Sequence Alignments
-IPD-IMGT/HLA Release: 3.24.0
-Sequences Aligned: 2016 April 15
-Steven GE Marsh, Anthony Nolan Research Institute.
-Please see http://hla.alleles.org/terms.html for terms of use.
+(* How this works:
 
- gDNA              -300
-                   |
- A*01:01:01:01     CAGGAGCAGA GGGGTCAGGG CGAAGTCCCA GGGCCCCAGG CGTGGCTCTC AGGGTCTCAG GCCCCGAAGG CGGTGTATGG ATTGGGGAGT CCCAGCCTTG
- A*01:01:01:02N    ********** ********** ********** ********** ********** ********** ********** *********- ---------- ----------
- A*01:01:01:03     ********** ********** ********** ********** ********** ********** ********** ********** ********** **********
-   *)
+This is a line based format. For our purposes, there are three types of lines
+as determined by {type line}, where `SeqData` has most of the actual alignment
+data. We divide the parsing of sequences into two types: reference and
+alternatives. We take special care of keeping track of gaps in the reference so
+that positions, when parsing the alternatives, are annotated with regard to
+the reference positions.
+
+We return
+*)
 
 open Printf
 module String = Sosa.Native_string
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
-type data =
+type line =
   | Position of int
   | Dash
   | SeqData of string * string list
@@ -32,8 +30,7 @@ let parse_data line =
       | ["gDNA"; pos]           -> Position (int_of_string pos)
       | ["cDNA"; pos]           -> Position (int_of_string pos)
       | []                      -> invalid_arg "Empty data line!"
-      | s :: lst (*when lst <> []*) -> SeqData (s, lst)
-      (*| _                       -> invalid_arg ("Unexpected data line:" ^  line) *)
+      | s :: lst                -> SeqData (s, lst)
 
 (* This 'could' be 2 separate types (for reference and non). *)
 type 'sr seq_elems =
@@ -175,9 +172,9 @@ let update_seq ps s =
   in
   update_seq_char ps (String.to_character_list s)
 
-type 'sr result =
+type 'sr parse_result =
   { start_pos : int
-  ; reference : string
+  ; ref       : string
   ; ref_gaps  : (int * int) list
   ; gap_until : int                     (* This is such ugly hackery for poor reasons. *)
   ; ref_ps    : 'sr parse_struct
@@ -186,7 +183,7 @@ type 'sr result =
 
 let empty_result ref_allele position =
   { start_pos = position
-  ; reference = ref_allele
+  ; ref       = ref_allele
   ; ref_gaps  = []
   ; gap_until = min_int
   ; ref_ps    = init_ps ref_allele position
@@ -210,22 +207,26 @@ let normalize_seq ps =
 type parse_state =
   | Header
   | Empty
-  | Data of data
+  | Data of line
 
-let parse_ic ic =
+type result =
+  { reference : string
+  ; ref_elems : string seq_elems list
+  ; alt_elems : (string * string seq_elems list) list
+  }
+
+let from_in_channel ic =
   let update x = function
     | Position p     -> { x with start_pos = p }
     | Dash           -> x (* ignore dashes *)
     | SeqData (allele, s) ->
-      if x.reference = allele then
+      if x.ref = allele then
         let nref_ps = List.fold_left to_ref_seq_elems x.ref_ps s in
         (* Since the reference sequence is updated first, we can for the
            most recent gaps. *)
         let new_gaps = find_reference_gaps x.gap_until nref_ps.sequence in
         let new_until = match new_gaps with | [] -> x.gap_until | (h,_) :: _ -> h in
-        printf "new gaps: until %d \n" x.gap_until;
-        List.iter (fun (p,l) -> printf "%d - %d\n" p l) new_gaps;
-        { x with reference = allele
+        { x with ref       = allele
                ; ref_ps    = nref_ps
                ; ref_gaps  = new_gaps
                ; gap_until = new_until
@@ -282,29 +283,20 @@ let parse_ic ic =
       | Data _ -> loop_header state
   in
   let reversed = loop_header Header in
-  let ref_seq = normalize_seq reversed.ref_ps in
-  let all_seq =
+  let ref_elems = normalize_seq reversed.ref_ps in
+  let alt_elems =
     Hashtbl.fold (fun all ps acc -> (all, normalize_seq ps) :: acc)
       reversed.alg_htbl []
   in
-  reversed.reference, ref_seq, all_seq
+  { reference = reversed.ref ; ref_elems ; alt_elems }
 
-let parse_f f =
+let from_file f =
   let ic = open_in f in
   try
-    let r = parse_ic ic in
+    let r = from_in_channel ic in
     close_in ic;
     r
   with e ->
     close_in ic;
     raise e
 
-
-(*
-let do_it () =
-  let f = "/Users/leonidrozenberg/Documents/code/foreign/IMGTHLA/alignments/A_gen.txt" in
-  let ic = open_in f in
-  let r = parse ic in
-  close_in ic;
-  r
-*)

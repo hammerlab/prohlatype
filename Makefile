@@ -11,4 +11,6 @@ cli:
 clean:
 	ocamlbuild -clean
 
+test:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts/ test.native
 
