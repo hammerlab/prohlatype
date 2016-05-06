@@ -2,5 +2,5 @@
 #require "ocamlgraph"
 
 #directory "_build/src/lib"
-#load_rec "parser.cmo"
+#load_rec "mas_parser.cmo"
 #load_rec "to_graph.cmo"
