@@ -45,7 +45,12 @@ let insert_nuc reference g (allele, pos, seq) =
     G.add_edge_e g (G.E.create vm allele v2);
     v2
 
-let add_alt reference g allele pv se =
+module SeqSet = Set.Make (struct
+  type t = string Mas_parser.seq_elems
+  let compare = compare
+end)
+
+let add_alt ~reference g ref_gaps_set allele pv se =
   match se with
   | Start _ | End _   ->
     let v = seq_elem_to_vertex se in
@@ -60,7 +65,15 @@ let add_alt reference g allele pv se =
   | Nuc (p, s) ->
     insert_nuc reference g (allele, p, s)
   | Gap (p, gl) ->
-    insert_gap reference g (allele, p, gl)
+    (* Gap is in reference, so the appropriate break already exists, just need
+      to find the appropriate reference edge and replicated it. *)
+    if SeqSet.mem se ref_gaps_set then
+      (* Not create! *)
+      let v = find_or_create_break reference g p pv in
+      G.add_edge_e g (G.E.create pv allele v);
+      v
+    else
+      insert_gap reference g (allele, p, gl)
 
 let add_elems g add_seq_elem = function
   | h :: t ->
@@ -69,17 +82,24 @@ let add_elems g add_seq_elem = function
       List.fold_left ~f:add_seq_elem ~init:v0 t |> ignore
   | _ -> invalid_argf "Empty sequence"
 
-let add_non_ref reference g (allele, allele_seq) =
+let add_non_ref reference g ref_gaps_set (allele, allele_seq) =
   printf "adding %s \n" allele;
-  add_elems g (add_alt reference g allele) allele_seq
+  add_elems g (add_alt ~reference g ref_gaps_set allele) allele_seq
 
 let construct ?(num_alt_to_add=max_int) {reference; ref_elems; alt_elems} =
   let ref_length = List.length ref_elems in
   let num_alleles = List.length alt_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
   add_elems g (add_reference reference g) ref_elems;
-  List.iteri ~f:(fun i p -> if i < num_alt_to_add then
-                 add_non_ref reference g p) alt_elems;
+  let ref_gaps_set =
+    List.fold_left ref_elems ~init:SeqSet.empty
+      ~f:(fun s v->
+        match v with | Gap _ -> SeqSet.add v s | _ -> s)
+  in
+  List.iteri ~f:(fun i p ->
+    if i < num_alt_to_add then
+      add_non_ref reference g ref_gaps_set p)
+  alt_elems;
   g
 
 
