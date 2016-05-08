@@ -22,14 +22,16 @@ let to_fnames ?suffix dir =
   |> List.map (Filename.concat dir)
 
 let () =
-  if !Sys.interactive || Array.length Sys.argv = 1 then
+  if !Sys.interactive then
+    ()
+  else if Array.length Sys.argv <= 1 then
     print_endline "Please specify IMGT alignments directory."
   else
     to_fnames Sys.argv.(1)
     |> List.iter (fun f ->
         try
-        let _p = Mas_parser.from_file f in
-        Printf.printf "parsed %s\n" f
+          let _p = Mas_parser.from_file f in
+          printf "parsed %s\n" f
         with e ->
-          Printf.eprintf "failed to parse %s\n" f;
+          eprintf "failed to parse %s\n" f;
           raise e)

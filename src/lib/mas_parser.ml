@@ -173,7 +173,7 @@ type 'sr parse_result =
   ; ref       : string      (* Name of reference. *)
   (* As we parse the alternative tracks, we have to Keep track of the gaps that
      we encounter in the reference, so that all positions are with respect to
-     the reference. *) 
+     the reference. *)
   ; ref_gaps  : (int * int) list  (* Recently encountered reference gaps. *)
   ; gap_until : int               (* Highest seen gap position in _previous_ pass. *)
   ; ref_ps    : 'sr parse_struct

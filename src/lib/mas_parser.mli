@@ -64,6 +64,8 @@ type result =
   (** Seqeucen elements of alternative alleles in an associated list.*)
   }
 
+(** Parse an input channel. *)
 val from_in_channel : in_channel -> result
 
+(** Parse an alignment file. *)
 val from_file : string -> result
