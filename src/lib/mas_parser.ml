@@ -109,8 +109,12 @@ let insert_nuc pos c = function
   | []
   | Start _ :: _
   | Boundary _ :: _
-  | Gap _ :: _ as l   -> Nuc (pos, c :: []) :: l
-  | Nuc (p, ss) :: tl -> Nuc (p, c :: ss) :: tl
+  | Gap _ :: _ as l          -> Nuc (pos, c :: []) :: l
+  | (Nuc (p, ss) :: tl) as l ->
+      if p + List.length ss = pos then
+        Nuc (p, c :: ss) :: tl
+      else
+        Nuc (pos, c :: []) :: l
 
 let insert_nuc_s c ps =
   update_ps ~incr:`Pos (insert_nuc ps.position c) ps
@@ -161,7 +165,7 @@ let update_seq dna ps s =
     | m :: t when is_missing m    -> update_seq_char (insert_missing ps) t
     | g :: t when is_gap g        -> update_seq_char (insert_gap_s ~incr:`Pos ps) t
     | c :: t when is_nuc c        -> update_seq_char (insert_nuc_s c ps) t
-    | '-' :: t                    -> update_seq_char (update_ps ~incr:`Pos (fun l -> l) ps) t
+    | s :: t when is_same s       -> update_seq_char (update_ps ~incr:`Pos (fun l -> l) ps) t
     | 'X' :: _ when (not dna)     -> ps (* signals an 'end' for AA's *)
     | x :: _                      -> invalid_argf "unrecognized char in seq: %c" x
   in
