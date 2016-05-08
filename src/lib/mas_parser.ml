@@ -15,23 +15,6 @@ module String = Sosa.Native_string
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
-type line =
-  | Position of int
-  | Dash
-  | SeqData of string * string list
-
-(* Assume that it has been trimmed. *)
-let parse_data line =
-  String.split line ~on:(`Character ' ')
-  |> List.filter ((<>) String.empty)
-  |> function
-      | ["|"]                   -> Dash
-      | "AA" :: "codon" :: _    -> Dash (* not really but not modeling this at the moment. *)
-      | ["gDNA"; pos]           -> Position (int_of_string pos)
-      | ["cDNA"; pos]           -> Position (int_of_string pos)
-      | []                      -> invalid_arg "Empty data line!"
-      | s :: lst                -> SeqData (s, lst)
-
 (* This 'could' be 2 separate types (for reference and non). *)
 type 'sr seq_elems =
   | Start of int * string
@@ -50,13 +33,18 @@ let position = function
 type 'sr parse_struct =
   { allele    : string
   (* For now, it makes it easier to have some kind of sane delimiter to align
-     and spot check these alignments. The "|" are the 'boundaries' *)
+     and spot check these alignments. The "|" are the 'boundaries'. This keeps
+     track of the most recently encountered boundary marker, starting with 0. *)
   ; boundary  : int
   (* Where we are in the sequence, this starts from the first number specified
-     in the file and increments as we read characters. *)
+     in the file and increments as we read characters. This value must be with
+     regard to the _reference_ position. *)
   ; position  : int
   ; sequence  : 'sr seq_elems list
   ; gaps      : (int * int) list    (* pos and size *)
+  (* Sequences use '*' to indicate missing information at the beginning or end
+     of the alignment. This flag (starts as false), determines if we're past
+     the parts that are missing. *)
   ; in_data   : bool
   }
 
@@ -110,8 +98,12 @@ let is_gap c      = c = gap_char
 let is_same c     = c = same_char
 let is_missing c  = c = missing_char
 let is_nucleotide = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
+let is_amino_acid =
+  function
+  | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
+  | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
+  | _ -> false
 
-(* reference mode *)
 let insert_nuc pos c = function
   | End _ :: _ -> invalid_argf "Trying to insert nucleotide %c at %d past end" c pos
   | []
@@ -139,15 +131,16 @@ let insert_boundary_s ps =
   update_ps ~incr:`Bnd
     (fun s -> Boundary (ps.boundary + 1, ps.position) :: s ) ps
 
-let to_ref_seq_elems ps s =
+let to_ref_seq_elems dna ps s =
+  let is_nuc = if dna then is_nucleotide else is_amino_acid in
   (* do not increase the position based on gaps in reference sequence.*)
   let rec to_ref_seq_elems_char ps = function
     | []                          -> ps
     | b :: t when is_boundary b   -> to_ref_seq_elems_char (insert_boundary_s ps) t
     | m :: t when is_missing m    -> to_ref_seq_elems_char (insert_missing ps) t
     | g :: t when is_gap g        -> to_ref_seq_elems_char (insert_gap_s ps) t
-    | c :: t when is_nucleotide c -> to_ref_seq_elems_char (insert_nuc_s c ps) t
-    | x :: _                      -> invalid_arg (sprintf "unrecognized char in reference ps: %c" x)
+    | c :: t when is_nuc c        -> to_ref_seq_elems_char (insert_nuc_s c ps) t
+    | x :: _                      -> invalid_argf "unrecognized char in reference ps: %c" x
   in
   to_ref_seq_elems_char ps (String.to_character_list s)
 
@@ -160,29 +153,36 @@ let find_reference_gaps until seq =
   in
   loop [] seq
 
-let update_seq ps s =
+let update_seq dna ps s =
+  let is_nuc = if dna then is_nucleotide else is_amino_acid in
   let rec update_seq_char ps = function
     | []                          -> ps
     | b :: t when is_boundary b   -> update_seq_char (insert_boundary_s ps) t
     | m :: t when is_missing m    -> update_seq_char (insert_missing ps) t
     | g :: t when is_gap g        -> update_seq_char (insert_gap_s ~incr:`Pos ps) t
-    | c :: t when is_nucleotide c -> update_seq_char (insert_nuc_s c ps) t
+    | c :: t when is_nuc c        -> update_seq_char (insert_nuc_s c ps) t
     | '-' :: t                    -> update_seq_char (update_ps ~incr:`Pos (fun l -> l) ps) t
-    | x :: _                      -> invalid_arg (sprintf "unrecognized char in seq: %c" x)
+    | 'X' :: _ when (not dna)     -> ps (* signals an 'end' for AA's *)
+    | x :: _                      -> invalid_argf "unrecognized char in seq: %c" x
   in
   update_seq_char ps (String.to_character_list s)
 
 type 'sr parse_result =
-  { start_pos : int
-  ; ref       : string
-  ; ref_gaps  : (int * int) list
-  ; gap_until : int                     (* This is such ugly hackery for poor reasons. *)
+  { dna       : bool        (* DNA or Amino Acid sequence -> diff characters *)
+  ; start_pos : int
+  ; ref       : string      (* Name of reference. *)
+  (* As we parse the alternative tracks, we have to Keep track of the gaps that
+     we encounter in the reference, so that all positions are with respect to
+     the reference. *) 
+  ; ref_gaps  : (int * int) list  (* Recently encountered reference gaps. *)
+  ; gap_until : int               (* Highest seen gap position in _previous_ pass. *)
   ; ref_ps    : 'sr parse_struct
   ; alg_htbl  : (string, 'sr parse_struct) Hashtbl.t
   }
 
-let empty_result ref_allele position =
-  { start_pos = position
+let empty_result ref_allele dna position =
+  { dna       = dna
+  ; start_pos = position
   ; ref       = ref_allele
   ; ref_gaps  = []
   ; gap_until = min_int
@@ -204,6 +204,25 @@ let normalize_seq ps =
   | End _ :: _ -> reverse_seq ps.sequence
   | _ ->          reverse_seq (End ps.position :: ps.sequence)
 
+type line =
+  | Position of bool * int  (* nucleotide or amino acid sequence  *)
+  | Dash
+  | SeqData of string * string list
+
+(* Assume that it has been trimmed. *)
+let parse_data line =
+  String.split line ~on:(`Character ' ')
+  |> List.filter ((<>) String.empty)
+  |> function
+      | "|" :: _                 -> Dash
+      | "AA" :: "codon" :: _    -> Dash (* not really but not modeling this at the moment. *)
+      | "gDNA" :: pos :: _      -> Position (true, int_of_string pos)
+      | "cDNA" :: pos :: _      -> Position (true, int_of_string pos)
+      | "Prot" :: pos :: _      -> Position (false, int_of_string pos)
+      | []                      -> invalid_arg "Empty data line!"
+      | s :: lst                -> SeqData (s, lst)
+
+
 type parse_state =
   | Header
   | Empty
@@ -217,13 +236,17 @@ type result =
 
 let from_in_channel ic =
   let update x = function
-    | Position p     -> { x with start_pos = p }
-    | Dash           -> x (* ignore dashes *)
+    (* Sometimes, the files position counting seems to disagree with this
+       internal count, usually because of multiple boundaries. Not certain
+       how to get to the bottom, but my manual string counts lead me to
+       believe that there isn't a bug in the parsing code.
+
+       So we don't check for: x.ref_ps.position = p as well. *)
+    | Position (dna, p) -> assert (x.dna = dna); x
+    | Dash              -> x (* ignore dashes *)
     | SeqData (allele, s) ->
       if x.ref = allele then
-        let nref_ps = List.fold_left to_ref_seq_elems x.ref_ps s in
-        (* Since the reference sequence is updated first, we can for the
-           most recent gaps. *)
+        let nref_ps = List.fold_left (to_ref_seq_elems x.dna) x.ref_ps s in
         let new_gaps = find_reference_gaps x.gap_until nref_ps.sequence in
         let new_until = match new_gaps with | [] -> x.gap_until | (h,_) :: _ -> h in
         { x with ref       = allele
@@ -236,7 +259,7 @@ let from_in_channel ic =
           try Hashtbl.find x.alg_htbl allele
           with Not_found -> init_ps allele x.start_pos
         in
-        let cur_ps' = List.fold_left update_seq { cur_ps with gaps = x.ref_gaps } s in
+        let cur_ps' = List.fold_left (update_seq x.dna) { cur_ps with gaps = x.ref_gaps } s in
         Hashtbl.replace x.alg_htbl allele cur_ps';
         x
   in
@@ -269,14 +292,14 @@ let from_in_channel ic =
           begin
             let d = parse_data line in
             match d with
-            | Position p -> loop_header (Data d)
+            | Position _ -> loop_header (Data d)
             | _          -> invalid_arg "First data not position."
           end
-      | Data _ when String.is_empty line -> loop_header state 
-      | Data (Position p) -> 
+      | Data _ when String.is_empty line -> loop_header state
+      | Data (Position (dna, p)) ->
           begin
             match parse_data line with
-            | SeqData (allele, _) as d -> let res = empty_result allele p in
+            | SeqData (allele, _) as d -> let res = empty_result allele dna p in
                                           loop (Data d) (update res d)
             | _                        -> loop_header state
           end

@@ -23,7 +23,7 @@ let to_fnames ?suffix dir =
 
 let () =
   if !Sys.interactive || Array.length Sys.argv = 1 then
-    ()
+    print_endline "Please specify IMGT alignments directory."
   else
     to_fnames Sys.argv.(1)
     |> List.iter (fun f ->
