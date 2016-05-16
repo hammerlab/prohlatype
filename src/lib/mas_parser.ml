@@ -16,12 +16,19 @@ module String = Sosa.Native_string
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
 (* This 'could' be 2 separate types (for reference and non). *)
-type 'sr seq_elems =
+type 'sr sequence_element =
   | Start of int * string
   | End of int
   | Boundary of (int * int)   (* idx and pos *)
   | Nuc of (int * 'sr)        (* pos and what *)
   | Gap of (int * int)        (* pos and length *)
+
+let sequence_element_to_string = function
+  | Start (p, allele) -> sprintf "Start %s at %d" allele p
+  | End p             -> sprintf "End %d" p
+  | Boundary (i, p)   -> sprintf "Boundary %d at %d" i p
+  | Nuc (p, s)        -> sprintf "Nucleotide %s at %d" s p
+  | Gap (p, l)        -> sprintf "Gap %d starting at %d" l p
 
 let position = function
   | Start (p, _)
@@ -40,7 +47,7 @@ type 'sr parse_struct =
      in the file and increments as we read characters. This value must be with
      regard to the _reference_ position. *)
   ; position  : int
-  ; sequence  : 'sr seq_elems list
+  ; sequence  : 'sr sequence_element list
   ; gaps      : (int * int) list    (* pos and size *)
   (* Sequences use '*' to indicate missing information at the beginning or end
      of the alignment. This flag (starts as false), determines if we're past
@@ -234,8 +241,8 @@ type parse_state =
 
 type result =
   { reference : string
-  ; ref_elems : string seq_elems list
-  ; alt_elems : (string * string seq_elems list) list
+  ; ref_elems : string sequence_element list
+  ; alt_elems : (string * string sequence_element list) list
   }
 
 let from_in_channel ic =

@@ -33,7 +33,7 @@ Please see http://hla.alleles.org/terms.html for terms of use.
 (** Elements that describe alignment sequence.
 
     All positions are given reletive to reference. *)
-type 'sr seq_elems =
+type 'sr sequence_element =
   | Start of int * string
   (** Start of sequence, contains position and name *)
 
@@ -53,14 +53,18 @@ type 'sr seq_elems =
   | Gap of (int * int)
   (** Gap of position and length. *)
 
+val position: 'a sequence_element -> int
+
+val sequence_element_to_string : string sequence_element -> string
+
 type result =
   { reference : string
   (** The name of the reference allele *)
 
-  ; ref_elems : string seq_elems list
+  ; ref_elems : string sequence_element list
   (** The sequence elements of the reference. *)
 
-  ; alt_elems : (string * string seq_elems list) list
+  ; alt_elems : (string * string sequence_element list) list
   (** Seqeucen elements of alternative alleles in an associated list.*)
   }
 

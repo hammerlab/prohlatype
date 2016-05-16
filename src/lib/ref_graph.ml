@@ -66,18 +66,21 @@ let previous_node_along allele g ~from =
   with Found v ->
     Some v
 
-let first_boundary = Sequences.B 0
-
 let fold_along_allele ?start allele g ~f ~init =
-  let start = Option.value start ~default:first_boundary in
+  let start = Option.value start ~default:(Sequences.S allele) in
   let next = next_node_along allele g in
-  let rec loop from acc =
-    match next ~from with
-    | None    -> acc
-    | Some vs -> loop vs (f acc vs)
+  let rec loop from (acc, stop) =
+    if stop then
+      acc
+    else
+      match next ~from with
+      | None    -> acc
+      | Some vs -> loop vs (f acc vs)
   in
   loop start (f init start)
 
+(* If this was a GADT we could encode the p s v inside the
+   N that we're matching! *)
 let vsplit_at g allele ~pos p s v =
   let open Sequences in
   let index = pos - p in
@@ -94,25 +97,22 @@ let vsplit_at g allele ~pos p s v =
   List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v2 l s)) su;
   (v1, v2)
 
-let find_or_create_break allele g pos start =
+let find_or_create_split_at allele g pos start =
   let open Sequences in
-  let module M = struct exception Done of G.vertex end in
-  try
-    fold_along_allele ~start allele g ~init:None ~f:(fun pv v ->
-      match v with
-      | S _ | E   -> pv
-      | B _       -> Some v
-      | N (p, s)  ->
-        if p = pos then
-          let v = Option.value pv ~default:v in
-          raise (M.Done v)
-        else if pos >= p + (String.length s) then
-          None
-        else  (* found it! *)
-          let _v1, v2 = vsplit_at g allele ~pos p s v in
-          raise (M.Done v2))
-    |> fun _ -> invalid_argf "reached end of find_or_create_break %d" pos
-  with M.Done v -> v
+  (*let module M = struct exception Done of G.vertex end in *)
+  fold_along_allele ~start allele g ~init:(start, start)
+    ~f:(fun (pv1, pv2) v ->
+          match v with
+          | S _       -> (pv2, v), false
+          | E         -> (pv2, v), true
+          | B _       -> (pv2, v), false
+          | N (p, s)  ->
+            if pos >= p + (String.length s) then  (* too long *)
+              (pv2, v), false
+            else if p = pos then                  (* found it exactly! *)
+              (pv2, v), true
+            else                                  (* in this nucleotide it! *)
+              vsplit_at g allele ~pos p s v, true)
 
 let vsplit_at_two g allele ~pos1 ~pos2 p s v =
   let open Sequences in
@@ -133,41 +133,42 @@ let vsplit_at_two g allele ~pos1 ~pos2 p s v =
   List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v3 l s)) su;
   (v1, v2, v3)
 
-let find_or_create_two_breaks allele g (pos1, pos2) =
-  if pos1 >= pos2 then invalid_argf "pos must be increasing" else
+let find_or_create_two_breaks allele g (pos1, pos2) start =
   let open Sequences in
-  let module M = struct exception Done of G.vertex * G.vertex end in
-  try
-    let start = S allele in
-    fold_along_allele ~start allele g ~init:None ~f:(fun pv v ->
-      match v with
-      | S _ | E   -> pv
-      | B _       -> Some v
-      | N (p, s)  ->
-        let len = String.length s in
-        if pos1 >= p + len then
-          None
-        else if p = pos1 then begin
-          if pos2 < p + len then begin
-            let v1, v2 = vsplit_at g allele ~pos:pos2 p s v in
-            (*let vp = match pv with Some b -> b | None -> v1 in *)
-            raise (M.Done (v1, v2))
-          end else
-            (* Won't change v *)
-            raise (M.Done (v, find_or_create_break allele g pos2 v))
-        end else begin
-          if pos2 < p + len then begin
-            let _v1, v2, v3 = vsplit_at_two g allele ~pos1 ~pos2 p s v in
-            raise (M.Done (v2, v3))
-          end else
-            let _v1, v2 = vsplit_at g allele ~pos:pos1 p s v in
-            raise (M.Done (v2, find_or_create_break allele g pos2 v2))
-        end)
-    |> (fun _ ->
-        invalid_argf "reached end of find_or_create_two_breaks allele %s %d %d" allele pos1 pos2)
-  with M.Done (v1, v2) -> v1, v2
+  if pos1 >= pos2 then invalid_argf "pos must be increasing" else
+  fold_along_allele allele g ~init:start
+    ~f:(fun (pv1, pv2) v ->
+          match v with
+          | S _       -> (pv1, pv2), false
+          | E         -> (pv1, pv2), true
+          | B _       -> (pv2, v), false
+          | N (p, s)  ->
+            let len = String.length s in
+            if pos1 >= p + len then       (* haven't found first position. *)
+              (pv2, v), false
+            else if p = pos1 then begin   (* first position matches !*)
+              if pos2 < p + len then begin
+                let v1, v2 = vsplit_at g allele ~pos:pos2 p s v in
+                (v1, v2), true
+              end else
+                (* Won't change v *)
+                let _v1, v2 = find_or_create_split_at allele g pos2 v in
+                (v, v2), true
+            end else begin
+              if pos2 < p + len then begin
+                let _v1, v2, v3 = vsplit_at_two g allele ~pos1 ~pos2 p s v in
+                (v2, v3), true
+              end else
+                let _v1, v2 = vsplit_at g allele ~pos:pos1 p s v in
+                let _v2, v3 = find_or_create_split_at allele g pos2 v2 in
+                (v2, v3), true
+            end)
 
 (** Output **)
+
+(* TODO:
+  - When constructing the dot files, it would be nice if the alleles, edges,
+    were in some kind of consistent order. *)
 
 let output_dot ?short fname g =
   let oc = open_out fname in
