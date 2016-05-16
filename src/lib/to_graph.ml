@@ -200,9 +200,12 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     G.add_vertex g v;
     let _before_start_in_reference, start =
       split_reference_n_at ~pos:start_pos (S reference)
+        (* If we start right before a boundary, we want the start to point at
+           the boundary, so look ahead at a boundary and stop early. *)
         ~b:(fun bnd nv ->
               match nv with
-              | N (p, _) when p = start_pos -> Some (`Exact (bnd, nv))
+                      (* Ok, since we ignore the '_before_start_in_reference *)
+              | N (p, _) when p = start_pos -> Some (`Exact (bnd, bnd)) 
               | _                           -> None)
         ~e:(fun () ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
