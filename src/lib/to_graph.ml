@@ -142,6 +142,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     in
     let rec loop ~pv ~nv alt_lst =
       let () = printf "currently at %s to %s \n" (vertex_name pv) (vertex_name nv) in
+      let () = printf "trying to add: %s \n" (match alt_lst with [] -> "" | h :: _ -> Ms.sequence_element_to_string h) in
       let advance_along_reference l =
         add_allele_edge pv nv;
         loop ~pv:nv ~nv:(next_reference nv) l
@@ -204,8 +205,8 @@ let add_non_ref reference g ref_gaps_set alt_lst =
            the boundary, so look ahead at a boundary and stop early. *)
         ~b:(fun bnd nv ->
               match nv with
-                      (* Ok, since we ignore the '_before_start_in_reference *)
               | N (p, _) when p = start_pos -> Some (`Exact (bnd, bnd)) 
+                      (* Ok, since we ignore the '_before_start_in_reference *)
               | _                           -> None)
         ~e:(fun () ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
