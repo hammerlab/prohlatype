@@ -119,6 +119,16 @@ let is_amino_acid =
   | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
   | _ -> false
 
+let to_forward_pos p len = function
+  | `Ref                            -> p + len
+  | `Alt ((gp, _) :: _) when gp = p -> p
+  | `Alt _                          -> p + len
+
+let to_forward_pos2 p len = function
+  | `Ref                            -> p
+  | `Alt ((gp, _) :: _) when gp = p -> p
+  | `Alt _                          -> p + len
+
 let insert_nuc pos ~seq c = function
   | End _ :: _              -> invalid_argf "Trying to insert nucleotide %c at %d past end" c pos
   | []
@@ -126,8 +136,8 @@ let insert_nuc pos ~seq c = function
   | Boundary _ :: _
   | Gap _ :: _ as l         -> Nuc (pos, c :: []) :: l
   | (Nuc (p, ss) :: t) as l ->
-      let for_pos = match seq with | `Ref -> p + List.length ss | `Alt -> p in
-      if for_pos = pos then
+      let forward_pos = to_forward_pos p (List.length ss) seq in
+      if forward_pos = pos then
         Nuc (p, c :: ss) :: t
       else
         Nuc (pos, c :: []) :: l
@@ -135,18 +145,21 @@ let insert_nuc pos ~seq c = function
 let insert_nuc_s ~seq c ps =
   update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
 
-let insert_gap n = function
-  | End _ :: _               -> invalid_argf "Trying to insert gap at %d past end" n
+let insert_gap ~seq pos = function
+  | End _ :: _               -> invalid_argf "Trying to insert gap at %d past end" pos
   | []
   | Start _ :: _
   | (Boundary _ :: _)
-  | (Nuc _ :: _) as l        -> Gap (n, 1) :: l
-  | (Gap (p, len) :: t) as l -> if p = n then (* Gaps do not extend the position. *)
-                                  Gap (p, len + 1) :: t
-                                else
-                                  Gap (n, 1) :: l
+  | (Nuc _ :: _) as l        -> Gap (pos, 1) :: l
+  | (Gap (p, len) :: t) as l -> 
+    (*if p = pos then  Gaps do not extend the position. *)
+      let forward_pos = to_forward_pos2 p len seq in
+      if forward_pos = pos then
+        Gap (p, len + 1) :: t
+      else
+        Gap (pos, 1) :: l
 
-let insert_gap_s_f ?incr ps = update_ps ?incr (insert_gap ps.position) ps
+let insert_gap_s_f ?incr ~seq ps = update_ps ?incr (insert_gap ~seq ps.position) ps
 
 let output_debug action state ps =
   let p0, gl = match ps.gaps with | (x,y) :: _ -> (x, y) | [] -> (-1, -1) in
@@ -157,9 +170,9 @@ let output_debug action state ps =
         p0 gl
 
 
-let insert_gap_s ?incr ps =
+let insert_gap_s ?incr ~seq ps =
   (*let () = if ps.allele = "A*68:02:02" then output_debug "inserting gap" "before" ps in *)
-  let r = insert_gap_s_f ?incr ps in
+  let r = insert_gap_s_f ?incr ~seq ps in
   (*let () = if r.allele = "A*68:02:02" then output_debug "inserting gap" "after" r in *)
   r
 
@@ -177,7 +190,7 @@ let to_ref_seq_elems dna ps s =
     | []                          -> ps
     | b :: t when is_boundary b   -> to_ref_seq_elems_char (insert_boundary_s ps) t
     | m :: t when is_missing m    -> to_ref_seq_elems_char (insert_missing ps) t
-    | g :: t when is_gap g        -> to_ref_seq_elems_char (insert_gap_s ps) t
+    | g :: t when is_gap g        -> to_ref_seq_elems_char (insert_gap_s ~seq:`Ref ps) t
     | c :: t when is_nuc c        -> to_ref_seq_elems_char (insert_nuc_s ~seq:`Ref c ps) t
     | x :: _                      -> invalid_argf "unrecognized char in reference ps: %c" x
   in
@@ -202,8 +215,8 @@ let update_seq dna ps s =
     | []                          -> ps
     | b :: t when is_boundary b   -> update_seq_char (insert_boundary_s ps) t
     | m :: t when is_missing m    -> update_seq_char (insert_missing ps) t
-    | g :: t when is_gap g        -> update_seq_char (insert_gap_s ~incr:`Pos ps) t
-    | c :: t when is_nuc c        -> update_seq_char (insert_nuc_s ~seq:`Alt c ps) t
+    | g :: t when is_gap g        -> update_seq_char (insert_gap_s ~seq:(`Alt ps.gaps) ~incr:`Pos ps) t
+    | c :: t when is_nuc c        -> update_seq_char (insert_nuc_s ~seq:(`Alt ps.gaps) c ps) t
     | s :: t when is_same s       -> update_seq_char (update_ps ~incr:`Pos (fun l -> l) ps) t
     | 'X' :: _ when (not dna)     -> ps (* signals an 'end' for AA's *)
     | x :: _                      -> invalid_argf "unrecognized char in seq: %c" x

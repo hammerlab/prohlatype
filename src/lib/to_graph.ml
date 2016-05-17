@@ -142,8 +142,8 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     in
     let insert_seq_node pos seq ~before_gap_open ~gap_close =
       printf "insert_seq_node at %s\t%s \t -- %d %s \n"
-                (vertex_name before_gap_open) (vertex_name gap_close)
-                pos seq;
+        (vertex_name before_gap_open) (vertex_name gap_close)
+        pos seq;
       let vm = N (pos, seq) in
       G.add_vertex g vm;
       add_allele_edge before_gap_open vm;
@@ -204,10 +204,15 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           if GapSet.mem (spos, String.length seq) ref_gaps_set then
             match adding_advance ~prev_node:pv ~pos:spos nv with
             | `Exact (pv, nv)   ->
-                insert_seq_node spos seq pv nv;
+                let re = G.E.create pv allele nv in (* since we 'advance' the label until nv *)
+                G.remove_edge_e g re;
+                let () = printf "Adding exact from %s to %s, edges_before: %s\n"
+                    (vertex_name pv) (vertex_name nv)
+                    (G.pred_e g nv |> List.map ~f:(fun (_, l, _ ) -> l) |> String.concat ~sep:", ")
+                in
+                let pv, np = insert_seq_node spos seq ~before_gap_open:pv ~gap_close:nv in
                 loop ~pv ~nv t
-            | `In (_, _, _, _)  ->
-                invalid_argf "How could you not find %d pos" spos
+            | `In (_, _, _, _)  -> invalid_argf "How could you not find %d pos" spos
           else
             let action = "trying to insert sequence" in
             let pv, nv =
