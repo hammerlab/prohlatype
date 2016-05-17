@@ -46,15 +46,14 @@ let add_non_ref reference g ref_gaps_set alt_lst =
   let module Ms = Mas_parser in
   let open Sequences in
   let next_reference from =
-    let () = printf "next from %s \n" (vertex_name from) in
     next_node_along reference g ~from
     |> Option.value_exn ~msg:(sprintf "Reached end of reference before %s." reference)
   in
   let end_pos n s = n + String.length s in    (* Another function for GADT *)
   let do_nothing _ _ = None in
-  let advance_until ?prev_node ?(s=do_nothing) ?(b=do_nothing) ?(n=do_nothing) ~e ~pos start_node =
+  let advance_until ?prev_node ?(s=do_nothing) ?(b=do_nothing) ?(n=do_nothing) ~e
+      ~pos start_node =
     let rec loop prev_node ref_node =
-      let () = printf "--------------\n%!" in
       let advance f =
         let next_node = next_reference ref_node in
         match f ref_node next_node with
@@ -66,40 +65,43 @@ let add_non_ref reference g ref_gaps_set alt_lst =
       | E        -> e ()
       | B _      -> advance b
       | N (p, s) ->
-        if pos = p then                 (* found it exactly no need to split! *)
-          `Exact (prev_node, ref_node)
-        else if pos < end_pos p s then  (* in here -> split? *)
-          `In (prev_node, ref_node, p, s)
-        else                            (* keep going *)
-          advance n
+          if pos = p then                 (* found it exactly no need to split! *)
+            `Exact (prev_node, ref_node)
+          else if pos < end_pos p s then  (* in here -> split? *)
+            `In (prev_node, ref_node, p, s)
+          else                            (* keep going *)
+            advance n
     in
     loop (Option.value prev_node ~default:start_node) start_node
   in
-  let split_reference_n_at ?prev_node ?s ?b ?n ~e ~pos start_node =
+  let split_reference_n_at ?prev_node ?s ?b ?n ~e ~pos ~join_split start_node =
     match advance_until ?prev_node ?s ?b ?n ~e ~pos start_node with
     | `Exact (pv, nv)     -> (pv, nv)
-    | `In (_pv, nv, p, s) ->
-          let open Sequences in
-          let index = pos - p in
-          let fs, sn = String.split_at s ~index in
-          let pr = G.pred_e g nv in
-          let su = G.succ_e g nv in
-          G.remove_vertex g nv;
-          let v1 = N (p, fs) in
-          G.add_vertex g v1;
-          List.iter ~f:(fun (p, l, _) -> G.add_edge_e g (G.E.create p l v1)) pr;
-          let v2 = N (pos, sn) in
-          G.add_vertex g v2;
-          G.add_edge_e g (G.E.create v1 reference v2);
-          List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v2 l s)) su;
-          (v1, v2)
+    | `In (pv, nv, p, s) ->
+        join_split pv nv;
+        let open Sequences in
+        let index = pos - p in
+        let fs, sn = String.split_at s ~index in
+        let pr = G.pred_e g nv in
+        let su = G.succ_e g nv in
+        G.remove_vertex g nv;
+        let v1 = N (p, fs) in
+        G.add_vertex g v1;
+        List.iter ~f:(fun (p, l, _) -> G.add_edge_e g (G.E.create p l v1)) pr;
+        let v2 = N (pos, sn) in
+        G.add_vertex g v2;
+        G.add_edge_e g (G.E.create v1 reference v2);
+        List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v2 l s)) su;
+        (v1, v2)
   in
   let insert_alt_sequence prev_node next_ref_node allele alt_lst =
-    let add_allele_edge pv nv =
+    let add_allele_edge ?(debug=false) pv nv =
+      if debug then
+        printf "adding allele edge %s to %s\n" (vertex_name pv) (vertex_name nv);
       G.add_edge_e g (G.E.create pv allele nv);
     in
-    let add_allele_edge_and_continue pv nv =
-      add_allele_edge pv nv;
+    let add_allele_edge_and_continue ?debug pv nv =
+      add_allele_edge ?debug pv nv;
       None
     in
     let invalid_start action _ _ =
@@ -110,28 +112,43 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           action allele
     in
     let insert_gap ~pv ~nv ~open_pos ~gap_length f action =
-      let vbefore, vgap_start =
+      let () =
+        printf "inserting gap at %s\t%s \t \n"
+                (vertex_name pv) (vertex_name nv)
+      in
+      let before_gap_open, gap_start =
         split_reference_n_at ~prev_node:pv ~pos:open_pos nv
           ~s:(invalid_start action)
           ~e:(invalid_end action)
           ~b:add_allele_edge_and_continue
-          ~n:add_allele_edge_and_continue
+          ~n:(add_allele_edge_and_continue ~debug:true)
+          ~join_split:(add_allele_edge)
       in
-      let vgap_prev, vgap_end =
-        split_reference_n_at ~prev_node:vbefore ~pos:(open_pos + gap_length) vgap_start
+      let () =
+        printf "first part of gap at %s\t%s \n"
+                (vertex_name before_gap_open) (vertex_name gap_start)
+      in
+      let _before_gap_close, gap_close =
+        split_reference_n_at 
+          ~prev_node:before_gap_open gap_start
+          ~pos:(open_pos + gap_length)
           ~b:add_allele_edge_and_continue    (* Haven't seen gap's that cross boundaries. *)
           ~n:(fun _ _ -> (* Do nothing since we're NOT following this path *) None)
           ~s:(invalid_start action)
           ~e:(invalid_end action)
+          ~join_split:(fun _ _ -> ()) (* do NOT add allele edge *)
       in
-      f vbefore vgap_end;
-      vgap_prev, vgap_end
+      f ~before_gap_open ~gap_close
     in
-    let insert_seq_node pos seq vbefore vgap_end =
+    let insert_seq_node pos seq ~before_gap_open ~gap_close =
+      printf "insert_seq_node at %s\t%s \t -- %d %s \n"
+                (vertex_name before_gap_open) (vertex_name gap_close)
+                pos seq;
       let vm = N (pos, seq) in
       G.add_vertex g vm;
-      add_allele_edge vbefore vm;
-      add_allele_edge vm vgap_end
+      add_allele_edge before_gap_open vm;
+      add_allele_edge vm gap_close;
+      vm, gap_close
     in
     let adding_advance ~prev_node ~pos nv =
       advance_until ~prev_node ~pos nv
@@ -141,10 +158,13 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         ~n:add_allele_edge_and_continue
     in
     let rec loop ~pv ~nv alt_lst =
-      let () = printf "currently at %s to %s \n" (vertex_name pv) (vertex_name nv) in
-      let () = printf "trying to add: %s \n" (match alt_lst with [] -> "" | h :: _ -> Ms.sequence_element_to_string h) in
-      let advance_along_reference l =
-        add_allele_edge pv nv;
+      let () =
+        printf "currently at %s\t%s \t -- trying to add: %s \n"
+                (vertex_name pv) (vertex_name nv)
+                  (match alt_lst with [] -> "" | h :: _ -> Ms.sequence_element_to_string h)
+      in
+      let advance_along_reference ?debug l =
+        add_allele_edge ?debug pv nv;
         loop ~pv:nv ~nv:(next_reference nv) l
       in
       match alt_lst with
@@ -157,11 +177,10 @@ let add_non_ref reference g ref_gaps_set alt_lst =
       | Ms.Start _ :: _           -> invalid_argf "Multiple starts: %s!" allele
       | (Ms.Boundary _ as b) :: t ->
           let v = seq_elem_to_vertex b in
-          let () = printf "searching for %s \n" (vertex_name v) in
           if nv = v then
-            advance_along_reference t
+            advance_along_reference ~debug:true t
           else                                        (* Not at the right node along reference! *)
-            advance_along_reference alt_lst
+            advance_along_reference ~debug:true alt_lst
       | Ms.Gap (gp, gl) :: t      ->
           (* If the gap is in reference, then the appropriate break already
              exists and we just need to replicate the same reference edge. *)
@@ -172,7 +191,11 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           else
             let action = "trying to create gap" in
             let pv, nv =
-              insert_gap ~pv ~nv ~open_pos:gp ~gap_length:gl add_allele_edge action
+              insert_gap ~pv ~nv ~open_pos:gp ~gap_length:gl
+                (fun ~before_gap_open ~gap_close ->
+                   add_allele_edge before_gap_open gap_close;
+                   before_gap_open, gap_close)
+                action
             in
             loop ~pv ~nv t
       | Ms.Nuc (spos, seq) :: t   ->
@@ -184,7 +207,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
                 insert_seq_node spos seq pv nv;
                 loop ~pv ~nv t
             | `In (_, _, _, _)  ->
-              invalid_argf "How could you not find %d pos" spos
+                invalid_argf "How could you not find %d pos" spos
           else
             let action = "trying to insert sequence" in
             let pv, nv =
@@ -211,6 +234,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         ~e:(fun () ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
                 allele start_pos)
+        ~join_split:(fun _ _ -> ())
     in
     G.add_edge_e g (G.E.create v allele start);
     insert_alt_sequence v start allele t
