@@ -168,10 +168,18 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         loop ~pv:nv ~nv:(next_reference nv) l
       in
       match alt_lst with
-      | (Ms.End _ as h) :: []     ->
+      | (Ms.End endp as h) :: []  ->
           let v = seq_elem_to_vertex h in
+          let before, _after =
+            split_reference_n_at ~prev_node:pv ~pos:endp nv
+              ~s:(invalid_start "adding end")
+              ~e:(invalid_end "adding end")
+              ~b:add_allele_edge_and_continue
+              ~n:(add_allele_edge_and_continue ~debug:true)
+              ~join_split:(fun _ _ -> ())
+          in
           G.add_vertex g v;
-          add_allele_edge pv v          (* the _ONLY_ way to terminate ! *)
+          add_allele_edge before v          (* the _ONLY_ way to terminate ! *)
       | (Ms.End _) :: _t          -> invalid_argf "Alt sequences %s did not end on an end." allele
       | []                        -> invalid_argf "Alt sequences %s had no end node." allele
       | Ms.Start _ :: _           -> invalid_argf "Multiple starts: %s!" allele
