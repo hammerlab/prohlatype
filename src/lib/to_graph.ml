@@ -108,6 +108,11 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter;
         (v1, v2)
   in
+  let use_boundary_if_it_came_before ~before ~after =
+    match before with
+    | B _ -> before
+    | _ -> after
+  in
   let insert_alt_sequence prev_node next_ref_node allele alt_lst =
     let add_allele_edge ?(debug=false) pv nv =
       if debug then
@@ -149,7 +154,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
            |> List.map ~f:(fun (_,l,_) -> l)
            |> String.concat ~sep:",")
       in
-      let _before_gap_close, gap_close =
+      let bef_gap_close, gap_close =
         split_reference_n_at
           ~prev_node:before_gap_open gap_start
           ~pos:(open_pos + gap_length)
@@ -159,6 +164,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           ~e:(invalid_end action)
           ~join_split:(fun _ _ -> ()) (* do NOT add allele edge *)
       in
+      let gap_close = use_boundary_if_it_came_before ~before:bef_gap_close ~after:gap_close in
       f ~before_gap_open ~gap_close
     in
     let insert_seq_node pos seq ~before_gap_open ~gap_close =
@@ -258,20 +264,16 @@ let add_non_ref reference g ref_gaps_set alt_lst =
   | (Ms.Start (start_pos, allele) as h) :: t ->
     let v = seq_elem_to_vertex h in
     G.add_vertex g v;
-    let before_start_in_reference, start =
+    let bef_start_pos_n_ref, start_pos =
       split_reference_n_at ~pos:start_pos (S reference)
         ~e:(fun _pv ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
                 allele start_pos)
         ~join_split:(fun _ _ -> ())
     in
-    let start =
-      (* If we start right before a boundary, we want the start to point at
-         the boundary, so look ahead at a boundary and stop early.  *)
-      match before_start_in_reference with
-      | B _ -> before_start_in_reference
-      | _ -> start
-    in
+    (* If we start right before a boundary, we want the start to point at
+       the boundary, so look ahead at a boundary and stop early. *)
+    let start = use_boundary_if_it_came_before ~before:bef_start_pos_n_ref ~after:start_pos in
     G.add_edge_e g (G.E.create v allele start);
     insert_alt_sequence v start allele t
   | _ ->
