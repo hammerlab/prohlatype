@@ -66,7 +66,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
       in
       match ref_node with
       | S _      -> advance s
-      | E        -> e ()
+      | E        -> e prev_node
       | B _      -> advance b
       | N (p, s) ->
           if pos = p then                 (* found it exactly no need to split! *)
@@ -194,7 +194,9 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           let before, _after =
             split_reference_n_at ~prev_node:pv ~pos:endp nv
               ~s:(invalid_start "adding end")
-              ~e:(invalid_end "adding end")
+              ~e:(function
+                  | (N (pos, seq) as n) when pos + String.length seq = endp -> `Exact (n, n)
+                  | _ -> invalid_argf "adding end for %s %d" allele endp)
               ~b:add_allele_edge_and_continue
               ~n:(add_allele_edge_and_continue ~debug:true)
               ~join_split:(fun _ _ -> ())
@@ -258,7 +260,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     G.add_vertex g v;
     let before_start_in_reference, start =
       split_reference_n_at ~pos:start_pos (S reference)
-        ~e:(fun () ->
+        ~e:(fun _pv ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
                 allele start_pos)
         ~join_split:(fun _ _ -> ())
