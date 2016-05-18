@@ -161,27 +161,33 @@ let insert_gap ~seq pos = function
   | (Boundary _ :: _)
   | (Nuc _ :: _) as l        -> Gap (pos, 1) :: l
   | (Gap (p, len) :: t) as l ->
-    (*if p = pos then  Gaps do not extend the position. *)
       let forward_pos = to_forward_pos2 p len seq in
       if forward_pos = pos then
         Gap (p, len + 1) :: t
+      else if p + len > pos then  (* Our gap spans the reference gap *)
+        l
       else
         Gap (pos, 1) :: l
 
-let insert_gap_s_f ?incr ~seq ps = update_ps ?incr (insert_gap ~seq ps.position) ps
+let gaps_to_string gps =
+  String.concat ~sep:";" (List.map (fun (p,l) -> sprintf "(%d,%d)" p l) gps)
 
-let output_debug action state ps =
-  let p0, gl = match ps.gaps with | (x,y) :: _ -> (x, y) | [] -> (-1, -1) in
-  printf "%s %s, p: %d, b %d, %s, (%d,%d) \n"
+let insert_gap_s_f ?incr ~seq ps =
+  update_ps ?incr (insert_gap ~seq ps.position) ps
+
+let output_debug action state ps seq =
+  printf "%s %s, p: %d, b %d, %s, forward_pos %d head %s\n"
     action state ps.position ps.boundary
-    (try sequence_element_to_string_g ~sr_to_string:String.of_character_list (List.hd ps.sequence)
-     with Failure _ -> "empty hd")
-        p0 gl
+    (gaps_to_string ps.gaps)
+    (match ps.sequence with
+       | Gap (p, len) :: _ -> to_forward_pos p len seq
+       | _                 -> -10000)
+    (sequence_element_to_string_g ~sr_to_string:(String.of_character_list) (List.hd ps.sequence))
 
 let insert_gap_s ?incr ~seq ps =
-  (*let () = if ps.allele = "A*68:02:02" then output_debug "inserting gap" "before" ps in *)
+  (*let () = if ps.allele = "A*03:234Q" then output_debug "inserting gap" "before" ps seq in *)
   let r = insert_gap_s_f ?incr ~seq ps in
-  (*let () = if r.allele = "A*68:02:02" then output_debug "inserting gap" "after" r in *)
+  (*let () = if r.allele = "A*03:234Q" then output_debug "inserting gap" "after" r seq in*)
   r
 
 let insert_missing ps = update_ps ~datum:false ~incr:`Pos (fun l -> l) ps
@@ -295,9 +301,6 @@ type result =
   ; ref_elems : string sequence_element list
   ; alt_elems : (string * string sequence_element list) list
   }
-
-let gaps_to_string gps =
-  String.concat ~sep:";" (List.map (fun (p,l) -> sprintf "(%d,%d)" p l) gps)
 
 let report = ref false
 
