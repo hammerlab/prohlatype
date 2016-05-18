@@ -42,6 +42,10 @@ module GapSet = Set.Make (struct
   let compare = compare
 end)
 
+module SSet = Set.Make (struct
+    type t = string
+    let compare = compare
+  end)
 let add_non_ref reference g ref_gaps_set alt_lst =
   let module Ms = Mas_parser in
   let open Sequences in
@@ -56,9 +60,9 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     let rec loop prev_node ref_node =
       let advance f =
         let next_node = next_reference ref_node in
-        match f ref_node next_node with
+        match f prev_node ref_node with
         | None   -> loop ref_node next_node
-        | Some r -> r (*p, n *)
+        | Some r -> r
       in
       match ref_node with
       | S _      -> advance s
@@ -87,11 +91,21 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         G.remove_vertex g nv;
         let v1 = N (p, fs) in
         G.add_vertex g v1;
-        List.iter ~f:(fun (p, l, _) -> G.add_edge_e g (G.E.create p l v1)) pr;
+        (* TODO: this set intersect is very clumsy *)
+        let pr_edge_s =
+          List.fold_left pr ~init:SSet.empty ~f:(fun set (p, l, _) ->
+              G.add_edge_e g (G.E.create p l v1);
+              SSet.add l set)
+        in
         let v2 = N (pos, sn) in
         G.add_vertex g v2;
-        G.add_edge_e g (G.E.create v1 reference v2);
-        List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v2 l s)) su;
+        let su_edge_s =
+          List.fold_left su ~init:SSet.empty ~f:(fun set (_, l, s) ->
+              G.add_edge_e g (G.E.create v2 l s);
+              SSet.add l set)
+        in
+        let s_inter = SSet.inter pr_edge_s su_edge_s in
+        SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter;
         (v1, v2)
   in
   let insert_alt_sequence prev_node next_ref_node allele alt_lst =
@@ -113,8 +127,12 @@ let add_non_ref reference g ref_gaps_set alt_lst =
     in
     let insert_gap ~pv ~nv ~open_pos ~gap_length f action =
       let () =
-        printf "inserting gap at %s\t%s \t \n"
+        printf "inserting gap at %s\t%s\t edges:%s \n"
                 (vertex_name pv) (vertex_name nv)
+          (G.find_all_edges g pv nv
+           |> List.map ~f:(fun (_,l,_) -> l)
+           |> String.concat ~sep:",")
+
       in
       let before_gap_open, gap_start =
         split_reference_n_at ~prev_node:pv ~pos:open_pos nv
@@ -125,11 +143,14 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           ~join_split:(add_allele_edge)
       in
       let () =
-        printf "first part of gap at %s\t%s \n"
-                (vertex_name before_gap_open) (vertex_name gap_start)
+        printf "first part of gap at %s\t%s\t edges:%s \n"
+          (vertex_name before_gap_open) (vertex_name gap_start)
+          (G.find_all_edges g before_gap_open gap_start
+           |> List.map ~f:(fun (_,l,_) -> l)
+           |> String.concat ~sep:",")
       in
       let _before_gap_close, gap_close =
-        split_reference_n_at 
+        split_reference_n_at
           ~prev_node:before_gap_open gap_start
           ~pos:(open_pos + gap_length)
           ~b:add_allele_edge_and_continue    (* Haven't seen gap's that cross boundaries. *)
@@ -235,19 +256,19 @@ let add_non_ref reference g ref_gaps_set alt_lst =
   | (Ms.Start (start_pos, allele) as h) :: t ->
     let v = seq_elem_to_vertex h in
     G.add_vertex g v;
-    let _before_start_in_reference, start =
+    let before_start_in_reference, start =
       split_reference_n_at ~pos:start_pos (S reference)
-        (* If we start right before a boundary, we want the start to point at
-           the boundary, so look ahead at a boundary and stop early. *)
-        ~b:(fun bnd nv ->
-              match nv with
-              | N (p, _) when p = start_pos -> Some (`Exact (bnd, bnd)) 
-                      (* Ok, since we ignore the '_before_start_in_reference *)
-              | _                           -> None)
         ~e:(fun () ->
               invalid_argf "Couldn't find a start for %s %d, these aren't aligned!"
                 allele start_pos)
         ~join_split:(fun _ _ -> ())
+    in
+    let start =
+      (* If we start right before a boundary, we want the start to point at
+         the boundary, so look ahead at a boundary and stop early.  *)
+      match before_start_in_reference with
+      | B _ -> before_start_in_reference
+      | _ -> start
     in
     G.add_edge_e g (G.E.create v allele start);
     insert_alt_sequence v start allele t
