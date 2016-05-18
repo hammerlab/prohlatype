@@ -30,7 +30,7 @@ let () =
     print_endline "Please specify IMGT alignments directory."
   else
     let fname = if n <= 2 then None else Some (Sys.argv.(2)) in
-    to_fnames ?fname ~suffix:`nuc Sys.argv.(1)
+    to_fnames ?fname Sys.argv.(1)
     |> List.iter (fun f ->
         try
           let _p = Mas_parser.from_file f in

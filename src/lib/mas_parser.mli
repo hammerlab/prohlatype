@@ -68,6 +68,9 @@ type result =
   (** Seqeucen elements of alternative alleles in an associated list.*)
   }
 
+(* Report invariant parsing violations to stdout. *)
+val report : bool ref
+
 (** Parse an input channel. *)
 val from_in_channel : in_channel -> result
 

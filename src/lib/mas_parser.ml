@@ -296,10 +296,10 @@ type result =
   ; alt_elems : (string * string sequence_element list) list
   }
 
-let fname_debug = ref ""
-
 let gaps_to_string gps =
   String.concat ~sep:";" (List.map (fun (p,l) -> sprintf "(%d,%d)" p l) gps)
+
+let report = ref false
 
 let from_in_channel ic =
   let previous_reference_position = ref min_int in
@@ -342,29 +342,19 @@ let from_in_channel ic =
           try Hashtbl.find x.alg_htbl allele
           with Not_found -> init_ps allele x.start_pos
         in
-        let cur_ps2 = update_gaps_in_ps x.ref_gaps cur_ps in
-        let cur_ps3 = List.fold_left (update_seq x.dna) cur_ps2 s in
-        let () =
-          let p = !previous_reference_position in
-          let r = !latest_reference_position in
-          let a = cur_ps3.position in
-          let b = cur_ps.position in
-          if r <> a && cur_ps3.in_data <> After (*"A*33:72"*) then
-            printf
-              "position mismatch %d vs %d before %d vs %d %s %s \n\
-               ref gaps [%s], before gaps [%s], updated gaps [%s],  after gaps [%s], \n"
-              r a
-              p b
-              cur_ps3.allele
-              !fname_debug
-              (gaps_to_string x.ref_gaps)
-              (gaps_to_string cur_ps.gaps)
-              (gaps_to_string cur_ps2.gaps)
-              (gaps_to_string cur_ps3.gaps)
+        let new_ps =
+          List.fold_left (update_seq x.dna) (update_gaps_in_ps x.ref_gaps cur_ps) s
         in
-        (* if cur_ps3.in_data <> After then
-          assert (cur_ps3.position = !latest_reference_position); *)
-        Hashtbl.replace x.alg_htbl allele cur_ps3;
+        (* Can't make this into an assertion because of sequences such as
+            C*04:09N that have sequences extending after the end of the
+            reference. *)
+        if !report
+           && new_ps.in_data <> After
+           && new_ps.position <> !latest_reference_position then
+          printf
+            "position mismatch %d vs %d for %s.\n"
+            !latest_reference_position new_ps.position new_ps.allele;
+        Hashtbl.replace x.alg_htbl allele new_ps;
         x
       end
   in
@@ -421,7 +411,6 @@ let from_in_channel ic =
 let from_file f =
   let ic = open_in f in
   try
-    fname_debug := f;
     let r = from_in_channel ic in
     close_in ic;
     r
