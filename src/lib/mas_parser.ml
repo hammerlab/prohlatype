@@ -28,7 +28,7 @@ let sequence_element_to_string_g ~sr_to_string = function
   | End p             -> sprintf "End %d" p
   | Boundary (i, p)   -> sprintf "Boundary %d at %d" i p
   | Nuc (p, s)        -> sprintf "Nucleotide %s at %d" (sr_to_string s) p
-  | Gap (p, l)        -> sprintf "Gap %d starting at %d" l p
+  | Gap (p, l)        -> sprintf "Gap of length %d starting at %d" l p
 
 let sequence_element_to_string =
   sequence_element_to_string_g ~sr_to_string:(fun x -> x)

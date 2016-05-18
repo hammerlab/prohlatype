@@ -218,7 +218,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           if GapSet.mem (gp, gl) ref_gaps_set then
             match adding_advance ~prev_node:pv ~pos:gp nv with
             | `Exact (pv, nv)   -> loop ~pv ~nv t
-            | `In (_, _, _, _)  -> invalid_argf "How could you not find %d pos" gp
+            | `In (_, _, _, _)  -> invalid_argf "How could you not find %d pos of %d for allale %s" gp gl allele
           else
             let action = "trying to create gap" in
             let pv, nv =
@@ -298,8 +298,8 @@ let construct ?(num_alt_to_add=max_int) r =
     ~f:(fun i p ->
           flush_all ();
           let (_allele_name,p) = p in
-          if i < num_alt_to_add then
-            let () = add_non_ref reference g ref_gaps_set p
-      in
-    ());
+          if i < num_alt_to_add then begin
+            printf "Adding ---------------- %d ----------\n" i;
+            add_non_ref reference g ref_gaps_set p
+          end);
   g
