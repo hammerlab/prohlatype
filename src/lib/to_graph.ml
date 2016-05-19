@@ -13,7 +13,7 @@ let seq_elem_to_vertex se =
   | Start (_, a)    -> G.V.create (Sequences.S a)
   | End _           -> G.V.create Sequences.E
   | Boundary (n, _) -> G.V.create (Sequences.B n)
-  | Nuc (p, s)      -> G.V.create (Sequences.N (p, s))
+  | Nuc (p, s, _o)  -> G.V.create (Sequences.N (p, s))      (* The offset logic should be handled by the edges!*)
   | Gap _           -> invalid_argf "Not a valid vertex"
 
 let add_reference allele g pv se =
@@ -195,7 +195,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         loop ~pv:nv ~nv:(next_reference nv) l
       in
       match alt_lst with
-      | (Ms.End endp as h) :: []  ->
+      | (Ms.End endp as h) :: []        ->
           let v = seq_elem_to_vertex h in
           let before, _after =
             split_reference_n_at ~prev_node:pv ~pos:endp nv
@@ -209,16 +209,16 @@ let add_non_ref reference g ref_gaps_set alt_lst =
           in
           G.add_vertex g v;
           add_allele_edge before v          (* the _ONLY_ way to terminate ! *)
-      | (Ms.End _) :: _t          -> invalid_argf "Alt sequences %s did not end on an end." allele
-      | []                        -> invalid_argf "Alt sequences %s had no end node." allele
-      | Ms.Start _ :: _           -> invalid_argf "Multiple starts: %s!" allele
-      | (Ms.Boundary _ as b) :: t ->
+      | (Ms.End _) :: _t                -> invalid_argf "Alt sequences %s did not end on an end." allele
+      | []                              -> invalid_argf "Alt sequences %s had no end node." allele
+      | Ms.Start _ :: _                 -> invalid_argf "Multiple starts: %s!" allele
+      | (Ms.Boundary _ as b) :: t       ->
           let v = seq_elem_to_vertex b in
           if nv = v then
             advance_along_reference ~debug:true t
           else                                        (* Not at the right node along reference! *)
             advance_along_reference ~debug:true alt_lst
-      | Ms.Gap (gp, gl) :: t      ->
+      | Ms.Gap (gp, gl) :: t            ->
           (* If the gap is in reference, then the appropriate break already
              exists and we just need to replicate the same reference edge. *)
           if GapSet.mem (gp, gl) ref_gaps_set then
@@ -235,10 +235,10 @@ let add_non_ref reference g ref_gaps_set alt_lst =
                 action
             in
             loop ~pv ~nv t
-      | Ms.Nuc (spos, seq) :: t   ->
+      | Ms.Nuc (spos, seq, offset) :: t ->
           (* If there is a gap in the reference then we don't need to split
              anything to find the right position. *)
-          if GapSet.mem (spos, String.length seq) ref_gaps_set then
+          if offset = 0 && GapSet.mem (spos, String.length seq) ref_gaps_set then
             match adding_advance ~prev_node:pv ~pos:spos nv with
             | `Exact (pv, nv)   ->
                 let re = G.E.create pv allele nv in (* since we 'advance' the label until nv *)
@@ -252,8 +252,9 @@ let add_non_ref reference g ref_gaps_set alt_lst =
             | `In (_, _, _, _)  -> invalid_argf "How could you not find %d pos" spos
           else
             let action = "trying to insert sequence" in
+            let gap_length = String.length seq - offset in
             let pv, nv =
-              insert_gap ~pv ~nv ~open_pos:spos ~gap_length:(String.length seq)
+              insert_gap ~pv ~nv ~open_pos:spos ~gap_length
                 (insert_seq_node spos seq) action
             in
             loop ~pv ~nv t

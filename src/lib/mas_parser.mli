@@ -47,7 +47,7 @@ type 'sr sequence_element =
       preserve them for downstream tools to strip out. The boundary count
       starts at 0. *)
 
-  | Nuc of (int * 'sr)
+  | Nuc of (int * 'sr * int)
   (** Nucleotide sequence of position and sequence. *)
 
   | Gap of (int * int)

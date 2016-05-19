@@ -20,14 +20,14 @@ type 'sr sequence_element =
   | Start of int * string
   | End of int
   | Boundary of (int * int)   (* idx and pos *)
-  | Nuc of (int * 'sr)        (* pos and what *)
+  | Nuc of (int * 'sr * int)        (* pos and what *)
   | Gap of (int * int)        (* pos and length *)
 
 let sequence_element_to_string_g ~sr_to_string = function
   | Start (p, allele) -> sprintf "Start %s at %d" allele p
   | End p             -> sprintf "End %d" p
   | Boundary (i, p)   -> sprintf "Boundary %d at %d" i p
-  | Nuc (p, s)        -> sprintf "Nucleotide %s at %d" (sr_to_string s) p
+  | Nuc (p, s, o)     -> sprintf "Nucleotide %s at %d offset end by %d" (sr_to_string s) p o
   | Gap (p, l)        -> sprintf "Gap of length %d starting at %d" l p
 
 let sequence_element_to_string =
@@ -37,7 +37,7 @@ let position = function
   | Start (p, _)
   | End p
   | Boundary (_, p)
-  | Nuc (p, _)
+  | Nuc (p, _, _)
   | Gap (p, _) -> p
 
 type data_pos =
@@ -128,13 +128,9 @@ let is_amino_acid =
   | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
   | _ -> false
 
+(*** Inserting Sequences ***)
 let to_forward_pos p len = function
   | `Ref                            -> p + len
-  | `Alt ((gp, _) :: _) when gp = p -> p
-  | `Alt _                          -> p + len
-
-let to_forward_pos2 p len = function
-  | `Ref                            -> p
   | `Alt ((gp, _) :: _) when gp = p -> p
   | `Alt _                          -> p + len
 
@@ -143,16 +139,45 @@ let insert_nuc pos ~seq c = function
   | []
   | Start _ :: _
   | Boundary _ :: _
-  | Gap _ :: _ as l         -> Nuc (pos, c :: []) :: l
-  | (Nuc (p, ss) :: t) as l ->
-      let forward_pos = to_forward_pos p (List.length ss) seq in
+  | Gap _ :: _ as l         -> Nuc (pos, c :: [], 0) :: l
+  | (Nuc (p, ss, o) :: t) as l ->
+      let len = List.length ss in
+      let forward_pos = to_forward_pos p len seq in
       if forward_pos = pos then
-        Nuc (p, c :: ss) :: t
+        Nuc (p, c :: ss, o) :: t
+      (* there is a gap in the reference where we have a alternate sequence! *)
+      else if forward_pos > pos then
+        Nuc (p, c :: ss, o + (forward_pos - pos)) :: t
       else
-        Nuc (pos, c :: []) :: l
+        Nuc (pos, c :: [], 0) :: l
+
+let gaps_to_string gps =
+  String.concat ~sep:";" (List.map (fun (p,l) -> sprintf "(%d,%d)" p l) gps)
+
+let output_debug action state ps seq =
+  printf "%s %s, p: %d, b %d, %s, forward_pos %d head %s\n"
+    action state ps.position ps.boundary
+    (gaps_to_string ps.gaps)
+    (match ps.sequence with
+       | Nuc (p, ss, _) :: _ -> let len = List.length ss in to_forward_pos p len seq
+       | _                   -> -10000)
+    (sequence_element_to_string_g ~sr_to_string:(String.of_character_list) (List.hd ps.sequence))
+
+let insert_nuc_s_f ~seq c ps =
+  update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
 
 let insert_nuc_s ~seq c ps =
-  update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
+  let () = if ps.allele = "A*80:01:01:01" then output_debug "inserting nuc" "before" ps seq in
+  let r = insert_nuc_s_f ~seq c ps in
+  let () = if r.allele = "A*80:01:01:01" then output_debug "inserting nuc" "after" r seq in
+  r
+
+(*** Inserting Gaps ***)
+let to_forward_pos2 p len = function
+  | `Ref                            -> p
+  | `Alt ((gp, _) :: _) when gp = p -> p
+  | `Alt _                          -> p + len
+
 
 let insert_gap ~seq pos = function
   | End _ :: _               -> invalid_argf "Trying to insert gap at %d past end" pos
@@ -169,20 +194,8 @@ let insert_gap ~seq pos = function
       else
         Gap (pos, 1) :: l
 
-let gaps_to_string gps =
-  String.concat ~sep:";" (List.map (fun (p,l) -> sprintf "(%d,%d)" p l) gps)
-
 let insert_gap_s_f ?incr ~seq ps =
   update_ps ?incr (insert_gap ~seq ps.position) ps
-
-let output_debug action state ps seq =
-  printf "%s %s, p: %d, b %d, %s, forward_pos %d head %s\n"
-    action state ps.position ps.boundary
-    (gaps_to_string ps.gaps)
-    (match ps.sequence with
-       | Gap (p, len) :: _ -> to_forward_pos p len seq
-       | _                 -> -10000)
-    (sequence_element_to_string_g ~sr_to_string:(String.of_character_list) (List.hd ps.sequence))
 
 let insert_gap_s ?incr ~seq ps =
   (*let () = if ps.allele = "A*03:234Q" then output_debug "inserting gap" "before" ps seq in *)
@@ -261,11 +274,11 @@ let empty_result ref_allele dna position =
 let reverse_seq lst =
   List.rev lst
   |> List.map (function
-      | Nuc (n, sl)   -> Nuc (n, List.rev sl |> String.of_character_list)
-      | Boundary b    -> Boundary b
-      | Gap g         -> Gap g
-      | Start (p, s)  -> Start (p, s)
-      | End e         -> End e)
+      | Nuc (n, sl, o)  -> Nuc (n, List.rev sl |> String.of_character_list, o)
+      | Boundary b      -> Boundary b
+      | Gap g           -> Gap g
+      | Start (p, s)    -> Start (p, s)
+      | End e           -> End e)
 
 let normalize_seq ps =
   match ps.sequence with
