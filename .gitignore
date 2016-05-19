@@ -1,2 +1,5 @@
 _build
 *.dot
+*.pdf
+*.native
+*.byte

@@ -1,0 +1,3 @@
+PKG nonstd sosa ocamlgraph
+S ./src/lib/**
+B _build/**
