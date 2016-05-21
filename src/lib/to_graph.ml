@@ -280,7 +280,7 @@ let add_non_ref reference g ref_gaps_set alt_lst =
   | _ ->
     invalid_argf "Non reference sequences doesn't start with a start!"
 
-let construct ?(num_alt_to_add=max_int) r =
+let construct ?(num_alt_to_add=max_int) allele_lst r =
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
   let ref_length = List.length ref_elems in
@@ -297,12 +297,15 @@ let construct ?(num_alt_to_add=max_int) r =
             | Boundary _
             | Nuc _ -> s)
   in
-  List.iteri alt_elems
-    ~f:(fun i p ->
-          flush_all ();
-          let (_allele_name,p) = p in
-          if i < num_alt_to_add then begin
-            printf "Adding ---------------- %d ----------\n" i;
-            add_non_ref reference g ref_gaps_set p
-          end);
+  let alt_elems =
+    List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems
+  in
+  if allele_lst = [] then
+    List.iteri alt_elems ~f:(fun i (_allele_name, p) ->
+      if i < num_alt_to_add then
+        add_non_ref reference g ref_gaps_set p)
+  else
+    List.iter allele_lst ~f:(fun allele ->
+      let a = List.assoc allele alt_elems in
+      add_non_ref reference g ref_gaps_set a);
   g

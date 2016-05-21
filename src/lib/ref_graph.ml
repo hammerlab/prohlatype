@@ -189,15 +189,15 @@ let output_dot ?short fname g =
   Dot.output_graph oc g;
   close_out oc
 
-let output ?(dot=true) ?(_open=true) ~short fname g =
+let output ?(pdf=true) ?(open_=true) ~short fname g =
   output_dot ~short (fname ^ ".dot") g;
   let r =
-    if dot then
+    if pdf then
       Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)
     else
       -1
   in
-  if r = 0 && _open then
+  if r = 0 && open_ then
     Sys.command (sprintf "open %s.pdf" fname)
   else
     r
