@@ -163,14 +163,8 @@ let output_debug action state ps seq =
        | _                   -> -10000)
     (sequence_element_to_string_g ~sr_to_string:(String.of_character_list) (List.hd ps.sequence))
 
-let insert_nuc_s_f ~seq c ps =
-  update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
-
 let insert_nuc_s ~seq c ps =
-  let () = if ps.allele = "A*80:01:01:01" then output_debug "inserting nuc" "before" ps seq in
-  let r = insert_nuc_s_f ~seq c ps in
-  let () = if r.allele = "A*80:01:01:01" then output_debug "inserting nuc" "after" r seq in
-  r
+  update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
 
 (*** Inserting Gaps ***)
 let to_forward_pos2 p len = function
@@ -194,14 +188,8 @@ let insert_gap ~seq pos = function
       else
         Gap (pos, 1) :: l
 
-let insert_gap_s_f ?incr ~seq ps =
-  update_ps ?incr (insert_gap ~seq ps.position) ps
-
 let insert_gap_s ?incr ~seq ps =
-  (*let () = if ps.allele = "A*03:234Q" then output_debug "inserting gap" "before" ps seq in *)
-  let r = insert_gap_s_f ?incr ~seq ps in
-  (*let () = if r.allele = "A*03:234Q" then output_debug "inserting gap" "after" r seq in*)
-  r
+  update_ps ?incr (insert_gap ~seq ps.position) ps
 
 let insert_missing ps = update_ps ~datum:false ~incr:`Pos (fun l -> l) ps
 
