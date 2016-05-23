@@ -23,13 +23,13 @@ module Sequences = struct
   type t =
     | S of string             (* Start of allele *)
     | E                       (* End *)
-    | B of int                (* Boundary *)
+    | B of int * int          (* Boundary of position and count *)
     | N of int * String.t     (* Sequences *)
 
   let vertex_name ?(short=true) = function
     | S a       -> sprintf "\"S%s\"" a
     | E         -> sprintf "\"E\""
-    | B n       -> sprintf "\"B%d\"" n
+    | B (_, n)  -> sprintf "\"B%d\"" n
     | N (n, s)  -> sprintf "\"%d%s\"" n (if short then short_seq s else s)
 
   let compare = Pervasives.compare
@@ -97,6 +97,7 @@ let vsplit_at g allele ~pos p s v =
   List.iter ~f:(fun (_, l, s) -> G.add_edge_e g (G.E.create v2 l s)) su;
   (v1, v2)
 
+(*
 let find_or_create_split_at allele g pos start =
   let open Sequences in
   (*let module M = struct exception Done of G.vertex end in *)
@@ -163,6 +164,7 @@ let find_or_create_two_breaks allele g (pos1, pos2) start =
                 let _v2, v3 = find_or_create_split_at allele g pos2 v2 in
                 (v2, v3), true
             end)
+   *)
 
 (** Output **)
 
