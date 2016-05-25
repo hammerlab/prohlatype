@@ -10,7 +10,7 @@ let invalid_argf fmt = ksprintf invalid_arg fmt
 let seq_elem_to_vertex se =
   let open Mas_parser in
   match se with
-  | Start (_, a)    -> G.V.create (Sequences.S a)
+  | Start p         -> G.V.create (Sequences.S p)
   | End _           -> G.V.create Sequences.E
   | Boundary (n, p) -> G.V.create (Sequences.B (p, n))
   | Nuc (p, s, _o)  -> G.V.create (Sequences.N (p, s))      (* The offset logic should be handled by the edges!*)
@@ -179,10 +179,10 @@ let add_non_ref reference g ref_gaps_set alt_lst =
         ~n:add_allele_edge_and_continue
     in
     let rec loop ~pv ~nv alt_lst =
-      (*printf "currently at %s\t%s \t -- trying to add: %s \n"
+      printf "currently at %s\t%s \t -- trying to add: %s \n"
                   (vertex_name pv) (vertex_name nv)
                     (match alt_lst with [] -> "" | h :: _ ->
-                      Ms.sequence_element_to_string h);*)
+                      Ms.sequence_element_to_string h);
       let advance_along_reference l =
         add_allele_edge pv nv;
         loop ~pv:nv ~nv:(next_reference nv) l
@@ -292,12 +292,16 @@ let construct ?(num_alt_to_add=max_int) allele_lst r =
   let alt_elems =
     List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems
   in
-  if allele_lst = [] then
-    List.iteri alt_elems ~f:(fun i (_allele_name, p) ->
-      if i < num_alt_to_add then
-        add_non_ref reference g ref_gaps_set p)
-  else
-    List.iter allele_lst ~f:(fun allele ->
-      let a = List.assoc allele alt_elems in
-      add_non_ref reference g ref_gaps_set a);
+  let () =
+  try
+    if allele_lst = [] then
+      List.iteri alt_elems ~f:(fun i (_allele_name, p) ->
+        if i < num_alt_to_add then
+          add_non_ref reference g ref_gaps_set p)
+    else
+      List.iter allele_lst ~f:(fun allele ->
+        let a = List.assoc allele alt_elems in
+        add_non_ref reference g ref_gaps_set a)
+  with (Nonstd.Option.No_value _) -> ()
+  in
   g

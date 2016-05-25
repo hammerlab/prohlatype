@@ -13,16 +13,126 @@ We return
 open Printf
 module String = Sosa.Native_string
 
-let invalid_argf fmt = ksprintf invalid_arg fmt
+let invalid_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s " ^^ fmt) prefix
 
-(* This 'could' be 2 separate types (for reference and non). *)
+(* This refers to the alignment position.  *)
+type position = int
+
+let is_nucleotide = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
+let is_amino_acid =
+  function
+  | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
+  | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
+  | _ -> false
+
+type 'e parse_struct =
+  { allele    : string
+  (* For now, it makes it easier to have some kind of sane delimiter to align
+     and spot check these alignments. The "|" are the 'boundaries'. This keeps
+     track of the most recently encountered boundary marker, starting with 0. *)
+  ; boundary  : int
+  (* Where we are in the sequence, this starts from the first number specified
+     in the file and increments as we read characters. *)
+  ; position  : position
+  ; sequence  : 'e list
+  }
+
+let init_ps allele position =
+  { allele
+  ; position
+  ; boundary = 0
+  ; sequence = []
+  }
+
+let where ps =
+  sprintf "allele: %s, position: %d, sequence length: %d"
+    ps.allele ps.position (List.length ps.sequence)
+
+type 'sr alignment_element =
+  | Boundary of { idx : int; pos : position }
+  | Sequence of { start : position; s : 'sr }
+  | Gap of { start : position; length : int }
+  | Unknown of { start : position; length : int }
+
+let to_string srts = function
+  | Boundary { idx; pos }     -> sprintf "Boundary %d at %d" idx pos
+  | Sequence { start; s }     -> sprintf "Sequence %s at %d" (srts s) start 
+  | Gap { start; length }     -> sprintf "Gap of %d from %d" length start
+  | Unknown {start; length }  -> sprintf "Unknown of %d from %d" length start
+
+let next ps = { ps with position = ps.position + 1 }
+let with_next ps f = f (next ps)
+
+let insert_boundary ps =
+  with_next ps (fun ps ->
+    { ps with sequence = Boundary { idx = ps.boundary; pos = ps.position} :: ps.sequence
+            ; boundary = ps.boundary + 1
+    })
+
+let insert_gap ps =
+  with_next ps (fun ps ->
+    match ps.sequence with
+    | Gap { start; length } :: t when start + length = ps.position
+                            -> { ps with sequence = Gap { start; length = length + 1 } :: t }
+    | []
+    | Boundary _ :: _
+    | Gap _ :: _
+    | Unknown _ :: _
+    | Sequence _ :: _ as l  -> { ps with sequence = Gap { start = ps.position; length = 1 } :: l })
+
+let insert_unknown ps =
+  with_next ps (fun ps ->
+    match ps.sequence with
+    | Unknown { start; length } :: t when start + length = ps.position
+                            -> { ps with sequence = Unknown { start; length = length + 1 } :: t }
+    | []
+    | Boundary _ :: _
+    | Gap _ :: _
+    | Unknown _ :: _
+    | Sequence _ :: _ as l  -> { ps with sequence = Unknown { start = ps.position; length = 1 } :: l })
+
+let insert_nuc_error fmt =
+  invalid_argf ~prefix:"Trying to insert sequence element" fmt
+
+let insert_same ~fail_on_same ps =
+  if fail_on_same then
+    invalid_argf "Encountered unexpected '-' same char for : %s" (where ps)
+  else
+    next ps
+
+let insert_nuc c ps =
+  with_next ps (fun ps ->
+    match ps.sequence with
+    | Sequence {start; s} :: t when start + (List.length s) = ps.position
+                            -> { ps with sequence = Sequence { start; s = c :: s} :: t }
+    | []
+    | Boundary _ :: _
+    | Gap _ :: _
+    | Unknown _ :: _
+    | Sequence _ :: _ as l  -> { ps with sequence = Sequence { start = ps.position; s = c :: []} :: l })
+
+let update ~dna ~fail_on_same ps s =
+  let is_nuc = if dna then is_nucleotide else is_amino_acid in
+  let rec to_ref_seq_elems_char ps = function
+    | []                    -> ps
+    | '|' :: t              -> to_ref_seq_elems_char (insert_boundary ps) t
+    | '*' :: t              -> to_ref_seq_elems_char (insert_unknown ps) t
+    | 'X' :: t when not dna -> ps (* don't add anything else *)
+    | '.' :: t              -> to_ref_seq_elems_char (insert_gap ps) t
+    | '-' :: t              -> to_ref_seq_elems_char (insert_same ~fail_on_same ps) t
+    | c :: t when is_nuc c  -> to_ref_seq_elems_char (insert_nuc c ps) t
+    | x :: _                -> invalid_argf "Unrecognized char %c in %s" x (where ps)
+  in
+  to_ref_seq_elems_char ps (String.to_character_list s)
+
+
+(*
 type 'sr sequence_element =
   | Start of int * string
   | End of int
-  | Boundary of (int * int)   (* idx and pos *)
-  | Nuc of (int * 'sr * int)        (* pos and what *)
-  | Gap of (int * int)        (* pos and length *)
-
+  | Boundary of (int * int)     (* idx and pos *)
+  | Nuc of (int * 'sr * int)
+  | Gap of (int * int)          (* pos and length *)
 let sequence_element_to_string_g ~sr_to_string = function
   | Start (p, allele) -> sprintf "Start %s at %d" allele p
   | End p             -> sprintf "End %d" p
@@ -32,66 +142,34 @@ let sequence_element_to_string_g ~sr_to_string = function
 
 let sequence_element_to_string =
   sequence_element_to_string_g ~sr_to_string:(fun x -> x)
+   *)
 
-let position = function
+
+(*let position = function
   | Start (p, _)
   | End p
   | Boundary (_, p)
   | Nuc (p, _, _)
-  | Gap (p, _) -> p
-
-type data_pos =
-  | Before
-  | In
-  | After
-
-type 'sr parse_struct =
-  { allele    : string
-  (* For now, it makes it easier to have some kind of sane delimiter to align
-     and spot check these alignments. The "|" are the 'boundaries'. This keeps
-     track of the most recently encountered boundary marker, starting with 0. *)
-  ; boundary  : int
-  (* Where we are in the sequence, this starts from the first number specified
-     in the file and increments as we read characters. This value must be with
-     regard to the _reference_ position. *)
-  ; position  : int
-  ; sequence  : 'sr sequence_element list
-  (* pos, size : also used to indicate how much of the gap left to traverse *)
-  ; gaps      : (int * int) list
-  (* Sequences use '*' to indicate missing information at the beginning or end
-     of the alignment. This flag (starts as false), determines if we're past
-     the parts that are missing. *)
-  ; in_data   : data_pos
-  }
-
-let init_ps allele position =
-  { allele
-  ; position
-  ; boundary = 0
-  ; sequence = []
-  ; gaps     = []
-  ; in_data  = Before
-  }
+  | Gap (p, _) -> p *)
+(*
+let increment_position ps = { ps with position = ps.position + 1 }
 
 let new_status ps datum =
-  match ps.in_data, datum with
-  | Before, true  -> { ps with in_data = In
-                             ; sequence = Start (ps.position, ps.allele) :: ps.sequence }
-                     , false
-  | Before, false -> ps, false
-  | In, false     -> { ps with in_data = After
-                             ; sequence = End ps.position :: ps.sequence }
-                     , false
-  | In, true      -> ps, false
-  | After, true
-  | After, false  -> ps, true
+  match ps.in_data, ps.sequence, datum with
+  | Before, [], true  -> { ps with in_data = In ; sequence = Start (ps.position, ps.allele)}
+  | Before, ls, true  -> invalid_argf "Trying to start when we already have data: %s %d" ps.allele (List.length ls)
+  | Before,  _, false -> ps
+  | In,      _, false -> { ps with in_data = After ; sequence = End ps.position :: ps.sequence }
+  | In,      _, true  -> ps
+  | After,   _, true  -> invalid_argf "Adding a datum to a closed sequence: %s %d" ps.allele ps.position
+  | After,   _, false -> ps
 
-let update_ps ?incr ?(datum=true) insert_seq ps =
+(*
+let update_ps ?incr ~datum insert_seq ps =
   let ps, closed = new_status ps datum in
   if closed then ps else
   match incr with
-  | None ->
-    { ps with sequence = insert_seq ps.sequence }
+  | None -> { ps with sequence = insert_seq ps.sequence }
   | Some `Pos ->
     begin
       match ps.gaps with
@@ -107,26 +185,17 @@ let update_ps ?incr ?(datum=true) insert_seq ps =
     end
   | Some `Bnd ->
     { ps with sequence = insert_seq ps.sequence; boundary = ps.boundary + 1 }
+       *)
 
-let update_gaps_in_ps new_gaps ps =
-   { ps with gaps = List.filter (fun (p, _) -> p >= ps.position) (new_gaps @ ps.gaps) }
-
-(* Define special characters *)
-let boundary_char = '|'
-let gap_char  = '.'
-let same_char = '-'
-let missing_char = '*'
-
-let is_boundary c = c = boundary_char
-let is_gap c      = c = gap_char
-let is_same c     = c = same_char
-let is_missing c  = c = missing_char
-let is_nucleotide = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
-let is_amino_acid =
-  function
-  | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
-  | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
-  | _ -> false
+(*let update_gaps_in_ps new_gaps ps =
+  let adj_gaps =
+    (* Adjust gaps that might be spanning the current break boundary. *)
+    match ps.sequence with
+    | Gap (pos, len) :: _ ->
+      List.map (fun ((p, l) as g) -> if p = pos then (p, l - len) else g) new_gaps
+    | _ -> new_gaps
+  in
+  { ps with gaps = adj_gaps } *)
 
 (*** Inserting Sequences ***)
 let to_forward_pos p len = function
@@ -164,7 +233,10 @@ let output_debug action state ps seq =
     (sequence_element_to_string_g ~sr_to_string:(String.of_character_list) (List.hd ps.sequence))
 
 let insert_nuc_s ~seq c ps =
-  update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps
+  (*let () = if ps.allele = "DRB1*01:01:01" then output_debug "inserting nuc" "before" ps seq in *)
+  let r = update_ps ~incr:`Pos (insert_nuc ~seq ps.position c) ps in
+  (*let () = if r.allele = "DRB1*01:01:01" then output_debug "inserting nuc" "after" r seq in *)
+  r
 
 (*** Inserting Gaps ***)
 let to_forward_pos2 p len = function
@@ -172,28 +244,44 @@ let to_forward_pos2 p len = function
   | `Alt ((gp, _) :: _) when gp = p -> p
   | `Alt _                          -> p + len
 
+let debug_gap_ref = ref false
 
-let insert_gap ~seq pos = function
+let insert_gap in_reference_gap pos = function
   | End _ :: _               -> invalid_argf "Trying to insert gap at %d past end" pos
   | []
   | Start _ :: _
   | (Boundary _ :: _)
   | (Nuc _ :: _) as l        -> Gap (pos, 1) :: l
   | (Gap (p, len) :: t) as l ->
-      let forward_pos = to_forward_pos2 p len seq in
-      if forward_pos = pos then
-        Gap (p, len + 1) :: t
-      else if p + len > pos then  (* Our gap spans the reference gap *)
-        l
+      if in_reference_gap then
+        if p = pos then
+          Gap (p, len + 1) :: t
+        else
+          Gap (pos
       else
+        Gap (p, len + 1) :: t
+
+(* let forward_pos = to_forward_pos2 p len seq in
+      if forward_pos = pos then begin
+        if !debug_gap_ref then Printf.printf "forward pos %d equals pos %d p: %d len %d \n" forward_pos pos p len;
+        Gap (p, len + 1) :: t
+      end else if p + len > pos then  begin (* Our gap spans the reference gap *)
+        if !debug_gap_ref then Printf.printf "p: %d + len %d greater than pos %d \n" p len pos;
+        l
+      end else begin
+        if !debug_gap_ref then Printf.printf "tail case\n";
         Gap (pos, 1) :: l
+      end *)
 
 let insert_gap_s ?incr ~seq ps =
-  update_ps ?incr (insert_gap ~seq ps.position) ps
+  let () = if ps.position > 2345 && ps.position < 2355 && ps.allele = "DRB1*01:01:01" then begin output_debug "inserting gap" "before" ps seq; debug_gap_ref := true end in
+  let r = update_ps ?incr (insert_gap ~seq ps.position) ps in
+  let () = if ps.position > 2345 && ps.position < 2355 && r.allele = "DRB1*01:01:01" then begin output_debug "inserting gap" "after" r seq; debug_gap_ref := false end in
+  r
 
 let insert_missing ps = update_ps ~datum:false ~incr:`Pos (fun l -> l) ps
 
-let insert_boundary_s ps =
+let insert_boundary ps =
   update_ps ~incr:`Bnd
     (fun s -> Boundary (ps.boundary + 1, ps.position) :: s ) ps
 
@@ -203,7 +291,7 @@ let to_ref_seq_elems dna ps s =
   (* do not increase the position based on gaps in reference sequence.*)
   let rec to_ref_seq_elems_char ps = function
     | []                          -> ps
-    | b :: t when is_boundary b   -> to_ref_seq_elems_char (insert_boundary_s ps) t
+    | b :: t when is_boundary b   -> to_ref_seq_elems_char (insert_boundary ps) t
     | m :: t when is_missing m    -> to_ref_seq_elems_char (insert_missing ps) t
     | g :: t when is_gap g        -> to_ref_seq_elems_char (insert_gap_s ~seq:`Ref ps) t
     | c :: t when is_nuc c        -> to_ref_seq_elems_char (insert_nuc_s ~seq:`Ref c ps) t
@@ -228,7 +316,7 @@ let update_seq dna ps s =
   let is_nuc = if dna then is_nucleotide else is_amino_acid in
   let rec update_seq_char ps = function
     | []                          -> ps
-    | b :: t when is_boundary b   -> update_seq_char (insert_boundary_s ps) t
+    | b :: t when is_boundary b   -> update_seq_char (insert_boundary ps) t
     | m :: t when is_missing m    -> update_seq_char (insert_missing ps) t
     | g :: t when is_gap g        -> update_seq_char (insert_gap_s ~seq:(`Alt ps.gaps) ~incr:`Pos ps) t
     | c :: t when is_nuc c        -> update_seq_char (insert_nuc_s ~seq:(`Alt ps.gaps) c ps) t
@@ -237,6 +325,7 @@ let update_seq dna ps s =
     | x :: _                      -> invalid_argf "unrecognized char in seq: %c" x
   in
   update_seq_char ps (String.to_character_list s)
+*)
 
 type 'sr parse_result =
   { dna       : bool        (* DNA or Amino Acid sequence -> diff characters *)
@@ -245,7 +334,6 @@ type 'sr parse_result =
   (* As we parse the alternative tracks, we have to Keep track of the gaps that
      we encounter in the reference, so that all positions are with respect to
      the reference. *)
-  ; ref_gaps  : (int * int) list  (* Recently encountered reference gaps. *)
   ; ref_ps    : 'sr parse_struct
   ; alg_htbl  : (string, 'sr parse_struct) Hashtbl.t
   }
@@ -254,24 +342,24 @@ let empty_result ref_allele dna position =
   { dna       = dna
   ; start_pos = position
   ; ref       = ref_allele
-  ; ref_gaps  = []
   ; ref_ps    = init_ps ref_allele position
   ; alg_htbl  = Hashtbl.create 100
   }
 
 let reverse_seq lst =
-  List.rev lst
-  |> List.map (function
-      | Nuc (n, sl, o)  -> Nuc (n, List.rev sl |> String.of_character_list, o)
-      | Boundary b      -> Boundary b
-      | Gap g           -> Gap g
-      | Start (p, s)    -> Start (p, s)
-      | End e           -> End e)
+  let to_string l = String.of_character_list (List.rev l) in 
+  List.rev lst |> List.map (function
+    (*| Start _ 
+    | End _  *)
+    | Boundary _
+    | Unknown _
+    | Gap _ as e            -> e
+    | Sequence { start; s } -> Sequence { start; s = to_string s })
 
-let normalize_seq ps =
+(*let normalize_seq ps =
   match ps.sequence with
   | End _ :: _ -> reverse_seq ps.sequence
-  | _ ->          reverse_seq (End ps.position :: ps.sequence)
+  | _ ->          reverse_seq (End ps.position :: ps.sequence) *)
 
 type line =
   | Position of bool * int  (* nucleotide or amino acid sequence  *)
@@ -291,7 +379,6 @@ let parse_data line =
       | []                      -> invalid_arg "Empty data line!"
       | s :: lst                -> SeqData (s, lst)
 
-
 type parse_state =
   | Header
   | Empty
@@ -299,14 +386,14 @@ type parse_state =
 
 type result =
   { reference : string
-  ; ref_elems : string sequence_element list
-  ; alt_elems : (string * string sequence_element list) list
+  ; ref_elems : string alignment_element list
+  ; alt_elems : (string * string alignment_element list) list
   }
 
 let report = ref false
 
 let from_in_channel ic =
-  let previous_reference_position = ref min_int in
+  (*let previous_reference_position = ref min_int in*)
   let latest_reference_position = ref min_int in
   let update x = function
     (* Sometimes, the files position counting seems to disagree with this
@@ -321,39 +408,23 @@ let from_in_channel ic =
     | Dash              -> x (* ignore dashes *)
     | SeqData (allele, s) ->
       if x.ref = allele then begin
-        let prev_pos = x.ref_ps.position in
-        previous_reference_position := !latest_reference_position;
-        let nref_ps = List.fold_left (to_ref_seq_elems x.dna) x.ref_ps s in
+        (*let prev_pos = x.ref_ps.position in *) 
+        let nref_ps = List.fold_left (update ~dna:x.dna ~fail_on_same:true) x.ref_ps s in
         latest_reference_position := nref_ps.position;
-        let new_gaps = find_reference_gaps prev_pos nref_ps.sequence in
-        let new_gaps =
-          (* are we crossing a gap across parse boundaries? *)
-          match new_gaps with
-          | (p, new_length) :: tl when p = prev_pos ->
-              begin try
-                let _, prev_length = List.find (fun (p, _) -> p = prev_pos) x.ref_gaps in
-                (p, new_length - prev_length) :: tl
-                with Not_found -> new_gaps
-              end
-          | _ -> new_gaps
-        in
         { x with ref       = allele
                ; ref_ps    = nref_ps
-               ; ref_gaps  = new_gaps
         }
       end else begin
         let cur_ps =
           try Hashtbl.find x.alg_htbl allele
           with Not_found -> init_ps allele x.start_pos
         in
-        let new_ps =
-          List.fold_left (update_seq x.dna) (update_gaps_in_ps x.ref_gaps cur_ps) s
-        in
+        let new_ps = List.fold_left (update ~dna:x.dna ~fail_on_same:false) cur_ps s in
         (* Can't make this into an assertion because of sequences such as
             C*04:09N that have sequences extending after the end of the
             reference. *)
         if !report
-           && new_ps.in_data <> After
+           (*&& new_ps.in_data <> After*)
            && new_ps.position <> !latest_reference_position then
           printf
             "position mismatch %d vs %d for %s.\n"
@@ -405,9 +476,9 @@ let from_in_channel ic =
       | Data _ -> loop_header state
   in
   let reversed = loop_header Header in
-  let ref_elems = normalize_seq reversed.ref_ps in
+  let ref_elems = reverse_seq reversed.ref_ps.sequence in
   let alt_elems =
-    Hashtbl.fold (fun all ps acc -> (all, normalize_seq ps) :: acc)
+    Hashtbl.fold (fun all ps acc -> (all, reverse_seq ps.sequence) :: acc)
       reversed.alg_htbl []
   in
   { reference = reversed.ref ; ref_elems ; alt_elems }
@@ -421,4 +492,3 @@ let from_file f =
   with e ->
     close_in ic;
     raise e
-
