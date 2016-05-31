@@ -24,32 +24,63 @@ let to_fnames ?fname ?suffix dir =
   |> List.filter (fun f -> fname_f f && suffix_f f && not_swap_f f)
   |> List.map (Filename.concat dir)
 
-let id x = x
-
 let starts_with_start = 
+  "All sequences start with a Start",
+  fun lst ->
+    let rec test_loop = function
+      | []              -> false
+      | Start _ :: _t   -> true
+      (* We can have Boundaries before the sequence actually starts. *)
+      | Boundary _ :: t -> test_loop t
+      | _               -> false
+    in
+    test_loop lst
+
+let ends_with_end =
+  "All sequences end with an End",
+  fun lst ->
+    let rec test_loop = function
+      | []              -> false
+      | End _ :: _t     -> true
+      | Boundary _ :: t -> test_loop t
+      | _               -> false
+    in
+    test_loop (List.rev lst)
+
+exception Double of string
+
+let theres_an_end_for_every_start =
+  "There is an end for every start",
+  fun lst ->
+    try
+      let c =
+        List.fold_left (fun in_data a ->
+            match a with
+            | Start _ -> if in_data then raise (Double "start") else true
+            | End _   -> if not in_data then raise (Double "end") else false
+            | _       -> in_data)
+          false lst
+      in
+      not c
+    with Double s ->
+      eprintf "Found double %s" s;
+      false
+
+let sequence_have_diff_elemns =
   "Sequence elements different from previous",
   function
   | []     -> true    (* A sequence could be identical to the reference
                          and therefore the parsed alt will be [] *)
   | h :: t ->
       List.fold_left (fun (s, p) n ->
+        let false_ () = 
+          Printf.printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
+          (false && s, n)
+        in
         match p, n with
-        | Sequence s1, Sequence s2 when s1.start = s2.start -> 
-          begin
-            Printf.printf "p %s n %s\n" (to_string id p) (to_string id n);
-            (false && s, n)
-          end
-        | Gap g1, Gap g2 when g1.start = g2.start           ->
-          begin
-            Printf.printf "p %s n %s\n" (to_string id p) (to_string id n);
-            (false && s, n)
-          end
-        | Unknown u1, Unknown u2 when u1.start = u2.start   ->
-          begin
-            Printf.printf "p %s n %s\n" (to_string id p) (to_string id n);
-            (false && s, n)
-          end
-        | _ -> (true && s, n))
+        | Sequence s1, Sequence s2 when s1.start = s2.start -> false_ ()
+        | Gap g1, Gap g2 when g1.start = g2.start           -> false_ ()
+        | _                                                 -> (true && s, n))
         (true, h) t
       |> fst
 
@@ -66,7 +97,11 @@ let all_sequences_in_result f r =
   List.iter (fun (al, el) -> check f al el) r.alt_elems
 
 let test_result r =
-  all_sequences_in_result starts_with_start r
+  [ starts_with_start
+  ; ends_with_end
+  ; sequence_have_diff_elemns 
+  ; theres_an_end_for_every_start ]
+  |> List.iter (fun check -> all_sequences_in_result check r)
 
 let () =
   let n = Array.length Sys.argv in
