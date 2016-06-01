@@ -16,17 +16,17 @@ let add_reference_elems g allele ref_elems =
   in
   let add_end end_pos ~vs ~vp lst =
     let ve = G.V.create (E end_pos) in
-    let () = G.add_edge_e g (G.E.create vp allele ve) in
+    G.add_edge_e g (G.E.create vp allele ve);
     `Ended (vs, ve) :: lst
   in
   let add_boundary ~vs ~vp ~idx ~pos lst =
     let vb = G.V.create (B (pos, idx)) in
-    let () = G.add_edge_e g (G.E.create vp allele vb) in
+    G.add_edge_e g (G.E.create vp allele vb);
     `Started (vs, vb) :: lst
   in
   let add_seq ~vs ~vp ~start s lst =
     let vn = G.V.create (N (start, s)) in
-    let () = G.add_edge_e g (G.E.create vp allele vn) in
+    G.add_edge_e g (G.E.create vp allele vn);
     `Started (vs, vn) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
@@ -96,26 +96,26 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
                 with Not_found -> invalid_arg msg
   in
   let do_nothing _ _ = () in
-  let advance_until ~visit ~prev_node ~next_node pos =
+  let advance_until ~visit ~prev ~next pos =
     let rec forward node msg =
       loop node (next_reference ~msg node)
-    and loop prev_node next_node =
-      if next_node = first_start then
-        forward next_node "No next after reference Start!"
-      else if next_node = last_end then
-        `AfterLast prev_node
+    and loop prev next =
+      if next = first_start then
+        forward next "No next after reference Start!"
+      else if next = last_end then
+        `AfterLast prev
       else
-        match relationship pos next_node with
-        | `Ignore    -> forward next_node (sprintf "Skipping %s" (vertex_name next_node))
-        | `Before ap -> `InGap (prev_node, next_node, ap)
-        | `Exact     -> `AtNext (prev_node, next_node)
-        | `In (p, s) -> `InsideNext (prev_node, next_node, p, s)
-        | `After     -> let () = visit prev_node next_node in
-                        forward next_node "Not at End, should have next!"
+        match relationship pos next with
+        | `Ignore    -> forward next (sprintf "Skipping %s" (vertex_name next))
+        | `Before ap -> `InGap (prev, next, ap)
+        | `Exact     -> `AtNext (prev, next)
+        | `In (p, s) -> `InsideNext (prev, next, p, s)
+        | `After     -> visit prev next;
+                        forward next "Not at End, should have next!"
     in
-    loop prev_node next_node
+    loop prev next
   in
-  let split_in ~prev_node ~visit ~next_node pos =
+  let split_in ~prev ~visit ~next pos =
     let split_and_rejoin p s node =
       let open Nodes in
       let index = pos - p in
@@ -142,9 +142,9 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
       SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter;
       (v1, v2)
     in
-    match advance_until ~prev_node ~visit ~next_node pos with
+    match advance_until ~prev ~next ~visit pos with
     | `InsideNext (pv, nv, p, s) ->
-        let () = visit pv nv in
+        visit pv nv;
         let v1, v2 = split_and_rejoin p s nv in
         `AtNext (v1, v2)
     | `AfterLast _ as al -> al
@@ -152,7 +152,7 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     | `AtNext _ as an    -> an
   in
   let add_allele_edge pv nv = G.add_edge_e g (G.E.create pv allele nv) in
-  let rec advance_until_boundary ~visit ~prev_node ~next_node pos idx =
+  let rec advance_until_boundary ~visit ~prev ~next pos idx =
     let rec forward node msg =
       loop node (next_reference ~msg node)
     and loop pv nv =
@@ -166,7 +166,7 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
             pv, nv
       | B (p, _)
       | N (p, _) when p < pos ->
-          let () = visit pv nv in
+          visit pv nv;
           forward nv (sprintf "Trying to find B %d %d after %d" pos idx p)
       | B (p, c) (*when p > pos*) ->
           inv_argf "Next Boundary %d %d after desired boundary %d %d"
@@ -175,14 +175,21 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
           inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d)"
             p pos idx
     in
-    loop prev_node next_node
+    loop prev next
   in
+  (* How we close back with the reference *)
+  let rec rejoin_after_split ~prev ~next split_pos state ~new_node lst =
+    match split_in ~prev ~next ~visit:do_nothing split_pos with
+    | `AfterLast _            -> solo_loop state new_node lst 
+    | `InGap (_pv, next, ap)  -> ref_gap_loop state new_node next ap lst
+    | `AtNext (_pv, next)     -> add_allele_edge new_node next;
+                                 main_loop state ~prev:new_node ~next lst 
   (* In the beginning we have not 'Start'ed ->
      Loop through the Alignment elemends:
       - discarding Boundary
       - complaining on anything other than a Start
       - on a Start find the position in reference and start correct loop *)
-  let rec start_loop prev_start_ends lst =
+  and start_loop prev_start_ends lst =
     let rec find_start_loop = function
       | Boundary _ :: t 
       | Gap _ :: t      -> find_start_loop t (* Ignore Gaps & Boundaries before Start *)
@@ -199,163 +206,111 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     in
     match find_start_loop lst with
     | None -> prev_start_ends (* fin *)
-    | Some (vs, pos, tl) ->
-        let start_pos =
-          (* One optimization would be to keep the reference start around. *)
-          split_in ~prev_node:first_start ~next_node:first_start pos
-            (* we are only searching for start not labeling allele path. *)
-            ~visit:do_nothing
-        in
-        match start_pos with
-        | `AfterLast _          -> solo_loop (vs, prev_start_ends) vs tl
-        | `InGap (_pv, nv, ap)  -> ref_gap_loop (vs, prev_start_ends) vs nv ap tl
-        | `AtNext (_pv, nv)     ->
-              let () = add_allele_edge vs nv in
-              main_loop (vs, prev_start_ends) ~p:vs ~n:nv tl
+    | Some (new_node, start_pos, tl) ->
+        let state = new_node, prev_start_ends in
+        rejoin_after_split ~prev:first_start ~next:first_start start_pos state
+          ~new_node tl
   (* When the only thing that matters is the previous node. *)
   and solo_loop ((ps, os) as state) vp = function
-    | []              -> inv_argf "No End at allele sequence: %s" allele
-    | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p allele
-    | End pos :: []   ->
-        let ve = G.V.create (E pos) in
-        let () = add_allele_edge vp ve in
-        (ve,ps) :: os (* fin *)
-    | End pos :: lst  ->
-        let ve = G.V.create (E pos) in
-        let () = add_allele_edge vp ve in
-        start_loop ((ps, ve) :: os) lst
-    | Boundary { idx; pos} :: t ->
-        let vb = G.V.create (B (pos, idx)) in
-        let () = add_allele_edge vp vb in
-        solo_loop state vb t
-    | Sequence { start; s} :: t ->
-        let vs = G.V.create (N (start, s)) in
-        let () = add_allele_edge vp vs in
-        solo_loop state vs t
-    | Gap _ :: t ->
-        solo_loop state vp t
+    | []                        -> inv_argf "No End at allele sequence: %s" allele
+    | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p allele
+    | End pos :: []             -> let ve = G.V.create (E pos) in
+                                   add_allele_edge vp ve;
+                                   (ve,ps) :: os (* fin *)
+    | End pos :: lst            -> let ve = G.V.create (E pos) in
+                                   add_allele_edge vp ve;
+                                   start_loop ((ps, ve) :: os) lst
+    | Boundary { idx; pos} :: t -> let vb = G.V.create (B (pos, idx)) in
+                                   add_allele_edge vp vb;
+                                   solo_loop state vb t
+    | Sequence { start; s} :: t -> let vs = G.V.create (N (start, s)) in
+                                   add_allele_edge vp vs;
+                                   solo_loop state vs t
+    | Gap _ :: t                -> solo_loop state vp t
   (* When traversing a reference gap. We have to keep check allele elements
      position to check when to join back with the next reference node. *)
-  and ref_gap_loop ((vs, os) as state) vp ref_node ref_pos = function
+  and ref_gap_loop ((vs, os) as state) prev ref_node ref_pos = function
     | []                                -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
     | (End pos :: _) as l               ->
         if pos <= ref_pos then
           let ve = G.V.create (E pos) in
-          let () = add_allele_edge vp ve in
+          let () = add_allele_edge prev ve in
           (vs,ve) :: os (* fin *)
         else (* pos > ref_pos *)
-          let () = add_allele_edge vp ref_node in
-          main_loop state ~p:vp ~n:ref_node l
-    | (Boundary { idx; pos} :: t) as l  ->
+          let () = add_allele_edge prev ref_node in
+          main_loop state ~prev ~next:ref_node l
+    | (Boundary { idx; pos} :: tl) as l ->
         if pos < ref_pos then
           inv_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
             allele idx pos ref_pos
         else if pos = ref_pos then
           if ref_node = B (pos, idx) then
-            let () = add_allele_edge vp ref_node in
-            main_loop state ~p:vp ~n:ref_node t
+            let () = add_allele_edge prev ref_node in
+            main_loop state ~prev ~next:ref_node tl
           else
             inv_argf "Allele %s has a boundary %d at %d where ref gap ends %d."
               allele idx pos ref_pos
-        else begin
-          let () = add_allele_edge vp ref_node in
-          main_loop state ~p:vp ~n:ref_node l
-        end
-    | Sequence { start; s} :: t         ->
-        let vn = G.V.create (N (start, s)) in
-        let () = add_allele_edge vp vn in
+        else
+          let () = add_allele_edge prev ref_node in
+          main_loop state ~prev ~next:ref_node l
+    | Sequence { start; s} :: tl        ->
+        let new_node = G.V.create (N (start, s)) in
+        let () = add_allele_edge prev new_node in
         let close_pos = start + String.length s in
         if close_pos <= ref_pos then
-          ref_gap_loop state vn ref_node ref_pos t
+          ref_gap_loop state new_node ref_node ref_pos tl
         else (* close_pos > ref_pos *)
-          let split_res = split_in ~prev_node:ref_node ~next_node:ref_node
-              ~visit:do_nothing close_pos
-          in begin
-          match split_res with
-          | `AfterLast _          -> solo_loop state vn t
-          | `AtNext (_pv, nv)     ->
-              let () = add_allele_edge vn nv in
-              main_loop state ~p:vn ~n:nv t
-          | `InGap (_pv, nv, ap)  -> ref_gap_loop state vn nv ap t
-          end
-    | Gap { start; length} :: t         ->
+          rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
+            ~new_node tl
+    | Gap { start; length} :: tl        ->
         let close_pos = start + length in
         if close_pos <= ref_pos then
-          ref_gap_loop state vp ref_node ref_pos t
+          ref_gap_loop state prev ref_node ref_pos tl
         else (* close_pos > ref_pos *)
-          let split_res = split_in ~prev_node:ref_node ~next_node:ref_node
-              ~visit:do_nothing close_pos
-          in begin
-          match split_res with
-          | `AfterLast _          -> solo_loop state vp t
-          | `AtNext (_pv, nv)     ->
-              let () = add_allele_edge vp nv in
-              main_loop state ~p:vp ~n:nv t
-          | `InGap (_pv, nv, ap)  -> ref_gap_loop state vp nv ap t
-          end
+          rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
+            ~new_node:prev tl
   (* When not in a reference gap *)
-  and main_loop ((vs, os) as state) ~p ~n = function
+  and main_loop ((vs, os) as state) ~prev ~next = function
     | []              -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p allele
     | End pos :: tl   ->
         let ve = G.V.create (E pos) in
-        let end_split =
-          split_in ~prev_node:p ~next_node:n ~visit:add_allele_edge pos
-        in
-        let ns =
-          match end_split with
+        let pv =
+          match split_in ~prev ~next ~visit:add_allele_edge pos with
           | `AfterLast pv
           | `AtNext (pv, _)
-          | `InGap (pv, _, _) ->
-              let () = add_allele_edge pv ve in
-              (vs,ve) :: os
-        in begin
-        match tl with
-        | [] -> ns (* fin *)
-        | lst -> start_loop ns lst
-        end
+          | `InGap (pv, _, _) -> pv
+        in
+        add_allele_edge pv ve;
+        let ns = (vs,ve) :: os in
+        if tl = [] then
+          ns (* fin *)
+        else
+          start_loop ns tl
     | Boundary { idx; pos} :: t ->
-        let p, n =
-          advance_until_boundary ~prev_node:p ~next_node:n ~visit:add_allele_edge
+        let prev, next =
+          advance_until_boundary ~prev ~next ~visit:add_allele_edge
             pos idx
         in
-        let () = add_allele_edge p n in
-        main_loop state ~p ~n t
+        let () = add_allele_edge prev next in
+        main_loop state ~prev ~next t
     | Sequence { start; s} :: t ->
-        let vn = G.V.create (N (start, s)) in
+        let new_node = G.V.create (N (start, s)) in
         let close_pos = start + String.length s in
-        let open_res =
-          split_in ~prev_node:p ~next_node:n ~visit:add_allele_edge start
-        in begin
+        let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
         match open_res with
-        | `AfterLast pv  -> (* add the rest in solo loop *)
-            let () = add_allele_edge pv vn  in
-            solo_loop state vn t
-        | `InGap (pv, nv, ap) ->
-            let () = add_allele_edge pv vn in
-            let close_res =
-              split_in ~prev_node:pv ~next_node:nv ~visit:do_nothing close_pos
-            in begin
-            match close_res with
-            | `AfterLast _          -> solo_loop state vn t
-            | `InGap (_pv, nv, ap)  -> ref_gap_loop state vn nv ap t
-            | `AtNext (_pv, nv)     -> let () = add_allele_edge vn nv in
-                                      main_loop state ~p:vn ~n:nv t
-            end
-        | `AtNext (pv, nv) ->
-            let () = add_allele_edge pv vn in
-            let close_res =
-              split_in ~prev_node:pv ~next_node:nv ~visit:do_nothing close_pos
-            in begin
-            match close_res with
-            | `AfterLast _          -> solo_loop state vn t (* add the rest in solo loop. *)
-            | `InGap (_pv, nv, ap)  -> ref_gap_loop state vn nv ap t
-            | `AtNext (_pv, nv)     -> let () = add_allele_edge vn nv in
-                                      main_loop state ~p:vn ~n:nv t
-            end
+        | `AfterLast prev  ->
+            let () = add_allele_edge prev new_node in
+            solo_loop state new_node t
+        | `InGap (prev, next, ap) ->
+            let () = add_allele_edge prev new_node in
+            rejoin_after_split ~prev ~next close_pos state ~new_node t
+        | `AtNext (prev, next) ->
+            let () = add_allele_edge prev new_node in
+            rejoin_after_split ~prev ~next close_pos state ~new_node t
         end
-    | Gap _ :: t -> main_loop state ~p ~n t (* skip Gaps *)
+    | Gap _ :: t -> main_loop state ~prev ~next t (* skip Gaps *)
   in
   start_loop [] alt_lst
 
@@ -373,7 +328,6 @@ let construct ?(num_alt_to_add=max_int) allele_lst r =
   let () =
     if allele_lst = [] then
       List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
-        (*let () = Printf.printf "adding %s\n%!" allele_name in *)
         if i < num_alt_to_add then
           ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
     else
