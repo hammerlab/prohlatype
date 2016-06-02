@@ -30,41 +30,44 @@ Please see http://hla.alleles.org/terms.html for terms of use.
 
 *)
 
+(** We keep track of all {alignment_elements} with regard to their position,
+    character by character, in the alignment. *)
+type position = int
+
 (** Elements that describe alignment sequence.
 
     All positions are given reletive to reference. *)
-type 'sr sequence_element =
-  | Start of int * string
+type 'sr alignment_element =
+  | Start of position
   (** Start of sequence, contains position and name *)
 
-  | End of int
+  | End of position
   (** End of a sequence.*)
 
-  | Boundary of (int * int)
+  | Boundary of { idx : int; pos : position; }
   (** Boundary of count and position.
 
       Exon boundaries are represented in the alignment files with '|', we
       preserve them for downstream tools to strip out. The boundary count
       starts at 0. *)
 
-  | Nuc of (int * 'sr * int)
+  | Sequence of { start : position; s : 'sr; }
   (** Nucleotide sequence of position and sequence. *)
 
-  | Gap of (int * int)
+  | Gap of { start : position; length : int; }
   (** Gap of position and length. *)
 
-val position: 'a sequence_element -> int
 
-val sequence_element_to_string : string sequence_element -> string
+val al_el_to_string : string alignment_element -> string
 
 type result =
   { reference : string
   (** The name of the reference allele *)
 
-  ; ref_elems : string sequence_element list
+  ; ref_elems : string alignment_element list
   (** The sequence elements of the reference. *)
 
-  ; alt_elems : (string * string sequence_element list) list
+  ; alt_elems : (string * string alignment_element list) list
   (** Seqeucen elements of alternative alleles in an associated list.*)
   }
 
