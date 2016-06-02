@@ -17,5 +17,5 @@ let () =
         None, "A_gen_all"
     in
     let f = Filename.concat dir "A_gen.txt" in
-    let g = To_graph.construct ?num_alt_to_add (Mas_parser.from_file f) in
+    let g = To_graph.construct ?num_alt_to_add [] (Mas_parser.from_file f) in
     exit (Ref_graph.output ~short:true fname g)
