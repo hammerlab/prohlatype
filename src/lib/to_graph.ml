@@ -232,11 +232,15 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
   and ref_gap_loop ((vs, os) as state) prev ref_node ref_pos = function
     | []                                -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
-    | (End pos :: _) as l               ->
+    | (End pos :: tl) as l              ->
         if pos <= ref_pos then
           let ve = G.V.create (E pos) in
           let () = add_allele_edge prev ve in
-          (vs,ve) :: os (* fin *)
+          let ns = (vs,ve) :: os in
+          if tl = [] then
+            ns (* fin *)
+          else
+            start_loop ns tl
         else (* pos > ref_pos *)
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node l
@@ -300,13 +304,11 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
         let close_pos = start + String.length s in
         let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
         match open_res with
-        | `AfterLast prev  ->
+        | `AfterLast prev         ->
             let () = add_allele_edge prev new_node in
             solo_loop state new_node t
-        | `InGap (prev, next, ap) ->
-            let () = add_allele_edge prev new_node in
-            rejoin_after_split ~prev ~next close_pos state ~new_node t
-        | `AtNext (prev, next) ->
+        | `InGap (prev, next, _)
+        | `AtNext (prev, next)    ->
             let () = add_allele_edge prev new_node in
             rejoin_after_split ~prev ~next close_pos state ~new_node t
         end
