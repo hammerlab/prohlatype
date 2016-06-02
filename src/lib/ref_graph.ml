@@ -18,11 +18,17 @@ let short_seq s =
   else
     s
 
+type start = int * string
+type end_ = int
+
+(* start end pairs *)
+type sep = { start : start ; end_ : end_ }
+
 module Nodes = struct
 
   type t =
-    | S of int * string
-    | E of int
+    | S of start
+    | E of end_
     | B of int * int      (* Boundary of position and count *)
     | N of int * string   (* Sequences *)
 

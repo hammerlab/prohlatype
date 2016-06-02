@@ -11,23 +11,22 @@ let add_reference_elems g allele ref_elems =
   let open Mas_parser in
   let open Nodes in
   let add_start start_pos lst =
-    let vs = G.V.create (S (start_pos, allele)) in
-    `Started (vs, vs) :: lst
+    let st = start_pos, allele in
+    `Started (st, G.V.create (S st)) :: lst
   in
-  let add_end end_pos ~vs ~vp lst =
-    let ve = G.V.create (E end_pos) in
-    G.add_edge_e g (G.E.create vp allele ve);
-    `Ended (vs, ve) :: lst
+  let add_end end_pos ~st ~prev lst =
+    G.add_edge_e g (G.E.create prev allele (G.V.create (E end_pos)));
+    `Ended (st, end_pos) :: lst
   in
-  let add_boundary ~vs ~vp ~idx ~pos lst =
-    let vb = G.V.create (B (pos, idx)) in
-    G.add_edge_e g (G.E.create vp allele vb);
-    `Started (vs, vb) :: lst
+  let add_boundary ~st ~prev ~idx ~pos lst =
+    let boundary_node = G.V.create (B (pos, idx)) in
+    G.add_edge_e g (G.E.create prev allele boundary_node);
+    `Started (st, boundary_node) :: lst
   in
-  let add_seq ~vs ~vp ~start s lst =
-    let vn = G.V.create (N (start, s)) in
-    G.add_edge_e g (G.E.create vp allele vn);
-    `Started (vs, vn) :: lst
+  let add_seq ~st ~prev start s lst =
+    let sequence_node = G.V.create (N (start, s)) in
+    G.add_edge_e g (G.E.create prev allele sequence_node);
+    `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
       match state, e with
@@ -39,16 +38,16 @@ let add_reference_elems g allele ref_elems =
       | `Ended _ :: _ , al_el                         ->
           inv_argf "Unexpected %s before start for %s"
             (al_el_to_string al_el) allele
-      | `Started (vs, vp) :: tl, End end_pos          -> add_end end_pos ~vs ~vp tl
-      | `Started (vs, vp) :: tl, Boundary {idx; pos } -> add_boundary ~vs ~vp ~idx ~pos tl
-      | `Started (vs, vp) :: tl, Sequence {start; s } -> add_seq ~vs ~vp ~start s tl
-      | `Started (_, _) :: _,    Gap _                -> state       (* ignore gaps *)
-      | `Started (vs, vp) :: tl, Start sp             ->
+      | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
+      | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
+      | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
+      | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
+      | `Started (_, _) :: tl,     Start sp             ->
           inv_argf "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
       | `Started _ -> inv_argf "Still have a Started in %s ref" allele
-      | `Ended (vs, vp) -> vs, vp)
-  |> List.sort ~cmp:(fun (s1,_) (s2,_) -> compare s1 s2)
+      | `Ended (start, end_) -> { start; end_})
+  |> List.sort ~cmp:(fun s1 s2 -> compare s1.start s2.start)
 
 module SSet = Set.Make (struct
     type t = string
@@ -75,24 +74,27 @@ let edges_between_to_string g pv nv =
 
 (*first_start, last_end, end_to_next_start_assoc *)
 let reference_starts_and_ends = function
-  | []           -> inv_argf "Reference has no start and ends"
-  | (s, e) :: [] -> s, e, []
-  | (s, e) :: t  ->
+  | []                  -> inv_argf "Reference has no start and ends"
+  | {start; end_} :: [] -> start, end_, []
+  | {start; end_} :: t  ->
     let rec loop ep acc = function
-      | []           -> inv_argf "stop before empty"
-      | (s, e) :: [] -> e, (ep, s) :: acc
-      | (s, e) :: t  -> loop e ((ep, s) :: acc) t
+      | []                  -> inv_argf "stop before empty"
+      | {start; end_} :: [] -> end_, (ep, start) :: acc
+      | {start; end_} :: t  -> loop end_ ((ep, start) :: acc) t
     in
-    let e, l = loop e [] t in
-    s, e, l
+    let e, l = loop end_ [] t in
+    start, e, l
 
 let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
   let open Mas_parser in
   let open Nodes in
+  let first_start_node = S first_start in
+  let last_end_node = E last_end in
+  let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
   let next_reference ~msg from =
     match next_node_along reference g ~from with
     | Some n -> n
-    | None   -> try List.assoc from end_to_next_start_assoc
+    | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
   in
   let do_nothing _ _ = () in
@@ -100,9 +102,9 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     let rec forward node msg =
       loop node (next_reference ~msg node)
     and loop prev next =
-      if next = first_start then
+      if next = first_start_node then
         forward next "No next after reference Start!"
-      else if next = last_end then
+      else if next = last_end_node then
         `AfterLast prev
       else
         match relationship pos next with
@@ -180,24 +182,23 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
   (* How we close back with the reference *)
   let rec rejoin_after_split ~prev ~next split_pos state ~new_node lst =
     match split_in ~prev ~next ~visit:do_nothing split_pos with
-    | `AfterLast _            -> solo_loop state new_node lst 
+    | `AfterLast _            -> solo_loop state new_node lst
     | `InGap (_pv, next, ap)  -> ref_gap_loop state new_node next ap lst
     | `AtNext (_pv, next)     -> add_allele_edge new_node next;
-                                 main_loop state ~prev:new_node ~next lst 
+                                 main_loop state ~prev:new_node ~next lst
   (* In the beginning we have not 'Start'ed ->
-     Loop through the Alignment elemends:
-      - discarding Boundary
-      - complaining on anything other than a Start
-      - on a Start find the position in reference and start correct loop *)
-  and start_loop prev_start_ends lst =
+     Loop through the alignment elemends:
+      - discarding Boundaries and Gaps
+      - on a Start find the position in reference and start correct loop
+      - complaining on anything other than a Start *)
+  and start_loop previous_starts_and_ends lst =
     let rec find_start_loop = function
-      | Boundary _ :: t 
+      | Boundary _ :: t
       | Gap _ :: t      -> find_start_loop t (* Ignore Gaps & Boundaries before Start *)
-      | Start p :: t    -> let vs = G.V.create (S (p, allele)) in
-                           Some (vs, p, t)
+      | Start p :: t    -> Some ( p, t)
       | []              ->
         begin
-          match prev_start_ends with
+          match previous_starts_and_ends with
           | [] -> inv_argf "Failed to find start for %s." allele
           | ls -> None
         end
@@ -205,45 +206,43 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
                             (al_el_to_string s) allele
     in
     match find_start_loop lst with
-    | None -> prev_start_ends (* fin *)
-    | Some (new_node, start_pos, tl) ->
-        let state = new_node, prev_start_ends in
-        rejoin_after_split ~prev:first_start ~next:first_start start_pos state
+    | None -> previous_starts_and_ends (* fin *)
+    | Some (start_pos, tl) ->
+        let start = start_pos, allele in
+        let state = start, previous_starts_and_ends in
+        let new_node = G.V.create (S start) in
+        rejoin_after_split ~prev:first_start_node ~next:first_start_node start_pos state
           ~new_node tl
+  and add_end (start, os) end_ prev tl =
+    add_allele_edge prev (G.V.create (E end_));
+    let ns = { start; end_ } :: os in
+    if tl = [] then
+      ns  (* fin *)
+    else
+      start_loop ns tl
   (* When the only thing that matters is the previous node. *)
-  and solo_loop ((ps, os) as state) vp = function
+  and solo_loop state prev = function
     | []                        -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p allele
-    | End pos :: []             -> let ve = G.V.create (E pos) in
-                                   add_allele_edge vp ve;
-                                   (ve,ps) :: os (* fin *)
-    | End pos :: lst            -> let ve = G.V.create (E pos) in
-                                   add_allele_edge vp ve;
-                                   start_loop ((ps, ve) :: os) lst
-    | Boundary { idx; pos} :: t -> let vb = G.V.create (B (pos, idx)) in
-                                   add_allele_edge vp vb;
-                                   solo_loop state vb t
-    | Sequence { start; s} :: t -> let vs = G.V.create (N (start, s)) in
-                                   add_allele_edge vp vs;
-                                   solo_loop state vs t
-    | Gap _ :: t                -> solo_loop state vp t
+    | End end_pos :: tl         -> add_end state end_pos prev tl
+    | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
+                                   add_allele_edge prev boundary_node;
+                                   solo_loop state boundary_node t
+    | Sequence { start; s} :: t -> let sequence_node = G.V.create (N (start, s)) in
+                                   add_allele_edge prev sequence_node;
+                                   solo_loop state sequence_node t
+    | Gap _ :: t                -> solo_loop state prev t
   (* When traversing a reference gap. We have to keep check allele elements
      position to check when to join back with the next reference node. *)
-  and ref_gap_loop ((vs, os) as state) prev ref_node ref_pos = function
+  and ref_gap_loop state prev ref_node ref_pos = function
     | []                                -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
-    | (End pos :: tl) as l              ->
-        if pos <= ref_pos then
-          let ve = G.V.create (E pos) in
-          let () = add_allele_edge prev ve in
-          let ns = (vs,ve) :: os in
-          if tl = [] then
-            ns (* fin *)
-          else
-            start_loop ns tl
-        else (* pos > ref_pos *)
+    | (End end_pos :: tl) as lst        ->
+        if end_pos <= ref_pos then
+          add_end state end_pos prev tl
+        else (* end_pos > ref_pos *)
           let () = add_allele_edge prev ref_node in
-          main_loop state ~prev ~next:ref_node l
+          main_loop state ~prev ~next:ref_node lst
     | (Boundary { idx; pos} :: tl) as l ->
         if pos < ref_pos then
           inv_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
@@ -275,23 +274,17 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
           rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
             ~new_node:prev tl
   (* When not in a reference gap *)
-  and main_loop ((vs, os) as state) ~prev ~next = function
+  and main_loop state ~prev ~next = function
     | []              -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p allele
-    | End pos :: tl   ->
-        let ve = G.V.create (E pos) in
-        let pv =
-          match split_in ~prev ~next ~visit:add_allele_edge pos with
-          | `AfterLast pv
-          | `AtNext (pv, _)
-          | `InGap (pv, _, _) -> pv
+    | End end_pos :: tl  ->
+        let prev =
+          match split_in ~prev ~next ~visit:add_allele_edge end_pos with
+          | `AfterLast p
+          | `AtNext (p, _)
+          | `InGap (p, _, _) -> p
         in
-        add_allele_edge pv ve;
-        let ns = (vs,ve) :: os in
-        if tl = [] then
-          ns (* fin *)
-        else
-          start_loop ns tl
+        add_end state end_pos prev tl
     | Boundary { idx; pos} :: t ->
         let prev, next =
           advance_until_boundary ~prev ~next ~visit:add_allele_edge
