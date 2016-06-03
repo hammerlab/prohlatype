@@ -51,7 +51,7 @@ let add_reference_elems g allele ref_elems =
 
 module SSet = Set.Make (struct
     type t = string
-    let compare = compare
+    let compare (x : string) y = compare x y
   end)
 
 let relationship pos v =
