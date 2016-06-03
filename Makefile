@@ -5,7 +5,7 @@ PACKAGES=nonstd sosa ocamlgraph cmdliner
 default: build
 
 build:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib mas_parser.cmo to_graph.cmo
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib mas_parser.cmo pattern.cmo ref_graph.cmo to_graph.cmo 
 
 setup:
 	opam install ocamlfind ocamlbuild $(PACKAGES)

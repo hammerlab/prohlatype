@@ -4,4 +4,11 @@
 
 #directory "_build/src/lib"
 #load_rec "mas_parser.cmo"
+#load_rec "pattern.cmo"
+#load_rec "ref_graph.cmo"
 #load_rec "to_graph.cmo"
+
+open Nonstd
+module String = Sosa.Native_string
+
+let nn elst ilst = List.map ~f:(List.nth elst) ilst
