@@ -1,7 +1,7 @@
 
 open Util
 
-let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open =
+let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache =
   let open To_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =
@@ -18,7 +18,8 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no
   let short = not notshort in
   let pdf   = not no_pdf in
   let open_ = not no_open in
-  construct_from_file { alignment_file; which }
+  let skip_disk_cache = no_cache in
+  construct_from_file ~skip_disk_cache { alignment_file; which }
   |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
@@ -74,6 +75,15 @@ let () =
     in
     Arg.(value & flag & info ~doc ["no-open"])
   in
+  let no_cache_flag =
+    let doc =
+      sprintf "Do not use a disk cache (in %s sub directory of the current \
+               directory) to search for previously (and then save) constructed \
+               graphs."
+        To_graph.cache_dir
+    in
+    Arg.(value & flag & info ~doc ["no-cache"])
+  in
   let allele_arg =
     let docv = "allele name" in
     let doc = "Specify specfic alternate alleles to add to the graph.\
@@ -104,6 +114,7 @@ let () =
             $ output_fname_arg $ file_arg
             $ num_alt_arg $ allele_arg
             $ not_short_flag $ no_pdf_flag $ no_open_flag
+            $ no_cache_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with

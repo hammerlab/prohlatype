@@ -363,8 +363,10 @@ let construct_args_to_string { alignment_file; which } =
       | None -> "All"
       | Some w -> construct_which_args_to_string w)
 
+let cache_dir = ".ref_graphs"
+
 let construct_from_file =
-  let dir = Filename.concat (Sys.getcwd ()) ".ref_graphs" in
+  let dir = Filename.concat (Sys.getcwd ()) cache_dir in
   disk_memoize ~dir construct_args_to_string
     (fun { alignment_file; which } ->
        construct_from_file ?which alignment_file)
