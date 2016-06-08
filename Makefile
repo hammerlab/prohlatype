@@ -1,4 +1,4 @@
-PACKAGES=nonstd sosa ocamlgraph cmdliner
+PACKAGES=ppx_deriving.std nonstd sosa ocamlgraph cmdliner
 
 .PHONY: default setup clean build
 

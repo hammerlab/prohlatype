@@ -15,8 +15,8 @@ let short_seq s =
   else
     s
 
-type start = int * string
-type end_ = int
+type start = int * string [@@deriving eq, ord]
+type end_ = int [@@deriving eq, ord]
 
 (* start end pairs *)
 type sep = { start : start ; end_ : end_ }
@@ -28,6 +28,7 @@ module Nodes = struct
     | E of end_
     | B of int * int      (* Boundary of position and count *)
     | N of int * string   (* Sequences *)
+    [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
     | S (n, s)  -> sprintf "\"S%d-%s\"" n s
@@ -35,16 +36,14 @@ module Nodes = struct
     | B (_, n)  -> sprintf "\"B%d\"" n
     | N (n, s)  -> sprintf "\"%d%s\"" n (if short then short_seq s else s)
 
-  let compare = Pervasives.compare
-  let equal = (=)
   let hash = Hashtbl.hash
 end
 
 module Edges = struct
-  type t = String.t           (* Which allele *)
+  type t = string           (* Which allele *)
   let compare = String.compare
   let hash = Hashtbl.hash
-  let equal = (=)
+  let equal s1 s2 = compare s1 s2 = 0
   let default = ""
 end
 

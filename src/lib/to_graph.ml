@@ -46,7 +46,7 @@ let add_reference_elems g allele ref_elems =
   |> List.map ~f:(function
       | `Started _ -> inv_argf "Still have a Started in %s ref" allele
       | `Ended (start, end_) -> { start; end_})
-  |> List.sort ~cmp:(fun s1 s2 -> compare s1.start s2.start)
+  |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
 module SSet = Set.Make (struct
     type t = string
