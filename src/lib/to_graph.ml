@@ -1,9 +1,8 @@
 (** Construction from Mas_parser *)
 
+open Util
 open Graph        (* OCamlgraph *)
-open Nonstd
 open Ref_graph
-module String = Sosa.Native_string
 
 let inv_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
@@ -309,11 +308,24 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
   in
   start_loop [] alt_lst
 
-let construct ?(num_alt_to_add=max_int) allele_lst r =
+type construct_which_args =
+  | NumberOfAlts of int
+  | SpecificAlleles of string list
+
+let construct_which_args_to_string = function
+  | NumberOfAlts n    -> sprintf "N%d" n
+  | SpecificAlleles l -> sprintf "S%s" (String.concat ~sep:"_" l)
+
+let construct_from_parsed ?which r =
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
   let ref_length = List.length ref_elems in
-  let num_alleles = min (List.length alt_elems) num_alt_to_add in
+  let num_alleles =
+    match which with
+    | None                     -> List.length alt_elems
+    | Some (NumberOfAlts n)    -> n
+    | Some (SpecificAlleles l) -> List.length l
+  in
   let g = G.create ~size:(ref_length * num_alleles) () in
   let refs_start_ends = add_reference_elems g reference ref_elems in
   let alt_elems =
@@ -321,13 +333,38 @@ let construct ?(num_alt_to_add=max_int) allele_lst r =
   in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let () =
-    if allele_lst = [] then
-      List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
-        if i < num_alt_to_add then
-          ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
-    else
-      List.iter allele_lst ~f:(fun allele_name ->
-        let lst = List.assoc allele_name alt_elems in
-        ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
+    match which with
+    | None                               ->
+        List.iter alt_elems ~f:(fun (allele_name, lst) ->
+            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
+    | Some (NumberOfAlts num_alt_to_add) ->
+        List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
+          if i < num_alt_to_add then
+            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
+    | Some (SpecificAlleles allele_list) ->
+        List.iter allele_list ~f:(fun allele_name ->
+            let lst = List.assoc allele_name alt_elems in
+            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
   in
   g
+
+let construct_from_file ?which file =
+  construct_from_parsed ?which (Mas_parser.from_file file)
+
+type construct_args =
+  { alignment_file  : string       (* this is really a path, basename below *)
+  ; which           : construct_which_args option
+  }
+
+let construct_args_to_string { alignment_file; which } =
+  sprintf "%s_%s"
+    (Filename.basename alignment_file)
+    (match which with
+      | None -> "All"
+      | Some w -> construct_which_args_to_string w)
+
+let construct_from_file =
+  let dir = Filename.concat (Sys.getcwd ()) ".ref_graphs" in
+  disk_memoize ~dir construct_args_to_string
+    (fun { alignment_file; which } ->
+       construct_from_file ?which alignment_file)

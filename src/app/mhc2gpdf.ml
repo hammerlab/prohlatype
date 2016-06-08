@@ -1,27 +1,24 @@
 
-open Printf
+open Util
 
-let construct ofile ifile num_alt_to_add allele_lst notshort no_pdf no_open =
-  let ofile =
-    match ofile with
-    | None ->
-      begin
-        let base = Filename.basename ifile |> Filename.chop_extension in
-        match allele_lst with
-        | [] ->
-          begin
-            match num_alt_to_add with
-            | None   -> sprintf "%s_all" base
-            | Some n -> sprintf "%s_%d" base n
-          end
-        | lst        -> sprintf "%s_%d" base (List.length lst)
-      end
-    | Some s -> s
+let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open =
+  let open To_graph in
+  let base = Filename.basename alignment_file |> Filename.chop_extension in
+  let option_based_fname, which =
+    match allele_list with
+    | []  ->
+        begin
+          match num_alt_to_add with
+          | None   -> sprintf "%s_all" base, None
+          | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
+        end
+    | lst -> sprintf "%s_%d" base (List.length lst), (Some (SpecificAlleles lst))
   in
+  let ofile = Option.value ofile ~default:option_based_fname in
   let short = not notshort in
   let pdf   = not no_pdf in
   let open_ = not no_open in
-  To_graph.construct ?num_alt_to_add allele_lst (Mas_parser.from_file ifile)
+  construct_from_file { alignment_file; which }
   |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"

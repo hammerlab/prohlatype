@@ -1,9 +1,6 @@
 
+open Util
 open Graph
-open Nonstd
-module String = Sosa.Native_string
-
-let invalid_argf fmt = ksprintf invalid_arg fmt
 
 (* TODO:
   - Hashcons the sequences
@@ -86,24 +83,6 @@ let fold_along_allele ~start allele g ~f ~init =
 
 module Tg = Topological.Make_stable (G)
 
-(*
-let over_whole_kmers ~l ~k s ~f ~init =
-  let e = l - k in
-  let rec loop a i =
-    if i > e then a else loop (f a (String.sub_exn s i k)) (i + 1)
-  in
-  loop init 0
-
-let suffixes ~l ~k s =
-  List.init (k - 1) ~f:(fun i ->
-    let j = i + 1 in
-    j, String.sub_exn s (l - j) j)
-
-let individual ~l ~k s =
-  List.init l ~f:(fun i ->
-      (k - l + i, String.sub_exn s i (l - i)))
-   *)
-
 (* Fold over whole k-mers in s, but return an assoc of length remaining
    and suffixes that are not matched. *)
 let only_over_whole_kmers ?(canonical=false) k s f init =
@@ -119,7 +98,7 @@ let only_over_whole_kmers ?(canonical=false) k s f init =
   loop 0 (init, [])
   |> (fun (s, l) -> s, if canonical then List.rev l else l)
 
-let fold_kmers ?(canonical=false) k g f init =
+let fold_kmers ?(canonical=false) ~k g f init =
   let open Nodes in
   let rec over_succ state node = function
     | [] -> state
@@ -172,6 +151,21 @@ let between g start stop =
   add_from start;
   ng
 
+let create_kmer_table ~k g f i =
+  let t = Kmer_table.make k i in
+  fold_kmers ~k g (Kmer_table.update f) t
+
+let kmer_counts ~k g =
+  create_kmer_table ~k g ((+) 1) 0
+
+(*
+let kmer_nodes ~k g =
+  create_kmer_table ~k g (fun acc node -> node :: acc) [] 
+*)
+(*let lookup s (k, kmt) =
+  let prefix = String.take ~index:k s in
+  *)
+
 (** Output **)
 
 (* TODO:
@@ -197,8 +191,6 @@ let output_dot ?short fname g =
   Dot.output_graph oc g;
   close_out oc
 
-
-
 let output ?(pdf=true) ?(open_=true) ~short fname g =
   output_dot ~short (fname ^ ".dot") g;
   let r =
@@ -211,3 +203,14 @@ let output ?(pdf=true) ?(open_=true) ~short fname g =
     Sys.command (sprintf "open %s.pdf" fname)
   else
     r
+
+let save fname g =
+  let oc = open_out fname in
+  Marshal.to_channel oc g [];
+  close_out oc
+
+let load fname =
+  let ic = open_in fname in
+  let g : G.t = (Marshal.from_channel ic) in
+  close_in ic;
+  g
