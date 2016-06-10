@@ -1,6 +1,7 @@
 #require "nonstd"
 #require "sosa"
 #require "ocamlgraph"
+#require "extlib"
 
 #directory "_build/src/lib"
 #load_rec "mas_parser.cmo"

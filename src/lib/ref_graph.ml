@@ -80,6 +80,38 @@ let fold_along_allele ~start allele g ~f ~init =
   in
   loop start (f init start)
 
+module EdgesAsBitSets = struct
+  type t = BitSet.t
+  let hash = Hashtbl.hash
+  let compare = BitSet.compare
+  let equal = BitSet.equals
+  let default = BitSet.empty ()
+end
+
+module GE = Imperative.Digraph.ConcreteLabeled(Nodes)(EdgesAsBitSets)
+
+let next_node_along_ge aset allele g ~from =
+  try
+    GE.fold_succ_e (fun (_, bt, vs) n ->
+        if Allele_set.is_set aset bt allele then raise (Found vs) else n)
+      g from None
+  with Found v ->
+    Some v
+
+let fold_along_allele_ge aset ~start allele g ~f ~init =
+  let next = next_node_along_ge aset allele g in
+  let rec loop from (acc, stop) =
+    if stop then
+      acc
+    else
+      match next ~from with
+      | None    -> acc
+      | Some vs -> loop vs (f acc vs)
+  in
+  loop start (f init start)
+
+
+
 module Tg = Topological.Make_stable (G)
 
 (* Fold over whole k-mers in s, but return an assoc of length remaining
@@ -202,6 +234,39 @@ let output ?(pdf=true) ?(open_=true) ~short fname g =
     Sys.command (sprintf "open %s.pdf" fname)
   else
     r
+
+let output_dot_ge ?short fname (aset, g) =
+  let oc = open_out fname in
+  let module Dot = Graphviz.Dot (
+    struct
+      include GE
+      let graph_attributes _g = []
+      let default_vertex_attributes _g = []
+      let vertex_name = Nodes.vertex_name ?short
+      let vertex_attributes _v = [`Shape `Box]
+      let get_subgraph _v = None
+
+      let default_edge_attributes _t = [`Color 4711]
+      let edge_attributes e = [`Label (Allele_set.to_string aset (GE.E.label e))]
+
+    end)
+  in
+  Dot.output_graph oc g;
+  close_out oc
+
+let output_ge ?(pdf=true) ?(open_=true) ~short fname (aset, g) =
+  output_dot_ge ~short (fname ^ ".dot") (aset, g);
+  let r =
+    if pdf then
+      Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)
+    else
+      -1
+  in
+  if r = 0 && open_ then
+    Sys.command (sprintf "open %s.pdf" fname)
+  else
+    r
+
 
 let save fname g =
   let oc = open_out fname in

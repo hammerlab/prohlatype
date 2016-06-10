@@ -25,3 +25,10 @@ let disk_memoize ?dir arg_to_string f =
         close_out o;
         r
       end
+
+let error_bind o f =
+  match o with
+  | Error e -> Error e
+  | Ok o -> f o
+
+let (>>=) = error_bind
