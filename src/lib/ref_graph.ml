@@ -110,8 +110,6 @@ let fold_along_allele_ge aset ~start allele g ~f ~init =
   in
   loop start (f init start)
 
-
-
 module Tg = Topological.Make_stable (G)
 
 (* Fold over whole k-mers in s, but return an assoc of length remaining
@@ -196,6 +194,58 @@ let kmer_nodes ~k g =
 (*let lookup s (k, kmt) =
   let prefix = String.take ~index:k s in
   *)
+
+
+module TGe = Topological.Make_stable (GE)
+
+let fold_kmers_ge ?(canonical=false) ~k g f init =
+  let open Nodes in
+  let rec over_succ state node = function
+    | [] -> state
+    | k_seq_lst ->
+        (* Since we're folding over each edge, we'll get the successor node 'v'
+          for every allele edge. *)
+        GE.fold_succ (fun node ((state, set) as st) ->
+            if List.mem node ~set then st else
+              (* This logic makes it DFS *)
+              let nstate = proc_succ state k_seq_lst node in
+              nstate, node :: set) g node (state, [])
+        |> fst
+  and proc_succ state k_seq_lst node =
+    match node with
+      | S _       -> invalid_argf "Start should not be a successor!"
+      | E _       -> state
+      | B _       -> over_succ state node k_seq_lst
+      | N (_, s)  ->
+          let l = String.length s in
+          List.fold_left k_seq_lst ~init:(state,[])
+            ~f:(fun (state, acc) (k, seq) ->
+                  if k <= l then
+                    let ns = String.concat [seq; String.sub_exn s 0 k] in
+                    let nstate = f state ns in
+                    nstate, acc
+                  else
+                    state, (k - l, String.concat [seq; s]) :: acc)
+          |> fun (state, ksl) ->
+                over_succ state node (if canonical then List.rev ksl else ksl)
+  in
+  let proc node state =
+    match node with
+    | S _ | E _ | B _ -> state
+    | N (_, s)        ->
+      let nstate, lst = only_over_whole_kmers ~canonical k s f state in
+      over_succ nstate node lst
+  in
+  TGe.fold proc g init
+
+let create_kmer_table_ge ~k g f i =
+  let t = Kmer_table.make k i in
+  fold_kmers_ge ~k g (Kmer_table.update f) t
+
+let kmer_counts_ge ~k g =
+  create_kmer_table_ge ~k g ((+) 1) 0
+
+
 
 (** Output **)
 
