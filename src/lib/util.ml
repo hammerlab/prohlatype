@@ -32,3 +32,6 @@ let error_bind o f =
   | Ok o -> f o
 
 let (>>=) = error_bind
+
+let error fmt = ksprintf (fun s -> Error s) fmt
+
