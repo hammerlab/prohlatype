@@ -3,6 +3,8 @@ open Nonstd
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
+let k (n,_) = n
+
 let make k e =
   let n = Pattern.pow4 k in
   k, Array.make n e
