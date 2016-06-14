@@ -189,7 +189,7 @@ let kmer_counts ~k g =
 
 (*
 let kmer_nodes ~k g =
-  create_kmer_table ~k g (fun acc node -> node :: acc) [] 
+  create_kmer_table ~k g (fun acc node -> node :: acc) []
 *)
 (*let lookup s (k, kmt) =
   let prefix = String.take ~index:k s in
@@ -263,7 +263,7 @@ let create_kmer_table_ge ~k g f init =
   let fpartial state kseqlst p s =
     let l = String.length s in
     List.fold_left kseqlst ~init:(state, [])
-      ~f:(fun (state, acc) (krem, curp, posit) -> 
+      ~f:(fun (state, acc) (krem, curp, posit) ->
             if krem <= l then
               let pn = Pattern.encode_extend s ~pos:0 ~len:krem curp in
               let nf = Kmer_table.update_index f state.full posit pn in
@@ -274,7 +274,7 @@ let create_kmer_table_ge ~k g f init =
               state, na)
     |> (fun (s, plst) -> { s with partial = plst })
   in
-  fold_kmers_ge ~k g ~f:new_f ~fpartial ~init 
+  fold_kmers_ge ~k g ~f:new_f ~fpartial ~init
 
 let kmer_counts_ge ~k g =
   let f _ c = c + 1 in
@@ -283,6 +283,13 @@ let kmer_counts_ge ~k g =
 let kmer_list_ge ~k g =
   let f p acc = p :: acc in
   create_kmer_table_ge ~k g f []
+
+let starting_with g index s =
+  let k = Kmer_table.k index in
+  match String.sub s ~index:0 ~length:k with
+  | None -> error "Not long enough: %s vs %d" s k
+  | Some ss -> Ok (Kmer_table.lookup index ss)
+      (*| [] -> error "Not found"  *)
 
 (** Output **)
 
@@ -334,7 +341,7 @@ let output_dot_ge ?short fname (aset, g) =
       let get_subgraph _v = None
 
       let default_edge_attributes _t = [`Color 4711]
-      let edge_attributes e = [`Label (Allele_set.to_string aset (GE.E.label e))]
+      let edge_attributes e = [`Label (Allele_set.to_human_readable aset (GE.E.label e))]
 
     end)
   in
