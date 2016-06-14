@@ -198,54 +198,91 @@ let kmer_nodes ~k g =
 
 module TGe = Topological.Make_stable (GE)
 
-let fold_kmers_ge ?(canonical=false) ~k g f init =
+(* I want to avoid all of the calls to 'String.sub_ below so this call will
+   just pass the (1) whole string, (2) an offset, and (3) k; putting the
+   responsibility on 'f' to deal with not full length strings. *)
+
+(* Fold over whole k-mers in s, but return an assoc of length remaining
+   and suffixes that are not matched. *)
+let over_kmers_of_string k p s ~f ~init =
+  let l = String.length s in
+  let rec loop index acc =
+    if index = l then acc else
+      let sub_length = l - index in
+      if sub_length >= k then
+        loop (index + 1) (f acc p s ~index ~length:`Whole)
+      else
+        loop (index + 1) (f acc p s ~index ~length:(`Part sub_length))
+  in
+  loop 0 init
+
+type ('a, 'b) kmer_fold_state =
+  { full    : 'a
+  ; partial : 'b list
+  }
+
+let update_full f state = { state with full = f state }
+let update_partial f state = { state with partial = f state }
+
+let fold_kmers_ge ~k g ~f ~fpartial ~init =
   let open Nodes in
-  let rec over_succ state node = function
+  let rec fill_partial_matches node ({ partial ; _} as state) =
+    match partial with
     | [] -> state
-    | k_seq_lst ->
-        (* Since we're folding over each edge, we'll get the successor node 'v'
-          for every allele edge. *)
-        GE.fold_succ (fun node ((state, set) as st) ->
-            if List.mem node ~set then st else
-              (* This logic makes it DFS *)
-              let nstate = proc_succ state k_seq_lst node in
-              nstate, node :: set) g node (state, [])
-        |> fst
-  and proc_succ state k_seq_lst node =
-    match node with
-      | S _       -> invalid_argf "Start should not be a successor!"
-      | E _       -> state
-      | B _       -> over_succ state node k_seq_lst
-      | N (_, s)  ->
-          let l = String.length s in
-          List.fold_left k_seq_lst ~init:(state,[])
-            ~f:(fun (state, acc) (k, seq) ->
-                  if k <= l then
-                    let ns = String.concat [seq; String.sub_exn s 0 k] in
-                    let nstate = f state ns in
-                    nstate, acc
-                  else
-                    state, (k - l, String.concat [seq; s]) :: acc)
-          |> fun (state, ksl) ->
-                over_succ state node (if canonical then List.rev ksl else ksl)
+    | ps ->
+        GE.fold_succ (fun node state -> partial_state_on_successors state ps node)
+          g node state
+  and partial_state_on_successors state partial = function
+    | S _             -> invalid_argf "Start should not be a successor!"
+    | E _             -> state
+    | B _ as n        -> fill_partial_matches n state (* skip node *)
+    | (N (p, s) as n) -> fpartial state partial p s
+                         |> fill_partial_matches n
   in
   let proc node state =
     match node with
     | S _ | E _ | B _ -> state
-    | N (_, s)        ->
-      let nstate, lst = only_over_whole_kmers ~canonical k s f state in
-      over_succ nstate node lst
+    | N (p, s)        -> over_kmers_of_string k p s ~f ~init:state
+                         |> fill_partial_matches node
   in
   TGe.fold proc g init
 
-let create_kmer_table_ge ~k g f i =
-  let t = Kmer_table.make k i in
-  fold_kmers_ge ~k g (Kmer_table.update f) t
+let create_kmer_table_ge ~k g f init =
+  let init = { full = Kmer_table.make k init ; partial = [] } in
+  let new_f state p s ~index ~length =
+    let posit = p, s, index in
+    match length with
+    | `Whole  ->
+        let i = Pattern.encode_sub s ~pos:index ~len:k in     (* TODO: use consistent args *)
+        let nfull = Kmer_table.update_index f state.full posit i in
+        { state with full = nfull }
+    | `Part p ->
+        let is = Pattern.encode_sub s ~pos:index ~len:p in
+        { state with partial = (k - p, is, posit) :: state.partial }
+  in
+  let fpartial state kseqlst p s =
+    let l = String.length s in
+    List.fold_left kseqlst ~init:(state, [])
+      ~f:(fun (state, acc) (krem, curp, posit) -> 
+            if krem <= l then
+              let pn = Pattern.encode_extend s ~pos:0 ~len:krem curp in
+              let nf = Kmer_table.update_index f state.full posit pn in
+              { state with full = nf }, acc
+            else
+              let pn = Pattern.encode_extend s ~pos:0 ~len:l curp in
+              let na = (krem - l, pn, posit) :: acc in
+              state, na)
+    |> (fun (s, plst) -> { s with partial = plst })
+  in
+  fold_kmers_ge ~k g ~f:new_f ~fpartial ~init 
 
 let kmer_counts_ge ~k g =
-  create_kmer_table_ge ~k g ((+) 1) 0
+  let f _ c = c + 1 in
+  create_kmer_table_ge ~k g f 0
 
-
+let kmer_list_ge ~k g =
+  let f p acc = p :: acc in
+  create_kmer_table_ge ~k g f []
 
 (** Output **)
 

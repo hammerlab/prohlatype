@@ -341,31 +341,25 @@ let construct_from_parsed ?which r =
   let open Ref_graph in
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
-  let ref_length = List.length ref_elems in
-  let num_alleles =
-    match which with
-    | None                     -> List.length alt_elems
-    | Some (NumberOfAlts n)    -> n
-    | Some (SpecificAlleles l) -> List.length l
-  in
-  let g = GE.create ~size:(ref_length * num_alleles) () in
-  let aset = Allele_set.construct (reference :: List.map ~f:fst alt_elems) in
-  let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems in
+  let alt_alleles =
+    match which with
+    | None ->
+        alt_elems
+    | Some (NumberOfAlts num_alt_to_add) ->
+        List.take alt_elems num_alt_to_add 
+    | Some (SpecificAlleles alst)        ->
+        List.map alst ~f:(fun name -> name, List.assoc name alt_elems) 
+  in
+  let num_alleles = List.length alt_alleles in
+  let ref_length = List.length ref_elems in
+  let g = GE.create ~size:(ref_length * num_alleles) () in
+  let aset = Allele_set.construct (reference :: List.map ~f:fst alt_alleles) in
+  let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let () =
-    match which with
-    | None                               ->
-        List.iter alt_elems ~f:(fun (allele_name, lst) ->
-            ignore (add_non_ref g reference aset fs_ls_st_assoc allele_name lst))
-    | Some (NumberOfAlts num_alt_to_add) ->
-        List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
-          if i < num_alt_to_add then
-            ignore (add_non_ref g reference aset fs_ls_st_assoc allele_name lst))
-    | Some (SpecificAlleles allele_list) ->
-        List.iter allele_list ~f:(fun allele_name ->
-            let lst = List.assoc allele_name alt_elems in
-            ignore (add_non_ref g reference aset fs_ls_st_assoc allele_name lst))
+    List.iter alt_alleles ~f:(fun (allele_name, lst) ->
+      ignore (add_non_ref g reference aset fs_ls_st_assoc allele_name lst))
   in
   (aset, g)
 

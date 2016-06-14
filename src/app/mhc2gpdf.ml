@@ -2,7 +2,7 @@
 open Util
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache = function
-  | true ->
+  | false ->
       let open To_graph_ge in
       let base = Filename.basename alignment_file |> Filename.chop_extension in
       let option_based_fname, which =
@@ -22,7 +22,7 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no
       let skip_disk_cache = no_cache in
       construct_from_file ~skip_disk_cache { alignment_file; which }
       |> Ref_graph.output_ge ~short ~pdf ~open_ ofile
-  | false ->
+  | true ->
       let open To_graph in
       let base = Filename.basename alignment_file |> Filename.chop_extension in
       let option_based_fname, which =
@@ -105,9 +105,9 @@ let () =
     in
     Arg.(value & flag & info ~doc ["no-cache"])
   in
-  let use_new_flag =
-    let doc = sprintf "new method!" in
-    Arg.(value & flag & info ~doc ["use-new"])
+  let use_old_flag =
+    let doc = sprintf "old method!" in
+    Arg.(value & flag & info ~doc ["use-old"])
   in
   let allele_arg =
     let docv = "allele name" in
@@ -140,7 +140,7 @@ let () =
             $ num_alt_arg $ allele_arg
             $ not_short_flag $ no_pdf_flag $ no_open_flag
             $ no_cache_flag
-            $ use_new_flag
+            $ use_old_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with

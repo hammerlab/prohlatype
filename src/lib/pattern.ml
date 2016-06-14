@@ -20,14 +20,14 @@ let int_to_char = function
 let int_at s index = 
   char_to_int (String.get_exn s ~index)
 
-let pat_to_int s =
+let encode s =
   let r = ref 0 in
   for i = 0 to String.length s - 1 do
     r := 4 * !r  + (int_at s i);
   done;
   !r
 
-let int_to_pat ~k p =
+let decode ~k p =
   let rec loop s kp index =
     if kp = 0 || index < 0 then
       s
@@ -37,12 +37,25 @@ let int_to_pat ~k p =
   in
   loop (String.make k 'A') p (k - 1)
 
-let pat_to_int_sub text ~pos ~len =
+let add_to_pat cur chr =
+  cur * 4 + (char_to_int chr)
+
+let encode_sub text ~pos ~len =
   let rec loop i acc =
     if i = len then acc
     else loop (i + 1) (acc * 4 + (int_at text (pos + i)))
+    (*else loop (i + 1) (add_to_pat acc (String.get_exn text ~index:(pos + 1))) *)
   in
   loop 0 0
+
+let encode_extend text ~pos ~len cur =
+  let rec loop i acc =
+    if i = len then acc
+    else loop (i + 1) (acc * 4 + (int_at text (pos + i)))
+    (*else loop (i + 1) (add_to_pat acc (String.get_exn text ~index:(pos + 1))) *)
+  in
+  loop 0 cur
+
 
 let reverse_complement ~k i =
   let c = function

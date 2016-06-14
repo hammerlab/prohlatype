@@ -9,12 +9,16 @@ let make k e =
 
 let init k f =
   let n = Pattern.pow4 k in
-  k, Array.init n ~f:(fun i -> f (Pattern.int_to_pat ~k i))
+  k, Array.init n ~f:(fun i -> f (Pattern.decode ~k i))
 
 let update f ((k, t) as tb) s =
   assert (String.length s = k);
-  let j = Pattern.pat_to_int s in
+  let j = Pattern.encode s in
   t.(j) <- f t.(j);
+  tb
+
+let update_index f ((_, t) as tb) state index =
+  t.(index) <- f state t.(index);
   tb
 
 let distr (_, t) =
@@ -31,5 +35,5 @@ let lookup (k, t) s =
   if n <> k then
     invalid_argf "String length %d doesn't match table: %d" n k
   else
-    t.(Pattern.pat_to_int s)
+    t.(Pattern.encode s)
 
