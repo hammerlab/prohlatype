@@ -39,7 +39,7 @@ module Nodes = struct
   let hash = Hashtbl.hash
 end
 
-module EdgesAsBitSets = struct
+module Edges = struct
   type t = BitSet.t
   let hash = Hashtbl.hash
   let compare = BitSet.compare
@@ -48,7 +48,7 @@ module EdgesAsBitSets = struct
 end
 
 
-module G = Imperative.Digraph.ConcreteLabeled(Nodes)(EdgesAsBitSets)
+module G = Imperative.Digraph.ConcreteLabeled(Nodes)(Edges)
 
 exception Found of Nodes.t
 
@@ -174,12 +174,39 @@ let kmer_list ~k g =
   let f p acc = p :: acc in
   create_kmer_table ~k g f []
 
-let starting_with g index s =
+let starting_with index s =
   let k = Kmer_table.k index in
   match String.sub s ~index:0 ~length:k with
   | None -> error "Not long enough: %s vs %d" s k
   | Some ss -> Ok (Kmer_table.lookup index ss)
+
+let mismatches ~s1 ~o1 ~s2 ~o2 =
+  let l1 = String.length s1 in
+  let l2 = String.length s2 in
+  let rec loop i m =
+    let i1 = i + o1 in
+    let i2 = i + o2 in
+    if i1 >= l1 then
+      if i2 >= l2 then
+        `Both m
+      else
+        `First m
+    else if i2 >= l2 then
+      `Second m
+    else
+      loop (i + 1) (if s1.[i1] = s2.[i2] then m else m + 1)
+  in
+  loop 0 0
+
+(*
+let align g index s =
+  starting_with index s >>= (fun lst ->
+      List.map lst ~f:(fun (p, s, offset) ->
+          let node = N (p, s) in
+
+
       (*| [] -> error "Not found"  *)
+   *)
 
 (** Output **)
 
