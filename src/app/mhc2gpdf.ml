@@ -44,7 +44,7 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no
       |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
-let repo = "supreme-tribble"
+let repo = "prohlatype"
 
 let () =
   let open Cmdliner in
