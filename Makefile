@@ -5,7 +5,7 @@ PACKAGES=ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
 default: build
 
 build:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib util.cmo mas_parser.cmo pattern.cmo ref_graph.cmo to_graph.cmo to_graph_ge.cmo
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib util.cmo mas_parser.cmo pattern.cmo ref_graph.cmo to_graph.cmo
 
 setup:
 	opam install ocamlfind ocamlbuild $(PACKAGES)

@@ -1,47 +1,26 @@
 
 open Util
 
-let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache = function
-  | false ->
-      let open To_graph_ge in
-      let base = Filename.basename alignment_file |> Filename.chop_extension in
-      let option_based_fname, which =
-        match allele_list with
-        | []  ->
-            begin
-              match num_alt_to_add with
-              | None   -> sprintf "%s_all" base, None
-              | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
-            end
-        | lst -> sprintf "%s_%d" base (List.length lst), (Some (SpecificAlleles lst))
-      in
-      let ofile = Option.value ofile ~default:option_based_fname in
-      let short = not notshort in
-      let pdf   = not no_pdf in
-      let open_ = not no_open in
-      let skip_disk_cache = no_cache in
-      construct_from_file ~skip_disk_cache { alignment_file; which }
-      |> Ref_graph.output_ge ~short ~pdf ~open_ ofile
-  | true ->
-      let open To_graph in
-      let base = Filename.basename alignment_file |> Filename.chop_extension in
-      let option_based_fname, which =
-        match allele_list with
-        | []  ->
-            begin
-              match num_alt_to_add with
-              | None   -> sprintf "%s_all" base, None
-              | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
-            end
-        | lst -> sprintf "%s_%d" base (List.length lst), (Some (SpecificAlleles lst))
-      in
-      let ofile = Option.value ofile ~default:option_based_fname in
-      let short = not notshort in
-      let pdf   = not no_pdf in
-      let open_ = not no_open in
-      let skip_disk_cache = no_cache in
-      construct_from_file ~skip_disk_cache { alignment_file; which }
-      |> Ref_graph.output ~short ~pdf ~open_ ofile
+let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache =
+    let open To_graph in
+    let base = Filename.basename alignment_file |> Filename.chop_extension in
+    let option_based_fname, which =
+      match allele_list with
+      | []  ->
+          begin
+            match num_alt_to_add with
+            | None   -> sprintf "%s_all" base, None
+            | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
+          end
+      | lst -> sprintf "%s_%d" base (List.length lst), (Some (SpecificAlleles lst))
+    in
+    let ofile = Option.value ofile ~default:option_based_fname in
+    let short = not notshort in
+    let pdf   = not no_pdf in
+    let open_ = not no_open in
+    let skip_disk_cache = no_cache in
+    construct_from_file ~skip_disk_cache { alignment_file; which }
+    |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
 let repo = "prohlatype"
@@ -105,10 +84,6 @@ let () =
     in
     Arg.(value & flag & info ~doc ["no-cache"])
   in
-  let use_old_flag =
-    let doc = sprintf "old method!" in
-    Arg.(value & flag & info ~doc ["use-old"])
-  in
   let allele_arg =
     let docv = "allele name" in
     let doc = "Specify specfic alternate alleles to add to the graph.\
@@ -140,7 +115,6 @@ let () =
             $ num_alt_arg $ allele_arg
             $ not_short_flag $ no_pdf_flag $ no_open_flag
             $ no_cache_flag
-            $ use_old_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with

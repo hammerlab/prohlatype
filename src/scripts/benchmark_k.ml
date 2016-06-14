@@ -19,14 +19,14 @@ let files =
 
 let () =
   let to_cargs file =
-    { To_graph_ge.alignment_file = Filename.concat dir file
-    ; To_graph_ge.which = None }
+    { To_graph.alignment_file = Filename.concat dir file
+    ; To_graph.which = None }
   in
   let kmers_to_test = [ 5;6;7;8;9;10;11;12] in
   let doit k file =
     let carg = to_cargs file in
-    let (_, g) = To_graph_ge.construct_from_file carg in
-    let kt = Ref_graph.kmer_counts_ge g ~k in
+    let (_, g) = To_graph.construct_from_file carg in
+    let kt = Ref_graph.kmer_counts g ~k in
     let dst = Kmer_table.distr kt in
     let ds_str =
       Array.to_list dst

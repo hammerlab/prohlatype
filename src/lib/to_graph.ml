@@ -6,10 +6,10 @@ open Graph        (* OCamlgraph *)
 
 let inv_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
-module SSet = Set.Make (struct
+(*module SSet = Set.Make (struct
     type t = string
     let compare (x : string) y = compare x y
-  end)
+  end) *)
 
 let relationship pos v =
   let open Ref_graph.Nodes in
@@ -44,26 +44,27 @@ let reference_starts_and_ends lst =
   |> List.map ~f:(fun (_,l,_) -> l)
   |> String.concat ~sep:"," *)
 
-let add_reference_elems g allele ref_elems =
+let add_reference_elems g aset allele ref_elems =
   let open Mas_parser in
   let open Ref_graph in
   let open Nodes in
+  let bse = Allele_set.singleton aset allele in
   let add_start start_pos lst =
     let st = start_pos, allele in
     `Started (st, G.V.create (S st)) :: lst
   in
   let add_end end_pos ~st ~prev lst =
-    G.add_edge_e g (G.E.create prev allele (G.V.create (E end_pos)));
+    G.add_edge_e g (G.E.create prev bse (G.V.create (E end_pos)));
     `Ended (st, end_pos) :: lst
   in
   let add_boundary ~st ~prev ~idx ~pos lst =
     let boundary_node = G.V.create (B (pos, idx)) in
-    G.add_edge_e g (G.E.create prev allele boundary_node);
+    G.add_edge_e g (G.E.create prev bse boundary_node);
     `Started (st, boundary_node) :: lst
   in
   let add_seq ~st ~prev start s lst =
     let sequence_node = G.V.create (N (start, s)) in
-    G.add_edge_e g (G.E.create prev allele sequence_node);
+    G.add_edge_e g (G.E.create prev bse sequence_node);
     `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
@@ -87,8 +88,7 @@ let add_reference_elems g allele ref_elems =
       | `Ended (start, end_) -> { start; end_})
   |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
-
-let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
+let add_non_ref g reference aset (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
   let open Mas_parser in
   let open Ref_graph in
   let open Nodes in
@@ -96,7 +96,7 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
   let next_reference ~msg from =
-    match next_node_along reference g ~from with
+    match next_node_along aset reference g ~from with
     | Some n -> n
     | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
@@ -133,19 +133,28 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
       G.add_vertex g v1;
       (* TODO: this set intersect is very clumsy *)
       let pr_edge_s =
-        List.fold_left pr ~init:SSet.empty ~f:(fun set (p, l, _) ->
+        List.fold_left pr ~init:(Allele_set.empty aset)
+            ~f:(fun bta (p, bt, _) ->
+                  G.add_edge_e g (G.E.create p bt v1);
+                  Allele_set.union bt bta)
+       (* List.fold_left pr ~init:SSet.empty ~f:(fun set (p, l, _) ->
           G.add_edge_e g (G.E.create p l v1);
-            SSet.add l set)
+            SSet.add l set)*)
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
       let su_edge_s =
-        List.fold_left su ~init:SSet.empty ~f:(fun set (_, l, s) ->
+        List.fold_left su ~init:(Allele_set.empty aset)
+            ~f:(fun bta (_, bt, s) ->
+                  G.add_edge_e g (G.E.create v2 bt s);
+                  Allele_set.union bta bt)
+        (*List.fold_left su ~init:SSet.empty ~f:(fun set (_, l, s) ->
           G.add_edge_e g (G.E.create v2 l s);
-            SSet.add l set)
+            SSet.add l set) *)
       in
-      let s_inter = SSet.inter pr_edge_s su_edge_s in
-      SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter;
+      let s_inter = Allele_set.inter pr_edge_s su_edge_s in
+      G.add_edge_e g (G.E.create v1 s_inter v2);
+      (*SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter; *)
       (v1, v2)
     in
     match advance_until ~prev ~next ~visit pos with
@@ -157,7 +166,13 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
   in
-  let add_allele_edge pv nv = G.add_edge_e g (G.E.create pv allele nv) in
+  let add_allele_edge pv nv =
+    try
+      Allele_set.set_allele aset (G.find_edge g pv nv |> G.E.label) allele
+    with Not_found ->
+      let bt = Allele_set.singleton aset allele in
+      G.add_edge_e g (G.E.create pv bt nv)
+  in
   let rec advance_until_boundary ~visit ~prev ~next pos idx =
     let rec forward node msg =
       loop node (next_reference ~msg node)
@@ -326,32 +341,27 @@ let construct_from_parsed ?which r =
   let open Ref_graph in
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
-  let ref_length = List.length ref_elems in
-  let num_alleles =
-    match which with
-    | None                     -> List.length alt_elems
-    | Some (NumberOfAlts n)    -> n
-    | Some (SpecificAlleles l) -> List.length l
-  in
-  let g = G.create ~size:(ref_length * num_alleles) () in
-  let refs_start_ends = add_reference_elems g reference ref_elems in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems in
+  let alt_alleles =
+    match which with
+    | None ->
+        alt_elems
+    | Some (NumberOfAlts num_alt_to_add) ->
+        List.take alt_elems num_alt_to_add 
+    | Some (SpecificAlleles alst)        ->
+        List.map alst ~f:(fun name -> name, List.assoc name alt_elems) 
+  in
+  let num_alleles = List.length alt_alleles in
+  let ref_length = List.length ref_elems in
+  let g = G.create ~size:(ref_length * num_alleles) () in
+  let aset = Allele_set.construct (reference :: List.map ~f:fst alt_alleles) in
+  let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let () =
-    match which with
-    | None                               ->
-        List.iter alt_elems ~f:(fun (allele_name, lst) ->
-            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
-    | Some (NumberOfAlts num_alt_to_add) ->
-        List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
-          if i < num_alt_to_add then
-            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
-    | Some (SpecificAlleles allele_list) ->
-        List.iter allele_list ~f:(fun allele_name ->
-            let lst = List.assoc allele_name alt_elems in
-            ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
+    List.iter alt_alleles ~f:(fun (allele_name, lst) ->
+      ignore (add_non_ref g reference aset fs_ls_st_assoc allele_name lst))
   in
-  g
+  (aset, g)
 
 let construct_from_file ?which file =
   construct_from_parsed ?which (Mas_parser.from_file file)
