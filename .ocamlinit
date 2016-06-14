@@ -8,7 +8,6 @@
 #load_rec "pattern.cmo"
 #load_rec "ref_graph.cmo"
 #load_rec "to_graph.cmo"
-#load_rec "to_graph_ge.cmo"
 
 open Nonstd
 module String = Sosa.Native_string
