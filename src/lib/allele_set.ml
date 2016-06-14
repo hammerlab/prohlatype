@@ -59,9 +59,9 @@ let complement_string { to_allele; _} bt =
 
 let to_human_readable t bt =
   let first_try =
-    if BitSet.count bt > t.size / 2 then
+    (*if BitSet.count bt > t.size / 2 then
       complement_string t bt
-        else
+        else *)
       to_string t bt
   in
   if String.length first_try < 100 then
