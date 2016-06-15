@@ -15,7 +15,8 @@ let short_seq s =
   else
     s
 
-type start = int * string [@@deriving eq, ord]
+type allele_name = string [@@deriving eq, ord]
+type start = int * allele_name [@@deriving eq, ord]
 type end_ = int [@@deriving eq, ord]
 
 (* start end pairs *)
@@ -177,10 +178,10 @@ let kmer_list ~k g =
 let starting_with index s =
   let k = Kmer_table.k index in
   match String.sub s ~index:0 ~length:k with
-  | None -> error "Not long enough: %s vs %d" s k
+  | None    -> error "Not long enough %s for index size %d" s k
   | Some ss -> Ok (Kmer_table.lookup index ss)
 
-let mismatches ~s1 ~o1 ~s2 ~o2 =
+let align_sequences ~s1 ~o1 ~s2 ~o2 =
   let l1 = String.length s1 in
   let l2 = String.length s2 in
   let rec loop i m =
@@ -190,23 +191,98 @@ let mismatches ~s1 ~o1 ~s2 ~o2 =
       if i2 >= l2 then
         `Both m
       else
-        `First m
+        `First (m, i2)
     else if i2 >= l2 then
-      `Second m
+      `Second (m, i1)
     else
       loop (i + 1) (if s1.[i1] = s2.[i2] then m else m + 1)
   in
   loop 0 0
 
-(*
-let align g index s =
-  starting_with index s >>= (fun lst ->
-      List.map lst ~f:(fun (p, s, offset) ->
-          let node = N (p, s) in
+(* TODO:
+   There are 2 pieces of information about a graph that are relevant
+   for alignment:
 
-
-      (*| [] -> error "Not found"  *)
+   1. Which edges a path through the graph traverses, since edges give us alleles
+   2. If a path is entirely on a vertex (ex. "AC" in "GGACTT") then we need to
+      know if the vertex ("GGACTT") is only found in specific alleles
    *)
+
+type 'e pa =
+  { mismatches : int
+  ; edge       : 'e             (*BitSet.t        too big to carry around? *)
+  ; alignment  : 'e alignment
+  }
+and 'e alignment = Leaf of int
+                 | Partial of 'e pa list
+
+let rec map_alignment f = function
+  | Leaf n     -> Leaf n
+  | Partial pl -> Partial (List.map pl ~f:(fun p ->
+      { p with edge = f p.edge ; alignment = map_alignment f p.alignment }))
+
+(* Add max number of mismatches as argument  *)
+let align ?(mub=max_int) g index search_seq =
+  let open Nodes in
+  let align_against_seq ~search_pos ~node_seq ~node_offset =
+    (*let () =
+      Printf.printf "align_against_seq search_pos %d \t node_seq %s \t node_offset %d\n"
+              search_pos node_seq node_offset
+    in*)
+    let reached_end_of =
+      align_sequences ~s1:search_seq ~o1:search_pos ~s2:node_seq ~o2:node_offset
+    in
+    match reached_end_of with
+    | `Both m
+    | `First (m, _)   -> `Finished m      (* end of the search string *)
+    | `Second (m, so) -> `GoOn (m, so)
+  in
+  let over_all_sequence_nodes node m0 ~search_pos =
+    let rec descend node m0 ~search_pos =
+      (*let () = Printf.printf "descend m0 %d search_pos %d\n" m0 search_pos in *)
+      G.fold_succ_e (fun (_, edge, vs) acc ->
+          match vs with
+          | S _             -> invalid_argf "Another start?"
+          | E _             -> acc
+          | B _             -> (* This is a weird case since all prev nodes point at a boundary
+                                  the acc in this case should be [] *)
+                               assert (acc = []);
+                               descend vs m0 ~search_pos
+          | N (_, node_seq) ->
+              match align_against_seq ~search_pos ~node_seq ~node_offset:0 with
+              | `Finished mismatches    ->
+                  let tm = m0 + mismatches in
+                  if tm >= mub then acc else
+                    { mismatches ; edge; alignment = Leaf tm } :: acc
+              | `GoOn (mismatches, search_pos)  ->
+                  let tm = m0 + mismatches in
+                  if tm >= mub then acc else
+                    let alignment = Partial (descend vs tm ~search_pos) in
+                    { mismatches ; edge; alignment } :: acc)
+        g node []
+    in
+    descend node m0 ~search_pos
+  in
+  (*let k = Kmer_table.k index in*)
+  starting_with index search_seq >>= (fun lst ->
+      List.filter_map lst ~f:(fun (p, node_seq, no) ->
+          (* The current index table only tells you where a k-mer starts;
+             not the full k-mer path. Consequently, there can be other paths
+             when aligning:
+             match align_against_seq ~search_pos:k ~node_seq ~node_offset:(no + k) with
+
+             is wrong!
+          *)
+          match align_against_seq ~search_pos:0 ~node_seq ~node_offset:no with
+          | `Finished mismatches  ->
+              if mismatches >= mub then None else Some (Leaf mismatches)
+          | `GoOn (m, search_pos) ->
+              if m >= mub then None else
+                Some (Partial (over_all_sequence_nodes (N (p, node_seq)) m ~search_pos)))
+      |> fun als -> Ok als)
+
+let name_edges_in_alignment aset =
+  map_alignment (Allele_set.to_human_readable aset)
 
 (** Output **)
 
