@@ -26,12 +26,27 @@ let disk_memoize ?dir arg_to_string f =
         r
       end
 
-let error_bind o f =
-  match o with
+let error_bind ~f oe =
+  match oe with
   | Error e -> Error e
   | Ok o -> f o
 
-let (>>=) = error_bind
+let (>>=) oe f = error_bind ~f oe
+
+let error_map ~f oe =
+  match oe with
+  | Error e -> Error e
+  | Ok o    -> Ok (f o)
+
+let (>>|) oe ~f = error_map ~f oe
 
 let error fmt = ksprintf (fun s -> Error s) fmt
+
+let unwrap_ok ?(msg="") = function
+  | Ok o    -> o
+  | Error _ -> invalid_argf "Not Ok in unwrap_ok: %s" msg
+
+let unwrap_error ?(msg="") = function
+  | Ok _    -> invalid_argf "Not Error in unwrap_error: %s" msg
+  | Error e -> e
 
