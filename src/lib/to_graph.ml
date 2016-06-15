@@ -204,7 +204,7 @@ let add_non_ref g reference aset (first_start, last_end, end_to_next_start_assoc
     | `AfterLast _            -> solo_loop state new_node lst
     | `InGap (_pv, next, ap)  -> ref_gap_loop state new_node next ap lst
     | `AtNext (_pv, next)     -> add_allele_edge new_node next;
-                                main_loop state ~prev:new_node ~next lst
+                                 main_loop state ~prev:new_node ~next lst
   (* In the beginning we have not 'Start'ed ->
     Loop through the alignment elemends:
       - discarding Boundaries and Gaps
@@ -245,11 +245,11 @@ let add_non_ref g reference aset (first_start, last_end, end_to_next_start_assoc
     | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl         -> add_end state end_pos prev tl
     | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
-                                  add_allele_edge prev boundary_node;
-                                  solo_loop state boundary_node t
+                                   add_allele_edge prev boundary_node;
+                                   solo_loop state boundary_node t
     | Sequence { start; s} :: t -> let sequence_node = G.V.create (N (start, s)) in
-                                  add_allele_edge prev sequence_node;
-                                  solo_loop state sequence_node t
+                                   add_allele_edge prev sequence_node;
+                                   solo_loop state sequence_node t
     | Gap _ :: t                -> solo_loop state prev t
   (* When traversing a reference gap. We have to keep check allele elements
     position to check when to join back with the next reference node. *)
