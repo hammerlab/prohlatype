@@ -39,3 +39,13 @@ let lookup (k, t) s =
   else
     t.(Pattern.encode s)
 
+let cross_boundary (k, kt) =
+  Array.fold_left kt ~init:(0, []) ~f:(fun (i,acc) lst ->
+      let p = Pattern.decode ~k i in
+      let ni = i + 1 in
+      let cross = List.filter lst ~f:(fun (_, s, o) -> o > String.length s - k) in
+      match cross with
+      | []   -> (ni, acc)
+      | glst -> (ni, (p, glst) :: acc))
+  |> snd
+
