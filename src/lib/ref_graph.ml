@@ -297,9 +297,11 @@ let to_weights lst =
   let s = List.fold_left ~f:(+.) ~init:0. ilst in
   List.map ~f:(fun x -> x /. s) ilst
 
+let init_alingment_map aset =
+  Allele_set.make_allele_map aset 0.
+
 (* Weighing Alignments ... inference *)
-let alignments_to_weights ?(base_weight=1.) aset al =
-  let amap = Allele_set.make_allele_map aset 0. in
+let alignments_to_weights ?(base_weight=1.) amap al =
   let rec descend w0 = function
   | Leaf _     -> ()
   | Partial pl -> let weights = to_weights (List.map pl ~f:(fun pa -> pa.mismatches)) in
@@ -308,8 +310,7 @@ let alignments_to_weights ?(base_weight=1.) aset al =
                     Allele_set.update_allele_map_from_set pa.edge amap ((+.) w_i);
                     descend w_i pa.alignment)
   in
-  descend base_weight al;
-  amap
+  descend base_weight al
 
 let most_likely { Allele_set.to_allele; _} foo =
   Array.fold_left to_allele ~init:(0,[]) ~f:(fun (i,acc) a ->
