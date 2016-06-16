@@ -2,7 +2,7 @@
 open Util
 
 module SMap = Map.Make (struct type t = string let compare = String.compare end)
-module IMap = Map.Make (struct type t = int let compare = Int.compare end)
+(*module IMap = Map.Make (struct type t = int let compare = Int.compare end)*)
 
 type ds =
   { size      : int
@@ -37,7 +37,7 @@ let singleton ds allele =
 let is_set { to_index; _ } bt allele =
   BitSet.is_set bt (SMap.find allele to_index)
 
-let union = BitSet.union 
+let union = BitSet.union
 
 let inter = BitSet.inter
 
@@ -77,4 +77,14 @@ let to_human_readable t bt =
     to_allele []
   |> String.concat ~sep:"; " *)
 
+let make_allele_map { size; _} e =
+  Array.make size e
 
+let init_allele_map { size; _} bt p =
+  Array.init size ~f:(fun i -> p (BitSet.is_set bt i))
+
+let map_allele_map { to_allele; _} bt f =
+  Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set bt i) a)
+
+let update_allele_map_from_set bt m f =
+  Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum bt)

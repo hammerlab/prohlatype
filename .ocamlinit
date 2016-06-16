@@ -11,5 +11,6 @@
 
 open Nonstd
 module String = Sosa.Native_string
+open Util
 
 let nn elst ilst = List.map ~f:(List.nth elst) ilst

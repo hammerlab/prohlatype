@@ -252,11 +252,11 @@ let align ?(mub=max_int) g index search_seq =
               match align_against_seq ~search_pos ~node_seq ~node_offset:0 with
               | `Finished mismatches    ->
                   let tm = m0 + mismatches in
-                  if tm >= mub then acc else
+                  if tm > mub then acc else
                     { mismatches ; edge; alignment = Leaf tm } :: acc
               | `GoOn (mismatches, search_pos)  ->
                   let tm = m0 + mismatches in
-                  if tm >= mub then acc else
+                  if tm > mub then acc else
                     let alignment = Partial (descend vs tm ~search_pos) in
                     { mismatches ; edge; alignment } :: acc)
         g node []
@@ -275,14 +275,49 @@ let align ?(mub=max_int) g index search_seq =
           *)
           match align_against_seq ~search_pos:0 ~node_seq ~node_offset:no with
           | `Finished mismatches  ->
-              if mismatches >= mub then None else Some (Leaf mismatches)
+              if mismatches > mub then None else Some (Leaf mismatches)
           | `GoOn (m, search_pos) ->
-              if m >= mub then None else
+              if m > mub then None else
                 Some (Partial (over_all_sequence_nodes (N (p, node_seq)) m ~search_pos)))
       |> fun als -> Ok als)
 
 let name_edges_in_alignment aset =
   map_alignment (Allele_set.to_human_readable aset)
+
+let rec best_of_paths = function
+  | Leaf n      -> n
+  | Partial pl  ->
+      let bps = List.map ~f:(fun pa -> best_of_paths pa.alignment) pl in
+      List.fold_left ~f:min ~init:max_int bps
+      (* if pl = [] then there are no alignments that satisfy the mub *)
+
+let to_weights lst =
+  let flst = List.map ~f:float_of_int lst in
+  let ilst = List.map ~f:(fun x -> 1. /. (1. +. x)) flst in
+  let s = List.fold_left ~f:(+.) ~init:0. ilst in
+  List.map ~f:(fun x -> x /. s) ilst
+
+(* Weighing Alignments ... inference *)
+let alignments_to_weights ?(base_weight=1.) aset al =
+  let amap = Allele_set.make_allele_map aset 0. in
+  let rec descend w0 = function
+  | Leaf _     -> ()
+  | Partial pl -> let weights = to_weights (List.map pl ~f:(fun pa -> pa.mismatches)) in
+                  List.iter2 pl weights ~f:(fun pa w ->
+                    let w_i = w *. w0 in
+                    Allele_set.update_allele_map_from_set pa.edge amap ((+.) w_i);
+                    descend w_i pa.alignment)
+  in
+  descend base_weight al;
+  amap
+
+let most_likely { Allele_set.to_allele; _} foo =
+  Array.fold_left to_allele ~init:(0,[]) ~f:(fun (i,acc) a ->
+      let v = foo.(i) in
+      if v > 0. then (i+1, (v,a) :: acc) else (i + 1, acc))
+  |> snd
+  |> List.sort ~cmp:(fun ((v1 : float), _) (v2,_) -> compare v2 v1)
+
 
 (** Output **)
 

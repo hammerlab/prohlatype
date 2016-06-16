@@ -42,11 +42,11 @@ let (>>|) oe ~f = error_map ~f oe
 
 let error fmt = ksprintf (fun s -> Error s) fmt
 
-let unwrap_ok ?(msg="") = function
+let unwrap_ok = function
   | Ok o    -> o
-  | Error _ -> invalid_argf "Not Ok in unwrap_ok: %s" msg
+  | Error _ -> invalid_arg "Not Ok in unwrap_ok."
 
-let unwrap_error ?(msg="") = function
-  | Ok _    -> invalid_argf "Not Error in unwrap_error: %s" msg
+let unwrap_error = function
+  | Ok _    -> invalid_argf "Not Error in unwrap_error."
   | Error e -> e
 
