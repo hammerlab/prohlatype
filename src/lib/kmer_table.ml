@@ -6,16 +6,16 @@ let invalid_argf fmt = ksprintf invalid_arg fmt
 let k (n,_) = n
 
 let make k e =
-  let n = Pattern.pow4 k in
+  let n = Kmer_to_int.pow4 k in
   k, Array.make n e
 
 let init k f =
-  let n = Pattern.pow4 k in
-  k, Array.init n ~f:(fun i -> f (Pattern.decode ~k i))
+  let n = Kmer_to_int.pow4 k in
+  k, Array.init n ~f:(fun i -> f (Kmer_to_int.decode ~k i))
 
 let update f ((k, t) as tb) s =
   assert (String.length s = k);
-  let j = Pattern.encode s in
+  let j = Kmer_to_int.encode s in
   t.(j) <- f t.(j);
   tb
 
@@ -37,11 +37,11 @@ let lookup (k, t) s =
   if n <> k then
     invalid_argf "String length %d doesn't match table: %d" n k
   else
-    t.(Pattern.encode s)
+    t.(Kmer_to_int.encode s)
 
 let cross_boundary (k, kt) =
   Array.fold_left kt ~init:(0, []) ~f:(fun (i,acc) lst ->
-      let p = Pattern.decode ~k i in
+      let p = Kmer_to_int.decode ~k i in
       let ni = i + 1 in
       let cross = List.filter lst ~f:(fun (_, s, o) -> o > String.length s - k) in
       match cross with

@@ -5,7 +5,7 @@
 
 #directory "_build/src/lib"
 #load_rec "mas_parser.cmo"
-#load_rec "pattern.cmo"
+#load_rec "kmer_to_int.cmo"
 #load_rec "ref_graph.cmo"
 #load_rec "to_graph.cmo"
 
