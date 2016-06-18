@@ -144,11 +144,11 @@ let create_kmer_table ~k g f init =
     let posit = p, s, index in
     match length with
     | `Whole  ->
-        let i = Pattern.encode_sub s ~pos:index ~len:k in     (* TODO: use consistent args *)
+        let i = Pattern.encode s ~pos:index ~len:k in     (* TODO: use consistent args *)
         let nfull = Kmer_table.update_index f state.full posit i in
         { state with full = nfull }
     | `Part p ->
-        let is = Pattern.encode_sub s ~pos:index ~len:p in
+        let is = Pattern.encode s ~pos:index ~len:p in
         { state with partial = (k - p, is, posit) :: state.partial }
   in
   let fpartial state kseqlst p s =
@@ -156,11 +156,11 @@ let create_kmer_table ~k g f init =
     List.fold_left kseqlst ~init:(state, [])
       ~f:(fun (state, acc) (krem, curp, posit) ->
             if krem <= l then
-              let pn = Pattern.encode_extend s ~pos:0 ~len:krem curp in
+              let pn = Pattern.encode s ~pos:0 ~len:krem ~ext:curp in
               let nf = Kmer_table.update_index f state.full posit pn in
               { state with full = nf }, acc
             else
-              let pn = Pattern.encode_extend s ~pos:0 ~len:l curp in
+              let pn = Pattern.encode s ~pos:0 ~len:l ~ext:curp in
               let na = (krem - l, pn, posit) :: acc in
               state, na)
     |> (fun (s, plst) -> { s with partial = plst })
