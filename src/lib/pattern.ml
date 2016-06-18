@@ -28,24 +28,6 @@ let encode ?(pos=0) ?len ?(ext=0) s =
   done;
   !r
 
-  (*
-let encode_sub text ~pos ~len =
-  let rec loop i acc =
-    if i = len then acc
-    else loop (i + 1) (acc * 4 + (int_at text (pos + i)))
-    (*else loop (i + 1) (add_to_pat acc (String.get_exn text ~index:(pos + 1))) *)
-  in
-  loop 0 0
-
-let encode_extend text ~pos ~len cur =
-  let rec loop i acc =
-    if i = len then acc
-    else loop (i + 1) (acc * 4 + (int_at text (pos + i)))
-    (*else loop (i + 1) (add_to_pat acc (String.get_exn text ~index:(pos + 1))) *)
-  in
-  loop 0 cur
-  *)
-
 let decode ~k p =
   let rec loop s kp index =
     if kp = 0 || index < 0 then
@@ -55,8 +37,6 @@ let decode ~k p =
         (kp / 4) (index - 1)
   in
   loop (String.make k 'A') p (k - 1)
-
-
 
 let reverse_complement ~k i =
   let c = function
