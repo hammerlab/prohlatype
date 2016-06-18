@@ -145,8 +145,8 @@ let create_kmer_table ~k g f init =
     match length with
     | `Whole  ->
         let i = Kmer_to_int.encode s ~pos:index ~len:k in     (* TODO: use consistent args *)
-        let nfull = Kmer_table.update_index f state.full posit i in
-        { state with full = nfull }
+        Kmer_table.update_index f state.full posit i;
+        state
     | `Part p ->
         let is = Kmer_to_int.encode s ~pos:index ~len:p in
         { state with partial = (k - p, is, posit) :: state.partial }
@@ -157,8 +157,8 @@ let create_kmer_table ~k g f init =
       ~f:(fun (state, acc) (krem, curp, posit) ->
             if krem <= l then
               let pn = Kmer_to_int.encode s ~pos:0 ~len:krem ~ext:curp in
-              let nf = Kmer_table.update_index f state.full posit pn in
-              { state with full = nf }, acc
+              Kmer_table.update_index f state.full posit pn;
+              state, acc
             else
               let pn = Kmer_to_int.encode s ~pos:0 ~len:l ~ext:curp in
               let na = (krem - l, pn, posit) :: acc in
