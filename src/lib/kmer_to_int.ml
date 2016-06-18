@@ -22,8 +22,8 @@ let int_at s index =
 
 let encode ?(pos=0) ?len ?(ext=0) s =
   let r = ref ext in
-  let len = Option.value len ~default:(String.length s - 1) in
-  for i = pos to len do
+  let len = Option.value len ~default:(String.length s) in
+  for i = pos to pos + len - 1 do
     r := 4 * !r  + (int_at s i);
   done;
   !r
