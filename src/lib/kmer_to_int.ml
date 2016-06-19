@@ -17,7 +17,7 @@ let int_to_char = function
   | 3 -> 'T'
   | x -> invalid_argf "int_to_char: %d" x
 
-let int_at s index = 
+let int_at s index =
   char_to_int (String.get_exn s ~index)
 
 let encode ?(pos=0) ?len ?(ext=0) s =

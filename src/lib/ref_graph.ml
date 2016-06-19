@@ -145,7 +145,7 @@ let create_kmer_table ~k g f init =
     match length with
     | `Whole  ->
         let i = Kmer_to_int.encode s ~pos:index ~len:k in     (* TODO: use consistent args *)
-        Kmer_table.update_index f state.full posit i;
+        Kmer_table.update (f posit) state.full i;
         state
     | `Part p ->
         let is = Kmer_to_int.encode s ~pos:index ~len:p in
@@ -157,7 +157,7 @@ let create_kmer_table ~k g f init =
       ~f:(fun (state, acc) (krem, curp, posit) ->
             if krem <= l then
               let pn = Kmer_to_int.encode s ~pos:0 ~len:krem ~ext:curp in
-              Kmer_table.update_index f state.full posit pn;
+              Kmer_table.update (f posit) state.full pn;
               state, acc
             else
               let pn = Kmer_to_int.encode s ~pos:0 ~len:l ~ext:curp in
@@ -174,6 +174,20 @@ let kmer_counts ~k g =
 let kmer_list ~k g =
   let f p acc = p :: acc in
   create_kmer_table ~k g f []
+
+(*
+val cross_boundary : ('a * string * int) list t -> (string * ('a * string * int) list) list
+*)
+let cross_boundary kt =
+  let k = Kmer_table.k kt in
+  Kmer_table.fold kt ~init:(0, []) ~f:(fun (i, acc) lst ->
+      let p = Kmer_to_int.decode ~k i in
+      let ni = i + 1 in
+      let cross = List.filter lst ~f:(fun (_, s, o) -> o > String.length s - k) in
+      match cross with
+      | []   -> (ni, acc)
+      | glst -> (ni, (p, glst) :: acc))
+  |> snd
 
 let starting_with index s =
   let k = Kmer_table.k index in
@@ -270,7 +284,6 @@ let align ?(mub=max_int) g index search_seq =
              not the full k-mer path. Consequently, there can be other paths
              when aligning:
              match align_against_seq ~search_pos:k ~node_seq ~node_offset:(no + k) with
-
              is wrong!
           *)
           match align_against_seq ~search_pos:0 ~node_seq ~node_offset:no with
