@@ -41,28 +41,27 @@ module Nodes = struct
 end
 
 module Edges = struct
-  type t = BitSet.t
+  type t = Alleles.Set.t
   let hash = Hashtbl.hash
-  let compare = BitSet.compare
-  let equal = BitSet.equals
-  let default = BitSet.empty ()
+  let compare = Alleles.Set.compare
+  let equal = Alleles.Set.equals
+  let default = Alleles.Set.empty ()
 end
-
 
 module G = Imperative.Digraph.ConcreteLabeled(Nodes)(Edges)
 
 exception Found of Nodes.t
 
-let next_node_along aset allele g ~from =
+let next_node_along aindex allele g ~from =
   try
     G.fold_succ_e (fun (_, bt, vs) n ->
-        if Allele_set.is_set aset bt allele then raise (Found vs) else n)
+        if Alleles.Set.is_set aindex bt allele then raise (Found vs) else n)
       g from None
   with Found v ->
     Some v
 
-let fold_along_allele aset ~start allele g ~f ~init =
-  let next = next_node_along aset allele g in
+let fold_along_allele aindex ~start allele g ~f ~init =
+  let next = next_node_along aindex allele g in
   let rec loop from (acc, stop) =
     if stop then
       acc
@@ -294,8 +293,8 @@ let align ?(mub=max_int) g index search_seq =
                 Some (Partial (over_all_sequence_nodes (N (p, node_seq)) m ~search_pos)))
       |> fun als -> Ok als)
 
-let name_edges_in_alignment aset =
-  map_alignment (Allele_set.to_human_readable aset)
+let name_edges_in_alignment aindex =
+  map_alignment (Alleles.Set.to_human_readable aindex)
 
 let rec best_of_paths = function
   | Leaf n      -> n
@@ -310,8 +309,8 @@ let to_weights lst =
   let s = List.fold_left ~f:(+.) ~init:0. ilst in
   List.map ~f:(fun x -> x /. s) ilst
 
-let init_alingment_map aset =
-  Allele_set.make_allele_map aset 0.
+let init_alingment_map aindex =
+  Alleles.Map.make aindex 0.
 
 (* Weighing Alignments ... inference *)
 let alignments_to_weights ?(base_weight=1.) amap al =
@@ -320,17 +319,25 @@ let alignments_to_weights ?(base_weight=1.) amap al =
   | Partial pl -> let weights = to_weights (List.map pl ~f:(fun pa -> pa.mismatches)) in
                   List.iter2 pl weights ~f:(fun pa w ->
                     let w_i = w *. w0 in
-                    Allele_set.update_allele_map_from_set pa.edge amap ((+.) w_i);
+                    Alleles.Map.update_from pa.edge amap ((+.) w_i);
                     descend w_i pa.alignment)
   in
   descend base_weight al
 
+let most_likely aindex amap =
+  Alleles.Map.fold aindex ~init:[] ~f:(fun acc v allele ->
+    if v > 0. then (v,allele) :: acc else acc) amap
+  |> List.sort ~cmp:(fun ((v1 : float), _) (v2,_) -> compare v2 v1)
+
+  (*
 let most_likely { Allele_set.to_allele; _} foo =
+
   Array.fold_left to_allele ~init:(0,[]) ~f:(fun (i,acc) a ->
       let v = foo.(i) in
       if v > 0. then (i+1, (v,a) :: acc) else (i + 1, acc))
   |> snd
   |> List.sort ~cmp:(fun ((v1 : float), _) (v2,_) -> compare v2 v1)
+  *)
 
 
 (** Output **)
@@ -339,7 +346,7 @@ let most_likely { Allele_set.to_allele; _} foo =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
-let output_dot ?short fname (aset, g) =
+let output_dot ?short fname (aindex, g) =
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
@@ -351,15 +358,15 @@ let output_dot ?short fname (aset, g) =
       let get_subgraph _v = None
 
       let default_edge_attributes _t = [`Color 4711]
-      let edge_attributes e = [`Label (Allele_set.to_human_readable aset (G.E.label e))]
+      let edge_attributes e = [`Label (Alleles.Set.to_human_readable aindex (G.E.label e))]
 
     end)
   in
   Dot.output_graph oc g;
   close_out oc
 
-let output ?(pdf=true) ?(open_=true) ~short fname (aset, g) =
-  output_dot ~short (fname ^ ".dot") (aset, g);
+let output ?(pdf=true) ?(open_=true) ~short fname (aindex, g) =
+  output_dot ~short (fname ^ ".dot") (aindex, g);
   let r =
     if pdf then
       Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)
