@@ -3,12 +3,6 @@ open Util
 open Ref_graph
 
 (** Alignment. *)
-let starting_with index s =
-  let k = Kmer_table.k index in
-  match String.sub s ~index:0 ~length:k with
-  | None    -> error "Not long enough %s for index size %d" s k
-  | Some ss -> Ok (Kmer_table.lookup index ss)
-
 let align_sequences ~s1 ~o1 ~s2 ~o2 =
   let l1 = String.length s1 in
   let l2 = String.length s2 in
@@ -92,7 +86,7 @@ let align ?(mub=max_int) g index search_seq =
     descend node m0 ~search_pos
   in
   (*let k = Kmer_table.k index in*)
-  starting_with index search_seq >>= (fun lst ->
+  Graph_index.starting_with index search_seq >>= (fun lst ->
       List.filter_map lst ~f:(fun (p, node_seq, no) ->
           (* The current index table only tells you where a k-mer starts;
              not the full k-mer path. Consequently, there can be other paths

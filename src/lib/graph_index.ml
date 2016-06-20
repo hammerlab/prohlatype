@@ -27,8 +27,6 @@ type ('a, 'b) kmer_fold_state =
   ; partial : 'b list
   }
 
-let update_full f state = { state with full = f state }
-let update_partial f state = { state with partial = f state }
 
 let fold_kmers ~k g ~f ~fpartial ~init =
   let open Nodes in
@@ -53,6 +51,7 @@ let fold_kmers ~k g ~f ~fpartial ~init =
   in
   Tg.fold proc g init
 
+type position = alignment_position * sequence * int (* offset into sequence *)
 
 let create_kmer_table ~k g f init =
   let init = { full = Kmer_table.make k init ; partial = [] } in
@@ -87,9 +86,14 @@ let kmer_counts ~k g =
   let f _ c = c + 1 in
   create_kmer_table ~k g f 0
 
+type t = position list Kmer_table.t
+
 let kmer_list ~k g =
   let f p acc = p :: acc in
   create_kmer_table ~k g f []
+
+let create ~k g =
+  (kmer_list ~k g).full
 
 (*
 val cross_boundary : ('a * string * int) list t -> (string * ('a * string * int) list) list
@@ -104,5 +108,12 @@ let cross_boundary kt =
       | []   -> (ni, acc)
       | glst -> (ni, (p, glst) :: acc))
   |> snd
+
+
+let starting_with index s =
+  let k = Kmer_table.k index in
+  match String.sub s ~index:0 ~length:k with
+  | None    -> error "Not long enough %s for index size %d" s k
+  | Some ss -> Ok (Kmer_table.lookup index ss)
 
 

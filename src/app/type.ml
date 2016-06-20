@@ -25,9 +25,8 @@ let () =
   in
   let aset, g = To_graph.(construct_from_file cargs) in
   printf " Got graph!\n%!";
-  let kt = Graph_index.kmer_list ~k:5 g in
+  let kmt = Graph_index.create ~k:5 g in
   printf " Got index!\n%!";
-  let kmt = kt.Graph_index.full in
   let upenn_opti_res_dir = "~/Documents/projects/hlatyping/upenn/opti/merged" in
   let file = Filename.concat upenn_opti_res_dir "120013_TGACCA/120013_TGACCA_1fin.fastq" in
   let amap = Graph_alignment.init_alingment_map aset in
