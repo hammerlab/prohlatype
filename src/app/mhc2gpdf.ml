@@ -1,56 +1,31 @@
 
 open Util
+open Common_options
 
-let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache =
-    let open To_graph in
-    let open Cache in
-    let base = Filename.basename alignment_file |> Filename.chop_extension in
-    let option_based_fname, which =
-      match allele_list with
-      | []  ->
-          begin
-            match num_alt_to_add with
-            | None   -> sprintf "%s_all" base, None
-            | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
-          end
-      | lst -> sprintf "%s_%d" base (List.length lst), (Some (SpecificAlleles lst))
-    in
-    let ofile = Option.value ofile ~default:option_based_fname in
-    let short = not notshort in
-    let pdf   = not no_pdf in
-    let open_ = not no_open in
-    let skip_disk_cache = no_cache in
-    Cache.graph ~skip_disk_cache { alignment_file; which }
-    |> Ref_graph.output ~short ~pdf ~open_ ofile
+let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
+      no_open skip_disk_cache =
+  let open To_graph in
+  let open Cache in
+  let option_based_fname, cargs =
+    to_filename_and_graph_args alignment_file num_alt_to_add allele_list
+  in
+  let ofile = Option.value ofile ~default:option_based_fname in
+  let short = not notshort in
+  let pdf   = not no_pdf in
+  let open_ = not no_open in
+  Cache.graph ~skip_disk_cache cargs (*{ alignment_file; which } *)
+  |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
-let repo = "prohlatype"
 
 let () =
   let open Cmdliner in
-  let file_arg =
-    let docv = "file" in
-    let def  = "./A_gen.txt" in
-    let doc  =
-      sprintf "File to lookup IMGT allele alignments. Defaults to %s." def
-    in
-    Arg.(value & opt file "A_gen.txt" & info ~doc ~docv ["f"; "file"])
-  in
   let output_fname_arg =
     let docv = "file" in
     let doc  = "Output file name, defaults to a file (input file)_(number of \
                 non reference alleles).[pdf|dot]."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
-  in
-  let num_alt_arg =
-    let docv = "positive integer" in
-    let doc  = "Number of alternate alleles to add to the graph. \
-                If not specified, all of the alternate alleles in a file are \
-                added. Take note that rendering (converting to pdf with dot) \
-                a graph with a lot (> 50) of paths could be time consuming."
-    in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["n"; "num-alt"])
   in
   let not_short_flag =
     let doc = "Whether to turn off short labels on sequence nodes.\n\
@@ -75,26 +50,6 @@ let () =
                off that behavior."
     in
     Arg.(value & flag & info ~doc ["no-open"])
-  in
-  let no_cache_flag =
-    let doc =
-      sprintf "Do not use a disk cache (in %s sub directory of the current \
-               directory) to search for previously (and then save) constructed \
-               graphs."
-        Cache.dir
-    in
-    Arg.(value & flag & info ~doc ["no-cache"])
-  in
-  let allele_arg =
-    let docv = "allele name" in
-    let doc = "Specify specfic alternate alleles to add to the graph.\
-               By default the behavior is to add [num_alt] alleles (in \
-               alphabetical order) to the graph. Use this option to construct \
-               a graph with specific alleles (ex. A*01:02). Specify multiple \
-               alleles with multiple arguments. This flag will override \
-               [num_alt]."
-    in
-    Arg.(value & opt_all string [] & info ~doc ~docv ["a"; "allele"])
   in
   let construct =
     let version = "0.0.0" in

@@ -40,4 +40,3 @@ let graph_and_two_index =
         let ai, gr = graph g in
         let id = Graph_index.create ~k gr in
         gr, ai, id)
-
