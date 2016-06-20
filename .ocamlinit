@@ -6,6 +6,8 @@
 #directory "_build/src/lib"
 #load_rec "mas_parser.cmo"
 #load_rec "kmer_to_int.cmo"
+#load_rec "kmer_table.cmo"
+#load_rec "alleles.cmo"
 #load_rec "ref_graph.cmo"
 #load_rec "to_graph.cmo"
 
