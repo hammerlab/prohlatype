@@ -1,8 +1,8 @@
 
-let cargs = { To_graph.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
-            ; To_graph.which = None
+open Prohlatype
+let cargs = { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
+            ; Cache.which = None
             } ;;
-let aset, g = To_graph.(construct_from_file cargs);;
-let kt = Ref_graph.kmer_list ~k:5 g ;;
-let kmt = kt.Ref_graph.full ;;
+let k = 5 ;;
+let g, aindex, idx = Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs };;
 
