@@ -25,31 +25,31 @@ let () =
   in
   let aset, g = To_graph.(construct_from_file cargs) in
   printf " Got graph!\n%!";
-  let kt = Ref_graph.kmer_list ~k:5 g in
+  let kt = Graph_index.kmer_list ~k:5 g in
   printf " Got index!\n%!";
-  let kmt = kt.Ref_graph.full in
+  let kmt = kt.Graph_index.full in
   let upenn_opti_res_dir = "~/Documents/projects/hlatyping/upenn/opti/merged" in
   let file = Filename.concat upenn_opti_res_dir "120013_TGACCA/120013_TGACCA_1fin.fastq" in
-  let amap = Ref_graph.init_alingment_map aset in
+  let amap = Graph_alignment.init_alingment_map aset in
   printf " Aligning!\n%!";
   shitty_fastq_sequence_reader file (fun seq ->
     Printf.printf "aligning: %s\n%!" seq;
     match String.index_of_character seq 'N' with
     | Some _ -> printf "skipping N!\n"
     | None   ->
-      match Ref_graph.align ~mub:1 g kmt seq with
+      match Graph_alignment.align ~mub:1 g kmt seq with
       | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-      | Ok als    -> List.iter als ~f:(Ref_graph.alignments_to_weights amap));
+      | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
   (*
   let freader = Future.Reader.open_file file in
   let fastq_rdr = Fastq.read freader in
   Future.Pipe.iter fastq_rdr ~f:(fun oe ->
     let fastq_item = Or_error.ok_exn oe in
     let seq = fastq_item.Fastq.sequence in
-    match Ref_graph.align ~mub:3 g kmt seq with
+    match Graph_alignment.align ~mub:3 g kmt seq with
     | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-    | Ok als    -> List.iter als ~f:(Ref_graph.alignments_to_weights amap));
+    | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
     *)
-  Ref_graph.most_likely aset amap
+  Graph_alignment.most_likely aset amap
   |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
 
