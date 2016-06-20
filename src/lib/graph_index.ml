@@ -4,8 +4,8 @@ open Graph
 open Ref_graph
 module Tg = Topological.Make_stable (G)
 
-(* I want to avoid all of the calls to 'String.sub_ below so this call will
-   just pass the (1) whole string, (2) an offset, and (3) k; putting the
+(* I want to avoid calls to 'String.sub_ below so this will just pass the (1)
+   whole string, (2) an offset, and (3) k; putting the
    responsibility on 'f' to deal with not full length strings. *)
 
 (* Fold over whole k-mers in s, but return an assoc of length remaining

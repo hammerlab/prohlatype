@@ -3,6 +3,7 @@ open Util
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no_open no_cache =
     let open To_graph in
+    let open Cache in
     let base = Filename.basename alignment_file |> Filename.chop_extension in
     let option_based_fname, which =
       match allele_list with
@@ -19,7 +20,7 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf no
     let pdf   = not no_pdf in
     let open_ = not no_open in
     let skip_disk_cache = no_cache in
-    construct_from_file ~skip_disk_cache { alignment_file; which }
+    Cache.graph ~skip_disk_cache { alignment_file; which }
     |> Ref_graph.output ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
@@ -80,7 +81,7 @@ let () =
       sprintf "Do not use a disk cache (in %s sub directory of the current \
                directory) to search for previously (and then save) constructed \
                graphs."
-        To_graph.cache_dir
+        Cache.dir
     in
     Arg.(value & flag & info ~doc ["no-cache"])
   in

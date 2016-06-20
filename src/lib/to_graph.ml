@@ -340,9 +340,9 @@ let construct_from_parsed ?which r =
     | None ->
         alt_elems
     | Some (NumberOfAlts num_alt_to_add) ->
-        List.take alt_elems num_alt_to_add 
+        List.take alt_elems num_alt_to_add
     | Some (SpecificAlleles alst)        ->
-        List.map alst ~f:(fun name -> name, List.assoc name alt_elems) 
+        List.map alst ~f:(fun name -> name, List.assoc name alt_elems)
   in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
@@ -359,22 +359,3 @@ let construct_from_parsed ?which r =
 let construct_from_file ?which file =
   construct_from_parsed ?which (Mas_parser.from_file file)
 
-type construct_args =
-  { alignment_file  : string       (* this is really a path, basename below *)
-  ; which           : construct_which_args option
-  }
-
-let construct_args_to_string { alignment_file; which } =
-  sprintf "%s_%s"
-    (Filename.basename alignment_file)
-    (match which with
-      | None -> "All"
-      | Some w -> construct_which_args_to_string w)
-
-let cache_dir = ".ref_graphs"
-
-let construct_from_file =
-  let dir = Filename.concat (Sys.getcwd ()) cache_dir in
-  disk_memoize ~dir construct_args_to_string
-    (fun { alignment_file; which } ->
-       construct_from_file ?which alignment_file)

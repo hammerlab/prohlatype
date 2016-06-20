@@ -19,14 +19,15 @@ let shitty_fastq_sequence_reader file f =
 
 let () =
   let cargs =
-    { To_graph.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
-    ; To_graph.which = None
+    { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
+    ; Cache.which = None
     }
   in
-  let aset, g = To_graph.(construct_from_file cargs) in
+  let g, aset, kmt = Cache.graph_and_two_index { Cache.k = 5; g = cargs } in
+  (*let aset, g = To_graph.(construct_from_file cargs) in
   printf " Got graph!\n%!";
-  let kmt = Graph_index.create ~k:5 g in
-  printf " Got index!\n%!";
+  let kmt = Graph_index.create ~k:5 g in *)
+  printf " Got graph and index!\n%!";
   let upenn_opti_res_dir = "~/Documents/projects/hlatyping/upenn/opti/merged" in
   let file = Filename.concat upenn_opti_res_dir "120013_TGACCA/120013_TGACCA_1fin.fastq" in
   let amap = Graph_alignment.init_alingment_map aset in
