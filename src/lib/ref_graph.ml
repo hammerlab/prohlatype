@@ -16,8 +16,10 @@ let short_seq s =
     s
 
 type allele_name = string [@@deriving eq, ord]
-type start = int * allele_name [@@deriving eq, ord]
-type end_ = int [@@deriving eq, ord]
+type alignment_position = int [@@deriving eq, ord]
+type start = alignment_position * allele_name [@@deriving eq, ord]
+type end_ = alignment_position [@@deriving eq, ord]
+type sequence = string [@@deriving eq, ord]
 
 (* start end pairs *)
 type sep = { start : start ; end_ : end_ }
@@ -27,8 +29,8 @@ module Nodes = struct
   type t =
     | S of start
     | E of end_
-    | B of int * int      (* Boundary of position and count *)
-    | N of int * string   (* Sequences *)
+    | B of alignment_position * int      (* Boundary of position and count *)
+    | N of alignment_position * sequence   (* Sequences *)
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
