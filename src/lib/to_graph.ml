@@ -1,31 +1,70 @@
 (** Construction from Mas_parser *)
 
+open Util
 open Graph        (* OCamlgraph *)
-open Nonstd
-open Ref_graph
-module String = Sosa.Native_string
+(*open Ref_graph*)
 
 let inv_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
-let add_reference_elems g allele ref_elems =
+(*module SSet = Set.Make (struct
+    type t = string
+    let compare (x : string) y = compare x y
+  end) *)
+
+let relationship pos v =
+  let open Ref_graph.Nodes in
+  let end_pos p s = p + String.length s in
+  match v with
+  | S _ | E _                             -> `Ignore
+  | B (p, _) when pos < p                 -> `Before p
+  | N (p, _) when pos < p                 -> `Before p
+  | B (p, _) when pos = p                 -> `Exact
+  | N (p, s) when pos = p                 -> `Exact
+  | B _                                   -> `After
+  | N (p, s) when pos < end_pos p s       -> `In (p, s)
+  | N _ (*p, s) when pos >= end_pos p s*) -> `After
+
+(*first_start, last_end, end_to_next_start_assoc *)
+let reference_starts_and_ends lst =
+  let open Ref_graph in
+  match lst with
+  | []                  -> inv_argf "Reference has no start and ends"
+  | {start; end_} :: [] -> start, end_, []
+  | {start; end_} :: t  ->
+    let rec loop ep acc = function
+      | []                  -> inv_argf "stop before empty"
+      | {start; end_} :: [] -> end_, (ep, start) :: acc
+      | {start; end_} :: t  -> loop end_ ((ep, start) :: acc) t
+    in
+    let e, l = loop end_ [] t in
+    start, e, l
+
+(*let edges_between_to_string g pv nv =
+  G.find_all_edges g pv nv
+  |> List.map ~f:(fun (_,l,_) -> l)
+  |> String.concat ~sep:"," *)
+
+let add_reference_elems g aindex allele ref_elems =
   let open Mas_parser in
+  let open Ref_graph in
   let open Nodes in
+  let bse () = Alleles.Set.singleton aindex allele in
   let add_start start_pos lst =
     let st = start_pos, allele in
     `Started (st, G.V.create (S st)) :: lst
   in
   let add_end end_pos ~st ~prev lst =
-    G.add_edge_e g (G.E.create prev allele (G.V.create (E end_pos)));
+    G.add_edge_e g (G.E.create prev (bse ()) (G.V.create (E end_pos)));
     `Ended (st, end_pos) :: lst
   in
   let add_boundary ~st ~prev ~idx ~pos lst =
     let boundary_node = G.V.create (B (pos, idx)) in
-    G.add_edge_e g (G.E.create prev allele boundary_node);
+    G.add_edge_e g (G.E.create prev (bse ()) boundary_node);
     `Started (st, boundary_node) :: lst
   in
   let add_seq ~st ~prev start s lst =
     let sequence_node = G.V.create (N (start, s)) in
-    G.add_edge_e g (G.E.create prev allele sequence_node);
+    G.add_edge_e g (G.E.create prev (bse ()) sequence_node);
     `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
@@ -47,52 +86,17 @@ let add_reference_elems g allele ref_elems =
   |> List.map ~f:(function
       | `Started _ -> inv_argf "Still have a Started in %s ref" allele
       | `Ended (start, end_) -> { start; end_})
-  |> List.sort ~cmp:(fun s1 s2 -> compare s1.start s2.start)
+  |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
-module SSet = Set.Make (struct
-    type t = string
-    let compare = compare
-  end)
-
-let relationship pos v =
-  let open Nodes in
-  let end_pos p s = p + String.length s in
-  match v with
-  | S _ | E _                             -> `Ignore
-  | B (p, _) when pos < p                 -> `Before p
-  | N (p, _) when pos < p                 -> `Before p
-  | B (p, _) when pos = p                 -> `Exact
-  | N (p, s) when pos = p                 -> `Exact
-  | B _                                   -> `After
-  | N (p, s) when pos < end_pos p s       -> `In (p, s)
-  | N _ (*p, s) when pos >= end_pos p s*) -> `After
-
-let edges_between_to_string g pv nv =
-  G.find_all_edges g pv nv
-  |> List.map ~f:(fun (_,l,_) -> l)
-  |> String.concat ~sep:","
-
-(*first_start, last_end, end_to_next_start_assoc *)
-let reference_starts_and_ends = function
-  | []                  -> inv_argf "Reference has no start and ends"
-  | {start; end_} :: [] -> start, end_, []
-  | {start; end_} :: t  ->
-    let rec loop ep acc = function
-      | []                  -> inv_argf "stop before empty"
-      | {start; end_} :: [] -> end_, (ep, start) :: acc
-      | {start; end_} :: t  -> loop end_ ((ep, start) :: acc) t
-    in
-    let e, l = loop end_ [] t in
-    start, e, l
-
-let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
+let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
   let open Mas_parser in
+  let open Ref_graph in
   let open Nodes in
   let first_start_node = S first_start in
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
   let next_reference ~msg from =
-    match next_node_along reference g ~from with
+    match next_node_along aindex reference g ~from with
     | Some n -> n
     | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
@@ -129,19 +133,21 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
       G.add_vertex g v1;
       (* TODO: this set intersect is very clumsy *)
       let pr_edge_s =
-        List.fold_left pr ~init:SSet.empty ~f:(fun set (p, l, _) ->
-          G.add_edge_e g (G.E.create p l v1);
-            SSet.add l set)
+        List.fold_left pr ~init:(Alleles.Set.init aindex)
+            ~f:(fun bta (p, bt, _) ->
+                  G.add_edge_e g (G.E.create p bt v1);
+                  Alleles.Set.union bt bta)
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
       let su_edge_s =
-        List.fold_left su ~init:SSet.empty ~f:(fun set (_, l, s) ->
-          G.add_edge_e g (G.E.create v2 l s);
-            SSet.add l set)
+        List.fold_left su ~init:(Alleles.Set.init aindex)
+            ~f:(fun bta (_, bt, s) ->
+                  G.add_edge_e g (G.E.create v2 bt s);
+                  Alleles.Set.union bta bt)
       in
-      let s_inter = SSet.inter pr_edge_s su_edge_s in
-      SSet.iter (fun l -> G.add_edge_e g (G.E.create v1 l v2)) s_inter;
+      let s_inter = Alleles.Set.inter pr_edge_s su_edge_s in
+      G.add_edge_e g (G.E.create v1 s_inter v2);
       (v1, v2)
     in
     match advance_until ~prev ~next ~visit pos with
@@ -153,7 +159,14 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
   in
-  let add_allele_edge pv nv = G.add_edge_e g (G.E.create pv allele nv) in
+  let add_allele_edge pv nv =
+    try
+      let eset = G.find_edge g pv nv |> G.E.label in
+      Alleles.Set.set aindex eset allele
+    with Not_found ->
+      let bt = Alleles.Set.singleton aindex allele in
+      G.add_edge_e g (G.E.create pv bt nv)
+  in
   let rec advance_until_boundary ~visit ~prev ~next pos idx =
     let rec forward node msg =
       loop node (next_reference ~msg node)
@@ -187,7 +200,7 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
     | `AtNext (_pv, next)     -> add_allele_edge new_node next;
                                  main_loop state ~prev:new_node ~next lst
   (* In the beginning we have not 'Start'ed ->
-     Loop through the alignment elemends:
+    Loop through the alignment elemends:
       - discarding Boundaries and Gaps
       - on a Start find the position in reference and start correct loop
       - complaining on anything other than a Start *)
@@ -233,7 +246,7 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
                                    solo_loop state sequence_node t
     | Gap _ :: t                -> solo_loop state prev t
   (* When traversing a reference gap. We have to keep check allele elements
-     position to check when to join back with the next reference node. *)
+    position to check when to join back with the next reference node. *)
   and ref_gap_loop state prev ref_node ref_pos = function
     | []                                -> inv_argf "No End at allele sequence: %s" allele
     | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
@@ -309,25 +322,41 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
   in
   start_loop [] alt_lst
 
-let construct ?(num_alt_to_add=max_int) allele_lst r =
+type construct_which_args =
+  | NumberOfAlts of int
+  | SpecificAlleles of string list
+
+let construct_which_args_to_string = function
+  | NumberOfAlts n    -> sprintf "N%d" n
+  | SpecificAlleles l -> sprintf "S%s" (String.concat ~sep:"_" l)
+
+
+let construct_from_parsed ?which r =
+  let open Ref_graph in
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
-  let ref_length = List.length ref_elems in
-  let num_alleles = min (List.length alt_elems) num_alt_to_add in
-  let g = G.create ~size:(ref_length * num_alleles) () in
-  let refs_start_ends = add_reference_elems g reference ref_elems in
-  let alt_elems =
-    List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems
+  let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2) alt_elems in
+  let alt_alleles =
+    match which with
+    | None ->
+        alt_elems
+    | Some (NumberOfAlts num_alt_to_add) ->
+        List.take alt_elems num_alt_to_add
+    | Some (SpecificAlleles alst)        ->
+        List.map alst ~f:(fun name -> name, List.assoc name alt_elems)
   in
+  let num_alleles = List.length alt_alleles in
+  let ref_length = List.length ref_elems in
+  let g = G.create ~size:(ref_length * num_alleles) () in
+  let aindex = Alleles.index (reference :: List.map ~f:fst alt_alleles) in
+  let refs_start_ends = add_reference_elems g aindex reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let () =
-    if allele_lst = [] then
-      List.iteri alt_elems ~f:(fun i (allele_name, lst) ->
-        if i < num_alt_to_add then
-          ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
-    else
-      List.iter allele_lst ~f:(fun allele_name ->
-        let lst = List.assoc allele_name alt_elems in
-        ignore (add_non_ref g reference fs_ls_st_assoc allele_name lst))
+    List.iter alt_alleles ~f:(fun (allele_name, lst) ->
+      ignore (add_non_ref g reference aindex fs_ls_st_assoc allele_name lst))
   in
-  g
+  (aindex, g)
+
+let construct_from_file ?which file =
+  construct_from_parsed ?which (Mas_parser.from_file file)
+

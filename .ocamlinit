@@ -1,7 +1,13 @@
 #require "nonstd"
 #require "sosa"
 #require "ocamlgraph"
+#require "extlib"
 
 #directory "_build/src/lib"
-#load_rec "mas_parser.cmo"
-#load_rec "to_graph.cmo"
+#load_rec "prohlatype.cmo"
+
+open Nonstd
+module String = Sosa.Native_string
+open Util
+
+let nn elst ilst = List.map ~f:(List.nth elst) ilst

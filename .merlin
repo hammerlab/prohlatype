@@ -1,3 +1,4 @@
-PKG nonstd sosa ocamlgraph
+PKG ppx_deriving ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
 S ./src/lib/**
+S ./src/app/**
 B _build/**
