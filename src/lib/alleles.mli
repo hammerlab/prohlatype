@@ -52,13 +52,17 @@ module Set : sig
 
   (** Construct a string with all of the alleles {b not} found in the edge set.
 
-      @param annotate will prepend "Complement of " to the string description.
-        defaults to [true].  *)
-  val complement_string : ?annotate:bool -> index -> t -> string
+      @param complement_prefix will determine if the complement string is
+             prefixed (ie. "Complement of ") *)
+  val complement_string : ?complement_prefix:string -> index -> t -> string
 
   (** [to_human_readable] picks the shorter (fewer number of alleles) string
-      representation of the edge set. *)
-  val to_human_readable : index -> t -> string
+      representation of the edge set.
+
+      If the algorithm chooses to represent the set with a complement "C. of"
+      will be prepended unless otherwise specified. *)
+  val to_human_readable : ?max_length:int -> ?complement_prefix:string ->
+    index -> t -> string
 
 end
 

@@ -57,7 +57,7 @@ module Set = struct
     |> List.rev
     |> String.concat ~sep:" "
 
-  let complement_string ?(annotate=true) { to_allele; _} s =
+  let complement_string ?complement_prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
         ~f:(fun (i, acc) a -> if BitSet.is_set s i
                               then (i + 1, acc)
@@ -65,13 +65,25 @@ module Set = struct
     |> snd
     |> List.rev
     |> String.concat ~sep:" "
-    |> (fun s -> if annotate then s ^ "Complement of " else s)
+    |> function
+        | ""  -> invalid_argf "Complement of everything!"
+        | s   -> match complement_prefix with
+                 | None    -> s
+                 | Some cp -> cp ^ s
 
-  let to_human_readable t s =
-    if BitSet.count s > t.size / 2 then
-      complement_string t s
-        else
-      to_string t s
+  let to_human_readable ?(max_length=500) ?complement_prefix t s =
+    let make_shorter =
+      if BitSet.count s = t.size then
+        "Everything"
+      else if BitSet.count s > t.size / 2 then
+        let complement_prefix =
+          Option.value complement_prefix ~default:"C. of"
+        in
+        complement_string ~complement_prefix t s
+      else
+        to_string t s
+    in
+    String.take make_shorter ~index:max_length
 
 end
 
