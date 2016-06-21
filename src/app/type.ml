@@ -1,9 +1,8 @@
 
-(* open Core.Std
-open Biocaml_unix.Std
-open Future_unix.Std *)
-open Nonstd
 open Util
+open Common_options
+
+let app_name = "type"
 
 let shitty_fastq_sequence_reader file f =
   let ic = open_in file in
@@ -17,29 +16,6 @@ let shitty_fastq_sequence_reader file f =
   with End_of_file ->
     close_in ic
 
-let () =
-  let cargs =
-    { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
-    ; Cache.which = None
-    }
-  in
-  let g, aset, kmt = Cache.graph_and_two_index { Cache.k = 5; g = cargs } in
-  (*let aset, g = To_graph.(construct_from_file cargs) in
-  printf " Got graph!\n%!";
-  let kmt = Graph_index.create ~k:5 g in *)
-  printf " Got graph and index!\n%!";
-  let upenn_opti_res_dir = "~/Documents/projects/hlatyping/upenn/opti/merged" in
-  let file = Filename.concat upenn_opti_res_dir "120013_TGACCA/120013_TGACCA_1fin.fastq" in
-  let amap = Graph_alignment.init_alingment_map aset in
-  printf " Aligning!\n%!";
-  shitty_fastq_sequence_reader file (fun seq ->
-    Printf.printf "aligning: %s\n%!" seq;
-    match String.index_of_character seq 'N' with
-    | Some _ -> printf "skipping N!\n"
-    | None   ->
-      match Graph_alignment.align ~mub:1 g kmt seq with
-      | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-      | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
   (*
   let freader = Future.Reader.open_file file in
   let fastq_rdr = Fastq.read freader in
@@ -50,6 +26,65 @@ let () =
     | Error msg -> eprintf "error %s for seq: %s\n" msg seq
     | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
     *)
+
+let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file =
+  let open Cache in
+  let option_based_fname, g =
+    to_filename_and_graph_args alignment_file num_alt_to_add allele_list
+  in
+  let g, aset, kmt = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
+  printf " Got graph and index!\n%!";
+  let amap = Graph_alignment.init_alingment_map aset in
+  printf " Aligning!\n%!";
+  shitty_fastq_sequence_reader fastq_file (fun seq ->
+    Printf.printf "aligning: %s\n%!" seq;
+    match String.index_of_character seq 'N' with
+    | Some _ -> printf "skipping N!\n"
+    | None   ->
+      match Graph_alignment.align ~mub:1 g kmt seq with
+      | Error msg -> eprintf "error %s for seq: %s\n" msg seq
+      | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
   Graph_alignment.most_likely aset amap
   |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
+
+let () =
+  let open Cmdliner in
+  let kmer_size_arg =
+    let default = 5 in
+    let docv = "Kmer size" in
+    let doc =
+      sprintf "Number of consecutive nucleotides to use consider in K-mer
+               index construction. Defaults to %d." default
+    in
+    Arg.(value & opt int default & info ~doc ~docv ["k"; "kmer-size"])
+  in
+  let fastq_file_arg =
+    let docv = "Fastq samples" in
+    let doc = "Fastq formatted DNA reads file." in
+    Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
+  in
+  let type_ =
+    let version = "0.0.0" in
+    let doc = "Use HLA string graphs to type fastq samples." in
+    let bug =
+      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+        repo
+    in
+    let man =
+      [ `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
+      ; `Noblank
+      ; `S "BUGS"
+      ; `P bug
+      ]
+    in
+    Term.(const type_
+            $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
+            $ fastq_file_arg
+        , info app_name ~version ~doc ~man)
+  in
+  match Term.eval type_ with
+  | `Ok ()           -> exit 0
+  | `Error _         -> failwith "cmdliner error"
+  | `Version | `Help -> exit 0
 
