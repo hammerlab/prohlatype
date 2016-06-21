@@ -48,23 +48,23 @@ let add_reference_elems g aindex allele ref_elems =
   let open Mas_parser in
   let open Ref_graph in
   let open Nodes in
-  let bse = Alleles.Set.singleton aindex allele in
+  let bse () = Alleles.Set.singleton aindex allele in
   let add_start start_pos lst =
     let st = start_pos, allele in
     `Started (st, G.V.create (S st)) :: lst
   in
   let add_end end_pos ~st ~prev lst =
-    G.add_edge_e g (G.E.create prev bse (G.V.create (E end_pos)));
+    G.add_edge_e g (G.E.create prev (bse ()) (G.V.create (E end_pos)));
     `Ended (st, end_pos) :: lst
   in
   let add_boundary ~st ~prev ~idx ~pos lst =
     let boundary_node = G.V.create (B (pos, idx)) in
-    G.add_edge_e g (G.E.create prev bse boundary_node);
+    G.add_edge_e g (G.E.create prev (bse ()) boundary_node);
     `Started (st, boundary_node) :: lst
   in
   let add_seq ~st ~prev start s lst =
     let sequence_node = G.V.create (N (start, s)) in
-    G.add_edge_e g (G.E.create prev bse sequence_node);
+    G.add_edge_e g (G.E.create prev (bse ()) sequence_node);
     `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
@@ -161,7 +161,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   in
   let add_allele_edge pv nv =
     try
-      Alleles.Set.set aindex (G.find_edge g pv nv |> G.E.label) allele
+      let eset = G.find_edge g pv nv |> G.E.label in
+      Alleles.Set.set aindex eset allele
     with Not_found ->
       let bt = Alleles.Set.singleton aindex allele in
       G.add_edge_e g (G.E.create pv bt nv)
