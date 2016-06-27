@@ -72,7 +72,7 @@ let align ?(mub=max_int) g index search_seq =
                                descend vs m0 ~search_pos
           | N (_, node_seq) ->
               match align_against_seq ~search_pos ~node_seq ~node_offset:0 with
-              | `Finished mismatches    ->
+              | `Finished mismatches            ->
                   let tm = m0 + mismatches in
                   if tm > mub then acc else
                     { mismatches ; edge; alignment = Leaf tm } :: acc
@@ -85,21 +85,17 @@ let align ?(mub=max_int) g index search_seq =
     in
     descend node m0 ~search_pos
   in
-  (*let k = Kmer_table.k index in*)
-  Graph_index.starting_with index search_seq >>= (fun lst ->
-      List.filter_map lst ~f:(fun (p, node_seq, no) ->
-          (* The current index table only tells you where a k-mer starts;
-             not the full k-mer path. Consequently, there can be other paths
-             when aligning:
-             match align_against_seq ~search_pos:k ~node_seq ~node_offset:(no + k) with
-             is wrong!
-          *)
-          match align_against_seq ~search_pos:0 ~node_seq ~node_offset:no with
+  let open Graph_index in
+  let km1 = k index - 1 in
+  starting_with index search_seq >>= (fun lst ->
+      List.filter_map lst ~f:(fun { alignment; sequence; km1_offset} ->
+          match align_against_seq ~search_pos:km1 ~node_seq:sequence ~node_offset:km1_offset with
           | `Finished mismatches  ->
-              if mismatches > mub then None else Some (Leaf mismatches)
-          | `GoOn (m, search_pos) ->
-              if m > mub then None else
-                Some (Partial (over_all_sequence_nodes (N (p, node_seq)) m ~search_pos)))
+              if mismatches > mub then None else
+                Some (Leaf mismatches)
+          | `GoOn (mismatches, search_pos) ->
+              if mismatches > mub then None else
+                Some (Partial (over_all_sequence_nodes (N (alignment, sequence)) mismatches ~search_pos)))
       |> fun als -> Ok als)
 
 let name_edges_in_alignment aindex =
@@ -118,7 +114,7 @@ let to_weights lst =
   let s = List.fold_left ~f:(+.) ~init:0. ilst in
   List.map ~f:(fun x -> x /. s) ilst
 
-let init_alingment_map aindex =
+let init_alignment_map aindex =
   Alleles.Map.make aindex 0.
 
 (* Weighing Alignments ... inference *)
@@ -137,5 +133,4 @@ let most_likely aindex amap =
   Alleles.Map.fold aindex ~init:[] ~f:(fun acc v allele ->
     if v > 0. then (v,allele) :: acc else acc) amap
   |> List.sort ~cmp:(fun ((v1 : float), _) (v2,_) -> compare v2 v1)
-
 

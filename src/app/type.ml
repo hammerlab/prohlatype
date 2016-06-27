@@ -34,7 +34,7 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
   in
   let g, aset, kmt = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   printf " Got graph and index!\n%!";
-  let amap = Graph_alignment.init_alingment_map aset in
+  let amap = Graph_alignment.init_alignment_map aset in
   printf " Aligning!\n%!";
   shitty_fastq_sequence_reader fastq_file (fun seq ->
     Printf.printf "aligning: %s\n%!" seq;
