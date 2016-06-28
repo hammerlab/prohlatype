@@ -36,3 +36,4 @@ val reverse_complement : k:int -> int -> int
 (** Returns powers of 4. *)
 val pow4 : int -> int
 
+val neighbors : k:int -> int -> int array

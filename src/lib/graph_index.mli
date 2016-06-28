@@ -10,14 +10,15 @@ val fold_over_kmers_in_string :
   k:int ->
   f:('a -> [> `Part of int | `Whole ] kmer_substring -> 'a) ->
   init:'a -> string -> 'a
-type ('a, 'b) kmer_fold_state = { full : 'a; partial : (int * 'b) list; }
+
 val fold_over_kmers_in_graph :
   k:int ->
   f:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
   init:'a ->
   extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
   close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
-  G.t -> ('a, 'b) kmer_fold_state
+  G.t -> 'a
+
 val kmer_counts : k:int -> G.t -> int Kmer_table.t
 
 (** Public API *)
@@ -30,7 +31,7 @@ type position =
   }
 
 (** A graph index *)
-type t
+type t = position list Kmer_table.t
 
 (** Index a graph. *)
 val create : k:int -> G.t -> t
@@ -40,3 +41,5 @@ val starting_with : t -> string -> (position list, string) result
 
 (** What [k] are we using to index the graph. *)
 val k : t -> int
+
+val lookup: ?n:int -> t ->  string -> (position list, string) result

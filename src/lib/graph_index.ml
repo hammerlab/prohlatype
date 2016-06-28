@@ -48,52 +48,49 @@ let fold_over_kmers_in_string ~k ~f ~init s =
   in
   loop 0 init
 
-type ('a, 'b) kmer_fold_state =
-  { full    : 'a
-  ; partial : (int * 'b) list
-  }
-
 let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
   let open Nodes in
-  let rec fill_partial_matches node state =
-    match state.partial with
+  let rec fill_partial_matches node state = function
     | [] -> state
-    | _l -> fold_partials_on_successor node state
-  and fold_partials_on_successor node state =
-    G.fold_succ (fun n s -> partial_state_on_successors s n) g node state
-  and partial_state_on_successors state = function
+    | ls -> fold_partials_on_successor node state ls
+  and fold_partials_on_successor node state plst =
+    G.fold_succ (fun n s -> partial_state_on_successors s plst n) g node state
+  and partial_state_on_successors state plst = function
     | S _             -> invalid_argf "Start should not be a successor!"
     | E _             -> state
-    | B _ as n        -> fold_partials_on_successor n state (* skip node *)
+    | B _ as n        -> fold_partials_on_successor n state plst (* skip node *)
     | (N (p, s) as n) ->
         let l = String.length s in
-        let f state (krem, bstate) =
+        (* I'm not thrilled with f's lexical hiding (see below) but haven't
+           thought of a good name for the external 'f' similar to
+           'extend' and 'close' *)
+        let f (state, pacc) (krem, bstate) =
           if krem <= l then
-            let nfull = close state.full (p, s) (part ~index:0 krem) bstate in
-            { state with full = nfull }
+            let nstate = close state (p, s) (part ~index:0 krem) bstate in
+            nstate, pacc
           else
-            let np = (krem - l, extend (p, s) (part ~index:0 l) (Some bstate)) :: state.partial in
-            { state with partial = np }
+            let npacc = (krem - l, extend (p, s) (part ~index:0 l) (Some bstate)) :: pacc in
+            state, npacc
         in
-        List.fold_left state.partial ~f ~init:{ state with partial = [] }
-        |> fill_partial_matches n
+        let state, nplst = List.fold_left plst ~f ~init:(state, []) in
+        fill_partial_matches n state nplst
   in
   let proc node state =
     match node with
     | S _ | E _ | B _ -> state
     | N (p, s)        ->
-        let f state ss =
+        let f (state, pacc) ss =
           match ss with
           | { index; length = `Whole  } ->
-              let nfull = f state.full (p, s) (whole ~index) in
-              { state with full = nfull }
+              let nstate = f state (p, s) (whole ~index) in
+              nstate, pacc
           | { index; length = `Part l } ->
-              { state with partial = (k - l, extend (p, s) (part ~index l) None) :: state.partial }
+              state, (k - l, extend (p, s) (part ~index l) None) :: pacc
         in
-        fold_over_kmers_in_string s ~k ~f ~init:{ state with partial = [] }
-        |> fill_partial_matches node
+        let state, plst = fold_over_kmers_in_string s ~k ~f ~init:(state, []) in
+        fill_partial_matches node state plst
   in
-  Tg.fold proc g { full = init; partial = [] }
+  Tg.fold proc g init
 
 let kmer_counts ~k g =
   let init = Kmer_table.make k 0 in
@@ -111,8 +108,7 @@ let kmer_counts ~k g =
     Kmer_table.update ((+) 1) tbl i;
     tbl
   in
-  let fs = fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init in
-  fs.full
+  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
 
 type position =
   { alignment : alignment_position
@@ -128,26 +124,56 @@ let create ~k g =
   let f tbl (alignment, sequence) { index; length = `Whole } =
     let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
     let p = { alignment; sequence; offset = index + k - 1 } in
+    (*let () = printf "Adding %d \t %s \t %d\n" alignment (Ref_graph.index_string sequence p.offset) p.offset in *)
     Kmer_table.update (fun lst -> p :: lst) tbl i;
     tbl
   in
-  let extend (_al, sequence) { index; length = `Part len } = function
-    | None     -> Kmer_to_int.encode sequence ~pos:index ~len
-    | Some ext -> Kmer_to_int.encode sequence ~pos:index ~len ~ext
+  let extend (al, sequence) { index; length = `Part len } ext_opt =
+    (*let () = printf "At %d, %s extend at %d len %d" al (Ref_graph.index_string sequence index) index len in *)
+    match ext_opt with
+    | None     ->
+        let nj = Kmer_to_int.encode sequence ~pos:index ~len in
+        (*let () = printf " cur: None \t nj %d \n" nj in *)
+        nj
+    | Some ext ->
+        let nj = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
+        (*let () = printf " cur: Some %d \t nj %d\n" ext nj in *)
+        nj
   in
   let close tbl (alignment, sequence) { index; length = `Part len} ext =
     let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
     let p = { alignment; sequence; offset = index + len - 1 } in
+    (*let () = printf "Closing %d \t %s \t %d\t ext: %d \n"
+      alignment (Ref_graph.index_string sequence p.offset) p.offset ext
+    in *)
     Kmer_table.update (fun lst -> p :: lst) tbl i;
     tbl
   in
-  let fs = fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init in
-  fs.full
+  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
 
 let starting_with index s =
   let k = Kmer_table.k index in
   match String.sub s ~index:0 ~length:k with
   | None    -> error "Not long enough %s for index size %d" s k
-  | Some ss -> Ok (Kmer_table.lookup index ss)
+  | Some ss -> Ok (Kmer_table.lookup_kmer index ss)
+
+let lookup ?(n=0) index s =
+  let k = Kmer_table.k index in
+  match String.sub s ~index:0 ~length:k with
+  | None    -> error "Not long enough %s for index size %d" s k
+  | Some ss ->
+    if n = 0 then
+      Ok (Kmer_table.lookup_kmer index ss)
+    else if n = 1 then
+      let ns = Kmer_to_int.neighbors ~k (Kmer_to_int.encode ss) in
+      let init = Kmer_table.lookup_kmer index ss in
+      Array.fold_left ~init ~f:(fun acc n ->
+        List.append acc (Kmer_table.lookup index n)) ns
+      |> fun lst -> Ok lst
+    else
+      invalid_argf "not implemented n: %d" n
+
+
+
 
 let k = Kmer_table.k
