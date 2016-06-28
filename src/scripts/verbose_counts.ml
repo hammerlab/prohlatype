@@ -1,9 +1,7 @@
 
 (* Verbose version of the kmer counting algorithm used for debugging. *)
 
-let index_string s index =
-  let (b, a) = String.split_at s ~index in
-  b ^ "." ^ a
+open Util
 
 let verbose_counts ~k g =
   let init = Kmer_table.make k 0 in
@@ -33,7 +31,4 @@ let verbose_counts ~k g =
     let () = Printf.printf "updated\n" in
     tbl
   in
-  let fs = Graph_index.fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init in
-  fs.Graph_index.full
-
-
+  Graph_index.fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
