@@ -5,6 +5,20 @@ open Cmdliner
 
 let repo = "prohlatype"
 
+let positive_int_parser =
+  fun s ->
+    try
+      let d = Scanf.sscanf s "%d" (fun x -> x) in
+      if d <= 0 then
+        `Error (s ^ " is not a positive integer")
+      else
+        `Ok d
+    with Scanf.Scan_failure msg ->
+      `Error msg
+
+let positive_int =
+  positive_int_parser, (fun frmt -> Format.fprintf frmt "%d")
+
 let file_arg =
   let docv = "file" in
   let def  = "./A_gen.txt" in
@@ -19,7 +33,7 @@ let num_alt_arg =
               If not specified, all of the alternate alleles in a file are \
               added."
   in
-  Arg.(value & opt (some int) None & info ~doc ~docv ["n"; "num-alt"])
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["n"; "num-alt"])
 
 let allele_arg =
   let docv = "allele name" in

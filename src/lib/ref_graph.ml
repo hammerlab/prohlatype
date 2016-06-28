@@ -85,7 +85,7 @@ let between g start stop =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
-let output_dot ?short fname (aindex, g) =
+let output_dot ?short ?max_length fname (aindex, g) =
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
@@ -97,15 +97,16 @@ let output_dot ?short fname (aindex, g) =
       let get_subgraph _v = None
 
       let default_edge_attributes _t = [`Color 4711]
-      let edge_attributes e = [`Label (Alleles.Set.to_human_readable aindex (G.E.label e))]
+      let edge_attributes e =
+        [`Label (Alleles.Set.to_human_readable ?max_length aindex (G.E.label e))]
 
     end)
   in
   Dot.output_graph oc g;
   close_out oc
 
-let output ?(pdf=true) ?(open_=true) ~short fname (aindex, g) =
-  output_dot ~short (fname ^ ".dot") (aindex, g);
+let output ?max_length ?(pdf=true) ?(open_=true) ~short fname (aindex, g) =
+  output_dot ?max_length ~short (fname ^ ".dot") (aindex, g);
   let r =
     if pdf then
       Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)

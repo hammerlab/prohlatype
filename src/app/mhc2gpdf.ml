@@ -3,7 +3,7 @@ open Util
 open Common_options
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
-      no_open skip_disk_cache =
+      no_open skip_disk_cache max_edge_char_length =
   let open To_graph in
   let open Cache in
   let option_based_fname, cargs =
@@ -13,8 +13,9 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
   let short = not notshort in
   let pdf   = not no_pdf in
   let open_ = not no_open in
+  let max_length = max_edge_char_length in
   Cache.graph ~skip_disk_cache cargs (*{ alignment_file; which } *)
-  |> Ref_graph.output ~short ~pdf ~open_ ofile
+  |> Ref_graph.output ?max_length ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
 
@@ -51,6 +52,11 @@ let () =
     in
     Arg.(value & flag & info ~doc ["no-open"])
   in
+  let max_edge_char_length_flag =
+    let docv = "positive integer" in
+    let doc = "Specify a max number of characters to label the edges. (ex 100)" in
+    Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
+  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
@@ -71,6 +77,7 @@ let () =
             $ num_alt_arg $ allele_arg
             $ not_short_flag $ no_pdf_flag $ no_open_flag
             $ no_cache_flag
+            $ max_edge_char_length_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with
