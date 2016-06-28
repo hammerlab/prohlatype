@@ -115,9 +115,9 @@ let kmer_counts ~k g =
   fs.full
 
 type position =
-  { alignment   : alignment_position
-  ; sequence    : sequence
-  ; km1_offset  : int       (* into sequence *)
+  { alignment : alignment_position
+  ; sequence  : sequence
+  ; offset    : int       (* into sequence *)
   }
 
 (* A Graph index *)
@@ -127,7 +127,7 @@ let create ~k g =
   let init = Kmer_table.make k [] in
   let f tbl (alignment, sequence) { index; length = `Whole } =
     let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
-    let p = { alignment; sequence; km1_offset = index + k - 1 } in
+    let p = { alignment; sequence; offset = index + k - 1 } in
     Kmer_table.update (fun lst -> p :: lst) tbl i;
     tbl
   in
@@ -137,7 +137,7 @@ let create ~k g =
   in
   let close tbl (alignment, sequence) { index; length = `Part len} ext =
     let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
-    let p = { alignment; sequence; km1_offset = index + len - 1 } in
+    let p = { alignment; sequence; offset = index + len - 1 } in
     Kmer_table.update (fun lst -> p :: lst) tbl i;
     tbl
   in

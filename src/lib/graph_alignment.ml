@@ -88,8 +88,8 @@ let align ?(mub=max_int) g index search_seq =
   let open Graph_index in
   let km1 = k index - 1 in
   starting_with index search_seq >>= (fun lst ->
-      List.filter_map lst ~f:(fun { alignment; sequence; km1_offset} ->
-          match align_against_seq ~search_pos:km1 ~node_seq:sequence ~node_offset:km1_offset with
+      List.filter_map lst ~f:(fun { alignment; sequence; offset} ->
+          match align_against_seq ~search_pos:km1 ~node_seq:sequence ~node_offset:offset with
           | `Finished mismatches  ->
               if mismatches > mub then None else
                 Some (Leaf mismatches)

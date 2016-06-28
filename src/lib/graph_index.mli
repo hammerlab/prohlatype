@@ -21,16 +21,22 @@ val fold_over_kmers_in_graph :
 val kmer_counts : k:int -> G.t -> int Kmer_table.t
 
 (** Public API *)
+
+(** How we describe positions in the string graph. *)
 type position =
-  { alignment : alignment_position
-  ; sequence : sequence
-  ; km1_offset : int
+  { alignment : alignment_position    (* Where, in the alignment the sequence starts. *)
+  ; sequence  : sequence              (* The sequence. *)
+  ; offset    : int                   (* An offset into the the sequence. *)
   }
 
+(** A graph index *)
 type t
 
+(** Index a graph. *)
 val create : k:int -> G.t -> t
 
+(** Returns where the kmer starts the given sequence. *)
 val starting_with : t -> string -> (position list, string) result
 
+(** What [k] are we using to index the graph. *)
 val k : t -> int
