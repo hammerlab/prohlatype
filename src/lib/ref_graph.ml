@@ -7,14 +7,6 @@ open Graph
   - Turn fold_succ_e from O(n) into something better
 *)
 
-let short_seq s =
-  let n = String.length s in
-  if n > 10 then
-    sprintf "%s...%s"
-      (String.slice_exn ~finish:4 s) (String.slice_exn ~start:(n-3) s)
-  else
-    s
-
 type allele_name = string [@@deriving eq, ord]
 type alignment_position = int [@@deriving eq, ord]
 type start = alignment_position * allele_name [@@deriving eq, ord]
