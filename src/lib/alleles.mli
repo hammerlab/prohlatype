@@ -4,10 +4,16 @@
     upon the index. The idea is that we have only one index (per graph) and many
     edge sets/maps. Alleles are represented by strings. *)
 
+type allele = string
+
+val compare : allele -> allele -> int
+val equal : allele -> allele -> bool
+val to_string : allele -> string
+
 type index
 
 (** [index list_of_alleles] will create an [index]. *)
-val index : string list -> index
+val index : allele list -> index
 
 module Set : sig
 
@@ -17,22 +23,22 @@ module Set : sig
   val init : index -> t
 
   (** [singleton index allele] will create an edge set with just [allele]. *)
-  val singleton : index -> string -> t
+  val singleton : index -> allele -> t
 
   (** [set index t allele] will make sure that [allele] is
       in [t], specifically [is_set index t allele] will be [true].
       *)
-  val set : index -> t -> string -> unit
+  val set : index -> t -> allele -> unit
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
       [false]. *)
-  val clear : index -> t -> string -> unit
+  val clear : index -> t -> allele -> unit
 
   (** [is_set index t allele] is [allele] in [t]. *)
-  val is_set : index -> t -> string -> bool
+  val is_set : index -> t -> allele -> bool
 
-  val fold : index -> f:('a -> string -> 'a) -> init:'a -> t -> 'a
+  val fold : index -> f:('a -> allele -> 'a) -> init:'a -> t -> 'a
 
   (** For graph construction. *)
   val empty : unit -> t
@@ -71,8 +77,11 @@ module Map : sig
 
   type 'a t
 
-  (** [make index default_value] *)
+  (** [make index default_value]. *)
   val make : index -> 'a -> 'a t
+
+  (** [init index f]. *)
+  val init : index -> (allele -> 'a) -> 'a t
 
   (** [update_all set map f] apply [f] to all alleles in [map] where whether
       they are in [set] is passed the first arg to [f]. *)
@@ -83,6 +92,6 @@ module Map : sig
   val update_from : Set.t -> 'a t -> ('a -> 'a) -> unit
 
   (** [fold index f init amap] fold over all alleles found in the [map]. *)
-  val fold : index -> f:('a -> 'b -> string -> 'a) -> init:'a -> 'b t -> 'a
+  val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
 
 end

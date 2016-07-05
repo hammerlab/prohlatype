@@ -1,9 +1,14 @@
 
 open Util
 
+type allele = string [@@deriving eq, ord]
+let compare = compare_allele
+let equal = equal_allele
+let to_string a = a
+
 module SMap = Map.Make (struct
     type t = string
-    let compare = String.compare
+    let compare = compare_allele
   end)
 
 type index =
@@ -13,7 +18,7 @@ type index =
   }
 
 let index lst =
-  let to_allele = Array.of_list (List.sort ~cmp:compare lst) in
+  let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
   let size, to_index =
     Array.fold_left to_allele ~init:(0, SMap.empty )
       ~f:(fun (i, sm) a -> (i + 1, SMap.add a i sm))
@@ -94,9 +99,10 @@ module Map = struct
   let make { size; _} e =
     Array.make size e
 
-  (*let init { size; _} s p =
-    Array.init size ~f:(fun i -> p (BitSet.is_set s i))
+  let init { size; to_allele; _} f =
+    Array.init size ~f:(fun i -> f to_allele.(i))
 
+  (*
   let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
 
