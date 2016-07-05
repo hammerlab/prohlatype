@@ -102,6 +102,9 @@ module Map = struct
   let init { size; to_allele; _} f =
     Array.init size ~f:(fun i -> f to_allele.(i))
 
+  let get { to_index; _} m a =
+    m.(SMap.find a to_index)
+
   (*
   let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)

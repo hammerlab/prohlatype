@@ -83,6 +83,9 @@ module Map : sig
   (** [init index f]. *)
   val init : index -> (allele -> 'a) -> 'a t
 
+  (** [get index map allele]. *)
+  val get : index -> 'a t -> allele -> 'a
+
   (** [update_all set map f] apply [f] to all alleles in [map] where whether
       they are in [set] is passed the first arg to [f]. *)
   val update_all : Set.t -> 'a t -> (bool -> 'a -> 'a) -> unit
