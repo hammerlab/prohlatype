@@ -145,8 +145,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     in
     match advance_until ~prev ~next ~visit pos with
     | `InsideNext (pv, nv, p, s) ->
-        visit pv nv;
         let v1, v2 = split_and_rejoin p s nv in
+        visit pv v1;
         `AtNext (v1, v2)
     | `AfterLast _ as al -> al
     | `InGap _ as ig     -> ig
@@ -322,7 +322,6 @@ type construct_which_args =
 let construct_which_args_to_string = function
   | NumberOfAlts n    -> sprintf "N%d" n
   | SpecificAlleles l -> sprintf "S%s" (String.concat ~sep:"_" l)
-
 
 let construct_from_parsed ?which r =
   let open Ref_graph in
