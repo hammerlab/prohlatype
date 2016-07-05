@@ -4,7 +4,7 @@ open Common_options
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
       no_open skip_disk_cache max_edge_char_length not_human_edges_flag =
-  let open To_graph in
+  let open Ref_graph in
   let open Cache in
   let option_based_fname, cargs =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list

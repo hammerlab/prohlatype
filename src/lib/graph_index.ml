@@ -54,7 +54,7 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
     | [] -> state
     | ls -> fold_partials_on_successor node state ls
   and fold_partials_on_successor node state plst =
-    G.fold_succ (fun n s -> partial_state_on_successors s plst n) g node state
+    G.fold_succ (fun n s -> partial_state_on_successors s plst n) g.g node state
   and partial_state_on_successors state plst = function
     | S _             -> invalid_argf "Start should not be a successor!"
     | E _             -> state
@@ -90,7 +90,7 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
         let state, plst = fold_over_kmers_in_string s ~k ~f ~init:(state, []) in
         fill_partial_matches node state plst
   in
-  Tg.fold proc g init
+  Tg.fold proc g.g init
 
 let kmer_counts ~k g =
   let init = Kmer_table.make k 0 in

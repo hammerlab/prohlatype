@@ -17,9 +17,9 @@ val fold_over_kmers_in_graph :
   init:'a ->
   extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
   close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
-  G.t -> 'a
+  Ref_graph.t -> 'a
 
-val kmer_counts : k:int -> G.t -> int Kmer_table.t
+val kmer_counts : k:int -> Ref_graph.t -> int Kmer_table.t
 
 (** Public API *)
 
@@ -34,7 +34,7 @@ type position =
 type t = position list Kmer_table.t
 
 (** Index a graph. *)
-val create : k:int -> G.t -> t
+val create : k:int -> Ref_graph.t -> t
 
 (** Returns where the kmer starts the given sequence. *)
 val starting_with : t -> string -> (position list, string) result

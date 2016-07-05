@@ -29,12 +29,13 @@ let shitty_fastq_sequence_reader file f =
 
 let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file mub =
   let open Cache in
+  let open Ref_graph in
   let option_based_fname, g =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list
   in
-  let g, aset, kmt = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
+  let {g; aindex; _}, kmt = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   printf " Got graph and index!\n%!";
-  let amap = Graph_alignment.init_alignment_map aset in
+  let amap = Graph_alignment.init_alignment_map aindex in
   printf " Aligning!\n%!";
   shitty_fastq_sequence_reader fastq_file (fun seq ->
     Printf.printf "aligning: %s\n%!" seq;
@@ -44,7 +45,7 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
       match Graph_alignment.align ~mub g kmt seq with
       | Error msg -> eprintf "error %s for seq: %s\n" msg seq
       | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
-  Graph_alignment.most_likely aset amap
+  Graph_alignment.most_likely aindex amap
   |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
 
 let () =

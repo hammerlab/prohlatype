@@ -56,7 +56,7 @@ let no_cache_flag =
   Arg.(value & flag & info ~doc ["no-cache"])
 
 let to_filename_and_graph_args alignment_file num_alt_to_add allele_list =
-  let open To_graph in
+  let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =
     match allele_list with
