@@ -100,6 +100,11 @@ module Map = struct
   let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
 
+  let update_all s m f =
+    for j = 0 to Array.length m - 1 do
+      m.(j) <- f (BitSet.is_set s j) m.(j)
+    done
+
   let update_from s m f =
     Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
 

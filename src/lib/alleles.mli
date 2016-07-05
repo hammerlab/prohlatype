@@ -74,6 +74,10 @@ module Map : sig
   (** [make index default_value] *)
   val make : index -> 'a -> 'a t
 
+  (** [update_all set map f] apply [f] to all alleles in [map] where whether
+      they are in [set] is passed the first arg to [f]. *)
+  val update_all : Set.t -> 'a t -> (bool -> 'a -> 'a) -> unit
+
   (** [update_from set map f] apply [f] to all alleles in [map] that are
       in [set]. *)
   val update_from : Set.t -> 'a t -> ('a -> 'a) -> unit
