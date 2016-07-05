@@ -131,8 +131,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       G.remove_vertex g node;
       let v1 = N (p, fs) in
       G.add_vertex g v1;
-      (* TODO: this set intersect is very clumsy *)
-      let pr_edge_s =
+      let s_inter =
         List.fold_left pr ~init:(Alleles.Set.init aindex)
             ~f:(fun bta (p, bt, _) ->
                   G.add_edge_e g (G.E.create p bt v1);
@@ -140,14 +139,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
-      let su_edge_s =
-        List.fold_left su ~init:(Alleles.Set.init aindex)
-            ~f:(fun bta (_, bt, s) ->
-                  G.add_edge_e g (G.E.create v2 bt s);
-                  Alleles.Set.union bta bt)
-      in
-      let s_inter = Alleles.Set.inter pr_edge_s su_edge_s in
       G.add_edge_e g (G.E.create v1 s_inter v2);
+      List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
       (v1, v2)
     in
     match advance_until ~prev ~next ~visit pos with
