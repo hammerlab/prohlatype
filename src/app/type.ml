@@ -27,7 +27,7 @@ let shitty_fastq_sequence_reader file f =
     | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
     *)
 
-let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file =
+let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file mub =
   let open Cache in
   let option_based_fname, g =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list
@@ -41,7 +41,7 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
     match String.index_of_character seq 'N' with
     | Some _ -> printf "skipping N!\n"
     | None   ->
-      match Graph_alignment.align ~mub:1 g kmt seq with
+      match Graph_alignment.align ~mub g kmt seq with
       | Error msg -> eprintf "error %s for seq: %s\n" msg seq
       | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
   Graph_alignment.most_likely aset amap
@@ -63,6 +63,11 @@ let () =
     let doc = "Fastq formatted DNA reads file." in
     Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
   in
+  let mub_arg =
+    let docv = "positive integer" in
+    let doc = "mub" in
+    Arg.(value & opt positive_int 1 & info ~doc ~docv ["mub"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -80,7 +85,7 @@ let () =
     in
     Term.(const type_
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
-            $ fastq_file_arg
+            $ fastq_file_arg $ mub_arg
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
