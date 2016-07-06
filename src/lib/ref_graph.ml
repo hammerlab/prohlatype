@@ -488,3 +488,37 @@ let construct_from_parsed ?which r =
 
 let construct_from_file ?which file =
   construct_from_parsed ?which (Mas_parser.from_file file)
+
+(** Accessors. *)
+let sequence ?start ?stop {g; aindex; starts} allele =
+  let open Nodes in
+  let start =
+    match start with
+    | Some s -> s
+    | None   ->
+        match A.Map.get aindex starts allele with
+        | []      -> invalid_argf "Allele %s not found in graph!" (A.to_string allele)
+        | sp :: _ -> S (sp, allele)
+  in
+  let stop, pp =
+    match stop with
+    | None             -> (fun _ -> false)
+                          , (fun x -> x)
+    | Some (`AtPos p)  -> (fun n -> position n >= p)
+                          , (fun x -> x)
+    | Some (`Length n) ->
+        let r = ref 0 in
+        (function | S _ | E _ | B _ -> false
+                 | N (_, s) ->
+                    r := !r + String.length s;
+                    !r >= n)
+        , String.take ~index:n
+  in
+  fold_along_allele aindex ~start allele g ~init:[]
+    ~f:(fun clst node ->
+          match node with
+          | N (_, s)          -> (s :: clst, stop node)
+          | S _ | E _ | B _   -> (clst, stop node))
+  |> List.rev
+  |> String.concat
+  |> pp
