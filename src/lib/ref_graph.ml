@@ -315,10 +315,10 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   (* How we close back with the reference *)
   let rec rejoin_after_split ~prev ~next split_pos state ~new_node lst =
     match split_in ~prev ~next ~visit:do_nothing split_pos with
-    | `AfterLast _            -> solo_loop state new_node lst
-    | `InGap (_pv, next, ap)  -> ref_gap_loop state new_node next ap lst
-    | `AtNext (_pv, next)     -> add_allele_edge new_node next;
-                                 main_loop state ~prev:new_node ~next lst
+    | `AfterLast _          -> solo_loop state new_node lst
+    | `InGap (pv, next, ap) -> ref_gap_loop state ~prev:new_node next ap lst
+    | `AtNext (_pv, next)   -> add_allele_edge new_node next;
+                               main_loop state ~prev:new_node ~next lst
   (* In the beginning we have not 'Start'ed ->
     Loop through the alignment elemends:
       - discarding Boundaries and Gaps
@@ -367,7 +367,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | Gap _ :: t                -> solo_loop state prev t
   (* When traversing a reference gap. We have to keep check allele elements
     position to check when to join back with the next reference node. *)
-  and ref_gap_loop state prev ref_node ref_pos = function
+  and ref_gap_loop state ~prev ref_node ref_pos = function
     | []                                -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
     | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p (A.to_string allele)
     | (End end_pos :: tl) as lst        ->
@@ -390,19 +390,23 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         else
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node l
-    | Sequence { start; s} :: tl        ->
-        let new_node = G.V.create (N (start, s)) in
-        let () = add_allele_edge prev new_node in
-        let close_pos = start + String.length s in
-        if close_pos <= ref_pos then
-          ref_gap_loop state new_node ref_node ref_pos tl
-        else (* close_pos > ref_pos *)
-          rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
-            ~new_node tl
+    | (Sequence { start; s} :: tl) as l ->
+        if start > ref_pos then begin
+          add_allele_edge prev ref_node;
+          main_loop state ~prev ~next:ref_node l
+        end else
+          let new_node = G.V.create (N (start, s)) in
+          let () = add_allele_edge prev new_node in
+          let close_pos = start + String.length s in
+          if close_pos <= ref_pos then
+            ref_gap_loop state ~prev:new_node ref_node ref_pos tl
+          else (* close_pos > ref_pos *)
+            rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
+              ~new_node tl
     | Gap { start; length} :: tl        ->
         let close_pos = start + length in
         if close_pos <= ref_pos then
-          ref_gap_loop state prev ref_node ref_pos tl
+          ref_gap_loop state ~prev ref_node ref_pos tl
         else (* close_pos > ref_pos *)
           rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
             ~new_node:prev tl
@@ -427,7 +431,6 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         main_loop state ~prev ~next t
     | Sequence { start; s} :: t ->
         let new_node = G.V.create (N (start, s)) in
-        let close_pos = start + String.length s in
         let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
         match open_res with
         | `AfterLast prev         ->
@@ -436,6 +439,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         | `InGap (prev, next, _)
         | `AtNext (prev, next)    ->
             let () = add_allele_edge prev new_node in
+            let close_pos = start + String.length s in
             rejoin_after_split ~prev ~next close_pos state ~new_node t
         end
     | Gap _ :: t -> main_loop state ~prev ~next t (* skip Gaps *)
@@ -469,10 +473,6 @@ let construct_from_parsed ?which r =
   let aindex = A.index (reference :: List.map ~f:fst alt_alleles) in
   let refs_start_ends = add_reference_elems g aindex reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
-  (*let () =
-    List.iter alt_alleles ~f:(fun (allele, lst) ->
-      ignore (add_non_ref g reference aindex fs_ls_st_assoc allele lst))
-  in*)
   let start_and_stop_assoc =
     List.fold_left alt_alleles ~init:[ reference, refs_start_ends]
       ~f:(fun acc (allele, lst) ->
@@ -480,7 +480,7 @@ let construct_from_parsed ?which r =
             (allele, start_and_stops) :: acc)
   in
   let starts =
-    Alleles.Map.init aindex (fun allele ->
+    A.Map.init aindex (fun allele ->
       let seps = List.assoc allele start_and_stop_assoc in
       List.map seps ~f:(fun s -> fst s.start))
   in
