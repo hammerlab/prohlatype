@@ -344,8 +344,21 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         let start = start_pos, allele in
         let state = start, previous_starts_and_ends in
         let new_node = G.V.create (S start) in
-        rejoin_after_split ~prev:first_start_node ~next:first_start_node start_pos state
-          ~new_node tl
+        match tl with
+        | Sequence { start; s } :: tl when start = start_pos ->
+            let ns = N (start, s) in
+            add_allele_edge new_node ns;
+            let close_pos = start + String.length s in
+            rejoin_after_split ~prev:first_start_node ~next:first_start_node close_pos state
+              ~new_node:ns tl
+        | []
+        | Start _ :: _
+        | End _ :: _      -> inv_argf "Nothing after start for allele: %s" (A.to_string allele)
+        | Boundary _ :: _
+        | Gap _ :: _
+        | Sequence _ :: _ ->  (* tl is still correct! *)
+            rejoin_after_split ~prev:first_start_node ~next:first_start_node start_pos state
+              ~new_node tl
   and add_end (start, os) end_ prev tl =
     add_allele_edge prev (G.V.create (E end_));
     let ns = { start; end_ } :: os in
