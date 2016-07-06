@@ -403,13 +403,17 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           else (* close_pos > ref_pos *)
             rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
               ~new_node tl
-    | Gap { start; length} :: tl        ->
-        let close_pos = start + length in
-        if close_pos <= ref_pos then
-          ref_gap_loop state ~prev ref_node ref_pos tl
-        else (* close_pos > ref_pos *)
-          rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
-            ~new_node:prev tl
+    | (Gap { start; length} :: tl) as l ->
+        if start > ref_pos then begin
+          add_allele_edge prev ref_node;
+          main_loop state ~prev ~next:ref_node l
+        end else
+          let close_pos = start + length in
+          if close_pos <= ref_pos then
+            ref_gap_loop state ~prev ref_node ref_pos tl
+          else (* close_pos > ref_pos *)
+            rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
+              ~new_node:prev tl
   (* When not in a reference gap *)
   and main_loop state ~prev ~next = function
     | []              -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
