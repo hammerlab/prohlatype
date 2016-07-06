@@ -31,6 +31,9 @@ module Nodes = struct
     | B (_, n)  -> sprintf "\"B%d\"" n
     | N (n, s)  -> sprintf "\"%d%s\"" n (if short then short_seq s else s)
 
+  let position = function
+    | S (p, _) | E p | B (p, _) | N (p, _)  -> p
+
   let hash = Hashtbl.hash
 end
 
