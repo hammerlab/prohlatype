@@ -266,6 +266,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
       G.add_edge_e g (G.E.create v1 s_inter v2);
+      A.Set.clear aindex s_inter allele;
       List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
       (v1, v2)
     in
