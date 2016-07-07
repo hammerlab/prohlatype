@@ -511,11 +511,13 @@ let sequence ?start ?stop {g; aindex; starts} allele =
   let open Nodes in
   let start =
     match start with
-    | Some s -> s
+    | Some s -> [s]
     | None   ->
         match A.Map.get aindex starts allele with
-        | []      -> invalid_argf "Allele %s not found in graph!" (A.to_string allele)
-        | sp :: _ -> S (sp, allele)
+        | []     -> invalid_argf "Allele %s not found in graph!" (A.to_string allele)
+        | sp_lst -> (* make sure start points are in increasing order *)
+                    List.sort ~cmp:compare_alignment_position sp_lst
+                    |> List.map ~f:(fun sp -> S (sp, allele))
   in
   let stop, pp =
     match stop with
@@ -531,11 +533,12 @@ let sequence ?start ?stop {g; aindex; starts} allele =
                     !r >= n)
         , String.take ~index:n
   in
-  fold_along_allele aindex ~start allele g ~init:[]
-    ~f:(fun clst node ->
-          match node with
-          | N (_, s)          -> (s :: clst, stop node)
-          | S _ | E _ | B _   -> (clst, stop node))
+  List.fold_left start ~init:[] ~f:(fun acc start ->
+    fold_along_allele aindex ~start allele g ~init:acc
+      ~f:(fun clst node ->
+            match node with
+            | N (_, s)          -> (s :: clst, stop node)
+            | S _ | E _ | B _   -> (clst, stop node)))
   |> List.rev
   |> String.concat
   |> pp
