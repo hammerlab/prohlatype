@@ -16,14 +16,14 @@ let fasta_reader file =
           let nacc    = (allele, (String.concat (List.rev sacc))) :: acc in
           read_read nallele [] nacc
       | Some _    ->
-          read_read allele (line :: sacc) acc 
+          read_read allele (line :: sacc) acc
     with End_of_file ->
       close_in ic;
       (allele, (String.concat (List.rev sacc))) :: acc
   in
   let first_line = input_line ic in
   match String.get first_line ~index:0 with
-  | Some '>'  -> read_read (allele_from_line first_line) [] [] 
+  | Some '>'  -> read_read (allele_from_line first_line) [] []
   | None      -> eprintf "empty first line!"; []
   | Some c    -> eprintf "first line doesn't start with '>' %c" c ; []
 
@@ -51,11 +51,11 @@ let apply_changes ~r d =
     |  x  :: _,  y  :: _ -> invalid_argf "not implemented characters: %c vs %c"
                                 x y
   in
-  loop [] lr ld 
+  loop [] lr ld
   |> List.rev
-  |> String.of_character_list 
+  |> String.of_character_list
 
-let manual_diff ?(reference="A\\*01:01:01:01") ~allele ~file () =
+let manual_diff ~reference ~allele ~file () =
   let cmd =
     sprintf "grep -E \"%s|%s\" %s | tr -s ' ' | cut -d ' ' -f 3-"
       reference allele (root_dir // "alignments" // (file ^ ".txt"))
@@ -68,14 +68,20 @@ let manual_diff ?(reference="A\\*01:01:01:01") ~allele ~file () =
       acc
   in
   let lst = List.rev (loop []) in
-  let parsed = 
+  let parsed =
     let rec loop acc = function
       | []           -> List.rev acc
       | r :: d :: tl -> loop ((apply_changes ~r d) :: acc)  tl
-      | x :: []      -> invalid_argf "Unbalanced grep for %s %s, last: %s"
-                          allele file x
+      | x :: []      -> eprintf "Unbalanced grep for %s %s, adding last sequence.\n"
+                          allele file;
+                        let without_spaces = String.filter_map ~f:(function ' ' -> None | x -> Some x) x in
+                        List.rev (without_spaces :: acc)
     in
-    loop [] lst
+    try
+      loop [] lst
+    with Invalid_argument m ->
+      eprintf "%s couldn't manually apply changes for %s vs %s\n" m allele reference;
+      []
   in
   String.concat parsed
 
@@ -83,19 +89,19 @@ let test_sequences file =
   let all_args =
     { Cache.alignment_file = root_dir // "alignments" // (file ^ ".txt")
     ; Cache.which = None
-    } 
+    }
   in
   let gall = Cache.graph all_args in
-  let a_fasta = fasta_reader (root_dir // "fasta" // (file ^ ".fasta")) in 
+  let a_fasta = fasta_reader (root_dir // "fasta" // (file ^ ".fasta")) in
   List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
-    let gseq = 
-      try Ref_graph.sequence gall allele 
+    let graph_seq =
+      try Ref_graph.sequence gall allele
       with Not_found ->
         Printf.eprintf "missing %s!\n" allele;
         ""
     in
-    if seq <> gseq then
-      (allele, (seq, gseq)) :: acc
+    if seq <> graph_seq then
+      (allele, (seq, graph_seq)) :: acc
     else
       acc)
   |> fun lst -> List.length a_fasta, lst
@@ -103,18 +109,20 @@ let test_sequences file =
 let test ~reference file =
   let number_sequences, different = test_sequences file in
   if different = [] then
-    Printf.printf "Nothing different in %d sequences!" number_sequences
+    Printf.printf "Nothing different in %d sequences!\n" number_sequences
   else
-    List.iter different ~f:(fun (allele, (fasta, gseq)) ->
+    List.iter different ~f:(fun (allele, (fasta, graph_seq)) ->
       let md = manual_diff ~reference ~allele ~file () in
       if md = fasta then
-        Printf.printf "%s different and manual matches fasta.\n" allele
-      else if md = gseq then
-        Printf.printf "%s different but manual matches graph seq.\n" allele
+        Printf.printf "%s different and manual matches fasta:\ngraph:\n%s\nmanual:\n%s\n"
+          allele graph_seq md
+      else if md = graph_seq then
+        Printf.printf "%s different but manual matches graph seq.\nfasta:\n%s\ngraph:\n%s\n"
+          allele fasta graph_seq
       else
         Printf.printf
           "%s different but manual doesn't match any sequence.\nfasta:\n%s\ngraph:\n%s\nmanual:\n%s\n"
-            allele fasta gseq md)
+            allele fasta graph_seq md)
 
 let () =
   let n = Array.length Sys.argv in
