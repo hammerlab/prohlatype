@@ -58,16 +58,19 @@ let next_node_along aindex allele g ~from =
     Some v
 
 let fold_along_allele aindex ~start allele g ~f ~init =
-  let next = next_node_along aindex allele g in
-  let rec loop from (acc, stop) =
-    if stop then
-      acc
-    else
-      match next ~from with
-      | None    -> acc
-      | Some vs -> loop vs (f acc vs)
-  in
-  loop start (f init start)
+  if not (G.mem_vertex g start) then
+    invalid_argf "%s is not a vertex in the graph." (Nodes.vertex_name start)
+  else
+    let next = next_node_along aindex allele g in
+    let rec loop from (acc, stop) =
+      if stop then
+        acc
+      else
+        match next ~from with
+        | None    -> acc
+        | Some vs -> loop vs (f acc vs)
+    in
+    loop start (f init start)
 
 let between g start stop =
   let ng = G.create () in
