@@ -3,11 +3,13 @@ open Util
 open Common_options
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
-      no_open skip_disk_cache max_edge_char_length not_human_edges_flag =
+      no_open skip_disk_cache max_edge_char_length not_human_edges_flag
+      not_normalize =
   let open Ref_graph in
   let open Cache in
   let option_based_fname, cargs =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list
+      (not not_normalize)
   in
   let ofile = Option.value ofile ~default:option_based_fname in
   let short = not notshort in
@@ -15,7 +17,7 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
   let open_ = not no_open in
   let max_length = max_edge_char_length in
   let human_edges = not not_human_edges_flag in
-  Cache.graph ~skip_disk_cache cargs (*{ alignment_file; which } *)
+  Cache.graph ~skip_disk_cache cargs
   |> Ref_graph.output ~human_edges ?max_length ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
@@ -62,6 +64,12 @@ let () =
     let doc = "Specify a max number of characters to label the edges. (ex 100)" in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
   in
+  let do_not_normalize_flag =
+    let doc = "Do not normalize, remove overlapping nodes at the same position, \
+               in the string graph."
+    in
+    Arg.(value & flag & info ~doc ["do-not-normalize"])
+  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
@@ -84,6 +92,7 @@ let () =
             $ no_cache_flag
             $ max_edge_char_length_flag
             $ not_human_edges_flag
+            $ do_not_normalize_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with

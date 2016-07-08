@@ -21,8 +21,8 @@ module Nodes = struct
   type t =
     | S of start
     | E of end_
-    | B of alignment_position * int      (* Boundary of position and count *)
-    | N of alignment_position * sequence   (* Sequences *)
+    | B of alignment_position * int       (* Boundary of position and count *)
+    | N of alignment_position * sequence  (* Sequences *)
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
@@ -496,6 +496,153 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   in
   start_loop [] alt_lst
 
+(* TODO: use a real heap/pq ds?
+  - The one in Graph doesn't allow you to control not putting in duplicates
+  *)
+
+module Fold_at_same_position = struct
+
+  module Nq =
+    Set.Make(struct
+      type t = Nodes.t
+      let compare = Nodes.compare
+    end)
+
+  let at_min_position q =
+    let rec loop p q acc =
+      if q = Nq.empty then
+        q, acc
+      else
+        let me = Nq.min_elt q in
+        match acc with
+        | [] -> loop (Nodes.position me) (Nq.remove me q) [me]
+        | _  -> if Nodes.position me = p then
+                  loop p (Nq.remove me q) (me :: acc)
+                else
+                  q, acc
+    in
+    loop min_int q []
+
+  let after_starts {g; aindex; starts} =
+    let open Nodes in
+    let add_successors = G.fold_succ Nq.add g in
+    Alleles.Map.fold aindex starts ~init:Nq.empty
+      ~f:(fun q alignment_position_lst allele ->
+            List.fold_left alignment_position_lst ~init:q
+              ~f:(fun q alignment_position ->
+                    add_successors (S (alignment_position, allele)) q))
+
+  let f g ~f ~init =
+    let add_successors = G.fold_succ Nq.add g.g in
+    let q = after_starts g in
+    let rec loop a q =
+      if q = Nq.empty then
+        a
+      else
+        let nq, amp = at_min_position q in
+        let na = f a amp in
+        let nqq = List.fold_left amp ~init:nq ~f:(fun q n -> add_successors n q) in
+        loop na nqq
+    in
+    loop init q
+
+end
+
+module Apsq =
+  Set.Make(struct
+    type t = alignment_position * sequence
+    let compare = compare (*a1, s1) (a2, s2) =
+      let r = compare_alignment_position a1 a2 in
+      if r = 0 then
+        compare_sequence s1 s2
+      else
+        r*)
+  end)
+
+let at_min_position q =
+  let rec loop p q acc =
+    if q = Apsq.empty then
+      q, acc
+    else
+      let me = Apsq.min_elt q in
+      match acc with
+      | [] -> loop (fst me) (Apsq.remove me q) [me]
+      | _  -> if fst me = p then
+                loop p (Apsq.remove me q) (me :: acc)
+              else
+                q, acc
+  in
+  loop min_int q []
+
+let rec add_node_successors_only g v q =
+  let open Nodes in
+  match v with
+  | N (a, s) -> Apsq.add (a, s) q
+  | E _      -> q
+  | S _
+  | B _      -> G.fold_succ (add_node_successors_only g) g v q
+
+let after_starts {g; aindex; starts} =
+  let open Nodes in
+  let add_successors = G.fold_succ (add_node_successors_only g) g in
+  Alleles.Map.fold aindex starts ~init:Apsq.empty
+    ~f:(fun q alignment_position_lst allele ->
+          List.fold_left alignment_position_lst ~init:q
+            ~f:(fun q alignment_position ->
+                  add_successors (S (alignment_position, allele)) q))
+
+let normalize_by_position ({g; aindex; _ } as gg) =
+  let open Nodes in
+  let add_successors = G.fold_succ (add_node_successors_only g) g in
+  let qstart = after_starts gg in
+  let split_and_rejoin q p s =
+    let node = N (p, s) in
+    let pr = G.pred_e g node in
+    let su = G.succ_e g node in
+    G.remove_vertex g node;
+    let fs, sn = String.split_at s ~index:1 in
+    let p1 = p + 1 in
+    let v1 = N (p, fs) in
+    G.add_vertex g v1;
+    let s_inter =
+      List.fold_left pr ~init:(A.Set.init aindex)
+          ~f:(fun bta (p, bt, _) ->
+                G.add_edge_e g (G.E.create p bt v1);
+                A.Set.union bt bta)
+    in
+    let v2 = N (p1, sn) in
+    G.add_vertex g v2;
+    G.add_edge_e g (G.E.create v1 s_inter v2);
+    List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
+    Apsq.add (p1, sn) q
+  in
+  let flatten q ls =
+    match List.partition (fun (_, s) -> String.length s = 1) ls with
+    | [], [] -> invalid_argf "asked to flatten an empty list, bug in at_min_position"
+    | [], m :: [] -> q  (* single multiple branch, don't split! *)
+                    (* TODO: Do we care about preserving different multiple cases:
+                       [ "AC"; "GT"]. This method could be made marter *)
+    | [], mltpl   -> List.fold_left mltpl ~init:q ~f:(fun q (p, s) ->
+                        split_and_rejoin q p s)
+    | sngl, []    -> List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
+                         add_successors (N (p, s)) q)
+    | sngl, mltpl -> let nq =
+                       List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
+                         add_successors (N (p, s)) q)
+                     in
+                     List.fold_left mltpl ~init:nq ~f:(fun q (p, s) ->
+                            split_and_rejoin q p s)
+  in
+  let rec loop q =
+    if q = Apsq.empty then
+      ()
+    else
+      let nq, amp = at_min_position q in
+      let nq = flatten nq amp in
+      loop nq
+  in
+  loop qstart
+
 type construct_which_args =
   | NumberOfAlts of int
   | SpecificAlleles of string list
@@ -504,7 +651,7 @@ let construct_which_args_to_string = function
   | NumberOfAlts n    -> sprintf "N%d" n
   | SpecificAlleles l -> sprintf "S%s" (String.concat ~sep:"_" l)
 
-let construct_from_parsed ?which r =
+let construct_from_parsed ?which ?(normalize=true) r =
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
@@ -542,10 +689,12 @@ let construct_from_parsed ?which r =
       let seps = List.assoc allele start_and_stop_assoc in
       List.map seps ~f:(fun s -> fst s.start))
   in
-  { g; aindex; starts }
+  let gg = { g; aindex; starts } in
+  if normalize then normalize_by_position gg;
+  gg
 
-let construct_from_file ?which file =
-  construct_from_parsed ?which (Mas_parser.from_file file)
+let construct_from_file ~normalize ?which file =
+  construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
 (** Accessors. *)
 let sequence ?start ?stop {g; aindex; starts} allele =

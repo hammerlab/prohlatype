@@ -55,7 +55,7 @@ let no_cache_flag =
   in
   Arg.(value & flag & info ~doc ["no-cache"])
 
-let to_filename_and_graph_args alignment_file num_alt_to_add allele_list =
+let to_filename_and_graph_args alignment_file num_alt_to_add allele_list normalize =
   let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =
@@ -63,10 +63,10 @@ let to_filename_and_graph_args alignment_file num_alt_to_add allele_list =
     | []  ->
         begin
           match num_alt_to_add with
-          | None   -> sprintf "%s_all" base, None
-          | Some n -> sprintf "%s_%d" base n, (Some (NumberOfAlts n))
+          | None   -> sprintf "%s_%b_all" base normalize, None
+          | Some n -> sprintf "%s_%b_%d" base normalize n, (Some (NumberOfAlts n))
         end
     | lst -> sprintf "%s_spec_%d" base (Hashtbl.hash lst), (Some (SpecificAlleles lst))
   in
-  option_based_fname, { Cache.alignment_file; Cache.which }
+  option_based_fname, { Cache.alignment_file; Cache.which ; Cache.normalize }
 
