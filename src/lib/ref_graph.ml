@@ -366,21 +366,9 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         let start = start_pos, allele in
         let state = start, previous_starts_and_ends in
         let new_node = G.V.create (S start) in
-        match tl with
-        | Sequence { start; s } :: tll when start = start_pos ->
-            let ns = N (start, s) in
-            add_allele_edge new_node ns;
-            let close_pos = start + String.length s in
-            rejoin_after_split ~prev:first_start_node ~next:first_start_node close_pos state
-              ~new_node:ns tll
-        | []
-        | Start _ :: _
-        | End _ :: _      -> inv_argf "Nothing after start for allele: %s" (A.to_string allele)
-        | Boundary _ :: _
-        | Gap _ :: _
-        | Sequence _ :: _ ->
-            rejoin_after_split ~prev:first_start_node ~next:first_start_node start_pos state
-              ~new_node tl
+        (* we can think of a start as as a Gap *)
+        close_position_loop state ~prev:first_start_node ~next:first_start_node
+          ~allele_node:new_node (`Gap start_pos) tl
   and add_end (start, os) end_ prev tl =
     add_allele_edge prev (G.V.create (E end_));
     let ns = { start; end_ } :: os in
@@ -452,17 +440,17 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   (* The "run-length"-encoding nature of alignment implies that our edges have
      to link to the next sequence element iff they are consecutive
      (ex. "A..C", "...A..C" ) as opposed to linking back to the reference! *)
-  and close_position_loop state ~prev ~next ~ref_node pe lst =
+  and close_position_loop state ~prev ~next ~allele_node pe lst =
     match test_consecutive_elements pe lst with
     | `Close pos                            ->
-        rejoin_after_split pos state ~prev ~next ~new_node:ref_node lst
+        rejoin_after_split pos state ~prev ~next ~new_node:allele_node lst
     | `Continue (new_node_opt, new_pe, lst) ->
-        let ref_node =
+        let allele_node =
           match new_node_opt with
-          | None    -> ref_node
-          | Some nn -> add_allele_edge ref_node nn; nn
+          | None    -> allele_node
+          | Some nn -> add_allele_edge allele_node nn; nn
         in
-        close_position_loop state ~prev ~next ~ref_node new_pe lst
+        close_position_loop state ~prev ~next ~allele_node new_pe lst
   (* When not in a reference gap *)
   and main_loop state ~prev ~next = function
     | []              -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
@@ -493,7 +481,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         | `AtNext (prev, next)    ->
             let () = add_allele_edge prev new_node in
             let close_pos = start + String.length s in
-            close_position_loop ~prev ~next ~ref_node:new_node state (`Sequence close_pos) t
+            close_position_loop ~prev ~next ~allele_node:new_node state (`Sequence close_pos) t
         end
     | Gap {start; length} :: t ->
         let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
@@ -503,7 +491,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         | `InGap (prev, next, _)
         | `AtNext (prev, next)    ->
             let close_pos = start + length in
-            close_position_loop ~prev ~next ~ref_node:prev state (`Gap close_pos) t
+            close_position_loop ~prev ~next ~allele_node:prev state (`Gap close_pos) t
         end
   in
   start_loop [] alt_lst
