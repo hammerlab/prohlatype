@@ -89,6 +89,7 @@ let test_sequences file =
   let all_args =
     { Cache.alignment_file = root_dir // "alignments" // (file ^ ".txt")
     ; Cache.which = None
+    ; Cache.normalize = true
     }
   in
   let gall = Cache.graph all_args in

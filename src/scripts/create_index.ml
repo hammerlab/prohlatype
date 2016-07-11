@@ -2,11 +2,13 @@
 let cargs n =
   { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
   ; Cache.which = Some (Ref_graph.NumberOfAlts n)
+  ; Cache.normalize = true
   } ;;
 
 let all_args =
   { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
   ; Cache.which = None
+  ; Cache.normalize = true
   } ;;
 
 let k = 10 ;;
