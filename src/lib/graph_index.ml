@@ -119,7 +119,7 @@ type position =
 (* A Graph index *)
 type t = position list Kmer_table.t
 
-let create ~k g =
+let create_at_penultimate ~k g =
   let init = Kmer_table.make k [] in
   let f tbl (alignment, sequence) { index; length = `Whole } =
     let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
@@ -143,6 +143,39 @@ let create ~k g =
   let close tbl (alignment, sequence) { index; length = `Part len} ext =
     let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
     let p = { alignment; sequence; offset = index + len - 1 } in
+    (*let () = printf "Closing %d \t %s \t %d\t ext: %d \n"
+      alignment (Ref_graph.index_string sequence p.offset) p.offset ext
+    in *)
+    Kmer_table.update (fun lst -> p :: lst) tbl i;
+    tbl
+  in
+  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+
+let create ~k g =
+  let init = Kmer_table.make k [] in
+  let f tbl (alignment, sequence) { index; length = `Whole } =
+    let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
+    let p = { alignment; sequence; offset = index } in
+    (*let () = printf "Adding %d \t %s \t %d\n" alignment (Ref_graph.index_string sequence p.offset) p.offset in *)
+    Kmer_table.update (fun lst -> p :: lst) tbl i;
+    tbl
+  in
+  let extend (alignment, sequence) { index; length = `Part len } ext_opt =
+    (*let () = printf "At %d, %s extend at %d len %d" alignment
+          (Ref_graph.index_string sequence index) index len in *)
+    match ext_opt with
+    | None     ->
+        let nj = Kmer_to_int.encode sequence ~pos:index ~len in
+        let p  = { alignment; sequence; offset = index } in
+        (*let () = printf " cur: None \t nj %d \n" nj in *)
+        (nj, p)
+    | Some (ext, p) ->
+        let nj = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
+        (*let () = printf " cur: Some %d \t nj %d\n" ext nj in *)
+        nj, p
+  in
+  let close tbl (_al, sequence) { index; length = `Part len} (ext, p) =
+    let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
     (*let () = printf "Closing %d \t %s \t %d\t ext: %d \n"
       alignment (Ref_graph.index_string sequence p.offset) p.offset ext
     in *)
