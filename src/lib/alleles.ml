@@ -57,6 +57,17 @@ module Set = struct
 
   let inter = BitSet.inter
 
+  let complement {size; _} t =
+    let c = BitSet.copy t in
+    for i = 0 to size - 1 do BitSet.toggle c i done;
+    c
+
+  let any t =
+    BitSet.count t > 0
+
+  let all {size; _} t =
+    BitSet.count t = size
+
   let to_string index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev

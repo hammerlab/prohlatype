@@ -53,6 +53,15 @@ module Set : sig
       [e1] and [e2]. *)
   val inter : t -> t -> t
 
+  (** [completment index t] returns a set of all the alleles not in [t].*)
+  val complement : index -> t -> t
+
+  (** [any t] are any of the alleles in the set? *)
+  val any : t -> bool
+
+  (** [all t] are all of the alleles in the set? *)
+  val all : index -> t -> bool
+
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : index -> t -> string
 
