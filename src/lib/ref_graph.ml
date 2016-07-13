@@ -14,7 +14,7 @@ type end_ = alignment_position [@@deriving eq, ord]
 type sequence = string [@@deriving eq, ord]
 
 (* start end pairs *)
-type sep = { start : start ; end_ : end_ }
+type sep = { start : start ; end_ : end_ } [@@deriving eq, ord]
 
 module Nodes = struct
 
@@ -88,7 +88,7 @@ let between g start stop =
 type t =
   { g       : G.t
   ; aindex  : A.index
-  ; starts  : alignment_position list A.Map.t
+  ; bounds  : sep list A.Map.t
   }
 
 (** Output **)
@@ -523,14 +523,14 @@ module Fold_at_same_position = struct
     in
     loop min_int q []
 
-  let after_starts {g; aindex; starts} =
+  let after_starts {g; aindex; bounds } =
     let open Nodes in
     let add_successors = G.fold_succ Nq.add g in
-    Alleles.Map.fold aindex starts ~init:Nq.empty
-      ~f:(fun q alignment_position_lst allele ->
-            List.fold_left alignment_position_lst ~init:q
-              ~f:(fun q alignment_position ->
-                    add_successors (S (alignment_position, allele)) q))
+    Alleles.Map.fold aindex bounds ~init:Nq.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    add_successors (S (fst sep.start, allele)) q))
 
   let f g ~f ~init =
     let add_successors = G.fold_succ Nq.add g.g in
@@ -582,14 +582,14 @@ let rec add_node_successors_only g v q =
   | S _
   | B _      -> G.fold_succ (add_node_successors_only g) g v q
 
-let after_starts {g; aindex; starts} =
+let after_starts {g; aindex; bounds} =
   let open Nodes in
   let add_successors = G.fold_succ (add_node_successors_only g) g in
-  Alleles.Map.fold aindex starts ~init:Apsq.empty
-    ~f:(fun q alignment_position_lst allele ->
-          List.fold_left alignment_position_lst ~init:q
-            ~f:(fun q alignment_position ->
-                  add_successors (S (alignment_position, allele)) q))
+  Alleles.Map.fold aindex bounds ~init:Apsq.empty
+    ~f:(fun q sep_lst allele ->
+          List.fold_left sep_lst ~init:q
+            ~f:(fun q sep ->
+                  add_successors (S (fst sep.start, allele)) q))
 
 let normalize_by_position ({g; aindex; _ } as gg) =
   let open Nodes in
@@ -684,12 +684,10 @@ let construct_from_parsed ?which ?(normalize=true) r =
             let start_and_stops = add_non_ref g reference aindex fs_ls_st_assoc allele lst in
             (allele, start_and_stops) :: acc)
   in
-  let starts =
-    A.Map.init aindex (fun allele ->
-      let seps = List.assoc allele start_and_stop_assoc in
-      List.map seps ~f:(fun s -> fst s.start))
+  let bounds =
+    A.Map.init aindex (fun allele -> List.assoc allele start_and_stop_assoc)
   in
-  let gg = { g; aindex; starts } in
+  let gg = { g; aindex; bounds } in
   if normalize then normalize_by_position gg;
   gg
 
@@ -697,17 +695,17 @@ let construct_from_file ~normalize ?which file =
   construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
 (** Accessors. *)
-let sequence ?start ?stop {g; aindex; starts} allele =
+let sequence ?start ?stop {g; aindex; bounds } allele =
   let open Nodes in
   let start =
     match start with
     | Some s -> [s]
     | None   ->
-        match A.Map.get aindex starts allele with
+        match A.Map.get aindex bounds  allele with
         | []     -> invalid_argf "Allele %s not found in graph!" (A.to_string allele)
         | sp_lst -> (* make sure start points are in increasing order *)
-                    List.sort ~cmp:compare_alignment_position sp_lst
-                    |> List.map ~f:(fun sp -> S (sp, allele))
+                    List.sort ~cmp:compare_sep sp_lst
+                    |> List.map ~f:(fun sep -> S (fst sep.start, allele))
   in
   let stop, pp =
     match stop with
