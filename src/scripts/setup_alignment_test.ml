@@ -5,8 +5,8 @@
 
 let pos = Graph_index.lookup idxall greads.(0) |> unwrap_ok |>fun l -> List.nth_exn l 1 ;;
 
-let r = Graph_alignment.compute_mismatches gall (String.sub_exn greads.(0) ~index:0 ~length:20) ~search_pos_start:9 pos  ;;
-let rn length = Graph_alignment.compute_mismatches gall (String.sub_exn greads.(0) ~index:0 ~length) ~search_pos_start:9 pos  ;;
+let r = Graph_alignment.compute_mismatches gall (String.sub_exn greads.(0) ~index:0 ~length:20) (*~search_pos_start:9*) pos  ;;
+let rn length = Graph_alignment.compute_mismatches gall (String.sub_exn greads.(0) ~index:0 ~length) (*~search_pos_start:9*) pos  ;;
 
 let al_to_list idx r = Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[]  r |> List.sort ~cmp:compare  ;;
 
@@ -14,10 +14,23 @@ let foo ?k ~gi ~length ~read =
   let _, (g, idx) = g_and_idx ?k gi in
   let sub_read = String.sub_exn ~index:0 ~length read in
   let pos = Graph_index.lookup idx sub_read |> unwrap_ok |> List.hd_exn in
-  let search_pos_start = (Option.value ~default:10 k) - 1 in
-  let al = Graph_alignment.compute_mismatches g sub_read ~search_pos_start pos in
+  (*let search_pos_start = (Option.value ~default:10 k) - 1 in*)
+  let al = Graph_alignment.compute_mismatches g sub_read pos in
   let lal = al_to_list g.Ref_graph.aindex al in
   g, idx, pos, sub_read, (List.rev lal)
+
+let foo_u ?k ~gi ~length ~read =
+  let _, (g, idx) = g_and_idx ?k gi in
+  let sub_read = String.sub_exn ~index:0 ~length read in
+  Graph_index.lookup idx sub_read >>= function
+    | [] -> Error "missing position"
+    | pos :: _ -> 
+    (*let search_pos_start = (Option.value ~default:10 k) - 1 in*)
+    let al = Graph_alignment.compute_mismatches g sub_read pos in
+    let lal = al_to_list g.Ref_graph.aindex al in
+    Ok (g, idx, pos, sub_read, (List.rev lal))
+
+
 
 let reads_with_kmers ?k ~gi =
   let _, (g, idx) = g_and_idx ?k gi in
@@ -54,4 +67,13 @@ let find_bad ?(length=100) ?(k=10) start_size =
     | lst, bd -> bd
   in
   loop start_size start_lals
+
+let bad_read = "CGAGGACCTGCACTCCTGGACCGCCGCGAACACAGCGGCTCAGATCTCCCAGCACAAGTGGGAAGCGGACAAATACTCAGAGAAGGTCAGGGCCTACCTG" ;;
+let g27, i27, p27, s27, al27 = foo ~k:10 ~gi:27 ~length:20 ~read:bad_read ;;
+let g28, i28, p28, s28, al28 = foo ~k:10 ~gi:28 ~length:20 ~read:bad_read ;;
+
+let bad_read = "CTCAGATCACCCAGCGCAAGTGGGAGGCGGCCCGTTGGGCGGAGCAGTTGAGAGCCTACCTGGAGGGCACGTGCGTGGAGTGGCTCCGCAGATACCTGGA" ;;
+let g2, i2, p2, s2, al2 = foo ~k:10 ~gi:2 ~length:20 ~read:bad_read ;;
+let g3, i3, p3, s3, al3 = foo ~k:10 ~gi:3 ~length:20 ~read:bad_read ;;
+
 
