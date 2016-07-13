@@ -49,6 +49,9 @@ module Set = struct
   let fold { to_allele; } ~f ~init s =
     Enum.fold (fun i a -> f a to_allele.(i)) init (BitSet.enum s)
 
+  let iter index ~f s =
+    fold index ~init:() ~f:(fun () a -> f a) s
+
   let empty = BitSet.empty
   let compare = BitSet.compare
   let equals = BitSet.equals
@@ -61,6 +64,9 @@ module Set = struct
     let c = BitSet.copy t in
     for i = 0 to size - 1 do BitSet.toggle c i done;
     c
+
+  let is_empty t =
+    BitSet.count t = 0
 
   let any t =
     BitSet.count t > 0
@@ -116,9 +122,12 @@ module Map = struct
   let get { to_index; _} m a =
     m.(SMap.find a to_index)
 
-  (*
-  let map { to_allele; _} s f =
+  (* let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
+
+  let update_spec { to_index; _} m a f =
+    let j = SMap.find a to_index in
+    m.(j) <- f m.(j)
 
   let update_all s m f =
     for j = 0 to Array.length m - 1 do

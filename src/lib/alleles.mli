@@ -40,6 +40,8 @@ module Set : sig
 
   val fold : index -> f:('a -> allele -> 'a) -> init:'a -> t -> 'a
 
+  val iter : index -> f:(allele -> unit) -> t -> unit
+
   (** For graph construction. *)
   val empty : unit -> t
   val compare : t -> t -> int
@@ -53,8 +55,10 @@ module Set : sig
       [e1] and [e2]. *)
   val inter : t -> t -> t
 
-  (** [completment index t] returns a set of all the alleles not in [t].*)
+  (** [complement index t] returns a set of all the alleles not in [t].*)
   val complement : index -> t -> t
+
+  val is_empty : t -> bool
 
   (** [any t] are any of the alleles in the set? *)
   val any : t -> bool
@@ -102,6 +106,8 @@ module Map : sig
   (** [update_from set map f] apply [f] to all alleles in [map] that are
       in [set]. *)
   val update_from : Set.t -> 'a t -> ('a -> 'a) -> unit
+
+  val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
 
   (** [fold index f init amap] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
