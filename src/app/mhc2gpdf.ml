@@ -64,12 +64,6 @@ let () =
     let doc = "Specify a max number of characters to label the edges. (ex 100)" in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
   in
-  let do_not_normalize_flag =
-    let doc = "Do not normalize, remove overlapping nodes at the same position, \
-               in the string graph."
-    in
-    Arg.(value & flag & info ~doc ["do-not-normalize"])
-  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in

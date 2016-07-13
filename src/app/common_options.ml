@@ -55,6 +55,12 @@ let no_cache_flag =
   in
   Arg.(value & flag & info ~doc ["no-cache"])
 
+let do_not_normalize_flag =
+  let doc = "Do not normalize, remove overlapping nodes at the same position, \
+              in the string graph."
+  in
+  Arg.(value & flag & info ~doc ["do-not-normalize"])
+
 let to_filename_and_graph_args alignment_file num_alt_to_add allele_list normalize =
   let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
