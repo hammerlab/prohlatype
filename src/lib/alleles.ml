@@ -1,9 +1,14 @@
 
 open Util
 
+type allele = string [@@deriving eq, ord]
+let compare = compare_allele
+let equal = equal_allele
+let to_string a = a
+
 module SMap = Map.Make (struct
     type t = string
-    let compare = String.compare
+    let compare = compare_allele
   end)
 
 type index =
@@ -13,7 +18,7 @@ type index =
   }
 
 let index lst =
-  let to_allele = Array.of_list (List.sort ~cmp:compare lst) in
+  let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
   let size, to_index =
     Array.fold_left to_allele ~init:(0, SMap.empty )
       ~f:(fun (i, sm) a -> (i + 1, SMap.add a i sm))
@@ -44,6 +49,9 @@ module Set = struct
   let fold { to_allele; } ~f ~init s =
     Enum.fold (fun i a -> f a to_allele.(i)) init (BitSet.enum s)
 
+  let iter index ~f s =
+    fold index ~init:() ~f:(fun () a -> f a) s
+
   let empty = BitSet.empty
   let compare = BitSet.compare
   let equals = BitSet.equals
@@ -51,6 +59,20 @@ module Set = struct
   let union = BitSet.union
 
   let inter = BitSet.inter
+
+  let complement {size; _} t =
+    let c = BitSet.copy t in
+    for i = 0 to size - 1 do BitSet.toggle c i done;
+    c
+
+  let is_empty t =
+    BitSet.count t = 0
+
+  let any t =
+    BitSet.count t > 0
+
+  let all {size; _} t =
+    BitSet.count t = size
 
   let to_string index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
@@ -94,14 +116,31 @@ module Map = struct
   let make { size; _} e =
     Array.make size e
 
-  (*let init { size; _} s p =
-    Array.init size ~f:(fun i -> p (BitSet.is_set s i))
+  let init { size; to_allele; _} f =
+    Array.init size ~f:(fun i -> f to_allele.(i))
 
-  let map { to_allele; _} s f =
+  let get { to_index; _} m a =
+    m.(SMap.find a to_index)
+
+  (* let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
+
+  let update_spec { to_index; _} m a f =
+    let j = SMap.find a to_index in
+    m.(j) <- f m.(j)
+
+  let update_all s m f =
+    for j = 0 to Array.length m - 1 do
+      m.(j) <- f (BitSet.is_set s j) m.(j)
+    done
 
   let update_from s m f =
     Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
+
+  let update2 m1 m2 f =
+    for i = 0 to Array.length m1 - 1 do
+      m2.(i) <- f m1.(i) m2.(i)
+    done
 
   let fold { to_allele; size; _} ~f ~init amap =
     let s = ref init in

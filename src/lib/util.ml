@@ -50,3 +50,14 @@ let unwrap_error = function
   | Ok _    -> invalid_argf "Not Error in unwrap_error."
   | Error e -> e
 
+let short_seq s =
+  let n = String.length s in
+  if n > 10 then
+    sprintf "%s...%s"
+      (String.slice_exn ~finish:4 s) (String.slice_exn ~start:(n-3) s)
+  else
+    s
+
+let index_string s index =
+  let (b, a) = String.split_at s ~index in
+  b ^ "." ^ a

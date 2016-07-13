@@ -2,7 +2,6 @@
 module String = Sosa.Native_string
 open Util
 
-
 let char_to_int = function
   | 'A' -> 0
   | 'C' -> 1
@@ -54,4 +53,26 @@ let rec pow4 n =
   if n = 0 then 1
   else if n = 1 then 4
   else 4 * pow4 (n - 1)
+
+let others = function
+  | 0 -> [| 1; 2; 3|]
+  | 1 -> [| 0; 2; 3|]
+  | 2 -> [| 0; 1; 3|]
+  | 3 -> [| 0; 1; 2|]
+  | x   -> invalid_argf "others: %d" x
+
+let coefficients ~k p =
+  Array.init k (fun i ->
+    let o = k - i - 1 in
+    (p / (pow4 o)) mod 4)
+
+let neighbors ~k e =
+  let coefs = coefficients ~k e in
+  Array.init (k * 3) (fun i ->
+    let p = i / 3 in
+    let c = coefs.(p) in
+    let o = others c in
+    let j = i mod 3 in
+    let p4 = pow4 (k - p - 1) in
+    e + (o.(j) - c) * p4)
 

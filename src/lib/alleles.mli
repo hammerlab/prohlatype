@@ -4,10 +4,16 @@
     upon the index. The idea is that we have only one index (per graph) and many
     edge sets/maps. Alleles are represented by strings. *)
 
+type allele = string
+
+val compare : allele -> allele -> int
+val equal : allele -> allele -> bool
+val to_string : allele -> string
+
 type index
 
 (** [index list_of_alleles] will create an [index]. *)
-val index : string list -> index
+val index : allele list -> index
 
 module Set : sig
 
@@ -17,22 +23,24 @@ module Set : sig
   val init : index -> t
 
   (** [singleton index allele] will create an edge set with just [allele]. *)
-  val singleton : index -> string -> t
+  val singleton : index -> allele -> t
 
   (** [set index t allele] will make sure that [allele] is
       in [t], specifically [is_set index t allele] will be [true].
       *)
-  val set : index -> t -> string -> unit
+  val set : index -> t -> allele -> unit
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
       [false]. *)
-  val clear : index -> t -> string -> unit
+  val clear : index -> t -> allele -> unit
 
   (** [is_set index t allele] is [allele] in [t]. *)
-  val is_set : index -> t -> string -> bool
+  val is_set : index -> t -> allele -> bool
 
-  val fold : index -> f:('a -> string -> 'a) -> init:'a -> t -> 'a
+  val fold : index -> f:('a -> allele -> 'a) -> init:'a -> t -> 'a
+
+  val iter : index -> f:(allele -> unit) -> t -> unit
 
   (** For graph construction. *)
   val empty : unit -> t
@@ -46,6 +54,17 @@ module Set : sig
   (** [inter e1 e2] will return an edge set with alleles found in both
       [e1] and [e2]. *)
   val inter : t -> t -> t
+
+  (** [complement index t] returns a set of all the alleles not in [t].*)
+  val complement : index -> t -> t
+
+  val is_empty : t -> bool
+
+  (** [any t] are any of the alleles in the set? *)
+  val any : t -> bool
+
+  (** [all t] are all of the alleles in the set? *)
+  val all : index -> t -> bool
 
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : index -> t -> string
@@ -71,14 +90,28 @@ module Map : sig
 
   type 'a t
 
-  (** [make index default_value] *)
+  (** [make index default_value]. *)
   val make : index -> 'a -> 'a t
+
+  (** [init index f]. *)
+  val init : index -> (allele -> 'a) -> 'a t
+
+  (** [get index map allele]. *)
+  val get : index -> 'a t -> allele -> 'a
+
+  (** [update_all set map f] apply [f] to all alleles in [map] where whether
+      they are in [set] is passed the first arg to [f]. *)
+  val update_all : Set.t -> 'a t -> (bool -> 'a -> 'a) -> unit
 
   (** [update_from set map f] apply [f] to all alleles in [map] that are
       in [set]. *)
   val update_from : Set.t -> 'a t -> ('a -> 'a) -> unit
 
+  val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
+
+  val update2 : 'a t -> 'b t -> ('a -> 'b -> 'b) -> unit
+
   (** [fold index f init amap] fold over all alleles found in the [map]. *)
-  val fold : index -> f:('a -> 'b -> string -> 'a) -> init:'a -> 'b t -> 'a
+  val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
 
 end

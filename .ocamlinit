@@ -4,7 +4,7 @@
 #require "extlib"
 
 #directory "_build/src/lib"
-#load_rec "prohlatype.cmo"
+#load_rec "prohlatype.cma"
 
 open Nonstd
 module String = Sosa.Native_string

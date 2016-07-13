@@ -5,7 +5,8 @@ PACKAGES=ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
 default: build
 
 build:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cmo
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma
+
 setup:
 	opam install ocamlfind ocamlbuild $(PACKAGES)
 
@@ -15,8 +16,11 @@ cli:
 clean:
 	ocamlbuild -clean
 
-test:
+tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts test_parsing.native
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts round_trip.native
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts same_alignments_test.native
+
 
 ## Tools:
 
