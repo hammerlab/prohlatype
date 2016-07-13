@@ -137,6 +137,11 @@ module Map = struct
   let update_from s m f =
     Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
 
+  let update2 m1 m2 f =
+    for i = 0 to Array.length m1 - 1 do
+      m2.(i) <- f m1.(i) m2.(i)
+    done
+
   let fold { to_allele; size; _} ~f ~init amap =
     let s = ref init in
     for i = 0 to size - 1 do
