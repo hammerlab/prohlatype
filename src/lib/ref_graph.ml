@@ -740,7 +740,7 @@ let construct_from_parsed ?which ?(normalize=true) r =
             (allele, start_and_stops) :: acc)
   in
   let bounds =
-    A.Map.init aindex (fun allele -> List.assoc allele start_and_stop_assoc)
+    A.Map.init aindex (fun allele -> List.rev (List.assoc allele start_and_stop_assoc))
   in
   let gg = { g; aindex; bounds } in
   if normalize then normalize_by_position gg;
