@@ -8,7 +8,6 @@ type allele = string
 
 val compare : allele -> allele -> int
 val equal : allele -> allele -> bool
-val to_string : allele -> string
 
 type index
 

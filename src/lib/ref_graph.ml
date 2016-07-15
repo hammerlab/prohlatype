@@ -26,7 +26,7 @@ module Nodes = struct
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
-    | S (n, s)  -> sprintf "\"S%d-%s\"" n (A.to_string s)
+    | S (n, s)  -> sprintf "\"S%d-%s\"" n s
     | E n       -> sprintf "\"E%d\"" n
     | B (_, n)  -> sprintf "\"B%d\"" n
     | N (n, s)  -> sprintf "\"%d%s\"" n (if short then short_seq s else s)
@@ -208,15 +208,15 @@ let add_reference_elems g aindex allele ref_elems =
       | []            , al_el
       | `Ended _ :: _ , al_el                         ->
           inv_argf "Unexpected %s before start for %s"
-            (al_el_to_string al_el) (A.to_string allele)
+            (al_el_to_string al_el) allele
       | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
       | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
       | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
       | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
       | `Started (_, _) :: tl,     Start sp             ->
-          inv_argf "Unexpected second start at %d for %s" sp (A.to_string allele))
+          inv_argf "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
-      | `Started _ -> inv_argf "Still have a Started in %s ref" (A.to_string allele)
+      | `Started _ -> inv_argf "Still have a Started in %s ref" allele
       | `Ended (start, end_) -> { start; end_})
   |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
@@ -356,11 +356,11 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       | []              ->
         begin
           match previous_starts_and_ends with
-          | [] -> inv_argf "Failed to find start for %s." (A.to_string allele)
+          | [] -> inv_argf "Failed to find start for %s." allele
           | ls -> None
         end
       | s :: _          -> inv_argf "Encountered %s in %s instead of Start"
-                            (al_el_to_string s) (A.to_string allele)
+                            (al_el_to_string s) allele
     in
     match find_start_loop lst with
     | None -> previous_starts_and_ends (* fin *)
@@ -380,8 +380,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       start_loop ns tl
   (* When the only thing that matters is the previous node. *)
   and solo_loop state prev = function
-    | []                        -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
-    | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p (A.to_string allele)
+    | []                        -> inv_argf "No End at allele sequence: %s" allele
+    | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl         -> add_end state end_pos prev tl
     | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
                                    add_allele_edge prev boundary_node;
@@ -393,8 +393,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   (* When traversing a reference gap. We have to keep check allele elements
     position to check when to join back with the next reference node. *)
   and ref_gap_loop state ~prev ref_node ref_pos = function
-    | []                                -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
-    | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p (A.to_string allele)
+    | []                                -> inv_argf "No End at allele sequence: %s" allele
+    | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
     | (End end_pos :: tl) as lst        ->
         if end_pos <= ref_pos then
           add_end state end_pos prev tl
@@ -404,14 +404,14 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | (Boundary { idx; pos} :: tl) as l ->
         if pos < ref_pos then
           inv_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
-            (A.to_string allele) idx pos ref_pos
+            allele idx pos ref_pos
         else if pos = ref_pos then
           if ref_node = B (pos, idx) then
             let () = add_allele_edge prev ref_node in
             main_loop state ~prev ~next:ref_node tl
           else
             inv_argf "Allele %s has a boundary %d at %d where ref gap ends %d."
-              (A.to_string allele) idx pos ref_pos
+              allele idx pos ref_pos
         else
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node l
@@ -455,8 +455,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         close_position_loop state ~prev ~next ~allele_node new_pe lst
   (* When not in a reference gap *)
   and main_loop state ~prev ~next = function
-    | []              -> inv_argf "No End at allele sequence: %s" (A.to_string allele)
-    | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p (A.to_string allele)
+    | []              -> inv_argf "No End at allele sequence: %s" allele
+    | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl  ->
         let prev =
           match split_in ~prev ~next ~visit:add_allele_edge end_pos with
@@ -669,7 +669,7 @@ let construct_from_parsed ?which ?(normalize=true) r =
             try Some (name, List.assoc name alt_elems)
             with Not_found ->
               eprintf "Ignoring requested allele %s in graph construction."
-                (A.to_string name);
+                name;
               None
         in
         List.filter_map alst ~f:assoc_wrap
@@ -704,7 +704,7 @@ let sequence ?start ?stop {g; aindex; bounds } allele =
     | Some s -> [s]
     | None   ->
         match A.Map.get aindex bounds  allele with
-        | []     -> invalid_argf "Allele %s not found in graph!" (A.to_string allele)
+        | []     -> invalid_argf "Allele %s not found in graph!" allele
         | sp_lst -> (* make sure start points are in increasing order *)
                     List.sort ~cmp:compare_sep sp_lst
                     |> List.map ~f:(fun sep -> S (fst sep.start, allele))
