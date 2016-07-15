@@ -40,5 +40,5 @@ let graph_and_two_index =
   disk_memoize ~dir index_args_to_string
     (fun {k; g} ->
         let gr = graph g in
-        let id = Graph_index.create ~k gr in
+        let id = Index.create ~k gr in
         gr, id)

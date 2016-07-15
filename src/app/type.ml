@@ -50,7 +50,7 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
     match String.index_of_character seq 'N' with
     | Some _ -> printf "skipping N!\n"
     | None   ->
-      match Graph_index.lookup idx seq with
+      match Index.lookup idx seq with
       | Error m     -> printf "Error looking up %s\n" m
       | Ok []       -> printf "Empty for %s\n" seq
       | Ok (p :: _) ->  (* TODO, more than one! *)

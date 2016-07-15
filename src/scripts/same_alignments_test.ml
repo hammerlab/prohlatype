@@ -35,7 +35,7 @@ let al_to_list idx r = Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~
 let test_case ?k ~gi ~length ~read =
   let _, (g, idx) = g_and_idx ?k gi in
   let sub_read = String.sub_exn ~index:0 ~length read in
-  let pos = Graph_index.lookup idx sub_read |> unwrap_ok |> List.hd_exn in
+  let pos = Index.lookup idx sub_read |> unwrap_ok |> List.hd_exn in
   (*let search_pos_start = (Option.value ~default:10 k) - 1 in *)
   let al = Graph_alignment.compute_mismatches g sub_read (*~search_pos_start*) pos in
   let lal = al_to_list g.Ref_graph.aindex al in
@@ -44,7 +44,7 @@ let test_case ?k ~gi ~length ~read =
 let reads_with_kmers ?k ~gi =
   let _, (g, idx) = g_and_idx ?k gi in
   Array.to_list greads
-  |> List.filter_map ~f:(fun s -> Graph_index.lookup idx s |> unwrap_ok |> function | [] -> None | _ -> Some s)
+  |> List.filter_map ~f:(fun s -> Index.lookup idx s |> unwrap_ok |> function | [] -> None | _ -> Some s)
 
 let just_lal ?k ~gi ~length read =
   let _g, _idx, _pos, _sub_read, lal = test_case ?k ~gi ~length ~read in
