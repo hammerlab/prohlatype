@@ -14,6 +14,8 @@ type index
 (** [index list_of_alleles] will create an [index]. *)
 val index : allele list -> index
 
+val to_alleles : index -> allele list
+
 module Set : sig
 
   type t

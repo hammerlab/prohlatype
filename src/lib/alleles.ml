@@ -124,6 +124,8 @@ module CompressNames = struct
 
 end  (* CompressNames *)
 
+let to_alleles { to_allele; _ } = Array.to_list to_allele
+
 module Set = struct
 
   type t = BitSet.t
