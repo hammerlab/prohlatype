@@ -25,6 +25,74 @@ let index lst =
   in
   { size; to_index; to_allele }
 
+module CompressNames = struct
+
+  let split_semi = String.split ~on:(`Character ':')
+
+  type last_state =
+    | And of (last_state * last_state)
+    | From of (int * int)
+    | Just of int
+
+  let rec to_last = function
+    | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
+    | From (a, b) -> sprintf "%d-%d" a b
+    | Just n      -> sprintf "%d" n
+
+  let rec last_val = function
+    | And (_, v)  -> last_val v
+    | From (_, l) -> l
+    | Just n      -> n
+
+  let rec add c v =
+    match c with
+    | Just n       -> if n + 1 = v then From (n,v) else And (c, Just v)
+    | From (a, b)  -> if b + 1 = v then From (a, v) else And (c, Just v)
+    | And (a, b)   -> And (a, add b v)
+
+  let parse_last s =
+    try Some (int_of_string s)
+    with Failure _ -> None     (* for the ":5N" cases *)
+
+  let rec f = function
+    | []      -> []
+    | h :: [] -> [h]
+    | h :: t  ->
+        let to_string ts lint =
+          String.concat ~sep:":" (ts @ [to_last lint])
+        in
+        let rec loop ts lint acc = function
+          | []      -> List.rev ((to_string ts lint) :: acc)
+          | h :: t  ->
+              let ss = split_semi h in
+              let n  = List.length ss in
+              let reset () =
+                  let current = List.rev ((to_string ts lint) :: acc) in
+                  let rest = h :: t in
+                  current @ f rest
+              in
+              match List.split_n ss (n - 1) with
+              | _,   []        -> reset ()
+              | nts, last :: _ ->
+                  match parse_last last with
+                  | None          -> reset ()
+                  | Some last_int ->
+                      if nts = ts then
+                        loop ts (add lint last_int) acc t
+                      else
+                        loop nts (Just last_int) (to_string ts lint :: acc) t
+        in
+        let ss = split_semi h in
+        let n  = List.length ss in
+        match List.split_n ss (n - 1) with
+        | _,  []        -> h :: (f t)
+        | ts, last :: _ ->
+            match parse_last last with
+            | None    -> h :: (f t)
+            | Some l  -> loop ts (Just l) [] t
+
+end  (* CompressNames *)
+
 module Set = struct
 
   type t = BitSet.t
@@ -74,18 +142,20 @@ module Set = struct
   let all {size; _} t =
     BitSet.count t = size
 
-  let to_string index s =
+  let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev
+    |> (fun l -> if compress then CompressNames.f l else l)
     |> String.concat ~sep:" "
 
-  let complement_string ?complement_prefix { to_allele; _} s =
+  let complement_string ?(compress=false) ?complement_prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
         ~f:(fun (i, acc) a -> if BitSet.is_set s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
     |> List.rev
+    |> (fun l -> if compress then CompressNames.f l else l)
     |> String.concat ~sep:" "
     |> function
         | ""  -> invalid_argf "Complement of everything!"
@@ -93,7 +163,7 @@ module Set = struct
                  | None    -> s
                  | Some cp -> cp ^ s
 
-  let to_human_readable ?(max_length=500) ?complement_prefix t s =
+  let to_human_readable ?compress ?(max_length=500) ?complement_prefix t s =
     let make_shorter =
       if BitSet.count s = t.size then
         "Everything"
@@ -101,13 +171,13 @@ module Set = struct
         let complement_prefix =
           Option.value complement_prefix ~default:"C. of"
         in
-        complement_string ~complement_prefix t s
+        complement_string ?compress ~complement_prefix t s
       else
-        to_string t s
+        to_string ?compress t s
     in
     String.take make_shorter ~index:max_length
 
-end
+end (* Set *)
 
 module Map = struct
 
@@ -149,4 +219,4 @@ module Map = struct
     done;
     !s
 
-end
+end (* Map *)

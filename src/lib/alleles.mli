@@ -67,20 +67,21 @@ module Set : sig
   val all : index -> t -> bool
 
   (** Construct a string of all the alleles found in the edge set. *)
-  val to_string : index -> t -> string
+  val to_string : ?compress:bool -> index -> t -> string
 
   (** Construct a string with all of the alleles {b not} found in the edge set.
 
       @param complement_prefix will determine if the complement string is
              prefixed (ie. "Complement of ") *)
-  val complement_string : ?complement_prefix:string -> index -> t -> string
+  val complement_string : ?compress:bool -> ?complement_prefix:string -> index
+      -> t -> string
 
   (** [to_human_readable] picks the shorter (fewer number of alleles) string
       representation of the edge set.
 
       If the algorithm chooses to represent the set with a complement "C. of"
       will be prepended unless otherwise specified. *)
-  val to_human_readable : ?max_length:int -> ?complement_prefix:string ->
+  val to_human_readable : ?compress:bool -> ?max_length:int -> ?complement_prefix:string ->
     index -> t -> string
 
 end
