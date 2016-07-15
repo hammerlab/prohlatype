@@ -25,6 +25,106 @@ let index lst =
   in
   { size; to_index; to_allele }
 
+module CompressNames = struct
+
+  let split_colon = String.split ~on:(`Character ':')
+  let rejoin_colon = String.concat ~sep:":"
+
+  module CompressIntSequencess = struct
+
+    type t =
+      | And of (t * t)
+      | From of (int * int)
+      | Just of int
+
+    let rec to_last = function
+      | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
+      | From (a, b) -> sprintf "%d-%d" a b
+      | Just n      -> sprintf "%d" n
+
+    let rec last_val = function
+      | And (_, v)  -> last_val v
+      | From (_, l) -> l
+      | Just n      -> n
+
+    let rec add c v =
+      match c with
+      | Just n       -> if n + 1 = v then From (n,v) else And (c, Just v)
+      | From (a, b)  -> if b + 1 = v then From (a, v) else And (c, Just v)
+      | And (a, b)   -> And (a, add b v)
+
+  end (* CompressIntSequencess *)
+
+  let parse_last s =
+    try Some (int_of_string s)
+    with Failure _ -> None     (* for the ":5N" cases *)
+
+  let to_comparable a =
+    let l = split_colon a in
+    let n = List.length l in
+    match List.split_n l (n - 1) with
+    | [], _       -> `Special a         (* n = 0 *)
+    | _,  []      -> invalid_argf "odd length %d" n
+    | d,  l :: [] ->
+        begin
+          match parse_last l with
+          | None    -> `Special a
+          | Some li -> `Template (d, li)
+        end
+    | _,  l :: _  -> invalid_argf "Split at the end! %d" n
+
+  let rec split_all =
+    let comp = function
+      | `Special s        -> `Special s
+      | `Template (d, li) -> `Compress (d, [li])
+    in
+    function
+    | []      -> []
+    | h :: [] -> (comp h) :: []
+    | h :: t  ->
+        let rec loop cur acc = function
+          | []      -> List.rev (cur :: acc)
+          | h :: t  ->
+              match h with
+              | `Template (d, li) -> begin
+                  match cur with
+                  | `Compress (dc, ls) when d = dc
+                                  -> loop (`Compress (d, li :: ls)) acc t
+                  | `Special _
+                  | `Compress _   -> loop (comp h) (cur :: acc) t
+                  end
+              | `Special _    -> begin
+                  (* try to keep compressable targets current *)
+                  match cur with
+                  | `Special _  -> loop (comp h) (cur :: acc) t
+                  | `Compress _ -> loop cur (comp h :: acc) t
+                  end
+        in
+        loop (comp h) [] t
+
+  let compress_int_list lst =
+    let open CompressIntSequencess in
+    match List.sort lst ~cmp:(fun (c1 : int) c2 -> Pervasives.compare c1 c2) with
+    | []      -> ""  (* error instead? *)
+    | h :: tl ->
+        List.fold_left tl ~init:(Just h) ~f:add
+        |> to_last
+
+  let f lst =
+    List.map lst ~f:to_comparable
+    |> split_all
+    |> fun clst ->
+        let rec loop acc = function
+          | []                      -> List.rev acc
+          | `Special s :: tl        -> loop (s :: acc) tl
+          | `Compress (t, l) :: tl  ->
+              let ns = rejoin_colon (t @ [ compress_int_list l]) in
+              loop (ns :: acc) tl
+        in
+        loop [] clst
+
+end  (* CompressNames *)
+
 module Set = struct
 
   type t = BitSet.t
@@ -74,40 +174,42 @@ module Set = struct
   let all {size; _} t =
     BitSet.count t = size
 
-  let to_string index s =
+  let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev
-    |> String.concat ~sep:" "
+    |> (fun l -> if compress then CompressNames.f l else l)
+    |> String.concat ~sep:";"
 
-  let complement_string ?complement_prefix { to_allele; _} s =
+  let complement_string ?(compress=false) ?complement_prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
         ~f:(fun (i, acc) a -> if BitSet.is_set s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
     |> List.rev
-    |> String.concat ~sep:" "
+    |> (fun l -> if compress then CompressNames.f l else l)
+    |> String.concat ~sep:";"
     |> function
         | ""  -> invalid_argf "Complement of everything!"
         | s   -> match complement_prefix with
                  | None    -> s
                  | Some cp -> cp ^ s
 
-  let to_human_readable ?(max_length=500) ?complement_prefix t s =
+  let to_human_readable ?compress ?(max_length=500) ?complement_prefix t s =
     let make_shorter =
       if BitSet.count s = t.size then
         "Everything"
       else if BitSet.count s > t.size / 2 then
         let complement_prefix =
-          Option.value complement_prefix ~default:"C. of"
+          Option.value complement_prefix ~default:"C. of "
         in
-        complement_string ~complement_prefix t s
+        complement_string ?compress ~complement_prefix t s
       else
-        to_string t s
+        to_string ?compress t s
     in
     String.take make_shorter ~index:max_length
 
-end
+end (* Set *)
 
 module Map = struct
 
@@ -149,4 +251,4 @@ module Map = struct
     done;
     !s
 
-end
+end (* Map *)

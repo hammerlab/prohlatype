@@ -97,7 +97,8 @@ type t =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
-let output_dot ?(human_edges=true) ?short ?max_length fname { aindex; g; _} =
+let output_dot ?(human_edges=true) ?(compress_edges=true) ?short ?max_length fname
+  { aindex; g; _} =
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
@@ -110,18 +111,19 @@ let output_dot ?(human_edges=true) ?short ?max_length fname { aindex; g; _} =
 
       let default_edge_attributes _t = [`Color 4711]
       let edge_attributes e =
+        let compress = compress_edges in
         if human_edges then
-          [`Label (A.Set.to_human_readable ?max_length aindex (G.E.label e))]
+          [`Label (A.Set.to_human_readable ~compress ?max_length aindex (G.E.label e))]
         else
-          [`Label (A.Set.to_string aindex (G.E.label e))]
+          [`Label (A.Set.to_string ~compress aindex (G.E.label e))]
 
     end)
   in
   Dot.output_graph oc g;
   close_out oc
 
-let output ?human_edges ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
-  output_dot ?human_edges ?max_length ~short (fname ^ ".dot") t;
+let output ?human_edges ?compress_edges ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
+  output_dot ?human_edges ?compress_edges ?max_length ~short (fname ^ ".dot") t;
   let r =
     if pdf then
       Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)

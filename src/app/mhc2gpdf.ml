@@ -3,8 +3,8 @@ open Util
 open Common_options
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
-      no_open skip_disk_cache max_edge_char_length not_human_edges_flag
-      not_normalize =
+      no_open skip_disk_cache max_edge_char_length not_human_edges
+      not_normalize not_compress_edges =
   let open Ref_graph in
   let open Cache in
   let option_based_fname, cargs =
@@ -16,9 +16,10 @@ let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
   let pdf   = not no_pdf in
   let open_ = not no_open in
   let max_length = max_edge_char_length in
-  let human_edges = not not_human_edges_flag in
+  let human_edges = not not_human_edges in
+  let compress_edges = not not_compress_edges in
   Cache.graph ~skip_disk_cache cargs
-  |> Ref_graph.output ~human_edges ?max_length ~short ~pdf ~open_ ofile
+  |> Ref_graph.output ~compress_edges ~human_edges ?max_length ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
 
@@ -64,6 +65,10 @@ let () =
     let doc = "Specify a max number of characters to label the edges. (ex 100)" in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
   in
+  let do_not_compress_edges_flag =
+    let doc = "Do not try to run encode the alleles along the edges.." in
+    Arg.(value & flag & info ~doc ["do-not-compress-edges"])
+  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
@@ -87,6 +92,7 @@ let () =
             $ max_edge_char_length_flag
             $ not_human_edges_flag
             $ do_not_normalize_flag
+            $ do_not_compress_edges_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with
