@@ -178,7 +178,7 @@ module Set = struct
     fold index ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev
     |> (fun l -> if compress then CompressNames.f l else l)
-    |> String.concat ~sep:" "
+    |> String.concat ~sep:";"
 
   let complement_string ?(compress=false) ?complement_prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
@@ -188,7 +188,7 @@ module Set = struct
     |> snd
     |> List.rev
     |> (fun l -> if compress then CompressNames.f l else l)
-    |> String.concat ~sep:" "
+    |> String.concat ~sep:";"
     |> function
         | ""  -> invalid_argf "Complement of everything!"
         | s   -> match complement_prefix with
@@ -201,7 +201,7 @@ module Set = struct
         "Everything"
       else if BitSet.count s > t.size / 2 then
         let complement_prefix =
-          Option.value complement_prefix ~default:"C. of"
+          Option.value complement_prefix ~default:"C. of "
         in
         complement_string ?compress ~complement_prefix t s
       else
