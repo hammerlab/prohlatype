@@ -749,8 +749,11 @@ let construct_from_parsed ?which ?(normalize=true) r =
 let construct_from_file ~normalize ?which file =
   construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
-let find_bound { aindex; bounds; _} allele pos =
+let all_bounds { aindex; bounds; _} allele pos =
   Alleles.Map.get aindex bounds allele
+
+let find_bound g allele pos =
+  all_bounds g allele
   |> List.find ~f:(fun sep -> (fst sep.start) <= pos && pos <= sep.end_)
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
