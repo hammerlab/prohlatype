@@ -49,7 +49,7 @@ module G = Imperative.Digraph.ConcreteLabeled(Nodes)(Edges)
 
 exception Found of Nodes.t
 
-let next_node_along aindex allele g ~from =
+let next_node_along g aindex allele ~from =
   try
     G.fold_succ_e (fun (_, bt, vs) n ->
         if A.Set.is_set aindex bt allele then raise (Found vs) else n)
@@ -57,11 +57,11 @@ let next_node_along aindex allele g ~from =
   with Found v ->
     Some v
 
-let fold_along_allele aindex ~start allele g ~f ~init =
+let fold_along_allele g aindex allele ~start ~f ~init =
   if not (G.mem_vertex g start) then
     invalid_argf "%s is not a vertex in the graph." (Nodes.vertex_name start)
   else
-    let next = next_node_along aindex allele g in
+    let next = next_node_along g aindex allele in
     let rec loop from (acc, stop) =
       if stop then
         acc
@@ -299,7 +299,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
   let next_reference ~msg from =
-    match next_node_along aindex reference g ~from with
+    match next_node_along g aindex reference ~from with
     | Some n -> n
     | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
@@ -749,39 +749,80 @@ let construct_from_parsed ?which ?(normalize=true) r =
 let construct_from_file ~normalize ?which file =
   construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
-(** Accessors. *)
-let sequence ?start ?stop {g; aindex; bounds } allele =
+let find_bound { aindex; bounds; _} allele pos =
+  Alleles.Map.get aindex bounds allele
+  |> List.find ~f:(fun sep -> (fst sep.start) <= pos && pos <= sep.end_)
+  |> Option.value_map ~default:(error "%d is not in any bounds" pos)
+        ~f:(fun s -> Ok s)
+
+(* vertex and precise *)
+let find_position t allele pos =
+  let module M = struct exception F of Nodes.t end in
   let open Nodes in
-  let start =
-    match start with
-    | Some s -> [s]
-    | None   ->
-        match A.Map.get aindex bounds  allele with
-        | []     -> invalid_argf "Allele %s not found in graph!" allele
-        | sp_lst -> (* make sure start points are in increasing order *)
-                    List.sort ~cmp:compare_sep sp_lst
-                    |> List.map ~f:(fun sep -> S (fst sep.start, allele))
-  in
-  let stop, pp =
-    match stop with
-    | None             -> (fun _ -> false)
-                          , (fun x -> x)
-    | Some (`AtPos p)  -> (fun n -> position n >= p)
-                          , (fun x -> x)
-    | Some (`Length n) ->
-        let r = ref 0 in
-        (function | S _ | E _ | B _ -> false
-                 | N (_, s) ->
-                    r := !r + String.length s;
-                    !r >= n)
-        , String.take ~index:n
-  in
-  List.fold_left start ~init:[] ~f:(fun acc start ->
-    fold_along_allele aindex ~start allele g ~init:acc
-      ~f:(fun clst node ->
-            match node with
-            | N (_, s)          -> (s :: clst, stop node)
-            | S _ | E _ | B _   -> (clst, stop node)))
-  |> List.rev
-  |> String.concat
-  |> pp
+  find_bound t allele pos >>= fun bound ->
+    let start = S (fst bound.start, allele) in
+    fold_along_allele t.g t.aindex allele ~start ~init:None
+      ~f:(fun o v ->
+            match v with
+            | S (p, _) | E p | B (p, _) ->
+                if p = pos then Some (v, true), true else o, false
+            | N (p, s)                  ->
+                if p = pos then
+                  Some (v, true), true
+                else if p > pos && pos < p + String.length s then
+                  Some (v, false), true
+                else
+                  o, false)
+    |> Option.value_map ~default:(error "%d in a gap" pos)
+          ~f:(fun x -> Ok x)
+
+let parse_start_arg g allele =
+  let open Nodes in function
+  | Some (`Node s)    ->
+      if G.mem_vertex g.g s then
+        Ok [ s ]
+      else
+        error "%s vertex not in graph" (vertex_name s)
+  | Some (`AtPos p)   ->
+      find_position g allele p >>= fun (v, precise) ->
+        if precise then
+          Ok [v]
+        else
+          error "Couldn't find precise starting pos %d" p
+  | Some (`AtNext p)  ->
+      find_position g allele p >>= fun (v, _) ->
+        Ok [v]
+  | None              ->
+      match A.Map.get g.aindex g.bounds allele with
+      | []  -> error "Allele %s not found in graph!" allele
+      | spl -> Ok (List.map spl ~f:(fun sep ->
+                        Nodes.S (fst sep.start, allele)))
+
+let parse_stop_arg =
+  let open Nodes in function
+  | None             -> (fun _ -> false)          , (fun x -> x)
+  | Some (`AtPos p)  -> (fun n -> position n >= p), (fun x -> x)
+  | Some (`Length n) -> let r = ref 0 in
+                        (function
+                          | S _ | E _ | B _ -> false
+                          | N (_, s) ->
+                              r := !r + String.length s;
+                              !r >= n)
+                                                  , String.take ~index:n
+
+(** Accessors. *)
+let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
+  let open Nodes in
+  parse_start_arg gt allele start
+  >>= fun start ->
+    let stop, pp = parse_stop_arg stop in
+    List.fold_left start ~init:[] ~f:(fun acc start ->
+      fold_along_allele g aindex allele ~start ~init:acc
+        ~f:(fun clst node ->
+              match node with
+              | N (_, s)          -> (s :: clst, stop node)
+              | S _ | E _ | B _   -> (clst, stop node)))
+    |> List.rev
+    |> String.concat
+    |> pp
+    |> fun s -> Ok s
