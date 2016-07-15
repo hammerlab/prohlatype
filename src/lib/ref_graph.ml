@@ -749,7 +749,7 @@ let construct_from_parsed ?which ?(normalize=true) r =
 let construct_from_file ~normalize ?which file =
   construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
-let all_bounds { aindex; bounds; _} allele pos =
+let all_bounds { aindex; bounds; _} allele =
   Alleles.Map.get aindex bounds allele
 
 let find_bound g allele pos =
