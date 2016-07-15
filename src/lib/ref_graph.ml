@@ -772,7 +772,7 @@ let find_position t allele pos =
             | N (p, s)                  ->
                 if p = pos then
                   Some (v, true), true
-                else if p > pos && pos < p + String.length s then
+                else if p < pos && pos < p + String.length s then
                   Some (v, false), true
                 else
                   o, false)
