@@ -27,69 +27,101 @@ let index lst =
 
 module CompressNames = struct
 
-  let split_semi = String.split ~on:(`Character ':')
+  let split_colon = String.split ~on:(`Character ':')
+  let rejoin_colon = String.concat ~sep:":"
 
-  type last_state =
-    | And of (last_state * last_state)
-    | From of (int * int)
-    | Just of int
+  module CompressIntSequencess = struct
 
-  let rec to_last = function
-    | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
-    | From (a, b) -> sprintf "%d-%d" a b
-    | Just n      -> sprintf "%d" n
+    type t =
+      | And of (t * t)
+      | From of (int * int)
+      | Just of int
 
-  let rec last_val = function
-    | And (_, v)  -> last_val v
-    | From (_, l) -> l
-    | Just n      -> n
+    let rec to_last = function
+      | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
+      | From (a, b) -> sprintf "%d-%d" a b
+      | Just n      -> sprintf "%d" n
 
-  let rec add c v =
-    match c with
-    | Just n       -> if n + 1 = v then From (n,v) else And (c, Just v)
-    | From (a, b)  -> if b + 1 = v then From (a, v) else And (c, Just v)
-    | And (a, b)   -> And (a, add b v)
+    let rec last_val = function
+      | And (_, v)  -> last_val v
+      | From (_, l) -> l
+      | Just n      -> n
+
+    let rec add c v =
+      match c with
+      | Just n       -> if n + 1 = v then From (n,v) else And (c, Just v)
+      | From (a, b)  -> if b + 1 = v then From (a, v) else And (c, Just v)
+      | And (a, b)   -> And (a, add b v)
+
+  end (* CompressIntSequencess *)
 
   let parse_last s =
     try Some (int_of_string s)
     with Failure _ -> None     (* for the ":5N" cases *)
 
-  let rec f = function
+  let to_comparable a =
+    let l = split_colon a in
+    let n = List.length l in
+    match List.split_n l (n - 1) with
+    | [], _       -> `Special a         (* n = 0 *)
+    | _,  []      -> invalid_argf "odd length %d" n
+    | d,  l :: [] ->
+        begin
+          match parse_last l with
+          | None    -> `Special a
+          | Some li -> `Template (d, li)
+        end
+    | _,  l :: _  -> invalid_argf "Split at the end! %d" n
+
+  let rec split_all =
+    let comp = function
+      | `Special s        -> `Special s
+      | `Template (d, li) -> `Compress (d, [li])
+    in
+    function
     | []      -> []
-    | h :: [] -> [h]
+    | h :: [] -> (comp h) :: []
     | h :: t  ->
-        let to_string ts lint =
-          String.concat ~sep:":" (ts @ [to_last lint])
-        in
-        let rec loop ts lint acc = function
-          | []      -> List.rev ((to_string ts lint) :: acc)
+        let rec loop cur acc = function
+          | []      -> List.rev (cur :: acc)
           | h :: t  ->
-              let ss = split_semi h in
-              let n  = List.length ss in
-              let reset () =
-                  let current = List.rev ((to_string ts lint) :: acc) in
-                  let rest = h :: t in
-                  current @ f rest
-              in
-              match List.split_n ss (n - 1) with
-              | _,   []        -> reset ()
-              | nts, last :: _ ->
-                  match parse_last last with
-                  | None          -> reset ()
-                  | Some last_int ->
-                      if nts = ts then
-                        loop ts (add lint last_int) acc t
-                      else
-                        loop nts (Just last_int) (to_string ts lint :: acc) t
+              match h with
+              | `Template (d, li) -> begin
+                  match cur with
+                  | `Compress (dc, ls) when d = dc
+                                  -> loop (`Compress (d, li :: ls)) acc t
+                  | `Special _
+                  | `Compress _   -> loop (comp h) (cur :: acc) t
+                  end
+              | `Special _    -> begin
+                  (* try to keep compressable targets current *)
+                  match cur with
+                  | `Special _  -> loop (comp h) (cur :: acc) t
+                  | `Compress _ -> loop cur (comp h :: acc) t
+                  end
         in
-        let ss = split_semi h in
-        let n  = List.length ss in
-        match List.split_n ss (n - 1) with
-        | _,  []        -> h :: (f t)
-        | ts, last :: _ ->
-            match parse_last last with
-            | None    -> h :: (f t)
-            | Some l  -> loop ts (Just l) [] t
+        loop (comp h) [] t
+
+  let compress_int_list lst =
+    let open CompressIntSequencess in
+    match List.sort lst ~cmp:(fun (c1 : int) c2 -> Pervasives.compare c1 c2) with
+    | []      -> ""  (* error instead? *)
+    | h :: tl ->
+        List.fold_left tl ~init:(Just h) ~f:add
+        |> to_last
+
+  let f lst =
+    List.map lst ~f:to_comparable
+    |> split_all
+    |> fun clst ->
+        let rec loop acc = function
+          | []                      -> List.rev acc
+          | `Special s :: tl        -> loop (s :: acc) tl
+          | `Compress (t, l) :: tl  ->
+              let ns = rejoin_colon (t @ [ compress_int_list l]) in
+              loop (ns :: acc) tl
+        in
+        loop [] clst
 
 end  (* CompressNames *)
 
