@@ -116,6 +116,14 @@ type position =
   ; offset    : int       (* into sequence *)
   }
 
+let specific_position g allele alp =
+  let open Nodes in
+  Ref_graph.find_position g allele alp >>= function
+    | S _, _      -> error "%d for %s is at Start " alp allele
+    | E _, _      -> error "%d for %s is at End " alp allele
+    | B _, _      -> error "%d for %s is at Boundary " alp allele
+    | N (p, s), _ -> Ok { alignment = p ; sequence = s ; offset = alp - p }
+
 (* A Graph index *)
 type t = position list Kmer_table.t
 

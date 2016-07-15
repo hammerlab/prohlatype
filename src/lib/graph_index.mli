@@ -30,6 +30,9 @@ type position =
   ; offset    : int                   (* An offset into the the sequence. *)
   }
 
+val specific_position : Ref_graph.t -> Alleles.allele -> alignment_position ->
+  (position, string) result
+    
 (** A graph index *)
 type t = position list Kmer_table.t
 
