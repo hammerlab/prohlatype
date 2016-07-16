@@ -118,7 +118,6 @@ let create_compressed g =
     G.add_vertex ng node;
     Alleles.Set.iter g.aindex allele_set ~f:(fun allele ->
       let rm = S (pos, allele) in
-      (*G.iter_succ_e (fun (_, e, sv) -> G.add_edge_e ng (G.E.create node e sv)) ng rm; *)
       G.iter_succ (fun sv ->
         try
           let eset = G.find_edge ng node sv |> G.E.label in
@@ -129,6 +128,17 @@ let create_compressed g =
       G.remove_vertex ng rm));
   { g = ng; aindex = g.aindex; bounds = g.bounds }
 
+let insert_newline ?(every=120) ?(token=';') s =
+  String.to_character_list s
+  |> List.fold_left ~init:(0,[]) ~f:(fun (i, acc) c ->
+      if i > every && c = token then
+        (0, '\n' :: c :: acc)
+      else
+        (i + 1, c :: acc))
+  |> snd
+  |> List.rev
+  |> String.of_character_list
+
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?short ?max_length fname t =
   let { aindex; g; _} = if compress_start then create_compressed t else t in
@@ -138,17 +148,20 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
       include G
       let graph_attributes _g = []
       let default_vertex_attributes _g = []
-      let vertex_name = Nodes.vertex_name ?short
+      let vertex_name v = insert_newline (Nodes.vertex_name ?short v)
       let vertex_attributes _v = [`Shape `Box]
       let get_subgraph _v = None
 
       let default_edge_attributes _t = [`Color 4711]
       let edge_attributes e =
         let compress = compress_edges in
-        if human_edges then
-          [`Label (A.Set.to_human_readable ~compress ?max_length aindex (G.E.label e))]
-        else
-          [`Label (A.Set.to_string ~compress aindex (G.E.label e))]
+        let t e =
+          if human_edges then
+            A.Set.to_human_readable ~compress ?max_length aindex (G.E.label e)
+          else
+            A.Set.to_string ~compress aindex (G.E.label e)
+        in
+        [`Label ( insert_newline (t e)) ]
 
     end)
   in
