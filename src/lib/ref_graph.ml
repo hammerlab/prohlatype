@@ -140,7 +140,7 @@ let insert_newline ?(every=120) ?(token=';') s =
   |> String.of_character_list
 
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
-  ?short ?max_length fname t =
+  ?(insert_newlines=true) ?short ?max_length fname t =
   let { aindex; g; _} = if compress_start then create_compressed t else t in
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
@@ -148,28 +148,34 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
       include G
       let graph_attributes _g = []
       let default_vertex_attributes _g = []
-      let vertex_name v = insert_newline (Nodes.vertex_name ?short v)
+      let vertex_name v =
+        let s = Nodes.vertex_name ?short v in
+        if insert_newlines then insert_newline s else s
+
       let vertex_attributes _v = [`Shape `Box]
       let get_subgraph _v = None
 
       let default_edge_attributes _t = [`Color 4711]
       let edge_attributes e =
         let compress = compress_edges in
-        let t e =
+        let s =
           if human_edges then
             A.Set.to_human_readable ~compress ?max_length aindex (G.E.label e)
           else
             A.Set.to_string ~compress aindex (G.E.label e)
         in
-        [`Label ( insert_newline (t e)) ]
+        if insert_newlines then
+          [`Label ( insert_newline s) ]
+            else
+          [`Label s ]
 
     end)
   in
   Dot.output_graph oc g;
   close_out oc
 
-let output ?human_edges ?compress_edges ?compress_start ?max_length ?(pdf=true)
-  ?(open_=true) ~short fname t =
+let output ?human_edges ?compress_edges ?compress_start ?insert_newlines
+  ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
   output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short (fname ^ ".dot") t;
   let r =
     if pdf then
