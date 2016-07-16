@@ -155,8 +155,9 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   Dot.output_graph oc g;
   close_out oc
 
-let output ?human_edges ?compress_edges ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
-  output_dot ?human_edges ?compress_edges ?max_length ~short (fname ^ ".dot") t;
+let output ?human_edges ?compress_edges ?compress_start ?max_length ?(pdf=true)
+  ?(open_=true) ~short fname t =
+  output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short (fname ^ ".dot") t;
   let r =
     if pdf then
       Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)
