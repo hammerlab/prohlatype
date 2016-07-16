@@ -97,8 +97,41 @@ type t =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
-let output_dot ?(human_edges=true) ?(compress_edges=true) ?short ?max_length fname
-  { aindex; g; _} =
+let starts_by_position { aindex; bounds; _ } =
+  Alleles.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
+    List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
+      let pos = fst sep.start in
+      try
+        let bts = List.assoc pos asc in
+        Alleles.Set.set aindex bts allele;
+        asc
+      with Not_found ->
+        (pos, Alleles.Set.singleton aindex allele) :: asc))
+
+let create_compressed g =
+  let start_asc = starts_by_position g in
+  let ng = G.copy g.g in
+  let open Nodes in
+  List.iter start_asc ~f:(fun (pos, allele_set) ->
+    let a_str = Alleles.Set.to_string ~compress:true g.aindex allele_set in
+    let node = G.V.create (S (pos, a_str)) in
+    G.add_vertex ng node;
+    Alleles.Set.iter g.aindex allele_set ~f:(fun allele ->
+      let rm = S (pos, allele) in
+      (*G.iter_succ_e (fun (_, e, sv) -> G.add_edge_e ng (G.E.create node e sv)) ng rm; *)
+      G.iter_succ (fun sv ->
+        try
+          let eset = G.find_edge ng node sv |> G.E.label in
+          Alleles.Set.set g.aindex eset allele
+        with Not_found ->
+          let bt = Alleles.Set.singleton g.aindex allele in
+          G.add_edge_e ng (G.E.create node bt sv)) ng rm;
+      G.remove_vertex ng rm));
+  { g = ng; aindex = g.aindex; bounds = g.bounds }
+
+let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
+  ?short ?max_length fname t =
+  let { aindex; g; _} = if compress_start then create_compressed t else t in
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
