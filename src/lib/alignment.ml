@@ -69,6 +69,8 @@ let debug_ref = ref false
 let fail_ref = ref false
 
 let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
+(** The propogate and back fill algorithm. *)
+let compute_mismatches_old ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
   let open Nodes in
   let open Index in
   let search_str_length = String.length search_seq in
@@ -82,7 +84,7 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
       if mismatches <> 0 then begin
         if !debug_ref then
           printf "Asgn_msm NODE adding %d mismatches to: %s\n"
-            mismatches (Alleles.Set.to_string aindex e);
+            mismatches (Alleles.Set.to_human_readable aindex e);
         Alleles.Map.update_from e mis_map ((+) mismatches)
       end;
       Alleles.Set.union ea e)
@@ -92,7 +94,7 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
     if mismatches <> 0 then begin
       if !debug_ref then
         printf "Asgn_msm EDGE adding %d mismatches to: %s\n"
-          mismatches (Alleles.Set.to_string aindex edge);
+          mismatches (Alleles.Set.to_human_readable aindex edge);
       Alleles.Map.update_from edge mis_map ((+) mismatches)
     end
   in
@@ -103,12 +105,12 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
       if !debug_ref then
         printf "already visited! %d %s\n" search_pos
           (match edge with | None -> "no edge" | Some e ->
-              Alleles.Set.to_string aindex e);
+              Alleles.Set.to_human_readable aindex e);
       t st end else  begin
         if !debug_ref then
           printf "visiting %d %s\n" search_pos
             (match edge with | None -> "no edge" | Some e ->
-                Alleles.Set.to_string aindex e);
+                Alleles.Set.to_human_readable aindex e);
           e (Ms.add k st)
           end
   in
@@ -125,14 +127,14 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
       let mismatches = search_str_length - search_pos in
       if !debug_ref then
         printf "Adding %d mismatches to %s for ending edge\n"
-          mismatches (Alleles.Set.to_string aindex edge);
+          mismatches (Alleles.Set.to_human_readable aindex edge);
       assign_mismatches_to_edge mismatches edge;
       st)
   and assign_starting_backfill_mismatch search_pos edge ea st =
     if_not_visited ~edge search_pos st (fun st -> ea, st) (fun st ->
       if !debug_ref then
         printf "Adding %d mismatches to %s for start backfill\n"
-          search_pos (Alleles.Set.to_string aindex edge);
+          search_pos (Alleles.Set.to_human_readable aindex edge);
       assign_mismatches_to_edge search_pos edge;
       Alleles.Set.union edge ea, st)
   and next_sequence_node search_pos (_, edge, node) st =
@@ -159,7 +161,7 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
                 if mismatches <> 0 then begin
                   if !debug_ref then
                     printf "Asgn_msm NODE Edge adding %d mismatches to: %s\n"
-                      mismatches (Alleles.Set.to_string aindex e);
+                      mismatches (Alleles.Set.to_human_readable aindex e);
                   Alleles.Map.update_from e mis_map ((+) mismatches)
                 end)
                 g node;
@@ -177,7 +179,7 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
                       if possibly_me = node then acc else begin
                         if !debug_ref then 
                           printf "prev seq along %s of %s\n"
-                            (Alleles.Set.to_string aindex e) 
+                            (Alleles.Set.to_human_readable aindex e) 
                             (Nodes.vertex_name possibly_me);
                         prev_sequence_node prev_seq_pos v acc end)
                       g p acc) g node (seen_edges, st)
@@ -200,8 +202,8 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
                   else begin
                     let msg =
                       sprintf "Still haven't found all of them! at %s\n only saw: %s\n missing %s"
-                        (Nodes.vertex_name node) (Alleles.Set.to_string aindex seen_edges_after_backfill)
-                        (Alleles.Set.to_string aindex (Alleles.Set.complement aindex seen_edges_after_backfill))
+                        (Nodes.vertex_name node) (Alleles.Set.to_human_readable aindex seen_edges_after_backfill)
+                        (Alleles.Set.to_human_readable aindex (Alleles.Set.complement aindex seen_edges_after_backfill))
                     in
                     if !fail_ref then invalid_arg msg;
                     if !debug_ref then print_endline msg;
