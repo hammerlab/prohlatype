@@ -767,15 +767,13 @@ let find_position t allele pos =
     fold_along_allele t.g t.aindex allele ~start ~init:None
       ~f:(fun o v ->
             match v with
-            | S (p, _) | E p | B (p, _) ->
-                if p = pos then Some (v, true), true else o, false
-            | N (p, s)                  ->
-                if p = pos then
-                  Some (v, true), true
-                else if p < pos && pos < p + String.length s then
-                  Some (v, false), true
-                else
-                  o, false)
+            | S (p, _) | E p | B (p, _) when p = pos  -> Some (v, true), true 
+            | S (p, _) | E p | B (p, _) when p > pos  -> o, true
+            | S (p, _) | E p | B (p, _) (*   p < pos*)-> o, false
+            | N (p, s) when p = pos -> Some (v, true), true
+            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), true
+            | N (p, s) when pos < p -> Some (v, false), false
+            | N (p, s)  -> o, false)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
 
