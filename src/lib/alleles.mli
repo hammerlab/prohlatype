@@ -36,6 +36,9 @@ module Set : sig
       [false]. *)
   val clear : index -> t -> allele -> unit
 
+  (** [min_elt index t] returns the allele with the minimum value in [t]. *)
+  val min_elt : index -> t -> allele
+
   (** [is_set index t allele] is [allele] in [t]. *)
   val is_set : index -> t -> allele -> bool
 

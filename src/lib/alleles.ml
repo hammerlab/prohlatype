@@ -144,6 +144,14 @@ module Set = struct
   let clear { to_index; _ } s allele =
     BitSet.unset s (SMap.find allele to_index)
 
+  let min_elt { size; to_allele; _ } s =
+    let rec loop idx =
+      if idx = size then raise Not_found else
+        if BitSet.is_set s idx then to_allele.(idx)
+        else loop (idx + 1)
+    in
+    loop 0
+
   let is_set { to_index; _ } s allele =
     BitSet.is_set s (SMap.find allele to_index)
 
