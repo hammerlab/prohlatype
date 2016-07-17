@@ -113,7 +113,10 @@ module Map : sig
 
   val update2 : 'a t -> 'b t -> ('a -> 'b -> 'b) -> unit
 
-  (** [fold index f init amap] fold over all alleles found in the [map]. *)
+  (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
+
+  (** [iter index f map] iter over all allele assignments in the [map]. *)
+  val iter : index -> f:('b -> allele -> unit) -> 'b t -> unit
 
 end

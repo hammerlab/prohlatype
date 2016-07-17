@@ -252,4 +252,7 @@ module Map = struct
     done;
     !s
 
+  let iter i ~f amap =
+    fold i ~init:() ~f:(fun () m a -> f m a) amap
+
 end (* Map *)
