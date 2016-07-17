@@ -63,12 +63,12 @@ let fold_along_allele g aindex allele ~start ~f ~init =
   else
     let next = next_node_along g aindex allele in
     let rec loop from (acc, stop) =
-      if stop then
-        acc
-      else
-        match next ~from with
-        | None    -> acc
-        | Some vs -> loop vs (f acc vs)
+      match stop with
+      | `Stop     -> acc
+      | `Continue ->
+          match next ~from with
+          | None    -> acc
+          | Some vs -> loop vs (f acc vs)
     in
     loop start (f init start)
 
@@ -767,13 +767,13 @@ let find_position t allele pos =
     fold_along_allele t.g t.aindex allele ~start ~init:None
       ~f:(fun o v ->
             match v with
-            | S (p, _) | E p | B (p, _) when p = pos  -> Some (v, true), true 
-            | S (p, _) | E p | B (p, _) when p > pos  -> o, true
-            | S (p, _) | E p | B (p, _) (*   p < pos*)-> o, false
-            | N (p, s) when p = pos -> Some (v, true), true
-            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), true
-            | N (p, s) when pos < p -> Some (v, false), false
-            | N (p, s)  -> o, false)
+            | S (p, _) | E p | B (p, _) when p = pos  -> Some (v, true), `Stop
+            | S (p, _) | E p | B (p, _) when p > pos  -> o, `Stop
+            | S (p, _) | E p | B (p, _) (*   p < pos*)-> o, `Continue
+            | N (p, s) when p = pos                              -> Some (v, true), `Stop
+            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), `Stop
+            | N (p, s) when pos < p                              -> Some (v, false), `Continue
+            | N (p, s) (* p + String.length s > pos*) -> o, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
 
@@ -800,16 +800,16 @@ let parse_start_arg g allele =
                         Nodes.S (fst sep.start, allele)))
 
 let parse_stop_arg =
+  let stop_if b = if b then `Stop else `Continue in
   let open Nodes in function
-  | None             -> (fun _ -> false)          , (fun x -> x)
-  | Some (`AtPos p)  -> (fun n -> position n >= p), (fun x -> x)
+  | None             -> (fun _ -> `Continue)                  , (fun x -> x)
+  | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))  , (fun x -> x)
   | Some (`Length n) -> let r = ref 0 in
                         (function
-                          | S _ | E _ | B _ -> false
+                          | S _ | E _ | B _ -> `Continue
                           | N (_, s) ->
                               r := !r + String.length s;
-                              !r >= n)
-                                                  , String.take ~index:n
+                              stop_if (!r >= n))              , String.take ~index:n
 
 (** Accessors. *)
 let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
