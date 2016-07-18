@@ -813,6 +813,45 @@ let adjacents_until_with_stack (type a) ?max_height ~f ~init g node =
 
 let adjacents_until ?max_height ~f ~init g node =
   fst (adjacents_until_with_stack ?max_height ~f ~init g node)
+
+(* At or past
+let first_sequence_nodes_at ({g; aindex; _} as gt)  ~position =
+  let es = alleles_with_data gt ~position in
+  let al = Alleles.Set.min_elt aindex es in
+  let sp = find_bound gt al position |> unwrap_ok in
+  let start = S (fst sp.start, al) in
+  let root =
+    fold_along_allele g aindex al ~start ~init:None
+      ~f:(fun o v ->
+            match v with
+            | S (p, _) | E p | B (p, _) when p >= pos  -> o, `Stop (* only sequence nodes! *)
+            | S (p, _) | E p | B (p, _) (*   p < pos*) -> o, `Continue
+            | N (p, s) when p = pos                              -> Some (v, true), `Stop
+            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), `Stop
+            | N (p, s) when p > pos                              -> o, `Continue
+            | N (p, s)   (* p + String.length s > pos*)          -> o, `Stop)
+  in
+  match root with
+  | None    -> error "Couldn't find root node for %s at %d" al position
+  | Some rn ->
+      let seen_edges = G.fold_pred_e (fun (_, e, _) es ->
+        Alleles.Set.union es e) g rn (Alleles.Set.init aindex)
+      in
+      let rec loop d ess acc =
+        if d > !max_search_depth_ref then
+          error "After %s still didn't find all the edges at %s, missing %s"
+            !max_search_depth_ref (Nodes.vertex_name rn)
+              (Alleles.Set.complement_string ~compress:true aindex ess)
+        else if ess = es then
+          Ok acc
+        else
+*)
+
+
+
+(* find a vertex that is at the specified alignment position and if the node starts
+   at that position (precise) or the position is inside the node, only relevant to
+   sequence nodes N. *)
 let find_position t allele pos =
   let module M = struct exception F of Nodes.t end in
   let open Nodes in
@@ -826,8 +865,8 @@ let find_position t allele pos =
             | S (p, _) | E p | B (p, _) (*   p < pos*)-> o, `Continue
             | N (p, s) when p = pos                              -> Some (v, true), `Stop
             | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), `Stop
-            | N (p, s) when pos < p                              -> Some (v, false), `Continue
-            | N (p, s) (* p + String.length s > pos*) -> o, `Stop)
+            | N (p, s) when p > pos                              -> o, `Continue
+            | N (p, s)   (* p + String.length s > pos*)          -> o, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
 
