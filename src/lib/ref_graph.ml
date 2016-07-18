@@ -758,7 +758,14 @@ let find_bound g allele pos =
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
 
-(* vertex and precise *)
+let alleles_with_data { aindex; bounds; _} ~position =
+  let es = Alleles.Set.init aindex in
+  Alleles.Map.iter aindex bounds ~f:(fun sep_lst allele ->
+    List.iter sep_lst ~f:(fun sep ->
+      if (fst sep.start) <= position && position < sep.end_ then
+        Alleles.Set.set aindex es allele
+      (* No need to clear! *)));
+  es
 let find_position t allele pos =
   let module M = struct exception F of Nodes.t end in
   let open Nodes in
