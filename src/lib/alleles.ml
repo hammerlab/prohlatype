@@ -4,7 +4,6 @@ open Util
 type allele = string [@@deriving eq, ord]
 let compare = compare_allele
 let equal = equal_allele
-let to_string a = a
 
 module SMap = Map.Make (struct
     type t = string
