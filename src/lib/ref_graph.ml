@@ -766,6 +766,53 @@ let alleles_with_data { aindex; bounds; _} ~position =
         Alleles.Set.set aindex es allele
       (* No need to clear! *)));
   es
+
+module NodesSet = MoreLabels.Set.Make (struct
+  type t = Nodes.t
+  let compare = Nodes.compare
+end)
+
+let adjacents_until_with_stack (type a) ?max_height ~f ~init g node =
+  let module M = struct exception F of a end in
+  let add_if_new ~cur n ss =
+    if NodesSet.mem n cur then ss else
+      NodesSet.add n ss
+  in
+  let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
+    if NodesSet.mem n cur then st else
+      match f e n acc with
+      | `Stop r     -> raise (M.F r)
+      | `Continue r -> NodesSet.add n ss, r
+  in
+  let rec up i acc cur tl =
+    match max_height with
+    | Some mh when i > mh -> acc, cur :: tl
+    | None | Some _ ->
+        let parents = NodesSet.fold cur ~f:(G.fold_pred NodesSet.add g) ~init:NodesSet.empty in
+        try
+          let children, grandkids, nacc = down acc parents cur tl in
+          up (i + 1) nacc parents (children :: grandkids)
+        with M.F r ->
+          r, (parents :: cur :: tl)
+  and down acc parents cur = function
+    | [] ->
+        let with_siblings, nacc =
+          NodesSet.fold parents ~f:(G.fold_succ_e (add_and_fold_if_new ~cur) g)
+            ~init:(cur, acc)
+        in
+        with_siblings, [], nacc
+    | (h :: t) ->
+        let children =
+          NodesSet.fold parents ~f:(G.fold_succ (add_if_new ~cur) g) ~init:cur
+        in
+        let grandkids, grand_grand_list, nacc = down acc children h t in
+        children, (grandkids :: grand_grand_list), nacc
+  in
+  let start = NodesSet.singleton node in
+  up 0 init start []
+
+let adjacents_until ?max_height ~f ~init g node =
+  fst (adjacents_until_with_stack ?max_height ~f ~init g node)
 let find_position t allele pos =
   let module M = struct exception F of Nodes.t end in
   let open Nodes in
