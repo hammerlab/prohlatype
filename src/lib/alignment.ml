@@ -68,9 +68,18 @@ module Ms = Set.Make (
 let debug_ref = ref false
 let fail_ref = ref false
 
-let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
+(*
+let compute_mismatches {g; aindex; bounds} search_seq pos =
+  let open Nodes in
+  let open Index in
+  let search_str_length = String.length search_seq in
+  let mis_map = Alleles.Map.make aindex 0 in
+  let nmas = num_mismatches_against_seq search_seq in
+  let nmasb = num_mismatches_against_seq_backwards search_seq in
+*)
+ 
 (** The propogate and back fill algorithm. *)
-let compute_mismatches_old ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
+let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
   let open Nodes in
   let open Index in
   let search_str_length = String.length search_seq in
