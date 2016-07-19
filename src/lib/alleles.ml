@@ -169,6 +169,8 @@ module Set = struct
 
   let inter = BitSet.inter
 
+  let diff = BitSet.diff
+
   let complement {size; _} t =
     let c = BitSet.copy t in
     for i = 0 to size - 1 do BitSet.toggle c i done;

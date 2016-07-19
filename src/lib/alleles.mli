@@ -59,6 +59,10 @@ module Set : sig
       [e1] and [e2]. *)
   val inter : t -> t -> t
 
+  (** [diff e1 e2] will return an edge set with alleles found in [e1] but not
+      in [e2]. *)
+  val diff : t -> t -> t
+
   (** [complement index t] returns a set of all the alleles not in [t].*)
   val complement : index -> t -> t
 
