@@ -161,6 +161,8 @@ module Set = struct
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
 
+  let cardinal = BitSet.count
+
   let empty = BitSet.empty
   let compare = BitSet.compare
   let equals = BitSet.equals

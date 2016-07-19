@@ -46,6 +46,9 @@ module Set : sig
 
   val iter : index -> f:(allele -> unit) -> t -> unit
 
+  (** [cardinal t] returns the number of alleles found in [t]. *)
+  val cardinal : t -> int
+
   (** For graph construction. *)
   val empty : unit -> t
   val compare : t -> t -> int

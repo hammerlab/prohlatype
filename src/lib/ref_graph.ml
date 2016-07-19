@@ -116,19 +116,21 @@ let create_compressed g =
   let ng = G.copy g.g in
   let open Nodes in
   List.iter start_asc ~f:(fun (pos, allele_set) ->
-    let a_str = Alleles.Set.to_string ~compress:true g.aindex allele_set in
-    let node = G.V.create (S (pos, a_str)) in
-    G.add_vertex ng node;
-    Alleles.Set.iter g.aindex allele_set ~f:(fun allele ->
-      let rm = S (pos, allele) in
-      G.iter_succ (fun sv ->
-        try
-          let eset = G.find_edge ng node sv |> G.E.label in
-          Alleles.Set.set g.aindex eset allele
-        with Not_found ->
-          let bt = Alleles.Set.singleton g.aindex allele in
-          G.add_edge_e ng (G.E.create node bt sv)) ng rm;
-      G.remove_vertex ng rm));
+    if Alleles.Set.cardinal allele_set > 1 then begin
+      let a_str = Alleles.Set.to_string ~compress:true g.aindex allele_set in
+      let node = G.V.create (S (pos, a_str)) in
+      G.add_vertex ng node;
+      Alleles.Set.iter g.aindex allele_set ~f:(fun allele ->
+        let rm = S (pos, allele) in
+        G.iter_succ (fun sv ->
+          try
+            let eset = G.find_edge ng node sv |> G.E.label in
+            Alleles.Set.set g.aindex eset allele
+          with Not_found ->
+            let bt = Alleles.Set.singleton g.aindex allele in
+            G.add_edge_e ng (G.E.create node bt sv)) ng rm;
+        G.remove_vertex ng rm)
+    end);
   { g = ng; aindex = g.aindex; bounds = g.bounds }
 
 let insert_newline ?(every=120) ?(token=';') s =
