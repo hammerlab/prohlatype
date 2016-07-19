@@ -935,13 +935,15 @@ module Adjacents = struct
 end (* Adjacents *)
 
 (* At or past  *)
-let first_sequence_nodes_at ({g; aindex; _} as gt)  ~pos =
-  let es = alleles_with_data gt ~pos in
-  let al = Alleles.Set.min_elt aindex es in
-  find_position gt al ~pos >>= fun (rootn, _) ->
+let sequence_nodes_at ({g; aindex; _} as gt)  ~pos =
+  let all_edges = alleles_with_data gt ~pos in
+  let root_allele = Alleles.Set.min_elt aindex all_edges in
+  find_position gt root_allele ~pos >>= fun (rootn, _) ->
     let init = Alleles.Set.init aindex, [] in
-    let stop (es_acc, nlst) = es_acc = es in
-    let _, adj = Adjacents.check_by_levels ~max_height:10 ~init ~stop
-      g rootn ~f:(fun e n (es, acc) -> Alleles.Set.union es e, n :: acc)
+    let stop (es_acc, nlst) = es_acc = all_edges in
+    let f edge node (edge_set, acc) =
+      Alleles.Set.union edge edge_set, (edge, node) :: acc
     in
-    Ok (rootn :: adj)
+    let _, adj = Adjacents.check_by_levels ~max_height:10 ~init ~stop g rootn ~f in
+    let root_edges = G.fold_pred_e (fun (_, e, _) a -> (e, rootn) :: a) g rootn [] in
+    Ok (root_edges @ adj)
