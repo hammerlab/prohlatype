@@ -34,8 +34,8 @@ module Nodes = struct
   let position = function
     | S (p, _) | E p | B (p, _) | N (p, _)  -> p
 
-  let inside_seq p s ~position =
-    p < position && position < p + String.length s
+  let inside_seq p s ~pos =
+    p < pos && pos < p + String.length s
 
   let hash = Hashtbl.hash
 end
@@ -764,7 +764,9 @@ let find_bound g allele ~pos =
 
 (* find a vertex that is at the specified alignment position and if the node starts
    at that position (precise) or the position is inside the node, only relevant to
-   sequence nodes N. *)
+   sequence nodes N.
+
+   This method is O(n) ... need better. *)
 let find_position t allele ~pos =
   let open Nodes in
   find_bound t allele ~pos >>= fun bound ->
@@ -776,8 +778,8 @@ let find_position t allele ~pos =
             | S (p, _) | E p | B (p, _) when p > pos   -> o, `Stop
             | S (p, _) | E p | B (p, _) (*   p < pos*) -> o, `Continue
             | N (p, s) when p = pos                    -> Some (v, true), `Stop
-            | N (p, s) when inside_seq p s pos         -> Some (v, false), `Stop
-            | N (p, s) when p > pos                    -> o, `Continue
+            | N (p, s) when inside_seq p s ~pos        -> Some (v, false), `Stop
+            | N (p, s) when p < pos                    -> o, `Continue
             | N (p, s)  (* p + String.length s > pos*) -> o, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
@@ -904,7 +906,9 @@ module Adjacents = struct
     fst (until_with_stack ?max_height ~f ~init g node)
 
     (* A less general method that requires an extra predicate function to the
-       stopping condition. *)
+       stopping condition. The advantage is that we check less frequently and
+       probably when it matters, when we increase the level of how far back in
+       the graph we look for adjacents. *)
   let check_by_levels_with_stack ?max_height ~f ~stop ~init g node =
     let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
       if NodesSet.mem n cur then st else
