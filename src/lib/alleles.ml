@@ -38,8 +38,8 @@ module CompressNames = struct
 
     let rec to_last = function
       | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
-      | From (a, b) -> sprintf "%d-%d" a b
-      | Just n      -> sprintf "%d" n
+      | From (a, b) -> sprintf "%0.2d-%0.2d" a b
+      | Just n      -> sprintf "%0.2d" n
 
     let rec last_val = function
       | And (_, v)  -> last_val v
