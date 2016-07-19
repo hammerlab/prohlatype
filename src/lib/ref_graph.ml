@@ -34,6 +34,9 @@ module Nodes = struct
   let position = function
     | S (p, _) | E p | B (p, _) | N (p, _)  -> p
 
+  let inside_seq p s ~position =
+    p < position && position < p + String.length s
+
   let hash = Hashtbl.hash
 end
 
@@ -749,126 +752,36 @@ let construct_from_parsed ?which ?(normalize=true) r =
 let construct_from_file ~normalize ?which file =
   construct_from_parsed ~normalize ?which (Mas_parser.from_file file)
 
+(* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =
   Alleles.Map.get aindex bounds allele
 
-let find_bound g allele pos =
+let find_bound g allele ~pos =
   all_bounds g allele
   |> List.find ~f:(fun sep -> (fst sep.start) <= pos && pos <= sep.end_)
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
 
-let alleles_with_data { aindex; bounds; _} ~position =
-  let es = Alleles.Set.init aindex in
-  Alleles.Map.iter aindex bounds ~f:(fun sep_lst allele ->
-    List.iter sep_lst ~f:(fun sep ->
-      if (fst sep.start) <= position && position < sep.end_ then
-        Alleles.Set.set aindex es allele
-      (* No need to clear! *)));
-  es
-
-module NodesSet = MoreLabels.Set.Make (struct
-  type t = Nodes.t
-  let compare = Nodes.compare
-end)
-
-let adjacents_until_with_stack (type a) ?max_height ~f ~init g node =
-  let module M = struct exception F of a end in
-  let add_if_new ~cur n ss =
-    if NodesSet.mem n cur then ss else
-      NodesSet.add n ss
-  in
-  let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
-    if NodesSet.mem n cur then st else
-      match f e n acc with
-      | `Stop r     -> raise (M.F r)
-      | `Continue r -> NodesSet.add n ss, r
-  in
-  let rec up i acc cur tl =
-    match max_height with
-    | Some mh when i > mh -> acc, cur :: tl
-    | None | Some _ ->
-        let parents = NodesSet.fold cur ~f:(G.fold_pred NodesSet.add g) ~init:NodesSet.empty in
-        try
-          let children, grandkids, nacc = down acc parents cur tl in
-          up (i + 1) nacc parents (children :: grandkids)
-        with M.F r ->
-          r, (parents :: cur :: tl)
-  and down acc parents cur = function
-    | [] ->
-        let with_siblings, nacc =
-          NodesSet.fold parents ~f:(G.fold_succ_e (add_and_fold_if_new ~cur) g)
-            ~init:(cur, acc)
-        in
-        with_siblings, [], nacc
-    | (h :: t) ->
-        let children =
-          NodesSet.fold parents ~f:(G.fold_succ (add_if_new ~cur) g) ~init:cur
-        in
-        let grandkids, grand_grand_list, nacc = down acc children h t in
-        children, (grandkids :: grand_grand_list), nacc
-  in
-  let start = NodesSet.singleton node in
-  up 0 init start []
-
-let adjacents_until ?max_height ~f ~init g node =
-  fst (adjacents_until_with_stack ?max_height ~f ~init g node)
-
-(* At or past
-let first_sequence_nodes_at ({g; aindex; _} as gt)  ~position =
-  let es = alleles_with_data gt ~position in
-  let al = Alleles.Set.min_elt aindex es in
-  let sp = find_bound gt al position |> unwrap_ok in
-  let start = S (fst sp.start, al) in
-  let root =
-    fold_along_allele g aindex al ~start ~init:None
-      ~f:(fun o v ->
-            match v with
-            | S (p, _) | E p | B (p, _) when p >= pos  -> o, `Stop (* only sequence nodes! *)
-            | S (p, _) | E p | B (p, _) (*   p < pos*) -> o, `Continue
-            | N (p, s) when p = pos                              -> Some (v, true), `Stop
-            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), `Stop
-            | N (p, s) when p > pos                              -> o, `Continue
-            | N (p, s)   (* p + String.length s > pos*)          -> o, `Stop)
-  in
-  match root with
-  | None    -> error "Couldn't find root node for %s at %d" al position
-  | Some rn ->
-      let seen_edges = G.fold_pred_e (fun (_, e, _) es ->
-        Alleles.Set.union es e) g rn (Alleles.Set.init aindex)
-      in
-      let rec loop d ess acc =
-        if d > !max_search_depth_ref then
-          error "After %s still didn't find all the edges at %s, missing %s"
-            !max_search_depth_ref (Nodes.vertex_name rn)
-              (Alleles.Set.complement_string ~compress:true aindex ess)
-        else if ess = es then
-          Ok acc
-        else
-*)
-
-
-
 (* find a vertex that is at the specified alignment position and if the node starts
    at that position (precise) or the position is inside the node, only relevant to
    sequence nodes N. *)
-let find_position t allele pos =
-  let module M = struct exception F of Nodes.t end in
+let find_position t allele ~pos =
   let open Nodes in
-  find_bound t allele pos >>= fun bound ->
+  find_bound t allele ~pos >>= fun bound ->
     let start = S (fst bound.start, allele) in
     fold_along_allele t.g t.aindex allele ~start ~init:None
       ~f:(fun o v ->
             match v with
-            | S (p, _) | E p | B (p, _) when p = pos  -> Some (v, true), `Stop
-            | S (p, _) | E p | B (p, _) when p > pos  -> o, `Stop
-            | S (p, _) | E p | B (p, _) (*   p < pos*)-> o, `Continue
-            | N (p, s) when p = pos                              -> Some (v, true), `Stop
-            | N (p, s) when p < pos && pos < p + String.length s -> Some (v, false), `Stop
-            | N (p, s) when p > pos                              -> o, `Continue
-            | N (p, s)   (* p + String.length s > pos*)          -> o, `Stop)
+            | S (p, _) | E p | B (p, _) when p = pos   -> Some (v, true), `Stop
+            | S (p, _) | E p | B (p, _) when p > pos   -> o, `Stop
+            | S (p, _) | E p | B (p, _) (*   p < pos*) -> o, `Continue
+            | N (p, s) when p = pos                    -> Some (v, true), `Stop
+            | N (p, s) when inside_seq p s pos         -> Some (v, false), `Stop
+            | N (p, s) when p > pos                    -> o, `Continue
+            | N (p, s)  (* p + String.length s > pos*) -> o, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
+
 
 let parse_start_arg g allele =
   let open Nodes in function
@@ -920,3 +833,111 @@ let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
     |> String.concat
     |> pp
     |> fun s -> Ok s
+
+let alleles_with_data { aindex; bounds; _} ~pos =
+  let es = Alleles.Set.init aindex in
+  Alleles.Map.iter aindex bounds ~f:(fun sep_lst allele ->
+    List.iter sep_lst ~f:(fun sep ->
+      if (fst sep.start) <= pos && pos < sep.end_ then
+        Alleles.Set.set aindex es allele
+      (* No need to clear! *)));
+  es
+
+module NodesSet = MoreLabels.Set.Make (struct
+  type t = Nodes.t
+  let compare = Nodes.compare
+end)
+
+(* Methods for finding adjacent nodes:
+   Nodes with the same (or greater due to gaps) alignment position.
+
+   Aside from checking the bounds and looking for Boundary positions,
+   there is now way of knowing when we have found all adjacents. These
+   algorithms build as stack of successively seen nodes at progressively
+   farther distance (measured by edges) from the root node. *)
+module Adjacents = struct
+
+  let add_if_new ~cur n ss =
+    if NodesSet.mem n cur then ss else
+      NodesSet.add n ss
+
+  let rec down add_and_fold_if_new g acc parents cur = function
+    | [] ->
+        let with_siblings, nacc =
+          NodesSet.fold parents ~f:(G.fold_succ_e (add_and_fold_if_new ~cur) g)
+            ~init:(cur, acc)
+        in
+        with_siblings, [], nacc
+    | (h :: t) ->
+        let children =
+          NodesSet.fold parents ~f:(G.fold_succ (add_if_new ~cur) g) ~init:cur
+        in
+        let grandkids, grand_grand_list, nacc = down add_and_fold_if_new g acc children h t in
+        children, (grandkids :: grand_grand_list), nacc
+
+  (* A more general method that checks whether to continue after each
+     new adjacent. *)
+  let until_with_stack (type a) ?max_height ~f ~init g node =
+    let module M = struct exception F of a end in
+    let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
+      if NodesSet.mem n cur then st else
+        match f e n acc with
+        | `Stop r     -> raise (M.F r)
+        | `Continue r -> NodesSet.add n ss, r
+    in
+    let down = down add_and_fold_if_new g in
+    let rec up i acc cur tl =
+      match max_height with
+      | Some mh when i > mh -> acc, cur :: tl
+      | None | Some _ ->
+          let parents = NodesSet.fold cur ~f:(G.fold_pred NodesSet.add g) ~init:NodesSet.empty in
+          try
+            let children, grandkids, nacc = down acc parents cur tl in
+            up (i + 1) nacc parents (children :: grandkids)
+          with M.F r ->
+            r, (parents :: cur :: tl)
+    in
+    let start = NodesSet.singleton node in
+    up 0 init start []
+
+  let until ?max_height ~f ~init g node =
+    fst (until_with_stack ?max_height ~f ~init g node)
+
+    (* A less general method that requires an extra predicate function to the
+       stopping condition. *)
+  let check_by_levels_with_stack ?max_height ~f ~stop ~init g node =
+    let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
+      if NodesSet.mem n cur then st else
+        NodesSet.add n ss, (f e n acc)
+    in
+    let down = down add_and_fold_if_new g in
+    let rec up i acc cur tl =
+      match max_height with
+      | Some mh when i > mh -> acc, cur :: tl
+      | None | Some _ ->
+          let parents = NodesSet.fold cur ~f:(G.fold_pred NodesSet.add g) ~init:NodesSet.empty in
+          let children, grandkids, nacc = down acc parents cur tl in
+          if stop nacc then
+            nacc, parents :: children :: grandkids
+          else
+            up (i + 1) nacc parents (children :: grandkids)
+    in
+    let start = NodesSet.singleton node in
+    up 0 init start []
+
+  let check_by_levels ?max_height ~f ~stop ~init g node =
+    fst (check_by_levels_with_stack ?max_height ~f ~stop ~init g node)
+
+end (* Adjacents *)
+
+(* At or past  *)
+let first_sequence_nodes_at ({g; aindex; _} as gt)  ~pos =
+  let es = alleles_with_data gt ~pos in
+  let al = Alleles.Set.min_elt aindex es in
+  find_position gt al ~pos >>= fun (rootn, _) ->
+    let init = Alleles.Set.init aindex, [] in
+    let stop (es_acc, nlst) = es_acc = es in
+    let _, adj = Adjacents.check_by_levels ~max_height:10 ~init ~stop
+      g rootn ~f:(fun e n (es, acc) -> Alleles.Set.union es e, n :: acc)
+    in
+    Ok (rootn :: adj)
