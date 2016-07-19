@@ -608,15 +608,16 @@ module Fold_at_same_position = struct
 
 end
 
+(* Alignment and sequence pair set used as queue *)
 module Apsq =
   Set.Make(struct
     type t = alignment_position * sequence
-    let compare = compare (*a1, s1) (a2, s2) =
+    let compare (a1, s1) (a2, s2) =
       let r = compare_alignment_position a1 a2 in
       if r = 0 then
         compare_sequence s1 s2
       else
-        r*)
+        r
   end)
 
 let at_min_position q =
