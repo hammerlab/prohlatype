@@ -35,17 +35,6 @@ module NodesSet = MoreLabels.Set.Make (struct
   let compare = Nodes.compare
 end)
 
-let e_n_lst_to_out lst =
-  List.iter lst ~f:(fun (e, n) ->
-    printf "%s -- %s\n"
-      (Nodes.vertex_name n)
-      (Alleles.Set.to_human_readable ~compress:true gall.aindex e))
-
-let nodesset_to_string s =
-  NodesSet.fold ~f:(fun n a -> Nodes.vertex_name n :: a) s ~init:[]
-  |> String.concat ~sep:"; "
-  |> sprintf "{%s}"
-
 let adjacents_n max_height ~f ~init g node =
   let add_if_new ~cur n ss =
     if NodesSet.mem n cur then ss else
