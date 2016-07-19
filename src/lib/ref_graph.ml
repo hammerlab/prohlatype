@@ -905,10 +905,10 @@ module Adjacents = struct
   let until ?max_height ~f ~init g node =
     fst (until_with_stack ?max_height ~f ~init g node)
 
-    (* A less general method that requires an extra predicate function to the
-       stopping condition. The advantage is that we check less frequently and
-       probably when it matters, when we increase the level of how far back in
-       the graph we look for adjacents. *)
+  (* A less general method that requires an extra predicate function to the
+      stopping condition. The advantage is that we check less frequently and
+      probably when it matters, when we increase the level of how far back in
+      the graph we look for adjacents. *)
   let check_by_levels_with_stack ?max_height ~f ~stop ~init g node =
     let add_and_fold_if_new ~cur (_, e, n) ((ss, acc) as st) =
       if NodesSet.mem n cur then st else
@@ -934,16 +934,39 @@ module Adjacents = struct
 
 end (* Adjacents *)
 
-(* At or past  *)
-let sequence_nodes_at ({g; aindex; _} as gt)  ~pos =
+let find_root_position ({aindex; _} as gt) ~pos =
   let all_edges = alleles_with_data gt ~pos in
   let root_allele = Alleles.Set.min_elt aindex all_edges in
-  find_position gt root_allele ~pos >>= fun (rootn, _) ->
+  find_position gt root_allele ~pos >>= fun rp ->
+    Ok (root_allele, all_edges, rp)
+
+let debug_ref = ref false
+
+(* At or past  *)
+let sequence_nodes_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
+  find_root_position gt ~pos >>= fun (_root_allele, all_edges, (rootn, _precise)) ->
     let init = Alleles.Set.init aindex, [] in
-    let stop (es_acc, nlst) = es_acc = all_edges in
+    let stop (es_acc, nlst) =
+      if es_acc = all_edges then true else
+        begin
+          if !debug_ref then
+            eprintf "Still missing %s\n"
+              (Alleles.Set.to_human_readable aindex (Alleles.Set.diff all_edges es_acc));
+          false
+        end
+    in
     let f edge node (edge_set, acc) =
       Alleles.Set.union edge edge_set, (edge, node) :: acc
     in
-    let _, adj = Adjacents.check_by_levels ~max_height:10 ~init ~stop g rootn ~f in
-    let root_edges = G.fold_pred_e (fun (_, e, _) a -> (e, rootn) :: a) g rootn [] in
-    Ok (root_edges @ adj)
+    let (_root_es_acc, root_edges) as rp =
+      G.fold_pred_e (fun (_, e, n) a -> f e n a) g rootn init
+    in
+    (* The adjacent methods are "stupid" and can search excessively if what
+       they're searching for doesn't exist: such as if the the root node is
+       the only 'adjacent'. *)
+    if stop rp then
+      Ok root_edges
+    else
+      let _, adj = Adjacents.check_by_levels ~max_height ~init:rp ~stop g rootn ~f in
+      Ok adj
+
