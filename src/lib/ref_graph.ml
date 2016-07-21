@@ -34,6 +34,10 @@ module Nodes = struct
   let position = function
     | S (p, _) | E p | B (p, _) | N (p, _)  -> p
 
+  let inside pos = function
+    | S (p, _) | E p | B (p, _) -> p = pos
+    | N (p, s) -> p <= pos && pos < p + String.length s
+
   let inside_seq p s ~pos =
     p < pos && pos < p + String.length s
 
@@ -767,27 +771,30 @@ let find_bound g allele ~pos =
 
 (* find a vertex that is at the specified alignment position and if the node starts
    at that position (precise) or the position is inside the node, only relevant to
-   sequence nodes N.
+   sequence nodes N or Boundary positions.
 
    TODO: This method is O(n) ... need better, really fold_along_allele is not
          good enough. *)
-let find_position t allele ~pos =
+let find_position ?(next_after=false) t allele ~pos =
   let open Nodes in
+  let next_after o v = if next_after then Some (v, false) else o in
   find_bound t allele ~pos >>= fun bound ->
     let start = S (fst bound.start, allele) in
     fold_along_allele t.g t.aindex allele ~start ~init:None
       ~f:(fun o v ->
             match v with
-            | S (p, _) | E p | B (p, _) when p = pos   -> Some (v, true), `Stop
-            | S (p, _) | E p | B (p, _) when p > pos   -> o, `Stop
-            | S (p, _) | E p | B (p, _) (*   p < pos*) -> o, `Continue
+            | S (p, _) when p <= pos                   -> o, `Continue
+            | S (p, _) (*   p > pos *)                 -> next_after o v, `Stop
+            | E p                                      -> next_after o v, `Stop
+            | B (p, _) when p = pos                    -> Some (v, true), `Stop
+            | B (p, _) when p > pos                    -> next_after o v, `Stop
+            | B (p, _) (*   p < pos*)                  -> o, `Continue
             | N (p, s) when p = pos                    -> Some (v, true), `Stop
             | N (p, s) when inside_seq p s ~pos        -> Some (v, false), `Stop
             | N (p, s) when p < pos                    -> o, `Continue
-            | N (p, s)  (* p + String.length s > pos*) -> o, `Stop)
+            | N (p, s)  (* p + String.length s > pos*) -> next_after o v, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
           ~f:(fun x -> Ok x)
-
 
 let parse_start_arg g allele =
   let open Nodes in function
@@ -849,95 +856,162 @@ let alleles_with_data { aindex; bounds; _} ~pos =
       (* No need to clear! *)));
   es
 
+(* This method is super awkward, since it is mirroring the
+  gap searching logic of Adjacents, but not as carefully/exhaustively. *)
+let search_through_gap g node ~pos =
+  let preds =
+    G.fold_pred_e (fun (pn, e, _) l -> (Nodes.position pn, pn, e) :: l) g node []
+    |> List.sort ~cmp:compare (* should be precise about comparing by position. *)
+  in
+  let back_look =
+    List.find_map preds ~f:(fun (p, n, e) ->
+      if Nodes.inside pos n then Some (n, e) else None)
+  in
+  match back_look with
+  | Some v -> Ok v
+  | None   -> (* try looking forward again! *)
+      let frds =
+        List.fold_left preds ~init:[] ~f:(fun acc (_, n, _) ->
+          G.fold_succ_e (fun (_, e, n) l -> (Nodes.position n, n, e) :: l)
+            g n [])
+        |> List.sort ~cmp:compare
+      in
+      let forward_look =
+        List.find_map frds ~f:(fun (p, n, e) ->
+          if Nodes.inside pos n then Some (n, e) else None)
+      in
+      match forward_look with
+      | Some v -> Ok v
+      | None   -> error "Couldn't work through gap before %s for %d"
+                    (Nodes.vertex_name node) pos
+
+let find_root_position ({g; aindex; _} as gt) ~pos =
+  let all_edges = alleles_with_data gt ~pos in
+  let root_allele = Alleles.Set.min_elt aindex all_edges in
+  find_position ~next_after:true gt root_allele ~pos >>=
+    fun ((rootn, _precise) as rp) ->
+      if Nodes.position rootn > pos then begin  (* In a gap, work backwards! *)
+        search_through_gap g rootn ~pos >>= fun (n, e) ->
+          let new_root_allele = Alleles.Set.min_elt aindex e in
+          Ok (new_root_allele, all_edges, (n, (Nodes.position n = pos)))
+      end else
+        Ok (root_allele, all_edges, rp)
+
 module NodeSet = MoreLabels.Set.Make
   (struct
     type t = Nodes.t
     let compare = Nodes.compare
   end)
 
-module NodeEdgeSet = MoreLabels.Set.Make
+module EdgeNodeSet = MoreLabels.Set.Make
   (struct
-    type t = Nodes.t * Edges.t
-    let compare (n1, e1) (n2, e2) =
+    (* edges first since these edges point into the respective node. *)
+    type t = Edges.t * Nodes.t
+
+    let compare (e1, n1) (e2, n2) =
       let r = Nodes.compare n1 n2 in
-      if r = 0 then r else Edges.compare e1 e2
+      if r = 0 then Edges.compare e1 e2 else r
   end)
 
+let node_set_to_string s =
+  NodeSet.fold ~f:(fun n a -> Nodes.vertex_name n :: a) ~init:[] s
+  |> String.concat ~sep:"; "
+  |> sprintf "{%s}"
+
+let edge_node_set_to_string aindex s =
+  EdgeNodeSet.fold ~f:(fun (e, n) a ->
+    (sprintf "(%s -> %s)"
+      (Alleles.Set.to_human_readable aindex ~compress:true e)
+      (Nodes.vertex_name n)) :: a) ~init:[] s
+  |> String.concat ~sep:"; "
+  |> sprintf "{%s}"
+
+let edge_node_set_to_table aindex s =
+  EdgeNodeSet.fold ~f:(fun p l -> p :: l) ~init:[] s
+  |> List.sort ~cmp:(fun (_,n1) (_,n2) -> Nodes.compare n1 n2)
+  |> List.map ~f:(fun (e, n) ->
+      sprintf "%s <- %s"
+        (Nodes.vertex_name n)
+        (Alleles.Set.to_human_readable aindex ~compress:true e))
+  |> String.concat ~sep:"\n"
+  |> sprintf "%s"
+
+let debug_ref = ref false
+
 (* Methods for finding adjacent nodes/edges combinations.:
-   Nodes with the same (or greater due to gaps) alignment position.
+   Nodes with the same (or greater; due to gaps) alignment position.
 
    Aside from checking the bounds and looking for Boundary positions,
    there is no way of knowing when we have found all adjacents. These
-   algorithms build a stack of successively seen nodes at progressively
-   farther distance (measured by edges) from the root node. *)
+   algorithms expand a set of successively seen nodes at progressively
+   farther distance (measured by edges) from the root node. At each
+   step they recurse down and explore new adjacents. The two main methods
+
+   {until} and {check_by_levels} provide a fold operation over these
+   adjacents (via ~f and ~init) as they are discovered and also returns:
+   1. A EdgeNodeSet of actual adjacents. adjacent nodes can have multiple
+      edges leading into them.
+   2. The final accumulator value.
+   3. A stack of encountered nodes (probably not useful). *)
 module Adjacents = struct
 
-  (* [add_if_new cur node sibs] Add [node] to [sibs] if it isn't in [cur]rent.
-     Although [sibs] and [cur] represent nodes at the same level, to prevent
-     traversing/recursing down the same paths as we discover new sibs, we keep
-     track of two sets.
-     
+  (* [add_if_new cur node sibs] Add [node] to [kids] if it isn't in [cur]rent.
+     Although [kids] and [cur] may represent nodes at different alignment
+     position, to prevent traversing/recursing down the same paths as we
+     discover new kids, we keep track of two sets.
+
      (check) + (add) -> O(log n) + O(log n) = O(2 log n
      as opposed to O(log n) for just adding but then we redo lots (how much?)
      work and can't add the is_empty stop condition in [down].  *)
-  let add_if_new ~cur n sibs =
-    if NodeSet.mem n cur then sibs else NodeSet.add n sibs
+  let add_if_new ~cur n kids =
+    if NodeSet.mem n cur then kids else NodeSet.add n kids
 
-  let siblings_and_adjacents pos ~if_new g ~parents ~cur ~adjacents acc =
-    let add ((_pn, _el, n) as e) (sibs, adjs, acc) =
-      if Nodes.position n <= pos then
+  let siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc =
+    let add ((_pn, _el, n) as e) (kids, adjs, acc) =
+      if Nodes.position n >= pos then
         let nadjs, nacc = if_new e (adjs, acc) in
-        sibs, nadjs, nacc
+        kids, nadjs, nacc
       else
-        let nsibs = add_if_new ~cur n sibs in
-        nsibs, adjs, acc
+        let nkids = add_if_new ~cur n kids in
+        nkids, adjs, acc
     in
     let init = NodeSet.empty, adjacents, acc in
-    NodeSet.fold parents ~f:(G.fold_succ_e add g) ~init
+    NodeSet.fold new_nodes ~f:(G.fold_succ_e add g) ~init
 
-  (* Method is a bit convoluted since I am trying to type enforce a non-empty stack.
-     Specifically we always have an oldest set of [parents]. As the stack grows the
-     oldest parents change (they move back along the alignment position, ex 100 -> 99)
-     and we expand the set of parents closer to use (100). *)
-  let rec down pos if_new g acc ~adjacents ~parents = function
-    | []                ->          (* ===> parents are above adjacents! *)
-        let nadjacents, nacc =
-          NodeSet.fold parents ~f:(G.fold_succ_e if_new g) ~init:(adjacents, acc)
-        in
-        nadjacents, nacc, []
-    | (cur :: t) as ptl ->          (* ===> parents are above cur! *)
-        let cur_sibs, nadjacents, nacc =
-          siblings_and_adjacents pos ~if_new g ~parents ~cur ~adjacents acc
-        in
-        if NodeSet.is_empty cur_sibs then
-          nadjacents, nacc, ptl         (* no new siblings don't recurse! *)
-        else
-          let nh = NodeSet.union cur cur_sibs in
-          let nadjacents, nacc, ntl =
-            down pos if_new g nacc ~adjacents:nadjacents ~parents:nh t
-          in
-          nadjacents, nacc, nh :: ntl
+  let rec down if_new g pos acc ~adjacents ~new_nodes cur =
+    let newer_nodes, nadjacents, nacc =
+      siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc
+    in
+    let new_cur = NodeSet.union cur new_nodes in
+    if NodeSet.is_empty newer_nodes then
+      (* no new nodes don't recurse! *)
+      nadjacents, nacc, new_cur
+    else
+      down if_new g pos acc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
 
-  let all_parents g cur =
-    NodeSet.fold cur ~f:(G.fold_pred NodeSet.add g) ~init:NodeSet.empty
+  let look_above g cur =
+    NodeSet.fold cur ~f:(G.fold_pred (add_if_new ~cur) g) ~init:NodeSet.empty
 
   (* A general combination of [up] and [down] that is parameterized
      [search] that should tell us when to stop recursing. *)
-  let up_and_down  ?max_height ~f ~init ~if_new ~search g node =
-    let down = down (Nodes.position node) if_new g in
-    let rec up i adjacents acc ~parents prnts_lst =
+  let up_and ?max_height ~init ~if_new ~down g ~pos node =
+    let rec up i adjacents acc ~new_nodes cur =
       match max_height with
-      | Some h when i >= h  -> adjacents, acc, parents :: prnts_lst
+      | Some h when i >= h  -> adjacents, acc, NodeSet.union new_nodes cur
       | None | Some _       ->
-          match search down acc ~adjacents ~parents prnts_lst with
+          match down acc ~adjacents ~new_nodes cur with
           | `Stop t         -> t
-          | `Continue (nadjacents, nacc, ptl) ->
-            let grand_parents = all_parents g parents in
-            up (i + 1) nadjacents nacc ~parents:grand_parents (parents :: ptl)
+          | `Continue (nadjacents, nacc, ncur) ->
+              let newer_nodes = look_above g new_nodes in
+              if !debug_ref then
+                eprintf "Adding new newer_nodes: %s\n from new_nodes: %s\n"
+                  (node_set_to_string newer_nodes) (node_set_to_string new_nodes);
+              up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
     in
-    let adj_strt, nacc = G.fold_pred_e if_new g node (NodeEdgeSet.empty, init) in
-    let parents = G.fold_pred NodeSet.add g node NodeSet.empty in
-    up 0 adj_strt nacc parents []
+    let adj_strt, nacc = G.fold_pred_e if_new g node (EdgeNodeSet.empty, init) in
+    let new_nodes = G.fold_pred NodeSet.add g node NodeSet.empty in
+    let cur = NodeSet.singleton node in
+    up 0 adj_strt nacc ~new_nodes cur
 
   (* A more general method that checks whether to continue after each new
      adjacent. Since we throw an exception to terminate early, the search
@@ -945,53 +1019,52 @@ module Adjacents = struct
   let until (type a) ?max_height ~f ~init g node =
     let module M = struct exception F of a end in
     let if_new (_, e, n) ((adjacents, acc) as s) =
-      let ne = n, e in
-      if NodeEdgeSet.mem ne adjacents then s else
+      let en = e, n in
+      if EdgeNodeSet.mem en adjacents then s else
         match f e n acc with
         | `Stop r     -> raise (M.F r)
-        | `Continue r -> NodeEdgeSet.add ne adjacents, r
+        | `Continue r -> EdgeNodeSet.add en adjacents, r
     in
-    let search down acc ~adjacents ~parents prnts_lst =
-      try `Continue (down acc ~adjacents ~parents prnts_lst) 
-      with M.F r -> `Stop (adjacents, r, parents :: prnts_lst)
+    let pos = Nodes.position node in
+    let downc = down if_new g pos  in
+    let down acc ~adjacents ~new_nodes cur =
+      try `Continue (downc acc ~adjacents ~new_nodes cur)
+      with M.F r -> `Stop (adjacents, r, (NodeSet.union new_nodes cur))
     in
-    up_and_down ?max_height ~f ~init ~if_new ~search g node 
+    up_and ?max_height ~init ~if_new ~down g ~pos node
 
   (* A less general method that requires an extra predicate function to check
      the stopping condition. The advantage is that we check less frequently and
      probably when it matters: when we increase the level of how far back in
      the graph we look for adjacents. *)
   let check_by_levels ?max_height ~f ~stop ~init g node =
-    let if_new (_, e, n) ((adjacents, acc) as s) =
-      let ne = n, e in
-      if NodeEdgeSet.mem ne adjacents then s else
-        NodeEdgeSet.add ne adjacents, (f e n acc)
+    let if_new (pn, e, n) ((adjacents, acc) as s) =
+      if !debug_ref then
+        eprintf "if_new check of %s -> %s\n"
+          (Nodes.vertex_name pn) (Nodes.vertex_name n);
+      let en = e, n in
+      if EdgeNodeSet.mem en adjacents then s else
+        EdgeNodeSet.add en adjacents, (f e n acc)
     in
-    let search down acc ~adjacents ~parents prnts_lst =
+    let pos = Nodes.position node in
+    let downc = down if_new g pos in
+    let down acc ~adjacents ~new_nodes cur =
       let (nadjacents, nacc, ptl) as state =
-        down acc ~adjacents ~parents prnts_lst
+        downc acc ~adjacents ~new_nodes cur
       in
       if stop nacc then
-        `Stop (nadjacents, nacc,  parents :: prnts_lst)
+        `Stop (nadjacents, nacc, (NodeSet.union new_nodes cur))
       else
         `Continue state
     in
-    up_and_down ?max_height ~f ~init ~if_new ~search g node
+    up_and ?max_height ~init ~if_new ~down g ~pos node
 
 end (* Adjacents *)
 
-let find_root_position ({aindex; _} as gt) ~pos =
-  let all_edges = alleles_with_data gt ~pos in
-  let root_allele = Alleles.Set.min_elt aindex all_edges in
-  find_position gt root_allele ~pos >>= fun rp ->
-    Ok (root_allele, all_edges, rp)
-
-let debug_ref = ref false
-
-(* At or past  
+(* At or past *)
 let sequence_nodes_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
   find_root_position gt ~pos >>= fun (_root_allele, all_edges, (rootn, _precise)) ->
-    let stop (es_acc, _nlst) =
+    let stop es_acc =
       if es_acc = all_edges then true else
         begin
           if !debug_ref then
@@ -1000,20 +1073,14 @@ let sequence_nodes_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
           false
         end
     in
-    let f edge node (edge_set, acc) =
-      Alleles.Set.union edge edge_set, (edge, node) :: acc
+    let f edge node edge_set =
+      if !debug_ref then
+        eprintf "Adding %s <- %s\n"
+          (Nodes.vertex_name node)
+          (Alleles.Set.to_human_readable aindex edge);
+      Alleles.Set.union edge edge_set
     in
-    let (_root_es_acc, root_edges) as rp =
-      let init = Alleles.Set.init aindex, [] in
-      G.fold_pred_e (fun (_, e, n) a -> f e n a) g rootn init
-    in
-    (* The adjacent methods are "stupid" and can search excessively if what
-       they're searching for doesn't exist: such as if the the root node is
-       the only 'adjacent'. *)
-    if stop rp then
-      Ok root_edges
-    else
-      let adj, _, _ = Adjacents.check_by_levels ~max_height ~init:rp ~stop g rootn ~f in
-      Ok (NodeEdgeSet.to_list adj)
+    let init = Alleles.Set.init aindex in
+    (*let adj, _es, _stack = *) Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
+    (*Ok adj*)
 
-*)
