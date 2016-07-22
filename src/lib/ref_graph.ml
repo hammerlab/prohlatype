@@ -109,6 +109,8 @@ type t =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
+(** [starts_by_position g] returns an associated list of alignment_position and
+    an a set of alleles that start at that position. *)
 let starts_by_position { aindex; bounds; _ } =
   Alleles.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
@@ -120,7 +122,9 @@ let starts_by_position { aindex; bounds; _ } =
       with Not_found ->
         (pos, Alleles.Set.singleton aindex allele) :: asc))
 
-let create_compressed g =
+(** Compress the start nodes; join all the start nodes that have the same
+    alignment position into one node. *)
+let create_compressed_starts g =
   let start_asc = starts_by_position g in
   let ng = G.copy g.g in
   let open Nodes in
@@ -155,7 +159,7 @@ let insert_newline ?(every=120) ?(token=';') s =
 
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
-  let { aindex; g; _} = if compress_start then create_compressed t else t in
+  let { aindex; g; _} = if compress_start then create_compressed_starts t else t in
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
