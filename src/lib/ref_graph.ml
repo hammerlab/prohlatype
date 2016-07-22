@@ -569,31 +569,30 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   in
   start_loop [] alt_lst
 
-(* TODO: use a real heap/pq ds?
-  - The one in Graph doesn't allow you to control not putting in duplicates
-  *)
-
 module FoldAtSamePosition = struct
 
-  module Nq =
+  (* TODO: use a real heap/pq ds?
+    - The one in Graph doesn't allow you to control not putting in duplicates
+  *)
+  module NodeQueue =
     Set.Make(struct
       type t = Nodes.t
       let compare = Nodes.compare_by_position_first
     end)
 
-  let add_successors g = G.fold_succ Nq.add g
+  let add_successors g = G.fold_succ NodeQueue.add g
 
   let with_start_nodes {g; aindex; bounds } =
     let open Nodes in
-    Alleles.Map.fold aindex bounds ~init:Nq.empty
+    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
-                    Nq.add (S (fst sep.start, allele)) q))
+                    NodeQueue.add (S (fst sep.start, allele)) q))
 
   let after_start_nodes {g; aindex; bounds } =
     let open Nodes in
-    Alleles.Map.fold aindex bounds ~init:Nq.empty
+    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
@@ -601,14 +600,14 @@ module FoldAtSamePosition = struct
 
   let at_min_position q =
     let rec loop p q acc =
-      if q = Nq.empty then
+      if q = NodeQueue.empty then
         q, acc
       else
-        let me = Nq.min_elt q in
+        let me = NodeQueue.min_elt q in
         match acc with
-        | [] -> loop (Nodes.position me) (Nq.remove me q) [me]
+        | [] -> loop (Nodes.position me) (NodeQueue.remove me q) [me]
         | _  -> if Nodes.position me = p then
-                  loop p (Nq.remove me q) (me :: acc)
+                  loop p (NodeQueue.remove me q) (me :: acc)
                 else
                   q, acc
     in
@@ -623,7 +622,7 @@ module FoldAtSamePosition = struct
 
   let fold_from g q ~f ~init =
     let rec loop a q =
-      if q = Nq.empty then
+      if q = NodeQueue.empty then
         a
       else
         let nq, amp = step g.g q in
