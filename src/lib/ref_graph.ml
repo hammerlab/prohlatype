@@ -26,10 +26,10 @@ module Nodes = struct
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
-    | S (n, s)  -> sprintf "\"S%d-%s\"" n s
-    | E n       -> sprintf "\"E%d\"" n
-    | B (_, n)  -> sprintf "\"B%d\"" n
-    | N (n, s)  -> sprintf "\"%d%s\"" n (if short then short_seq s else s)
+    | S (n, s)  -> sprintf "S%d-%s" n s
+    | E n       -> sprintf "E%d" n
+    | B (p, n)  -> sprintf "B%%d-%d" n p
+    | N (n, s)  -> sprintf "%d%s" n (if short then short_seq s else s)
 
   let position = function
     | S (p, _) | E p | B (p, _) | N (p, _)  -> p
@@ -158,7 +158,7 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
       let graph_attributes _g = []
       let default_vertex_attributes _g = []
       let vertex_name v =
-        let s = Nodes.vertex_name ?short v in
+        let s = sprintf "\"%s\"" (Nodes.vertex_name ?short v) in
         if insert_newlines then insert_newline s else s
 
       let vertex_attributes _v = [`Shape `Box]
