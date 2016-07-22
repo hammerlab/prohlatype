@@ -41,6 +41,11 @@ module Nodes = struct
   let inside_seq p s ~pos =
     p < pos && pos < p + String.length s
 
+  let compare_by_position_first n1 n2 =
+    let compare_int (i1 : int) (i2 : int) = Pervasives.compare i1 i2 in
+    let r = compare_int (position n1) (position n2) in
+    if r = 0 then compare n1 n2 else r
+
   let hash = Hashtbl.hash
 end
 
@@ -564,13 +569,31 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   - The one in Graph doesn't allow you to control not putting in duplicates
   *)
 
-module Fold_at_same_position = struct
+module FoldAtSamePosition = struct
 
   module Nq =
     Set.Make(struct
       type t = Nodes.t
-      let compare = Nodes.compare
+      let compare = Nodes.compare_by_position_first
     end)
+
+  let add_successors g = G.fold_succ Nq.add g
+
+  let with_start_nodes {g; aindex; bounds } =
+    let open Nodes in
+    Alleles.Map.fold aindex bounds ~init:Nq.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    Nq.add (S (fst sep.start, allele)) q))
+
+  let after_start_nodes {g; aindex; bounds } =
+    let open Nodes in
+    Alleles.Map.fold aindex bounds ~init:Nq.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    add_successors g (S (fst sep.start, allele)) q))
 
   let at_min_position q =
     let rec loop p q acc =
@@ -587,30 +610,31 @@ module Fold_at_same_position = struct
     in
     loop min_int q []
 
-  let after_starts {g; aindex; bounds } =
-    let open Nodes in
-    let add_successors = G.fold_succ Nq.add g in
-    Alleles.Map.fold aindex bounds ~init:Nq.empty
-      ~f:(fun q sep_lst allele ->
-            List.fold_left sep_lst ~init:q
-              ~f:(fun q sep ->
-                    add_successors (S (fst sep.start, allele)) q))
+  let step g q =
+    let without_old, amp = at_min_position q in
+    let withnew =
+      List.fold_left amp ~init:without_old ~f:(fun q n -> add_successors g n q)
+    in
+    withnew, amp
 
-  let f g ~f ~init =
-    let add_successors = G.fold_succ Nq.add g.g in
-    let q = after_starts g in
+  let fold_from g q ~f ~init =
     let rec loop a q =
       if q = Nq.empty then
         a
       else
-        let nq, amp = at_min_position q in
+        let nq, amp = step g.g q in
         let na = f a amp in
-        let nqq = List.fold_left amp ~init:nq ~f:(fun q n -> add_successors n q) in
-        loop na nqq
+        loop na nq
     in
     loop init q
 
-end (* Fold_at_same_position *)
+  let fold_after_starts g ~f ~init =
+    fold_from g (after_start_nodes g) ~f ~init
+
+  let f g ~f ~init =
+    fold_from g (with_start_nodes g) ~f ~init
+
+end (* FoldAtSamePosition *)
 
 module JoinSameSequencePaths = struct
 
