@@ -7,7 +7,7 @@ let root_dir = "../foreign/IMGTHLA/"
 let all_args ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") () =
   { Cache.alignment_file = file
   ; Cache.which = None
-  ; Cache.normalize = true
+  ; Cache.join_same_sequence = true
   }
 
 let test_graph g pos =

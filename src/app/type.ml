@@ -34,12 +34,12 @@ let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   exp ((float c) *. lcp +. (float mismatches) *. lmp)
 
 
-let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file not_normalize =
+let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file not_join_same_seq =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-      (not not_normalize)
+      (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   printf " Got graph and index!\n%!";
@@ -96,7 +96,7 @@ let () =
     Term.(const type_
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
-            $ do_not_normalize_flag
+            $ do_not_join_same_sequence_paths_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with

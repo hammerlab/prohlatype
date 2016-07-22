@@ -55,13 +55,13 @@ let no_cache_flag =
   in
   Arg.(value & flag & info ~doc ["no-cache"])
 
-let do_not_normalize_flag =
-  let doc = "Do not normalize, remove overlapping nodes at the same position, \
-              in the string graph."
+let do_not_join_same_sequence_paths_flag =
+  let doc = "Do not join same sequence paths; remove overlapping nodes at the same position, \
+             in the string graph."
   in
-  Arg.(value & flag & info ~doc ["do-not-normalize"])
+  Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_filename_and_graph_args alignment_file num_alt_to_add allele_list normalize =
+let to_filename_and_graph_args alignment_file num_alt_to_add allele_list join_same_sequence =
   let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =
@@ -69,10 +69,10 @@ let to_filename_and_graph_args alignment_file num_alt_to_add allele_list normali
     | []  ->
         begin
           match num_alt_to_add with
-          | None   -> sprintf "%s_%b_all" base normalize, None
-          | Some n -> sprintf "%s_%b_%d" base normalize n, (Some (NumberOfAlts n))
+          | None   -> sprintf "%s_%b_all" base join_same_sequence, None
+          | Some n -> sprintf "%s_%b_%d" base join_same_sequence n, (Some (NumberOfAlts n))
         end
     | lst -> sprintf "%s_spec_%d" base (Hashtbl.hash lst), (Some (SpecificAlleles lst))
   in
-  option_based_fname, { Cache.alignment_file; Cache.which ; Cache.normalize }
+  option_based_fname, { Cache.alignment_file; Cache.which ; Cache.join_same_sequence }
 

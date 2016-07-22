@@ -4,7 +4,7 @@ open Util
 let cargs n =
   { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
   ; Cache.which = Some (Ref_graph.NumberOfAlts n)
-  ; Cache.normalize = true
+  ; Cache.join_same_sequence = true
   }
 
 let g_and_idx ?(k=10) n = (n, Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs n })
