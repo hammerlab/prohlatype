@@ -4,12 +4,12 @@ open Common_options
 
 let construct ofile alignment_file num_alt_to_add allele_list notshort no_pdf
       no_open skip_disk_cache max_edge_char_length not_human_edges
-      not_normalize not_compress_edges not_compress_start not_insert_newlines =
+      not_join_same_seq not_compress_edges not_compress_start not_insert_newlines =
   let open Ref_graph in
   let open Cache in
   let option_based_fname, cargs =
     to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-      (not not_normalize)
+      (not not_join_same_seq)
   in
   let ofile = Option.value ofile ~default:option_based_fname in
   let short = not notshort in
@@ -102,7 +102,7 @@ let () =
             $ no_cache_flag
             $ max_edge_char_length_flag
             $ not_human_edges_flag
-            $ do_not_normalize_flag
+            $ do_not_join_same_sequence_paths_flag
             $ do_not_compress_edges_flag
             $ do_not_compress_start_flag
             $ do_not_insert_newlines_flag
