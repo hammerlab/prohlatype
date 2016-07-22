@@ -19,13 +19,7 @@ let test_file file =
   let open Ref_graph in
   let all_args = all_args ~file:(root_dir // "alignments" // (file ^ ".txt")) () in
   let g = Cache.graph all_args in
-  let st, en =
-     g.bounds
-     |> Alleles.Map.fold g.aindex ~init:(max_int, min_int)
-        ~f:(fun p sep_lst _allele ->
-            List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
-              (min st (fst sep.Ref_graph.start)), (max en sep.Ref_graph.end_)))
-  in
+  let st, en = Ref_graph.range g in
   for i = st to en - 1 do
     printf "------------testing %d -------------\n" i;
     test_graph g i

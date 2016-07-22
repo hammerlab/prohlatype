@@ -640,6 +640,17 @@ module FoldAtSamePosition = struct
 
 end (* FoldAtSamePosition *)
 
+(** [range g] returns the minimum and maximum alignment position in [g]. *)
+let range { aindex; bounds; _ } =
+  Alleles.Map.fold aindex bounds ~init:(max_int, min_int)
+    ~f:(fun p sep_lst _allele ->
+          List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
+            (min st (fst sep.start)), (max en sep.end_)))
+ 
+(*  
+  let create_by_position {g; aindex; } =
+  *)
+
 module JoinSameSequencePaths = struct
 
   (* Alignment and sequence pair set used as queue *)
