@@ -38,8 +38,8 @@ module CompressNames = struct
 
     let rec to_last = function
       | And  (a, b) -> sprintf "%s,%s" (to_last a) (to_last b)
-      | From (a, b) -> sprintf "%d-%d" a b
-      | Just n      -> sprintf "%d" n
+      | From (a, b) -> sprintf "%0.2d-%0.2d" a b
+      | Just n      -> sprintf "%0.2d" n
 
     let rec last_val = function
       | And (_, v)  -> last_val v
@@ -124,6 +124,8 @@ module CompressNames = struct
 
 end  (* CompressNames *)
 
+let to_alleles { to_allele; _ } = Array.to_list to_allele
+
 module Set = struct
 
   type t = BitSet.t
@@ -142,6 +144,14 @@ module Set = struct
   let clear { to_index; _ } s allele =
     BitSet.unset s (SMap.find allele to_index)
 
+  let min_elt { size; to_allele; _ } s =
+    let rec loop idx =
+      if idx = size then raise Not_found else
+        if BitSet.is_set s idx then to_allele.(idx)
+        else loop (idx + 1)
+    in
+    loop 0
+
   let is_set { to_index; _ } s allele =
     BitSet.is_set s (SMap.find allele to_index)
 
@@ -151,6 +161,8 @@ module Set = struct
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
 
+  let cardinal = BitSet.count
+
   let empty = BitSet.empty
   let compare = BitSet.compare
   let equals = BitSet.equals
@@ -158,6 +170,8 @@ module Set = struct
   let union = BitSet.union
 
   let inter = BitSet.inter
+
+  let diff = BitSet.diff
 
   let complement {size; _} t =
     let c = BitSet.copy t in
@@ -249,5 +263,8 @@ module Map = struct
       s := f !s amap.(i) to_allele.(i)
     done;
     !s
+
+  let iter i ~f amap =
+    fold i ~init:() ~f:(fun () m a -> f m a) amap
 
 end (* Map *)

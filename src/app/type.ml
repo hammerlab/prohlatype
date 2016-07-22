@@ -22,9 +22,9 @@ let shitty_fastq_sequence_reader file f =
   Future.Pipe.iter fastq_rdr ~f:(fun oe ->
     let fastq_item = Or_error.ok_exn oe in
     let seq = fastq_item.Fastq.sequence in
-    match Graph_alignment.align ~mub:3 g kmt seq with
+    match Alignment.align ~mub:3 g kmt seq with
     | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-    | Ok als    -> List.iter als ~f:(Graph_alignment.alignments_to_weights amap));
+    | Ok als    -> List.iter als ~f:(Alignment.alignments_to_weights amap));
     *)
 
 let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
@@ -43,23 +43,23 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   printf " Got graph and index!\n%!";
-  let amap = Graph_alignment.init_alignment_map g.aindex in
+  let amap = Alignment.init_alignment_map g.aindex in
   printf " Aligning!\n%!";
   shitty_fastq_sequence_reader fastq_file (fun seq ->
     Printf.printf "aligning: %s\n%!" seq;
     match String.index_of_character seq 'N' with
     | Some _ -> printf "skipping N!\n"
     | None   ->
-      match Graph_index.lookup idx seq with
+      match Index.lookup idx seq with
       | Error m     -> printf "Error looking up %s\n" m
       | Ok []       -> printf "Empty for %s\n" seq
       | Ok (p :: _) ->  (* TODO, more than one! *)
-          let md = Graph_alignment.compute_mismatches g seq p in
+          let md = Alignment.compute_mismatches g seq p in
           let len = String.length seq in
           Alleles.Map.update2 md amap (fun m c ->
             c +. likelihood ~len m));
 
-  Graph_alignment.most_likely g.aindex amap
+  Alignment.most_likely g.aindex amap
   |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
 
 let () =

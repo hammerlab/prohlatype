@@ -95,16 +95,17 @@ let test_sequences file =
   let gall = Cache.graph all_args in
   let a_fasta = fasta_reader (root_dir // "fasta" // (file ^ ".fasta")) in
   List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
-    let graph_seq =
-      try Ref_graph.sequence gall allele
-      with Not_found ->
-        Printf.eprintf "missing %s!\n" allele;
-        ""
-    in
-    if seq <> graph_seq then
-      (allele, (seq, graph_seq)) :: acc
-    else
-      acc)
+    match Ref_graph.sequence gall allele with
+    (* TODO: This should be an Error not an exception! *)
+    | exception Not_found -> eprintf "Coudn't find sequence for %s\n" allele;
+                             (allele, (seq, "")) :: acc
+    | Error msg           -> eprintf "missing sequence for %s because %s!\n" allele msg;
+                             (allele, (seq, "")) :: acc
+    | Ok graph_seq        ->
+        if seq <> graph_seq then
+          (allele, (seq, graph_seq)) :: acc
+        else
+          acc)
   |> fun lst -> List.length a_fasta, lst
 
 let test ~reference file =

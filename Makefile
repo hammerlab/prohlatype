@@ -16,11 +16,24 @@ cli:
 clean:
 	ocamlbuild -clean
 
-tests:
+## Tests --- this might not scale
+
+parsing:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts test_parsing.native
+
+round_trip:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts round_trip.native
+
+same_alignment:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts same_alignments_test.native
 
+check_multiple:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts check_multiple.native
+
+adjacents:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts adjacents.native
+
+tests: parsing round_trip same_alignment check_multiple adjacents
 
 ## Tools:
 

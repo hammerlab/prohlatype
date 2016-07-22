@@ -1,4 +1,6 @@
 
+open Util
+
 let cargs ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") n =
   { Cache.alignment_file = file
   ; Cache.which = Some (Ref_graph.NumberOfAlts n)
@@ -11,23 +13,13 @@ let all_args ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") () =
   ; Cache.normalize = true
   } ;;
 
-let k = 10 ;;
-
-let gall, idxall =
-  Cache.graph_and_two_index
-    { Cache.k = k
-    ; Cache.g = all_args () };;
-
-let g_and_idx ?(k=10) ?file ?n () =
-  let g2 =
+let graph ?file ?n () =
+  let g =
     match n with
-    | None   -> Cache.graph_and_two_index { Cache.k = k; Cache.g = all_args ?file () }
-    | Some n -> Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs ?file n }
+    | None   -> Cache.graph (all_args ?file ())
+    | Some n -> Cache.graph (cargs ?file n)
   in
-  n, g2
-
-let lst = [3; 5; 10; 15; 20; 50; 100; 150; 200; 250]
-let idxs = List.map lst ~f:(fun n -> g_and_idx ~n ())
+  n, g
 
 let all_files =
   [ "../foreign/IMGTHLA/alignments/A_gen.txt"
@@ -91,3 +83,26 @@ let all_files =
   ; "../foreign/IMGTHLA/alignments/Y_gen.txt"
   ; "../foreign/IMGTHLA/alignments/Y_nuc.txt"
   ]
+
+let more_than_one_sb g =
+  Alleles.Map.fold g.Ref_graph.aindex ~f:(fun acc l all ->
+    if List.length l > 1 then
+      (all, l) :: acc
+    else acc)
+    ~init:[] g.Ref_graph.bounds
+
+let () =
+  all_files
+  |> List.filter_map ~f:(fun file ->
+      printf "--%s--\n%!" file;
+      let _, g = graph ~file () in
+      match more_than_one_sb g with
+      | [] -> None
+      | l -> Some (file, l))
+  |> List.iter ~f:(fun (f, l) ->
+      printf "in file %s: \n" f;
+      List.iter l ~f:(fun (a, slst) ->
+        printf "allele\t%s: %s\n"
+          a (String.concat ~sep:", "
+              (List.map slst ~f:(fun sep ->
+                sprintf "%d -> %d" (fst sep.Ref_graph.start) sep.Ref_graph.end_)))))

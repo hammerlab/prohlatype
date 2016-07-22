@@ -14,6 +14,8 @@ type index
 (** [index list_of_alleles] will create an [index]. *)
 val index : allele list -> index
 
+val to_alleles : index -> allele list
+
 module Set : sig
 
   type t
@@ -34,12 +36,18 @@ module Set : sig
       [false]. *)
   val clear : index -> t -> allele -> unit
 
+  (** [min_elt index t] returns the allele with the minimum value in [t]. *)
+  val min_elt : index -> t -> allele
+
   (** [is_set index t allele] is [allele] in [t]. *)
   val is_set : index -> t -> allele -> bool
 
   val fold : index -> f:('a -> allele -> 'a) -> init:'a -> t -> 'a
 
   val iter : index -> f:(allele -> unit) -> t -> unit
+
+  (** [cardinal t] returns the number of alleles found in [t]. *)
+  val cardinal : t -> int
 
   (** For graph construction. *)
   val empty : unit -> t
@@ -53,6 +61,10 @@ module Set : sig
   (** [inter e1 e2] will return an edge set with alleles found in both
       [e1] and [e2]. *)
   val inter : t -> t -> t
+
+  (** [diff e1 e2] will return an edge set with alleles found in [e1] but not
+      in [e2]. *)
+  val diff : t -> t -> t
 
   (** [complement index t] returns a set of all the alleles not in [t].*)
   val complement : index -> t -> t
@@ -111,7 +123,10 @@ module Map : sig
 
   val update2 : 'a t -> 'b t -> ('a -> 'b -> 'b) -> unit
 
-  (** [fold index f init amap] fold over all alleles found in the [map]. *)
+  (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
+
+  (** [iter index f map] iter over all allele assignments in the [map]. *)
+  val iter : index -> f:('b -> allele -> unit) -> 'b t -> unit
 
 end
