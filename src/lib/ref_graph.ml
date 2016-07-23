@@ -646,9 +646,24 @@ let range { aindex; bounds; _ } =
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
 
-(*
-  let create_by_position {g; aindex; } =
-  *)
+type by_position =
+  | NL of Nodes.t list
+  | Redirect of int
+
+let create_by_position gt =
+  let st, en = range gt in
+  let len = en - st + 1 in
+  let arr = Array.make len [] in
+  FoldAtSamePosition.(f gt ~init:() ~f:(fun () lst ->
+    let p = Nodes.position (List.hd_exn lst) in
+    let j = p - st in
+    arr.(j) <- lst));
+  let prev = ref 0 in
+  Array.mapi (fun i nl ->
+    match nl with
+    | [] -> Redirect !prev
+    | ls -> prev := i; NL ls)
+    arr
 
 module JoinSameSequencePaths = struct
 
