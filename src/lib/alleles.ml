@@ -136,6 +136,8 @@ module Set = struct
   let set { to_index; _ } s allele =
     BitSet.set s (SMap.find allele to_index)
 
+  let unite ~into from = BitSet.unite into from
+
   let singleton index allele =
     let s = init index in
     set index s allele;

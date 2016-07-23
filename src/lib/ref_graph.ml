@@ -41,6 +41,11 @@ module Nodes = struct
   let inside_seq p s ~pos =
     p < pos && pos < p + String.length s
 
+  let compare_by_position_first n1 n2 =
+    let compare_int (i1 : int) (i2 : int) = Pervasives.compare i1 i2 in
+    let r = compare_int (position n1) (position n2) in
+    if r = 0 then compare n1 n2 else r
+
   let hash = Hashtbl.hash
 end
 
@@ -104,6 +109,8 @@ type t =
   - When constructing the dot files, it would be nice if the alleles (edges),
     were in some kind of consistent order. *)
 
+(** [starts_by_position g] returns an associated list of alignment_position and
+    an a set of alleles that start at that position. *)
 let starts_by_position { aindex; bounds; _ } =
   Alleles.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
@@ -115,7 +122,9 @@ let starts_by_position { aindex; bounds; _ } =
       with Not_found ->
         (pos, Alleles.Set.singleton aindex allele) :: asc))
 
-let create_compressed g =
+(** Compress the start nodes; join all the start nodes that have the same
+    alignment position into one node. *)
+let create_compressed_starts g =
   let start_asc = starts_by_position g in
   let ng = G.copy g.g in
   let open Nodes in
@@ -150,7 +159,7 @@ let insert_newline ?(every=120) ?(token=';') s =
 
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
-  let { aindex; g; _} = if compress_start then create_compressed t else t in
+  let { aindex; g; _} = if compress_start then create_compressed_starts t else t in
   let oc = open_out fname in
   let module Dot = Graphviz.Dot (
     struct
@@ -560,57 +569,86 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   in
   start_loop [] alt_lst
 
-(* TODO: use a real heap/pq ds?
-  - The one in Graph doesn't allow you to control not putting in duplicates
+module FoldAtSamePosition = struct
+
+  (* TODO: use a real heap/pq ds?
+    - The one in Graph doesn't allow you to control not putting in duplicates
   *)
-
-module Fold_at_same_position = struct
-
-  module Nq =
+  module NodeQueue =
     Set.Make(struct
       type t = Nodes.t
-      let compare = Nodes.compare
+      let compare = Nodes.compare_by_position_first
     end)
+
+  let add_successors g = G.fold_succ NodeQueue.add g
+
+  let with_start_nodes {g; aindex; bounds } =
+    let open Nodes in
+    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    NodeQueue.add (S (fst sep.start, allele)) q))
+
+  let after_start_nodes {g; aindex; bounds } =
+    let open Nodes in
+    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    add_successors g (S (fst sep.start, allele)) q))
 
   let at_min_position q =
     let rec loop p q acc =
-      if q = Nq.empty then
+      if q = NodeQueue.empty then
         q, acc
       else
-        let me = Nq.min_elt q in
+        let me = NodeQueue.min_elt q in
         match acc with
-        | [] -> loop (Nodes.position me) (Nq.remove me q) [me]
+        | [] -> loop (Nodes.position me) (NodeQueue.remove me q) [me]
         | _  -> if Nodes.position me = p then
-                  loop p (Nq.remove me q) (me :: acc)
+                  loop p (NodeQueue.remove me q) (me :: acc)
                 else
                   q, acc
     in
     loop min_int q []
 
-  let after_starts {g; aindex; bounds } =
-    let open Nodes in
-    let add_successors = G.fold_succ Nq.add g in
-    Alleles.Map.fold aindex bounds ~init:Nq.empty
-      ~f:(fun q sep_lst allele ->
-            List.fold_left sep_lst ~init:q
-              ~f:(fun q sep ->
-                    add_successors (S (fst sep.start, allele)) q))
+  let step g q =
+    let without_old, amp = at_min_position q in
+    let withnew =
+      List.fold_left amp ~init:without_old ~f:(fun q n -> add_successors g n q)
+    in
+    withnew, amp
 
-  let f g ~f ~init =
-    let add_successors = G.fold_succ Nq.add g.g in
-    let q = after_starts g in
+  let fold_from g q ~f ~init =
     let rec loop a q =
-      if q = Nq.empty then
+      if q = NodeQueue.empty then
         a
       else
-        let nq, amp = at_min_position q in
+        let nq, amp = step g.g q in
         let na = f a amp in
-        let nqq = List.fold_left amp ~init:nq ~f:(fun q n -> add_successors n q) in
-        loop na nqq
+        loop na nq
     in
     loop init q
 
-end (* Fold_at_same_position *)
+  let fold_after_starts g ~f ~init =
+    fold_from g (after_start_nodes g) ~f ~init
+
+  let f g ~f ~init =
+    fold_from g (with_start_nodes g) ~f ~init
+
+end (* FoldAtSamePosition *)
+
+(** [range g] returns the minimum and maximum alignment position in [g]. *)
+let range { aindex; bounds; _ } =
+  Alleles.Map.fold aindex bounds ~init:(max_int, min_int)
+    ~f:(fun p sep_lst _allele ->
+          List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
+            (min st (fst sep.start)), (max en sep.end_)))
+
+(*
+  let create_by_position {g; aindex; } =
+  *)
 
 module JoinSameSequencePaths = struct
 
@@ -626,9 +664,15 @@ module JoinSameSequencePaths = struct
           r
     end)
 
+  let peak_min_position q =
+    if Apsq.is_empty q then
+      None
+    else
+      Some (fst (Apsq.min_elt q))
+
   let at_min_position q =
     let rec loop p q acc =
-      if q = Apsq.empty then
+      if Apsq.is_empty q then
         q, acc
       else
         let me = Apsq.min_elt q in
@@ -662,50 +706,81 @@ module JoinSameSequencePaths = struct
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
     let qstart = after_starts gg in
-    let split_and_rejoin q p s =
+    let unite_edges pv nv e =
+      try
+        let ecur = G.find_edge g pv nv in
+        let into = G.E.label ecur in
+        Alleles.Set.unite ~into e;
+      with Not_found ->
+          G.add_edge_e g (G.E.create pv e nv)
+    in
+    let split_and_rejoin ~index q p s =
       let node = N (p, s) in
       let pr = G.pred_e g node in
       let su = G.succ_e g node in
       G.remove_vertex g node;
-      let fs, sn = String.split_at s ~index:1 in
-      let p1 = p + 1 in
+      let fs, sn = String.split_at s ~index in
+      let p1 = p + index in
       let v1 = N (p, fs) in
-      G.add_vertex g v1;
+      if not (G.mem_vertex g v1) then G.add_vertex g v1;
       let s_inter =
         List.fold_left pr ~init:(A.Set.init aindex)
-            ~f:(fun bta (p, bt, _) ->
-                  G.add_edge_e g (G.E.create p bt v1);
-                  A.Set.union bt bta)
+          ~f:(fun bta (p, bt, _) ->
+                unite_edges p v1 bt;
+                A.Set.union bt bta)
       in
       let v2 = N (p1, sn) in
-      G.add_vertex g v2;
-      G.add_edge_e g (G.E.create v1 s_inter v2);
-      List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
+      if not (G.mem_vertex g v2) then G.add_vertex g v2;
+      unite_edges v1 v2 s_inter;
+      List.iter su ~f:(fun (_, e, s) -> unite_edges v2 s e);
       Apsq.add (p1, sn) q
     in
-    let flatten q ls =
-      match List.partition (fun (_, s) -> String.length s = 1) ls with
-      | [], [] -> invalid_argf "asked to flatten an empty list, bug in at_min_position"
-      | [], m :: [] -> q  (* single multiple branch, don't split! *)
-                      (* TODO: Do we care about preserving different multiple cases:
-                        [ "AC"; "GT"]. This method could be made marter *)
-      | [], mltpl   -> List.fold_left mltpl ~init:q ~f:(fun q (p, s) ->
-                          split_and_rejoin q p s)
-      | sngl, []    -> List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                          add_successors (N (p, s)) q)
-      | sngl, mltpl -> let nq =
-                        List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                          add_successors (N (p, s)) q)
-                      in
-                      List.fold_left mltpl ~init:nq ~f:(fun q (p, s) ->
-                              split_and_rejoin q p s)
+    (* assume the list isn't empty *)
+    let find_higest_index ~must_split lst =
+      let init = Option.value must_split ~default:max_int in
+      let max_compare_length =
+        List.fold_left lst ~init ~f:(fun l (_p, s) ->
+          min l (String.length s))
+      in
+      let arr = [| 0; 0; 0; 0 |] in
+      let rec loop index =
+        if index >= max_compare_length then
+          index
+        else begin
+          for i = 0 to 3 do arr.(i) <- 0 done;
+          List.iter lst ~f:(fun (_p, s) ->
+            let c = String.get_exn s ~index in
+            let j = Kmer_to_int.char_to_int c in
+            arr.(j) <- arr.(j) + 1);
+          match arr with
+          | [| n; 0; 0; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; n; 0; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; 0; n; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; 0; 0; n |] when n >= 1 -> loop (index + 1)
+          | _                            -> index + 1
+        end
+      in
+      loop 0
+    in
+    let flatten ~next_pos q = function
+      | []                -> q
+      | (p, s) :: []      -> add_successors (N (p, s)) q
+      | (p, _) :: _ as ls ->
+          let must_split = Option.map ~f:(fun pn -> pn - p) next_pos in
+          let split_index = find_higest_index ~must_split ls in
+          List.fold_left ls ~init:q ~f:(fun q (p, s) ->
+            if String.length s <= split_index then
+              add_successors (N (p, s)) q
+            else
+              split_and_rejoin ~index:split_index q p s)
     in
     let rec loop q =
       if q = Apsq.empty then
         ()
       else
         let nq, amp = at_min_position q in
-        let nq = flatten nq amp in
+        let next_pos = peak_min_position nq in
+        let nq = flatten ~next_pos nq amp in
         loop nq
     in
     loop qstart
