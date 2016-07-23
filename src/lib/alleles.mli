@@ -31,6 +31,8 @@ module Set : sig
       *)
   val set : index -> t -> allele -> unit
 
+  val unite : into:t -> t -> unit
+
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
       [false]. *)

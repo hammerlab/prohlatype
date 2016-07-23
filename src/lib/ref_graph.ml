@@ -645,8 +645,8 @@ let range { aindex; bounds; _ } =
     ~f:(fun p sep_lst _allele ->
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
- 
-(*  
+
+(*
   let create_by_position {g; aindex; } =
   *)
 
@@ -696,10 +696,24 @@ module JoinSameSequencePaths = struct
               ~f:(fun q sep ->
                     add_successors (S (fst sep.start, allele)) q))
 
+  let debug_same_sequence = ref false
+
   let do_it ({g; aindex; _ } as gg) =
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
     let qstart = after_starts gg in
+    let unite_edges pv nv e =
+      try
+        let ecur = G.find_edge g pv nv in
+        let into = G.E.label ecur in
+        if !debug_same_sequence then
+          printf "Awesome uniting %s into %s\n"
+            (Alleles.Set.to_human_readable aindex ~compress:true e)
+            (Alleles.Set.to_human_readable aindex ~compress:true into);
+          Alleles.Set.unite ~into e;
+        with Not_found ->
+          G.add_edge_e g (G.E.create pv e nv)
+    in
     let split_and_rejoin q p s =
       let node = N (p, s) in
       let pr = G.pred_e g node in
@@ -708,35 +722,47 @@ module JoinSameSequencePaths = struct
       let fs, sn = String.split_at s ~index:1 in
       let p1 = p + 1 in
       let v1 = N (p, fs) in
-      G.add_vertex g v1;
+      if not (G.mem_vertex g v1) then G.add_vertex g v1;
       let s_inter =
         List.fold_left pr ~init:(A.Set.init aindex)
-            ~f:(fun bta (p, bt, _) ->
-                  G.add_edge_e g (G.E.create p bt v1);
-                  A.Set.union bt bta)
+          ~f:(fun bta (p, bt, _) ->
+                unite_edges p v1 bt;
+                A.Set.union bt bta)
       in
       let v2 = N (p1, sn) in
-      G.add_vertex g v2;
-      G.add_edge_e g (G.E.create v1 s_inter v2);
-      List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
+      if not (G.mem_vertex g v2) then G.add_vertex g v2;
+      unite_edges v1 v2 s_inter;
+      List.iter su ~f:(fun (_, e, s) -> unite_edges v2 s e);
       Apsq.add (p1, sn) q
     in
     let flatten q ls =
       match List.partition (fun (_, s) -> String.length s = 1) ls with
-      | [], [] -> invalid_argf "asked to flatten an empty list, bug in at_min_position"
-      | [], m :: [] -> q  (* single multiple branch, don't split! *)
-                      (* TODO: Do we care about preserving different multiple cases:
-                        [ "AC"; "GT"]. This method could be made marter *)
-      | [], mltpl   -> List.fold_left mltpl ~init:q ~f:(fun q (p, s) ->
-                          split_and_rejoin q p s)
-      | sngl, []    -> List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                          add_successors (N (p, s)) q)
-      | sngl, mltpl -> let nq =
-                        List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                          add_successors (N (p, s)) q)
-                      in
-                      List.fold_left mltpl ~init:nq ~f:(fun q (p, s) ->
-                              split_and_rejoin q p s)
+      | [],   []          ->  invalid_argf "asked to flatten an empty list, bug in at_min_position"
+      | [],   (p,s) :: [] ->  if !debug_same_sequence then
+                                printf "single multi branch at %d of %s\n" p s;
+                              add_successors (N (p, s)) q  (* single multiple branch, don't split! *)
+                              (* TODO: Do we care about preserving different multiple cases:
+                                [ "AC"; "GT"]. This method could be made marter *)
+      | [],   mltpl       ->  if !debug_same_sequence then
+                                print_endline "multi branch:";
+                              List.fold_left mltpl ~init:q ~f:(fun q (p, s) ->
+                                if !debug_same_sequence then
+                                  printf ":::%d-%s\n" p s;
+                                split_and_rejoin q p s)
+      | sngl, []          ->  List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
+                                add_successors (N (p, s)) q)
+      | sngl, mltpl       ->  if !debug_same_sequence then
+                                print_endline "single AND multi branch:";
+                              let nq =
+                                List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
+                                  if !debug_same_sequence then
+                                    printf "%d-%s\n" p s;
+                                  add_successors (N (p, s)) q)
+                              in
+                              List.fold_left mltpl ~init:nq ~f:(fun q (p, s) ->
+                                  if !debug_same_sequence then
+                                    printf ":::%d-%s\n" p s;
+                                split_and_rejoin q p s)
     in
     let rec loop q =
       if q = Apsq.empty then
