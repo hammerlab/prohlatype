@@ -664,9 +664,15 @@ module JoinSameSequencePaths = struct
           r
     end)
 
+  let peak_min_position q =
+    if Apsq.is_empty q then
+      None
+    else
+      Some (fst (Apsq.min_elt q))
+
   let at_min_position q =
     let rec loop p q acc =
-      if q = Apsq.empty then
+      if Apsq.is_empty q then
         q, acc
       else
         let me = Apsq.min_elt q in
@@ -696,8 +702,6 @@ module JoinSameSequencePaths = struct
               ~f:(fun q sep ->
                     add_successors (S (fst sep.start, allele)) q))
 
-  let debug_same_sequence = ref false
-
   let do_it ({g; aindex; _ } as gg) =
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
@@ -706,21 +710,17 @@ module JoinSameSequencePaths = struct
       try
         let ecur = G.find_edge g pv nv in
         let into = G.E.label ecur in
-        if !debug_same_sequence then
-          printf "Awesome uniting %s into %s\n"
-            (Alleles.Set.to_human_readable aindex ~compress:true e)
-            (Alleles.Set.to_human_readable aindex ~compress:true into);
-          Alleles.Set.unite ~into e;
-        with Not_found ->
+        Alleles.Set.unite ~into e;
+      with Not_found ->
           G.add_edge_e g (G.E.create pv e nv)
     in
-    let split_and_rejoin q p s =
+    let split_and_rejoin ~index q p s =
       let node = N (p, s) in
       let pr = G.pred_e g node in
       let su = G.succ_e g node in
       G.remove_vertex g node;
-      let fs, sn = String.split_at s ~index:1 in
-      let p1 = p + 1 in
+      let fs, sn = String.split_at s ~index in
+      let p1 = p + index in
       let v1 = N (p, fs) in
       if not (G.mem_vertex g v1) then G.add_vertex g v1;
       let s_inter =
@@ -735,41 +735,52 @@ module JoinSameSequencePaths = struct
       List.iter su ~f:(fun (_, e, s) -> unite_edges v2 s e);
       Apsq.add (p1, sn) q
     in
-    let flatten q ls =
-      match List.partition (fun (_, s) -> String.length s = 1) ls with
-      | [],   []          ->  invalid_argf "asked to flatten an empty list, bug in at_min_position"
-      | [],   (p,s) :: [] ->  if !debug_same_sequence then
-                                printf "single multi branch at %d of %s\n" p s;
-                              add_successors (N (p, s)) q  (* single multiple branch, don't split! *)
-                              (* TODO: Do we care about preserving different multiple cases:
-                                [ "AC"; "GT"]. This method could be made marter *)
-      | [],   mltpl       ->  if !debug_same_sequence then
-                                print_endline "multi branch:";
-                              List.fold_left mltpl ~init:q ~f:(fun q (p, s) ->
-                                if !debug_same_sequence then
-                                  printf ":::%d-%s\n" p s;
-                                split_and_rejoin q p s)
-      | sngl, []          ->  List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                                add_successors (N (p, s)) q)
-      | sngl, mltpl       ->  if !debug_same_sequence then
-                                print_endline "single AND multi branch:";
-                              let nq =
-                                List.fold_left sngl ~init:q ~f:(fun q (p, s) ->
-                                  if !debug_same_sequence then
-                                    printf "%d-%s\n" p s;
-                                  add_successors (N (p, s)) q)
-                              in
-                              List.fold_left mltpl ~init:nq ~f:(fun q (p, s) ->
-                                  if !debug_same_sequence then
-                                    printf ":::%d-%s\n" p s;
-                                split_and_rejoin q p s)
+    (* assume the list isn't empty *)
+    let find_higest_index ~must_split lst =
+      let init = Option.value must_split ~default:max_int in
+      let max_compare_length =
+        List.fold_left lst ~init ~f:(fun l (_p, s) ->
+          min l (String.length s))
+      in
+      let arr = [| 0; 0; 0; 0 |] in
+      let rec loop index =
+        if index >= max_compare_length then
+          index
+        else begin
+          for i = 0 to 3 do arr.(i) <- 0 done;
+          List.iter lst ~f:(fun (_p, s) ->
+            let c = String.get_exn s ~index in
+            let j = Kmer_to_int.char_to_int c in
+            arr.(j) <- arr.(j) + 1);
+          match arr with
+          | [| n; 0; 0; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; n; 0; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; 0; n; 0 |] when n >= 1 -> loop (index + 1)
+          | [| 0; 0; 0; n |] when n >= 1 -> loop (index + 1)
+          | _                            -> index + 1
+        end
+      in
+      loop 0
+    in
+    let flatten ~next_pos q = function
+      | []                -> q
+      | (p, s) :: []      -> add_successors (N (p, s)) q
+      | (p, _) :: _ as ls ->
+          let must_split = Option.map ~f:(fun pn -> pn - p) next_pos in
+          let split_index = find_higest_index ~must_split ls in
+          List.fold_left ls ~init:q ~f:(fun q (p, s) ->
+            if String.length s <= split_index then
+              add_successors (N (p, s)) q
+            else
+              split_and_rejoin ~index:split_index q p s)
     in
     let rec loop q =
       if q = Apsq.empty then
         ()
       else
         let nq, amp = at_min_position q in
-        let nq = flatten nq amp in
+        let next_pos = peak_min_position nq in
+        let nq = flatten ~next_pos nq amp in
         loop nq
     in
     loop qstart
