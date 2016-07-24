@@ -97,10 +97,16 @@ let between g start stop =
   add_from start;
   ng
 
+type by_position =
+  | NL of Nodes.t list
+  | Redirect of int
+
 type t =
   { g       : G.t
   ; aindex  : A.index
   ; bounds  : sep list A.Map.t
+  ; posarr  : by_position array
+  ; offset  : int
   }
 
 (** Output **)
@@ -124,27 +130,27 @@ let starts_by_position { aindex; bounds; _ } =
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
-let create_compressed_starts g =
-  let start_asc = starts_by_position g in
-  let ng = G.copy g.g in
+let create_compressed_starts t =
+  let start_asc = starts_by_position t in
+  let ng = G.copy t.g in
   let open Nodes in
   List.iter start_asc ~f:(fun (pos, allele_set) ->
     if Alleles.Set.cardinal allele_set > 1 then begin
-      let a_str = Alleles.Set.to_string ~compress:true g.aindex allele_set in
+      let a_str = Alleles.Set.to_string ~compress:true t.aindex allele_set in
       let node = G.V.create (S (pos, a_str)) in
       G.add_vertex ng node;
-      Alleles.Set.iter g.aindex allele_set ~f:(fun allele ->
+      Alleles.Set.iter t.aindex allele_set ~f:(fun allele ->
         let rm = S (pos, allele) in
         G.iter_succ (fun sv ->
           try
             let eset = G.find_edge ng node sv |> G.E.label in
-            Alleles.Set.set g.aindex eset allele
+            Alleles.Set.set t.aindex eset allele
           with Not_found ->
-            let bt = Alleles.Set.singleton g.aindex allele in
+            let bt = Alleles.Set.singleton t.aindex allele in
             G.add_edge_e ng (G.E.create node bt sv)) ng rm;
         G.remove_vertex ng rm)
     end);
-  { g = ng; aindex = g.aindex; bounds = g.bounds }
+  { t with g = ng }
 
 let insert_newline ?(every=120) ?(token=';') s =
   String.to_character_list s
@@ -582,7 +588,7 @@ module FoldAtSamePosition = struct
 
   let add_successors g = G.fold_succ NodeQueue.add g
 
-  let with_start_nodes {g; aindex; bounds } =
+  let with_start_nodes g aindex bounds =
     let open Nodes in
     Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
@@ -590,7 +596,7 @@ module FoldAtSamePosition = struct
               ~f:(fun q sep ->
                     NodeQueue.add (S (fst sep.start, allele)) q))
 
-  let after_start_nodes {g; aindex; bounds } =
+  let after_start_nodes g aindex bounds =
     let open Nodes in
     Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
@@ -625,36 +631,35 @@ module FoldAtSamePosition = struct
       if q = NodeQueue.empty then
         a
       else
-        let nq, amp = step g.g q in
+        let nq, amp = step g q in
         let na = f a amp in
         loop na nq
     in
     loop init q
 
-  let fold_after_starts g ~f ~init =
-    fold_from g (after_start_nodes g) ~f ~init
+  let fold_after_starts g aindex bounds ~f ~init =
+    fold_from g (after_start_nodes g aindex bounds) ~f ~init
 
-  let f g ~f ~init =
-    fold_from g (with_start_nodes g) ~f ~init
+  let f g aindex bounds ~f ~init =
+    fold_from g (with_start_nodes g aindex bounds) ~f ~init
 
 end (* FoldAtSamePosition *)
 
-(** [range g] returns the minimum and maximum alignment position in [g]. *)
-let range { aindex; bounds; _ } =
+let range_pr aindex bounds =
   Alleles.Map.fold aindex bounds ~init:(max_int, min_int)
     ~f:(fun p sep_lst _allele ->
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
 
-type by_position =
-  | NL of Nodes.t list
-  | Redirect of int
+(** [range g] returns the minimum and maximum alignment position in [g]. *)
+let range { aindex; bounds; _ } =
+  range_pr aindex bounds
 
-let create_by_position gt =
-  let st, en = range gt in
+let create_by_position g aindex bounds =
+  let st, en = range_pr aindex bounds in
   let len = en - st + 1 in
   let arr = Array.make len [] in
-  FoldAtSamePosition.(f gt ~init:() ~f:(fun () lst ->
+  FoldAtSamePosition.(f g aindex bounds ~init:() ~f:(fun () lst ->
     let p = Nodes.position (List.hd_exn lst) in
     let j = p - st in
     arr.(j) <- lst));
@@ -664,6 +669,21 @@ let create_by_position gt =
     | [] -> Redirect !prev
     | ls -> prev := i; NL ls)
     arr
+
+(* Does the position array make sense:
+  garr
+  |> Array.fold_left ~init:(0,1) ~f:(fun (i, x) e ->
+      match e with
+      | Redirect _ when x <= 0 -> invalid_argf "at %d" i
+      | Redirect _             -> (i + 1, x - 1)
+      |NL _ when x < 0         -> invalid_argf "at %d" i
+      | NL nl                  -> (i + 1,
+        List.map nl ~f:(function
+          | Nodes.S _ -> 0
+          | Nodes.E _ -> 0
+          | Nodes.B _ -> 0
+          | Nodes.N (_p, s) -> String.length s - 1)
+        |> List.fold_left ~init:min_int ~f:max)); *)
 
 module JoinSameSequencePaths = struct
 
@@ -708,7 +728,7 @@ module JoinSameSequencePaths = struct
     | S _
     | B _      -> G.fold_succ (add_node_successors_only g) g v q
 
-  let after_starts {g; aindex; bounds} =
+  let after_starts g aindex bounds =
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
     Alleles.Map.fold aindex bounds ~init:Apsq.empty
@@ -717,10 +737,10 @@ module JoinSameSequencePaths = struct
               ~f:(fun q sep ->
                     add_successors (S (fst sep.start, allele)) q))
 
-  let do_it ({g; aindex; _ } as gg) =
+  let do_it g aindex bounds =
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
-    let qstart = after_starts gg in
+    let qstart = after_starts g aindex bounds in
     let unite_edges pv nv e =
       try
         let ecur = G.find_edge g pv nv in
@@ -846,9 +866,16 @@ let construct_from_parsed ?which ?(join_same_sequence=true) r =
   let bounds =
     A.Map.init aindex (fun allele -> List.rev (List.assoc allele start_and_stop_assoc))
   in
-  let gg = { g; aindex; bounds } in
-  if join_same_sequence then JoinSameSequencePaths.do_it gg;
-  gg
+  if join_same_sequence then
+    JoinSameSequencePaths.do_it g aindex bounds; (* mutates 'g' *)
+  let offset = fst (range_pr aindex bounds) in
+  let posarr = create_by_position g aindex bounds in
+  { g
+  ; aindex
+  ; bounds
+  ; offset
+  ; posarr
+  }
 
 let construct_from_file ~join_same_sequence ?which file =
   construct_from_parsed ~join_same_sequence ?which (Mas_parser.from_file file)
