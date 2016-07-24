@@ -908,7 +908,7 @@ let find_bound g allele ~pos =
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
 
-let find_position ?(next_after=false) {g; aindex; offset; posarr; _} allele ~pos =
+let find_node_at ?(next_after=false) {g; aindex; offset; posarr; _} allele ~pos =
   let module M = struct exception Found end in
   let open Nodes in
   let is_along_allele node =
@@ -954,13 +954,13 @@ let parse_start_arg g allele =
       else
         error "%s vertex not in graph" (vertex_name s)
   | Some (`AtPos p)   ->
-      find_position g allele p >>= fun v ->
+      find_node_at g allele p >>= fun v ->
         if position v = p then
           Ok [v]
         else
           error "Couldn't find precise starting pos %d" p
   | Some (`AtNext p)  ->
-      find_position g allele p >>= fun v -> Ok [v]
+      find_node_at g allele p >>= fun v -> Ok [v]
   | None              ->
       match A.Map.get g.aindex g.bounds allele with
       | []  -> error "Allele %s not found in graph!" allele
@@ -1037,7 +1037,7 @@ let search_through_gap g node ~pos =
 let find_root_position ({g; aindex; _} as gt) ~pos =
   let all_edges = alleles_with_data gt ~pos in
   let root_allele = Alleles.Set.min_elt aindex all_edges in
-  find_position ~next_after:true gt root_allele ~pos >>=
+  find_node_at ~next_after:true gt root_allele ~pos >>=
     fun rootn ->
       if Nodes.position rootn > pos then begin  (* In a gap, work backwards! *)
         search_through_gap g rootn ~pos >>= fun (n, e) ->

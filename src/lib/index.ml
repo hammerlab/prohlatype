@@ -118,7 +118,7 @@ type position =
 
 let specific_position g allele alp =
   let open Nodes in
-  Ref_graph.find_position g allele alp >>= function
+  Ref_graph.find_node_at g allele alp >>= function
     | S _      -> error "%d for %s is at Start " alp allele
     | E _      -> error "%d for %s is at End " alp allele
     | B _      -> error "%d for %s is at Boundary " alp allele
