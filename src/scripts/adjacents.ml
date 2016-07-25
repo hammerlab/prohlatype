@@ -12,7 +12,7 @@ let all_args ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") () =
 
 let test_graph g pos =
   let open Ref_graph in
-  let ens, es, stack = sequence_nodes_at g ~pos |> unwrap_ok in
+  let ens, es, stack = adjacents_at g ~pos |> unwrap_ok in
   print_endline (edge_node_set_to_table g.aindex ens) ;;
 
 let test_file file =

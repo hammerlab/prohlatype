@@ -908,64 +908,89 @@ let find_bound g allele ~pos =
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
 
-let find_node_at ?(next_after=false) {g; aindex; offset; posarr; _} allele ~pos =
+(* This methods advantage is that [next_after] works ! *)
+let find_position_old ?(next_after=false) t ~allele ~pos =
+  let open Nodes in
+  let next_after o v = if next_after then Some (v, false) else o in
+  find_bound t allele ~pos >>= fun bound ->
+    let start = S (fst bound.start, allele) in
+    fold_along_allele t.g t.aindex allele ~start ~init:None
+      ~f:(fun o v ->
+            match v with
+            | S (p, _) when p <= pos                   -> o, `Continue
+            | S (p, _) (*   p > pos *)                 -> next_after o v, `Stop
+            | E p                                      -> next_after o v, `Stop
+            | B (p, _) when p = pos                    -> Some (v, true), `Stop
+            | B (p, _) when p > pos                    -> next_after o v, `Stop
+            | B (p, _) (*   p < pos*)                  -> o, `Continue
+            | N (p, s) when p = pos                    -> Some (v, true), `Stop
+            | N (p, s) when inside_seq p s ~pos        -> Some (v, false), `Stop
+            | N (p, s) when p < pos                    -> o, `Continue
+            | N (p, s)  (* p + String.length s > pos*) -> next_after o v, `Stop)
+    |> Option.value_map ~default:(error "%d in a gap" pos)
+        ~f:(fun x -> Ok x)
+
+let find_node_at ?allele ?ongap ~pos { g; aindex; offset; posarr; _} =
   let module M = struct exception Found end in
   let open Nodes in
-  let is_along_allele node =
-    try
-      G.fold_pred_e (fun (_, e, _) _b ->
-        if Alleles.Set.is_set aindex e allele then
-          raise M.Found else false) g node false
-    with M.Found ->
-      true
-  in
-  let is_seq_or_boundary = function
+  let is_seq_or_boundary =
+    let open Nodes in function
     | N _ | B _ -> true | S _ | E _ -> false
   in
-  let from_list lst =
-    let node_opt =
-    List.find lst ~f:(fun n -> is_seq_or_boundary n
-      && inside pos n
-      && is_along_allele n)
-    in
-    match node_opt with
-    | None   -> error "%d in a gap for %s" pos allele
-    | Some n -> Ok n
+  let all_str, test =
+    match allele with
+    | None   -> "", (fun n -> is_seq_or_boundary n && Nodes.inside pos n)
+    | Some a ->
+        let is_along_allele node =
+          try
+            G.fold_pred_e (fun (_, e, _) _b ->
+              if Alleles.Set.is_set aindex e a then
+                raise M.Found else false) g node false
+          with M.Found ->
+            true
+        in
+        (" " ^ a)
+        , (fun n -> is_seq_or_boundary n && is_along_allele n && Nodes.inside pos n)
   in
-  let rec lookup_at ~redirect j =
+  let from_list lst =
+    match List.find lst ~f:test with
+    | Some n -> Ok n
+    | None   ->
+        begin match ongap with
+        | None   -> error "%sin a gap at %d" all_str pos
+        | Some f -> f lst
+        end
+  in
+  let rec lookup_at redirect j =
     match posarr.(j) with
     | NL ls           -> from_list ls
-    | Redirect (p, n) ->
+    | Redirect (p, _) ->
         if redirect then
-          if next_after then
-            lookup_at ~redirect:false n
-          else
-            lookup_at ~redirect:false p
+          lookup_at false p
         else
-          error "Double redirect at %d" j (* TODO: replace array with GADT *)
+          error "Double redirect at %d" j (* TODO: replace array with GADT? *)
   in
-  lookup_at ~redirect:true (pos - offset)
+  lookup_at true (pos - offset)
 
 let parse_start_arg g allele =
+  let id x = x in
   let open Nodes in function
-  | Some (`Node s)    ->
+  | Some (`Node s)      ->
       if G.mem_vertex g.g s then
-        Ok [ s ]
+        Ok ([s], id)
       else
         error "%s vertex not in graph" (vertex_name s)
-  | Some (`AtPos p)   ->
-      find_node_at g allele p >>= fun v ->
-        if position v = p then
-          Ok [v]
-        else
-          error "Couldn't find precise starting pos %d" p
-  | Some (`AtNext p)  ->
-      find_node_at g allele p >>= fun v -> Ok [v]
-  | None              ->
+  | Some (`AtPos pos)   ->
+      find_node_at ~allele ~pos g >>= fun v ->
+        Ok ([v], String.drop ~index:(pos - position v))
+  | Some (`AtNext pos)  ->
+      find_position_old ~allele ~pos g >>= fun (v, precise) ->
+        Ok ([v], if precise then id else String.drop ~index:(pos - position v))
+  | None                ->
       match A.Map.get g.aindex g.bounds allele with
       | []  -> error "Allele %s not found in graph!" allele
       | spl -> Ok (List.map spl ~f:(fun sep ->
-                        Nodes.S (fst sep.start, allele)))
+                        Nodes.S (fst sep.start, allele)), id)
 
 let parse_stop_arg =
   let stop_if b = if b then `Stop else `Continue in
@@ -983,18 +1008,19 @@ let parse_stop_arg =
 let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
   let open Nodes in
   parse_start_arg gt allele start
-  >>= fun start ->
-    let stop, pp = parse_stop_arg stop in
-    List.fold_left start ~init:[] ~f:(fun acc start ->
-      fold_along_allele g aindex allele ~start ~init:acc
-        ~f:(fun clst node ->
-              match node with
-              | N (_, s)          -> (s :: clst, stop node)
-              | S _ | E _ | B _   -> (clst, stop node)))
-    |> List.rev
-    |> String.concat
-    |> pp
-    |> fun s -> Ok s
+    >>= fun (start, pre) ->
+      let stop, post = parse_stop_arg stop in
+      List.fold_left start ~init:[] ~f:(fun acc start ->
+        fold_along_allele g aindex allele ~start ~init:acc
+          ~f:(fun clst node ->
+                match node with
+                | N (_, s)          -> (s :: clst, stop node)
+                | S _ | E _ | B _   -> (clst, stop node)))
+      |> List.rev
+      |> String.concat
+      |> pre
+      |> post
+      |> fun s -> Ok s
 
 let alleles_with_data { aindex; bounds; _} ~pos =
   let es = Alleles.Set.init aindex in
@@ -1034,17 +1060,17 @@ let search_through_gap g node ~pos =
       | None   -> error "Couldn't work through gap before %s for %d"
                     (Nodes.vertex_name node) pos
 
-let find_root_position ({g; aindex; _} as gt) ~pos =
+(*let find_root_position ({g; aindex; _} as gt) ~pos =
   let all_edges = alleles_with_data gt ~pos in
   let root_allele = Alleles.Set.min_elt aindex all_edges in
-  find_node_at ~next_after:true gt root_allele ~pos >>=
+  find_node_at ~next_if_gap:true gt root_allele ~pos >>=
     fun rootn ->
       if Nodes.position rootn > pos then begin  (* In a gap, work backwards! *)
         search_through_gap g rootn ~pos >>= fun (n, e) ->
           let new_root_allele = Alleles.Set.min_elt aindex e in
           Ok (new_root_allele, all_edges, n)
       end else
-        Ok (root_allele, all_edges, rootn)
+        Ok (root_allele, all_edges, rootn) *)
 
 module NodeSet = MoreLabels.Set.Make
   (struct
@@ -1211,8 +1237,9 @@ module Adjacents = struct
 end (* Adjacents *)
 
 (* At or past *)
-let sequence_nodes_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
-  find_root_position gt ~pos >>= fun (_root_allele, all_edges, rootn) ->
+let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
+ find_node_at gt ~pos >>= fun rootn ->
+    let all_edges = alleles_with_data gt ~pos in
     let stop es_acc =
       if es_acc = all_edges then true else
         begin
@@ -1230,6 +1257,5 @@ let sequence_nodes_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
       Alleles.Set.union edge edge_set
     in
     let init = Alleles.Set.init aindex in
-    (*let adj, _es, _stack = *) Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
-    (*Ok adj*)
+    Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
 
