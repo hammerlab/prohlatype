@@ -10,10 +10,13 @@ let all_args ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") () =
   ; Cache.join_same_sequence = true
   }
 
-let test_graph g pos =
+let test_graph file g pos =
   let open Ref_graph in
-  let ens, es, stack = adjacents_at g ~pos |> unwrap_ok in
-  print_endline (edge_node_set_to_table g.aindex ens) ;;
+  match adjacents_at g ~pos with
+  | Error e ->
+      printf "Couldn't find adjacents at %d for %s because of %s" pos file e
+  | Ok (ens, es, stack) ->
+      print_endline (edge_node_set_to_table g.aindex ens)
 
 let test_file file =
   let open Ref_graph in
@@ -22,7 +25,7 @@ let test_file file =
   let st, en = Ref_graph.range g in
   for i = st to en - 1 do
     printf "------------testing %d -------------\n" i;
-    test_graph g i
+    test_graph file g i
   done
 
 let () =
