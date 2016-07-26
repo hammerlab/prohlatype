@@ -1,6 +1,5 @@
 
 open Util
-open Ref_graph
 
 (** Alignment. *)
 let align_sequences ~s1 ~o1 ~s2 ~o2 =
@@ -58,30 +57,130 @@ let num_mismatches_against_seq_backwards s =
     | `First (m, _)   -> `Finished m      (* end of the search string *)
     | `Second (m, so) -> `GoOn (m, so)
 
-module Ms = Set.Make (
-  struct
-    (* offset in search-string/read, Node *)
-    type t = int * Edges.t option
-    let compare = compare
-  end)
-
 let debug_ref = ref false
 let fail_ref = ref false
 
-(*
-let compute_mismatches {g; aindex; bounds} search_seq pos =
+module EdgeNodeOffsetQueue = MoreLabels.Set.Make
+  (struct
+    open Ref_graph
+
+    (* TODO: I'm probably boxing and unboxing too much here. *)
+    type t = alignment_position * sequence * int * Edges.t
+
+    let compare (p1, s1, o1, e1) (p2, s2, o2, e2) =
+      let r = compare_alignment_position p1 p2 in
+      if r <> 0 then r else
+        let r = compare_sequence s1 s2 in
+        if r <> 0 then r else
+          (* We should not have 2 of the same node/edges with different
+             offsets, so ignore the offset in the comparator! This has
+             the nice consequence that we won't add the same quadruple
+             when we consider the same node but different edges into
+             that node.*)
+          Edges.compare e1 e2
+  end)
+
+let at_min_position q =
+  let rec loop p q acc =
+    if q = EdgeNodeOffsetQueue.empty then
+      q, acc
+    else
+      let (pn, _, _, _) as me = EdgeNodeOffsetQueue.min_elt q in
+      match acc with
+      | [] -> loop pn (EdgeNodeOffsetQueue.remove me q) [me]
+      | _  -> if pn = p then
+                loop p (EdgeNodeOffsetQueue.remove me q) (me :: acc)
+              else
+                q, acc
+  in
+  loop min_int q []
+
+let compute_mismatches gt search_seq pos =
+  let open Ref_graph in
   let open Nodes in
   let open Index in
   let search_str_length = String.length search_seq in
-  let mis_map = Alleles.Map.make aindex 0 in
+  let mis_map = Alleles.Map.make gt.aindex 0 in
   let nmas = num_mismatches_against_seq search_seq in
-  let nmasb = num_mismatches_against_seq_backwards search_seq in
-*)
- 
+  (* We need a globally valid position. *)
+  let pos = pos.alignment + pos.offset in
+  let rec match_and_add_succ queue (p, node_seq, search_pos, edge) =
+    match nmas ~search_pos ~node_seq ~node_offset:0 with
+    | `Finished mismatches            ->
+        Alleles.Map.update_from edge mis_map ((+) mismatches);
+        queue
+    | `GoOn (mismatches, search_pos)  ->
+        Alleles.Map.update_from edge mis_map ((+) mismatches);
+        add_next_sequence_nodes search_pos (N (p, node_seq)) queue
+  and add_if_sequence search_pos (_, edge, node) queue =
+    if !debug_ref then
+      eprintf "Adding to queue %s -> %s\n"
+        (Alleles.Set.to_human_readable gt.aindex edge)
+        (vertex_name node);
+    match node with
+    | S _       -> invalid_argf "Asked to add a start node: %s" (vertex_name node)
+    | E _       -> queue
+    | B _       -> add_next_sequence_nodes search_pos node queue
+    | N (p, ns) -> EdgeNodeOffsetQueue.add (p, ns, search_pos, edge) queue
+  and add_next_sequence_nodes search_pos node queue =
+    G.fold_succ_e (add_if_sequence search_pos) gt.g node queue
+  in
+  let rec assign_loop q =
+    if EdgeNodeOffsetQueue.is_empty q then
+      mis_map
+    else
+      let nq, elst = at_min_position q in
+      assign_loop (List.fold_left elst ~init:nq ~f:match_and_add_succ)
+  in
+  Ref_graph.adjacents_at gt ~pos >>= (fun (edge_node_set, seen_alleles, _) ->
+    (* TODO. For now assume that everything that isn't seen has a full mismatch,
+       this isn't strictly true since the Start of that allele could be within
+       the range of the search str.
+       - One approach would be to add the other starts, to the adjacents results.
+       *)
+    let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
+    Alleles.Map.update_from not_seen mis_map (fun _ -> search_str_length);
+    let startq =
+      EdgeNodeSet.fold edge_node_set ~init:EdgeNodeOffsetQueue.empty
+        (* Since the adjacents aren't necessarily at pos we have extra
+           bookkeeping at the start of the recursion. *)
+        ~f:(fun (edge, node) queue ->
+              match node with
+              | S _ | E _ | B _ ->
+                  invalid_argf "Asked to compute mismatches at %s, not a sequence node"
+                    (vertex_name node)
+              | N (p, node_seq)  ->
+                  let node_offset, start_mismatches =
+                    if p <= pos then
+                      pos - p, 0
+                    else
+                      0, p - pos
+                  in
+                  match nmas ~search_pos:0 ~node_seq ~node_offset with
+                  | `Finished mismatches            ->
+                      let mm = mismatches + start_mismatches in
+                      Alleles.Map.update_from edge mis_map ((+) mm);
+                      queue
+                  | `GoOn (mismatches, search_pos)  ->
+                      let mm = mismatches + start_mismatches in
+                      Alleles.Map.update_from edge mis_map ((+) mm);
+                      add_next_sequence_nodes search_pos node queue)
+    in
+    Ok (assign_loop startq))
+
+module Ms = Set.Make (
+  struct
+    (* offset in search-string/read, Node *)
+    type t = int * Ref_graph.Edges.t option
+    let compare = compare
+  end)
+
 (** The propogate and back fill algorithm. *)
-let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos =
+let compute_mismatches_old ?(search_pos_start=0) gt search_seq pos =
+  let open Ref_graph in
   let open Nodes in
   let open Index in
+  let {g; aindex; bounds; _} = gt in
   let search_str_length = String.length search_seq in
   let mis_map = Alleles.Map.make aindex 0 in
   let nmas = num_mismatches_against_seq search_seq in
@@ -186,9 +285,9 @@ let compute_mismatches ?(search_pos_start=0) {g; aindex; bounds} search_seq pos 
                   G.fold_succ_e (fun (_me, _e, p) acc ->
                     G.fold_pred_e (fun ((possibly_me, e, _) as v) acc ->
                       if possibly_me = node then acc else begin
-                        if !debug_ref then 
+                        if !debug_ref then
                           printf "prev seq along %s of %s\n"
-                            (Alleles.Set.to_human_readable aindex e) 
+                            (Alleles.Set.to_human_readable aindex e)
                             (Nodes.vertex_name possibly_me);
                         prev_sequence_node prev_seq_pos v acc end)
                       g p acc) g node (seen_edges, st)

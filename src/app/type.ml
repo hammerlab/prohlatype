@@ -54,7 +54,7 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
       | Error m     -> printf "Error looking up %s\n" m
       | Ok []       -> printf "Empty for %s\n" seq
       | Ok (p :: _) ->  (* TODO, more than one! *)
-          let md = Alignment.compute_mismatches g seq p in
+          let md = Alignment.compute_mismatches g seq p |> unwrap_ok in
           let len = String.length seq in
           Alleles.Map.update2 md amap (fun m c ->
             c +. likelihood ~len m));

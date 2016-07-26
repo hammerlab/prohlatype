@@ -37,7 +37,7 @@ let test_case ?k ~gi ~length ~read =
   let sub_read = String.sub_exn ~index:0 ~length read in
   let pos = Index.lookup idx sub_read |> unwrap_ok |> List.hd_exn in
   (*let search_pos_start = (Option.value ~default:10 k) - 1 in *)
-  let al = Alignment.compute_mismatches g sub_read (*~search_pos_start*) pos in
+  let al = Alignment.compute_mismatches g sub_read pos |> unwrap_ok in
   let lal = al_to_list g.Ref_graph.aindex al in
   g, idx, pos, sub_read, (List.rev lal)
 
