@@ -738,6 +738,9 @@ module JoinSameSequencePaths = struct
     in
     loop min_int q []
 
+  let same_debug = ref false
+  let same_debug2 = ref false
+
   let rec add_node_successors_only g v q =
     let open Nodes in
     match v with
@@ -789,43 +792,94 @@ module JoinSameSequencePaths = struct
       Apsq.add (p1, sn) q
     in
     (* assume the list isn't empty *)
-    let find_higest_index ~must_split lst =
+    let find_highest_diff ~must_split lst =
       let init = Option.value must_split ~default:max_int in
       let max_compare_length =
         List.fold_left lst ~init ~f:(fun l (_p, s) ->
           min l (String.length s))
       in
       let arr = [| 0; 0; 0; 0 |] in
-      let rec loop index =
+      let clear_arr () = for i = 0 to 3 do arr.(i) <- 0 done in
+      let fill_arr index =
+        List.iter lst ~f:(fun (_p, s) ->
+          let c = String.get_exn s ~index in
+          let j = Kmer_to_int.char_to_int c in
+          arr.(j) <- arr.(j) + 1)
+      in
+      let rec diff_loop index =
         if index >= max_compare_length then
           index
         else begin
-          for i = 0 to 3 do arr.(i) <- 0 done;
-          List.iter lst ~f:(fun (_p, s) ->
-            let c = String.get_exn s ~index in
-            let j = Kmer_to_int.char_to_int c in
-            arr.(j) <- arr.(j) + 1);
+          clear_arr ();   (* clear A,C,G,T counts in the beginning! *)
+          fill_arr index;
           match arr with
-          | [| n; 0; 0; 0 |] when n >= 1 -> loop (index + 1)
-          | [| 0; n; 0; 0 |] when n >= 1 -> loop (index + 1)
-          | [| 0; 0; n; 0 |] when n >= 1 -> loop (index + 1)
-          | [| 0; 0; 0; n |] when n >= 1 -> loop (index + 1)
-          | _                            -> index + 1
+          | [| n; 0; 0; 0 |] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; n; 0; 0 |] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; 0; n; 0 |] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; 0; 0; n |] when n >= 1 -> diff_loop (index + 1)
+          | _                            ->
+              if !same_debug then
+                eprintf "found diff %d: [| %d; %d; %d; %d |]\n"
+                  index arr.(0) arr.(1) arr.(2) arr.(3);
+              if index > 0 then index else same_loop index
+        end
+      and same_loop index =
+        let nindex = index + 1 in
+        if nindex >= max_compare_length then
+          index
+        else begin
+          clear_arr ();
+          fill_arr nindex;
+          let mx = Array.fold_left ~init:0 ~f:max arr in
+          if !same_debug then
+            eprintf "what is mx: %d [| %d; %d; %d; %d; |] \n"
+              index arr.(0) arr.(1) arr.(2) arr.(3);
+          if mx = 1 then
+            same_loop nindex
+          else
+            index
         end
       in
-      loop 0
+      diff_loop 0
     in
     let flatten ~next_pos q = function
       | []                -> q
-      | (p, s) :: []      -> add_successors (N (p, s)) q
+      | (p, s) :: []      ->
+          begin
+            if !same_debug then
+              eprintf "one %d %s next_pos %d\n%!"
+                p s (Option.value next_pos ~default:(-1));
+            match next_pos with
+            | Some np when inside_seq p s ~pos:np ->
+                split_and_rejoin ~index:(np - p) q p s
+            | None | Some _ ->
+                add_successors (N (p, s)) q
+          end
       | (p, _) :: _ as ls ->
-          let must_split = Option.map ~f:(fun pn -> pn - p) next_pos in
-          let split_index = find_higest_index ~must_split ls in
-          List.fold_left ls ~init:q ~f:(fun q (p, s) ->
-            if String.length s <= split_index then
+          let must_split = Option.map ~f:(fun np -> np - p) next_pos in
+          let index = find_highest_diff ~must_split ls in
+          if !same_debug then begin
+            eprintf "index:\t%d must_split:\t%d\n" index (Option.value must_split ~default:(-1));
+            List.iter ls ~f:(fun (p, s) -> eprintf "%d: %s\n" p s)
+          end;
+          if index = 0 then
+            List.fold_left ls ~init:q ~f:(fun q (p, s) ->
+              if String.length s <= 1 then
+                add_successors (N (p, s)) q
+              else
+                split_and_rejoin ~index:1 q p s)
+          else
+            List.fold_left ls ~init:q ~f:(fun q (p, s) ->
+            if String.length s = index then begin
+              if !same_debug then
+                eprintf "Not splitting %d %s because length is less than %d\n" p s index;
+              (* Don't split to avoid an empty Node!*)
               add_successors (N (p, s)) q
-            else
-              split_and_rejoin ~index:split_index q p s)
+            end else begin
+              if !same_debug then
+                eprintf "splitting %d %s at %d\n" p (index_string s index) index;
+              split_and_rejoin ~index q p s
+            end)
     in
     let rec loop q =
       if q = Apsq.empty then
@@ -833,6 +887,9 @@ module JoinSameSequencePaths = struct
       else
         let nq, amp = at_min_position q in
         let next_pos = peak_min_position nq in
+        if !same_debug2 then
+          eprintf "popping %d peaking at %d\n" (List.hd_exn amp |> fst)
+            (Option.value next_pos ~default:(-1));
         let nq = flatten ~next_pos nq amp in
         loop nq
     in
@@ -1111,7 +1168,7 @@ let edge_node_set_to_table aindex s =
   |> String.concat ~sep:"\n"
   |> sprintf "%s"
 
-let debug_ref = ref false
+let adjacents_debug_ref = ref false
 
 (* Methods for finding adjacent nodes/edges combinations.:
    Nodes with the same (or greater; due to gaps) alignment position.
@@ -1178,7 +1235,7 @@ module Adjacents = struct
           | `Stop t         -> t
           | `Continue (nadjacents, nacc, ncur) ->
               let newer_nodes = look_above g new_nodes in
-              if !debug_ref then
+              if !adjacents_debug_ref then
                 eprintf "Adding new newer_nodes: %s\n from new_nodes: %s\n"
                   (node_set_to_string newer_nodes) (node_set_to_string new_nodes);
               up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
@@ -1214,7 +1271,7 @@ module Adjacents = struct
      the graph we look for adjacents. *)
   let check_by_levels ?max_height ~f ~stop ~init g node =
     let if_new (pn, e, n) ((adjacents, acc) as s) =
-      if !debug_ref then
+      if !adjacents_debug_ref then
         eprintf "if_new check of %s -> %s\n"
           (Nodes.vertex_name pn) (Nodes.vertex_name n);
       let en = e, n in
@@ -1243,14 +1300,14 @@ let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
     let stop es_acc =
       if es_acc = all_edges then true else
         begin
-          if !debug_ref then
+          if !adjacents_debug_ref then
             eprintf "Still missing %s\n"
               (Alleles.Set.to_human_readable aindex (Alleles.Set.diff all_edges es_acc));
           false
         end
     in
     let f edge node edge_set =
-      if !debug_ref then
+      if !adjacents_debug_ref then
         eprintf "Adding %s <- %s\n"
           (Nodes.vertex_name node)
           (Alleles.Set.to_human_readable aindex edge);
