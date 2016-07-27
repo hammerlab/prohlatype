@@ -1,13 +1,25 @@
 
 open Util
 
-let cargs n =
-  { Cache.alignment_file = "../foreign/IMGTHLA/alignments/A_nuc.txt"
-  ; Cache.which = Some (Ref_graph.NumberOfAlts n)
+let (//) = Filename.concat
+let root_dir = "../foreign/IMGTHLA/alignments"
+
+let cargs ?(file="A_nuc.txt") gi =
+  { Cache.alignment_file = (root_dir // file) ^ ".txt"
+  ; Cache.which = Some (Ref_graph.NumberOfAlts gi)
   ; Cache.join_same_sequence = true
   }
 
-let g_and_idx ?(k=10) n = (n, Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs n })
+let all_args ?(file="A_nuc.txt") () =
+  { Cache.alignment_file = (root_dir // file) ^ ".txt"
+  ; Cache.which = None
+  ; Cache.join_same_sequence = true
+  }
+
+let g_and_idx ?(k=10) ?file ?gi () =
+  match gi with
+  | None   -> Cache.graph_and_two_index { Cache.k = k; Cache.g = all_args ?file () }
+  | Some n -> Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs ?file n }
 
 let reads_from_fastq file =
   let ic = open_in file in
@@ -28,13 +40,15 @@ let reads =
     "/Users/leonidrozenberg/Documents/projects/hlatyping/upenn/opti/merged/120013_TGACCA/120013_TGACCA_2fin.fastq"
 
 let greads =
-  List.filter reads ~f:(fun r -> match String.index_of_character r 'N' with | Some _ -> false | _ -> true)
+  List.filter reads ~f:(fun r ->
+    match String.index_of_character r 'N' with | Some _ -> false | _ -> true)
   |> Array.of_list
 
-let al_to_list idx r = Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[]  r |> List.sort ~cmp:compare
+let al_to_list idx r =
+  Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r
+  |> List.sort ~cmp:compare
 
-let test_case ?compare_pos ?k ~gi ~length read =
-  let _, (g, idx) = g_and_idx ?k gi in
+let test_case ?compare_pos ~length (g, idx) read =
   let sub_read = String.sub_exn ~index:0 ~length read in
   let pos =
     let open Index in
@@ -52,27 +66,37 @@ let test_case ?compare_pos ?k ~gi ~length read =
   in
   let al = Alignment.compute_mismatches g sub_read pos |> unwrap_ok in
   let lal = al_to_list g.Ref_graph.aindex al in
-  g, idx, pos, sub_read, (List.rev lal)
+  pos, sub_read, (List.rev lal)
 
-let reads_with_kmers ?k ~gi =
-  let _, (g, idx) = g_and_idx ?k gi in
+let reads_with_kmers (g, idx) =
   Array.to_list greads
-  |> List.filter_map ~f:(fun s -> Index.lookup idx s |> unwrap_ok |> function | [] -> None | _ -> Some s)
+  |> List.filter_map ~f:(fun s ->
+      match Index.lookup idx s with
+      | Ok [] | Error _ -> None
+      | Ok ls           -> Some s)
 
-let just_lal ?k ?compare_pos ~gi ~length read =
-  let _g, _idx, pos, _sub_read, lal = test_case ?compare_pos ?k ~gi ~length read in
+let just_lal ?compare_pos ~length gidxp read =
+  let pos, _sub_read, lal = test_case ?compare_pos ~length gidxp read in
   pos, lal
 
-let find_bad ?(length=100) ?(k=10) ?(stop=3000) start_size =
-  let start_reads = reads_with_kmers ~k ~gi:start_size in
+let find_bad ?(length=100) ?(k=10) ?stop ~file start_size =
+  let stop =
+    match stop with
+    | Some s -> s
+    | None -> let gall, _ = g_and_idx ~file () in
+              Alleles.Map.cardinal gall.Ref_graph.bounds
+  in
+  let gsidx = g_and_idx ~k ~file ~gi:start_size () in
+  let start_reads = reads_with_kmers gsidx in
+  printf "Testing on %d reads\n" (List.length start_reads);
   let start_lals =
-    List.map ~f:(fun read -> read, just_lal ~k ~length ~gi:start_size read)
-      start_reads
+    List.map start_reads ~f:(fun read -> read, just_lal ~length gsidx read)
   in
   let diff_lals new_size prev_lals =
     List.fold_left prev_lals ~init:([], [])
       ~f:(fun (nacc, wacc) (read, (compare_pos, prev_lal)) ->
-            let (pos_new, lal_new) = just_lal ~compare_pos ~k ~length ~gi:new_size read in
+            let gsidx = g_and_idx ~k ~file ~gi:new_size () in
+            let (pos_new, lal_new) = just_lal ~compare_pos ~length gsidx read in
             let diff_opt =
               List.fold_left prev_lal ~init:[] ~f:(fun acc (a, c) ->
                 let new_c = List.assoc a lal_new in
@@ -84,31 +108,38 @@ let find_bad ?(length=100) ?(k=10) ?(stop=3000) start_size =
   in
   let rec loop prev_size old_lals =
     let gi = prev_size + 1 in
-    if gi > stop then (gi, []) else begin
+    if gi > stop then
+      Ok ("reached stop!")
+    else begin
       printf "new gi: %d\n%!" gi;
       match diff_lals gi old_lals with
       | lst, [] -> loop gi lst
-      | lst, bd -> (gi, bd)
+      | lst, bd -> Error (gi, bd)
     end
   in
   loop start_size start_lals
 
-let describe_error ?(length=20) read gi =
+let describe_error ?(length=20) ?(k=10) file read gi =
   let gim1 = gi - 1 in
   let cur = !Alignment.debug_ref in
   Alignment.debug_ref := true;
-  let gnm1, i_nm1, pnm1, snm1, alnm1 = test_case ~k:10 ~gi:gim1 ~length read in
-  let gn, i_n, pn, sn, aln = test_case ~compare_pos:pnm1 ~k:10 ~gi ~length read in
+  let (gnm1, i_nm1) as gsidx = g_and_idx ~k ~file ~gi:gim1 () in
+  let pnm1, snm1, alnm1 = test_case ~length gsidx read in
+  let (gn, i_n) as gsidx2 = g_and_idx ~k ~file ~gi () in
+  let pn, sn, aln = test_case ~compare_pos:pnm1 ~length gsidx2 read in
   Alignment.debug_ref := cur;
   (gnm1, i_nm1, pnm1, snm1, alnm1), (gn, i_n, pn, sn, aln)
-
 
 let () =
   if !Sys.interactive then () else
     let n = Array.length Sys.argv in
-    let length = if n <= 1 then 20 else int_of_string Sys.argv.(1) in
-    let start = if n <= 2 then 2 else int_of_string Sys.argv.(2) in
-    let bad_size, bad_elems = find_bad ~length start in
-    printf "found bad alignments %d with graph size: %d and read length: %d\n"
-      (List.length bad_elems) bad_size length
+    let file = if n <= 1 then "A_nuc" else Sys.argv.(1) in
+    let length = if n <= 2 then 100 else int_of_string Sys.argv.(2) in
+    let start = if n <= 3 then 2 else int_of_string Sys.argv.(3) in
+    match find_bad ~length ~file start with
+    | Ok s  -> print_endline s
+    | Error (bad_size, bad_elems) ->
+        printf "found bad alignments %d with graph size: %d and read length: %d\n"
+          (List.length bad_elems) bad_size length;
+        exit 1
 
