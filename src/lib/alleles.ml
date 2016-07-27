@@ -214,6 +214,8 @@ module Set = struct
     let make_shorter =
       if BitSet.count s = t.size then
         "Everything"
+      else if BitSet.count s = 0 then
+        "Nothing"
       else if BitSet.count s > t.size / 2 then
         let complement_prefix =
           Option.value complement_prefix ~default:"C. of "
