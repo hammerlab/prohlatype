@@ -606,7 +606,7 @@ module FoldAtSamePosition = struct
 
   let at_min_position q =
     let rec loop p q acc =
-      if q = NodeQueue.empty then
+      if NodeQueue.is_empty q then
         q, acc
       else
         let me = NodeQueue.min_elt q in
@@ -1219,7 +1219,7 @@ module Adjacents = struct
       (* no new nodes don't recurse! *)
       nadjacents, nacc, new_cur
     else
-      down if_new g pos acc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
+      down if_new g pos nacc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
 
   let look_above g cur =
     NodeSet.fold cur ~f:(G.fold_pred (add_if_new ~cur) g) ~init:NodeSet.empty
@@ -1232,7 +1232,7 @@ module Adjacents = struct
       | Some h when i >= h  -> adjacents, acc, NodeSet.union new_nodes cur
       | None | Some _       ->
           match down acc ~adjacents ~new_nodes cur with
-          | `Stop t         -> t
+          | `Stop t                            -> t
           | `Continue (nadjacents, nacc, ncur) ->
               let newer_nodes = look_above g new_nodes in
               if !adjacents_debug_ref then
@@ -1295,7 +1295,7 @@ end (* Adjacents *)
 
 (* At or past *)
 let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
- find_node_at gt ~pos >>= fun rootn ->
+  find_node_at gt ~pos >>= fun rootn ->
     let all_edges = alleles_with_data gt ~pos in
     let stop es_acc =
       if es_acc = all_edges then true else
@@ -1308,11 +1308,10 @@ let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
     in
     let f edge node edge_set =
       if !adjacents_debug_ref then
-        eprintf "Adding %s <- %s\n"
+        eprintf "Adding %s <- %s.\n"
           (Nodes.vertex_name node)
           (Alleles.Set.to_human_readable aindex edge);
       Alleles.Set.union edge edge_set
     in
     let init = Alleles.Set.init aindex in
     Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
-
