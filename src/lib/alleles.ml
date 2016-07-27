@@ -241,6 +241,8 @@ module Map = struct
   let get { to_index; _} m a =
     m.(SMap.find a to_index)
 
+  let cardinal = Array.length
+
   (* let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
 
