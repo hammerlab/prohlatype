@@ -157,9 +157,11 @@ let compute_mismatches gt search_seq pos =
            bookkeeping at the start of the recursion. *)
         ~f:(fun (edge, node) queue ->
               match node with
-              | S _ | E _ | B _ ->
+              | S _ | E _        ->
                   invalid_argf "Asked to compute mismatches at %s, not a sequence node"
                     (vertex_name node)
+              | B _              ->
+                  add_successors queue (node, [0, edge])
               | N (p, node_seq)  ->
                   let node_offset, start_mismatches =
                     if p <= pos then
