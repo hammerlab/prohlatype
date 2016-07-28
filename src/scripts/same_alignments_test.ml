@@ -18,8 +18,8 @@ let all_args ?(file="A_nuc.txt") () =
 
 let g_and_idx ?(k=10) ?file ?gi () =
   match gi with
-  | None   -> Cache.graph_and_two_index { Cache.k = k; Cache.g = all_args ?file () }
-  | Some n -> Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs ?file n }
+  | None   -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = all_args ?file () }
+  | Some n -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cargs ?file n }
 
 let reads_from_fastq file =
   let ic = open_in file in
