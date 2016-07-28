@@ -8,10 +8,10 @@ module A = Alleles
   - Turn fold_succ_e from O(n) into something better
 *)
 
-type alignment_position = int [@@deriving eq, ord]
+type alignment_position = int [@@deriving eq, ord, show]
 type start = alignment_position * (A.allele [@equal A.equal] [@compare A.compare]) [@@deriving eq, ord]
 type end_ = alignment_position [@@deriving eq, ord]
-type sequence = string [@@deriving eq, ord]
+type sequence = string [@@deriving eq, ord, show]
 
 (* start end pairs *)
 type sep = { start : start ; end_ : end_ } [@@deriving eq, ord]
