@@ -1294,7 +1294,7 @@ module Adjacents = struct
 end (* Adjacents *)
 
 (* At or past *)
-let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
+let adjacents_at ?(max_height=10000) ({g; aindex; _} as gt)  ~pos =
   find_node_at gt ~pos >>= fun rootn ->
     let all_edges = alleles_with_data gt ~pos in
     let stop es_acc =
