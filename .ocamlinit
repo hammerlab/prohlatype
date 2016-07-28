@@ -2,6 +2,7 @@
 #require "sosa"
 #require "ocamlgraph"
 #require "extlib"
+#require "ppx_deriving.runtime"
 
 #directory "_build/src/lib"
 #load_rec "prohlatype.cma"
