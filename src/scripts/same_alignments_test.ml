@@ -4,13 +4,13 @@ open Util
 let (//) = Filename.concat
 let root_dir = "../foreign/IMGTHLA/alignments"
 
-let cargs ?(file="A_nuc.txt") gi =
+let cargs ?(file="A_nuc") gi =
   { Cache.alignment_file = (root_dir // file) ^ ".txt"
   ; Cache.which = Some (Ref_graph.NumberOfAlts gi)
   ; Cache.join_same_sequence = true
   }
 
-let all_args ?(file="A_nuc.txt") () =
+let all_args ?(file="A_nuc") () =
   { Cache.alignment_file = (root_dir // file) ^ ".txt"
   ; Cache.which = None
   ; Cache.join_same_sequence = true
