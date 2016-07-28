@@ -134,4 +134,8 @@ module Map : sig
   (** [iter index f map] iter over all allele assignments in the [map]. *)
   val iter : index -> f:('b -> allele -> unit) -> 'b t -> unit
 
+  (** [map index f cm] return a new map based on applying [f] to each element
+       of [cm]. *)
+  val map : index -> f:('a -> allele -> 'b) -> 'a t -> 'b t
+
 end

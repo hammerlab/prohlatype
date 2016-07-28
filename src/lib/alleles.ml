@@ -273,4 +273,7 @@ module Map = struct
   let iter i ~f amap =
     fold i ~init:() ~f:(fun () m a -> f m a) amap
 
+  let map { to_allele; _} ~f amap =
+    Array.mapi amap ~f:(fun i c -> f amap.(i) (to_allele.(i)))
+
 end (* Map *)
