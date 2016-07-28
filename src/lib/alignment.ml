@@ -182,6 +182,19 @@ let compute_mismatches gt search_seq pos =
     in
     Ok (assign_loop startq))
 
+(* This method is a bad strawman... Would probably be much faster to
+   go back to the original file and apply the Mas_parser changes to the
+   reference. Only for comparison purposes... It probably makes sense to
+   parameterize Ref_graph.sequence into a more general 'fold'? *)
+let manual_mismatches gt search_seq pos =
+  let open Ref_graph in
+  let p = pos.Index.alignment + pos.Index.offset in
+  let n = String.length search_seq in
+  let s = sequence ~start:(`AtPos p) ~stop:(`Length n) gt in
+  Alleles.Map.map gt.aindex gt.bounds ~f:(fun _sep_lst allele ->
+      s allele >>= fun graph_seq ->
+          Ok (align_sequences ~s1:search_seq ~o1:0 ~s2:graph_seq ~o2:0))
+
 let align_sequences_backwards ~s1 ~o1 ~s2 ~o2 =
   let rec loop i m =
     let i1 = o1 - i in

@@ -16,10 +16,15 @@ let all_args ?(file="A_nuc") () =
   ; Cache.join_same_sequence = true
   }
 
-let g_and_idx ?(k=10) ?file ?gi () =
-  match gi with
-  | None   -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = all_args ?file () }
-  | Some n -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cargs ?file n }
+let g_and_idx ?(cache=true) ?(k=10) ?file ?gi () =
+  if cache then
+    match gi with
+    | None   -> Cache.graph_and_two_index { Cache.k = k; Cache.g = all_args ?file () }
+    | Some n -> Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs ?file n }
+  else
+    match gi with
+    | None   -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = all_args ?file () }
+    | Some n -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cargs ?file n }
 
 let reads_from_fastq file =
   let ic = open_in file in
@@ -76,14 +81,14 @@ let just_lal ?compare_pos ~length gidxp read =
   let pos, _sub_read, lal = test_case ?compare_pos ~length gidxp read in
   pos, lal
 
-let find_bad ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
+let find_bad ?cache ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
   let stop =
     match stop with
     | Some s -> s
-    | None -> let gall, _ = g_and_idx ~file () in
+    | None -> let gall, _ = g_and_idx ?cache ~file () in
               Alleles.Map.cardinal gall.Ref_graph.bounds
   in
-  let gsidx = g_and_idx ~k ~file ~gi:start_size () in
+  let gsidx = g_and_idx ?cache ~k ~file ~gi:start_size () in
   let start_reads = reads_with_kmers reads_file gsidx in
   printf "Testing on %d reads\n" (List.length start_reads);
   let start_lals =
@@ -92,7 +97,7 @@ let find_bad ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
   let diff_lals new_size prev_lals =
     List.fold_left prev_lals ~init:([], [])
       ~f:(fun (nacc, wacc) (read, (compare_pos, prev_lal)) ->
-            let gsidx = g_and_idx ~k ~file ~gi:new_size () in
+            let gsidx = g_and_idx ?cache ~k ~file ~gi:new_size () in
             let (pos_new, lal_new) = just_lal ~compare_pos ~length gsidx read in
             let diff_opt =
               List.fold_left prev_lal ~init:[] ~f:(fun acc (a, c) ->
@@ -116,7 +121,7 @@ let find_bad ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
   in
   loop start_size start_lals
 
-let describe_error ?(length=20) ?(k=10) file read gi =
+let describe_error ?(length=100) ?(k=10) file read gi =
   let gim1 = gi - 1 in
   let cur = !Alignment.debug_ref in
   Alignment.debug_ref := true;
@@ -127,22 +132,78 @@ let describe_error ?(length=20) ?(k=10) file read gi =
   Alignment.debug_ref := cur;
   (gnm1, i_nm1, pnm1, snm1, alnm1), (gn, i_n, pn, sn, aln)
 
+
+let compare_reads ?(length=100) ?(k=10) reads_file ~file =
+  let t g idx read =
+    Index.lookup idx read >>= function
+        | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
+        | []     -> error "read not in index"
+  in
+  let g, idx = g_and_idx ~k ~file () in
+  let reads = reads_with_kmers reads_file (g, idx) in
+  let aindx = g.Ref_graph.aindex in
+  let n = List.length reads in
+  let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read ->
+    match t g idx read with
+    | Error _     -> msm_acc  (* Just skip reads that we can't map. *) 
+    | Ok (pos, m) ->
+        match Alignment.compute_mismatches g read pos with
+        | Error mes ->
+            eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
+              read (Index.show_position pos) mes;
+            msm_acc
+        | Ok m2     ->
+            let msm =
+              Alleles.Map.fold aindx m ~init:[]  
+                ~f:(fun acc cm allele ->
+                      let with_all = Alleles.Map.get aindx m2 allele in
+                      match cm, with_all with
+                      | Ok (`Both mismatches), wa when wa = mismatches -> acc
+                      | Ok cmo               , wa                      -> (allele, Ok (cmo, wa)) :: acc
+                      | Error ec             , wa                      -> (allele, Error (ec, wa)) :: acc)
+            in
+            match msm with
+            | [] -> msm_acc
+            | ba -> (read, ba) :: msm_acc)
+  in
+  (n, l)
+
 let () =
   if !Sys.interactive then () else
     let n = Array.length Sys.argv in
     let reads_file =
       if n <= 1 then
-        invalid_argf "First argument should be a reads file!"
+        invalid_argf
+          "%s [reads_file] [alignment_file] length (graph_size for comparison test)"
+          Sys.argv.(0)
       else
         Sys.argv.(1)
     in
     let file = if n <= 2 then "A_nuc" else Sys.argv.(2) in
     let length = if n <= 3 then 100 else int_of_string Sys.argv.(3) in
-    let start = if n <= 4 then 2 else int_of_string Sys.argv.(4) in
-    match find_bad reads_file ~length ~file start with
-    | Ok s  -> print_endline s
-    | Error (bad_size, bad_elems) ->
-        printf "found bad alignments %d with graph size: %d and read length: %d\n"
-          (List.length bad_elems) bad_size length;
-        exit 1
+    let start_opt = if n <= 4 then None else Some (int_of_string Sys.argv.(4)) in
+    match start_opt with
+    | Some start ->
+        begin match find_bad reads_file ~length ~file start with
+        | Ok s  -> print_endline s
+        | Error (bad_size, bad_elems) ->
+            printf "found bad alignments %d with graph size: %d and read length: %d\n"
+              (List.length bad_elems) bad_size length;
+            exit 1
+        end
+    | None ->
+        begin match compare_reads reads_file ~length ~file with
+        | n, [] -> printf "all %d reads match!\n" n
+        | n, ls -> printf "otu of %d reads encountered the following errors:\n" n;
+                    List.iter ls ~f:(fun (read, blst) ->
+                      printf "read: %s\n" read;
+                      List.iter blst ~f:(fun (allele, oe) ->
+                        printf "\t%s: %s\n" allele
+                          (match oe with
+                          | Ok ((`Both m), m2)         -> sprintf "Both %d vs %d" m m2
+                          | Ok ((`First (m, p)), m2)   -> sprintf "First %d vs %d, sp: %d" m m2 p
+                          | Ok ((`Second (m, p)), m2)  -> sprintf "Second %d vs %d, sp: %d" m m2 p
+                          | Error (msg, d)             -> sprintf "Error %s %d" msg d)));
+                    exit 1                          
+        end
 
