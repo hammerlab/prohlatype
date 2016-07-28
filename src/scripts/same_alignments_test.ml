@@ -35,15 +35,6 @@ let reads_from_fastq file =
     close_in ic;
     !li
 
-let reads =
-  reads_from_fastq
-    "/Users/leonidrozenberg/Documents/projects/hlatyping/upenn/opti/merged/120013_TGACCA/120013_TGACCA_2fin.fastq"
-
-let greads =
-  List.filter reads ~f:(fun r ->
-    match String.index_of_character r 'N' with | Some _ -> false | _ -> true)
-  |> Array.of_list
-
 let al_to_list idx r =
   Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r
   |> List.sort ~cmp:compare
@@ -68,7 +59,13 @@ let test_case ?compare_pos ~length (g, idx) read =
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
-let reads_with_kmers (g, idx) =
+let reads_with_kmers reads_file (g, idx) =
+  let reads = reads_from_fastq reads_file in
+  let greads =
+    List.filter reads ~f:(fun r ->
+      match String.index_of_character r 'N' with | Some _ -> false | _ -> true)
+    |> Array.of_list
+  in
   Array.to_list greads
   |> List.filter_map ~f:(fun s ->
       match Index.lookup idx s with
@@ -79,7 +76,7 @@ let just_lal ?compare_pos ~length gidxp read =
   let pos, _sub_read, lal = test_case ?compare_pos ~length gidxp read in
   pos, lal
 
-let find_bad ?(length=100) ?(k=10) ?stop ~file start_size =
+let find_bad ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
   let stop =
     match stop with
     | Some s -> s
@@ -87,7 +84,7 @@ let find_bad ?(length=100) ?(k=10) ?stop ~file start_size =
               Alleles.Map.cardinal gall.Ref_graph.bounds
   in
   let gsidx = g_and_idx ~k ~file ~gi:start_size () in
-  let start_reads = reads_with_kmers gsidx in
+  let start_reads = reads_with_kmers reads_file gsidx in
   printf "Testing on %d reads\n" (List.length start_reads);
   let start_lals =
     List.map start_reads ~f:(fun read -> read, just_lal ~length gsidx read)
@@ -133,10 +130,16 @@ let describe_error ?(length=20) ?(k=10) file read gi =
 let () =
   if !Sys.interactive then () else
     let n = Array.length Sys.argv in
-    let file = if n <= 1 then "A_nuc" else Sys.argv.(1) in
-    let length = if n <= 2 then 100 else int_of_string Sys.argv.(2) in
-    let start = if n <= 3 then 2 else int_of_string Sys.argv.(3) in
-    match find_bad ~length ~file start with
+    let reads_file =
+      if n <= 1 then
+        invalid_argf "First argument should be a reads file!"
+      else
+        Sys.argv.(1)
+    in
+    let file = if n <= 2 then "A_nuc" else Sys.argv.(2) in
+    let length = if n <= 3 then 100 else int_of_string Sys.argv.(3) in
+    let start = if n <= 4 then 2 else int_of_string Sys.argv.(4) in
+    match find_bad reads_file ~length ~file start with
     | Ok s  -> print_endline s
     | Error (bad_size, bad_elems) ->
         printf "found bad alignments %d with graph size: %d and read length: %d\n"
