@@ -172,7 +172,7 @@ let compute_mismatches gt search_seq pos =
                     else
                       0, p - pos
                   in
-                  match nmas ~search_pos:0 ~node_seq ~node_offset with
+                  match nmas ~search_pos:start_mismatches ~node_seq ~node_offset with
                   | `Finished mismatches            ->
                       assign ~node edge (mismatches + start_mismatches);
                       queue
