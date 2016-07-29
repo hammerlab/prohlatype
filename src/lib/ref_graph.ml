@@ -1041,8 +1041,26 @@ let parse_start_arg g allele =
       find_node_at ~allele ~pos g >>= fun v ->
         Ok ([v], String.drop ~index:(pos - position v))
   | Some (`AtNext pos)  ->
-      find_position_old ~allele ~pos g >>= fun (v, precise) ->
-        Ok ([v], if precise then id else String.drop ~index:(pos - position v))
+      find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
+        let pre =
+          if precise || position v > pos then
+            id
+          else
+            String.drop ~index:(pos - position v)
+        in
+        Ok ([v], pre)
+  | Some (`PadFront pos)  ->
+      find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
+        let pv = position v in
+        let pre =
+          if precise then
+            id
+          else if pv > pos then
+            fun s -> (String.make (pv - pos) '.') ^ s
+          else
+            String.drop ~index:(pos - position v)
+        in
+        Ok ([v], pre)
   | None                ->
       match A.Map.get g.aindex g.bounds allele with
       | []  -> error "Allele %s not found in graph!" allele
