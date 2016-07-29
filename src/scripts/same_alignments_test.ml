@@ -134,8 +134,8 @@ let describe_error ?(length=100) ?(k=10) file read gi =
 
 let manual g idx read =
   Index.lookup idx read >>= function
-      | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
-      | []     -> error "read not in index"
+    | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
+    | []     -> error "read not in index"
 
 let compare_reads ?length ?(k=10) ?num_comp reads_file ~file =
   let g, idx = g_and_idx ~k ~file () in
