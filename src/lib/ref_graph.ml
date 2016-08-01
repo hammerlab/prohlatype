@@ -1059,7 +1059,7 @@ let parse_start_arg g allele =
           Ok ([v], id, 0)
         else
           Ok ([v], String.drop ~index, -index)
-  | Some (`PadFront pos)  ->
+  | Some (`Pad pos)       ->
       find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
         let pv = position v in
         let index = pos - pv in

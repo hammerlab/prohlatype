@@ -195,7 +195,7 @@ let manual_mismatches gt search_seq pos =
     List.exists sep_lst ~f:(fun sep -> (fst sep.start) <= p && p <= sep.end_)
   in
   let n = String.length search_seq in
-  let s = sequence ~start:(`PadFront p) ~stop:(`Length n) gt in
+  let s = sequence ~start:(`Pad p) ~stop:(`Pad n) gt in
   let nmas = num_mismatches_against_seq search_seq ~search_pos:0 in
   Alleles.Map.map gt.aindex gt.bounds ~f:(fun sep_lst allele ->
     if contains_p sep_lst then
