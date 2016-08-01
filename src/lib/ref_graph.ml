@@ -1029,50 +1029,59 @@ let find_node_at ?allele ?ongap ~pos { g; aindex; offset; posarr; _} =
   in
   lookup_at true (pos - offset)
 
+(* - A list of nodes to start searching from. If there is more than one it
+     is a list of the start nodes.
+   - A function to modify the accumulated string. For example when we wish
+     to start the sequence at a position inside of a node.
+   - An initialization of a count of how many characters we've seen. This
+     accounts for starting a node that we're going to trim with the function
+     of the previous argument.  *)
 let parse_start_arg g allele =
   let id x = x in
   let open Nodes in function
-  | Some (`Node s)      ->
+  | Some (`Node s)        ->
       if G.mem_vertex g.g s then
-        Ok ([s], id)
+        Ok ([s], id, 0)
       else
         error "%s vertex not in graph" (vertex_name s)
-  | Some (`AtPos pos)   ->
+  | Some (`AtPos pos)     ->
       find_node_at ~allele ~pos g >>= fun v ->
-        Ok ([v], String.drop ~index:(pos - position v))
-  | Some (`AtNext pos)  ->
+        let pv = position v in
+        let index = pos - pv in
+        Ok ([v], String.drop ~index, max 0 (-index))
+  | Some (`AtNext pos)    ->
+      (* find_node_at is O(1) but it doesn't currently accomodate
+         finding the next node if necessary. *)
       find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
-        let pre =
-          if precise || position v > pos then
-            id
-          else
-            String.drop ~index:(pos - position v)
-        in
-        Ok ([v], pre)
+        let pv = position v in
+        let index = pos - pv in
+        if precise || index < 0 then
+          Ok ([v], id, 0)
+        else
+          Ok ([v], String.drop ~index, -index)
   | Some (`PadFront pos)  ->
       find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
         let pv = position v in
-        let pre =
-          if precise then
-            id
-          else if pv > pos then
-            fun s -> (String.make (pv - pos) '.') ^ s
-          else
-            String.drop ~index:(pos - position v)
-        in
-        Ok ([v], pre)
-  | None                ->
-      match A.Map.get g.aindex g.bounds allele with
+        let index = pos - pv in
+        if precise then
+          Ok ([v], id, 0)
+        else if index < 0 then
+          Ok ([v], (fun s -> (String.make (-index) '.') ^ s), index)
+        else
+          Ok ([v], String.drop ~index, -index)
+  | None                  ->
+      begin match A.Map.get g.aindex g.bounds allele with
       | []  -> error "Allele %s not found in graph!" allele
       | spl -> Ok (List.map spl ~f:(fun sep ->
-                        Nodes.S (fst sep.start, allele)), id)
+                        Nodes.S (fst sep.start, allele)), id, 0)
+      end
 
-let parse_stop_arg =
+let parse_stop_arg ?(count=0) =
   let stop_if b = if b then `Stop else `Continue in
   let open Nodes in function
   | None             -> (fun _ -> `Continue)                  , (fun x -> x)
   | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))  , (fun x -> x)
-  | Some (`Length n) -> let r = ref 0 in
+  | Some (`Length n) -> let r = ref count in
                         (function
                           | S _ | E _ | B _ -> `Continue
                           | N (_, s) ->
@@ -1083,8 +1092,8 @@ let parse_stop_arg =
 let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
   let open Nodes in
   parse_start_arg gt allele start
-    >>= fun (start, pre) ->
-      let stop, post = parse_stop_arg stop in
+    >>= fun (start, pre, count) ->
+      let stop, post = parse_stop_arg ~count stop in
       List.fold_left start ~init:[] ~f:(fun acc start ->
         fold_along_allele g aindex allele ~start ~init:acc
           ~f:(fun clst node ->
