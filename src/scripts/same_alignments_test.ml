@@ -137,12 +137,16 @@ let manual g idx read =
     | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
     | []     -> error "read not in index"
 
-let compare_reads ?length ?(k=10) ?num_comp reads_file ~file =
+let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
   let g, idx = g_and_idx ~k ~file () in
   let reads = reads_with_kmers reads_file (g, idx) in
   let aindx = g.Ref_graph.aindex in
   let n = List.length reads in
-  let reads = match num_comp with | None -> reads | Some n -> List.take reads n in
+  let reads =
+    match num_comp with
+    | None -> reads
+    | Some n -> List.take (List.drop reads drop) n
+  in
   let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read ->
     let sub_read, sub_read_length =
       match length with
@@ -151,7 +155,7 @@ let compare_reads ?length ?(k=10) ?num_comp reads_file ~file =
     in
     printf "comparing alignments for %s" read;
     match manual g idx sub_read with
-    | Error _     -> msm_acc  (* Just skip reads that we can't map. *) 
+    | Error _     -> msm_acc  (* Just skip reads that we can't map. *)
     | Ok (pos, m) ->
         match Alignment.compute_mismatches g sub_read pos with
         | Error mes ->
@@ -160,7 +164,7 @@ let compare_reads ?length ?(k=10) ?num_comp reads_file ~file =
             msm_acc
         | Ok m2     ->
             let msm =
-              Alleles.Map.fold aindx m ~init:[]  
+              Alleles.Map.fold aindx m ~init:[]
                 ~f:(fun acc cm allele ->
                       let with_all = Alleles.Map.get aindx m2 allele in
                       match cm, with_all with
@@ -201,7 +205,7 @@ let () =
     | None ->
         begin match compare_reads reads_file ~length ~file with
         | n, [] -> printf "all %d reads match!\n" n
-        | n, ls -> printf "otu of %d reads encountered the following errors:\n" n;
+        | n, ls -> printf "out of %d reads encountered the following errors:\n" n;
                     List.iter ls ~f:(fun (read, blst) ->
                       printf "read: %s\n" read;
                       List.iter blst ~f:(fun (allele, oe) ->
@@ -211,6 +215,6 @@ let () =
                           | Ok ((`First (m, p)), m2)   -> sprintf "First %d vs %d, sp: %d" m m2 p
                           | Ok ((`Second (m, p)), m2)  -> sprintf "Second %d vs %d, sp: %d" m m2 p
                           | Error (msg, d)             -> sprintf "Error %s %d" msg d)));
-                    exit 1                          
+                    exit 1
         end
 
