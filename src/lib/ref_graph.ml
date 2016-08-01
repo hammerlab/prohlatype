@@ -1079,14 +1079,29 @@ let parse_start_arg g allele =
 let parse_stop_arg ?(count=0) =
   let stop_if b = if b then `Stop else `Continue in
   let open Nodes in function
-  | None             -> (fun _ -> `Continue)                  , (fun x -> x)
-  | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))  , (fun x -> x)
+  | None             -> (fun _ -> `Continue)
+                        , (fun x -> x)
+  | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))
+                        , (fun x -> x)
   | Some (`Length n) -> let r = ref count in
                         (function
                           | S _ | E _ | B _ -> `Continue
                           | N (_, s) ->
                               r := !r + String.length s;
-                              stop_if (!r >= n))              , String.take ~index:n
+                              stop_if (!r >= n))
+                        , String.take ~index:n
+  | Some (`Pad n)    -> let r = ref count in
+                        (function
+                          | S _ | E _ | B _ -> `Continue
+                          | N (_, s) ->
+                              r := !r + String.length s;
+                              stop_if (!r >= n))
+                        , (fun s ->
+                            let l = String.length s in
+                            if l < n then
+                              s ^ String.make (n - l) '.'
+                            else
+                              String.take ~index:n s)
 
 (** Accessors. *)
 let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
