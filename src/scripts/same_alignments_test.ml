@@ -137,10 +137,25 @@ let manual g idx read =
     | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
     | []     -> error "read not in index"
 
+let compare_manual g m fm read_len =
+  let aindx = g.Ref_graph.aindex in
+  Alleles.Map.fold aindx m ~init:[]
+    ~f:(fun acc cm allele ->
+          let with_all = Alleles.Map.get aindx fm allele in
+          match cm, with_all with
+          | Ok (`Finished mismatches) , wa when wa = mismatches                ->
+            acc
+          | Ok (`GoOn (msm, sp))      , wa when wa = msm + (read_len - sp) ->
+            acc
+          | Ok cmo                    , wa                                     ->
+            (allele, Ok (cmo, wa)) :: acc
+          | Error ec                  , wa                                     ->
+            (allele, Error (ec, wa)) :: acc)
+
+
 let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
   let g, idx = g_and_idx ~k ~file () in
   let reads = reads_with_kmers reads_file (g, idx) in
-  let aindx = g.Ref_graph.aindex in
   let reads =
     match num_comp with
     | None -> reads
@@ -158,32 +173,18 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
       in
       printf "comparing alignments for %s" read;
       match manual g idx sub_read with
-      | Error em    ->
+      | Error em        ->
           eprintf "Skipping %s because wasn't able to map because of %s\n"
             sub_read em;
           over_reads tl
-      | Ok (pos, m) ->
+      | Ok (pos, manm)  ->
           match Alignment.compute_mismatches g sub_read pos with
           | Error mes ->
               eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
                 sub_read (Index.show_position pos) mes;
               over_reads tl
           | Ok m2     ->
-              let msm =
-                Alleles.Map.fold aindx m ~init:[]
-                  ~f:(fun acc cm allele ->
-                        let with_all = Alleles.Map.get aindx m2 allele in
-                        match cm, with_all with
-                        | Ok (`Finished mismatches) , wa when wa = mismatches                ->
-                            acc
-                        | Ok (`GoOn (msm, sp))      , wa when wa = msm + (sub_read_len - sp) ->
-                            acc
-                        | Ok cmo                    , wa                                     ->
-                            (allele, Ok (cmo, wa)) :: acc
-                        | Error ec                  , wa                                     ->
-                            (allele, Error (ec, wa)) :: acc)
-              in
-              match msm with
+              match compare_manual g manm m2 (String.length sub_read) with
               | [] -> printf " everything matched!\n%!"; over_reads tl
               | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
