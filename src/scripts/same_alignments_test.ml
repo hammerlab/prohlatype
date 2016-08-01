@@ -141,43 +141,53 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
   let g, idx = g_and_idx ~k ~file () in
   let reads = reads_with_kmers reads_file (g, idx) in
   let aindx = g.Ref_graph.aindex in
-  let n = List.length reads in
   let reads =
     match num_comp with
     | None -> reads
     | Some n -> List.take (List.drop reads drop) n
   in
-  let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read ->
-    let sub_read, sub_read_length =
-      match length with
-      | None       -> read, String.length read
-      | Some index -> String.take read index, index
-    in
-    printf "comparing alignments for %s" read;
-    match manual g idx sub_read with
-    | Error _     -> msm_acc  (* Just skip reads that we can't map. *)
-    | Ok (pos, m) ->
-        match Alignment.compute_mismatches g sub_read pos with
-        | Error mes ->
-            eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
-              sub_read (Index.show_position pos) mes;
-            msm_acc
-        | Ok m2     ->
-            let msm =
-              Alleles.Map.fold aindx m ~init:[]
-                ~f:(fun acc cm allele ->
-                      let with_all = Alleles.Map.get aindx m2 allele in
-                      match cm, with_all with
-                      | Ok (`Both mismatches), wa when wa = mismatches -> acc
-                      | Ok (`Second (msm, sp)), wa when wa = msm + (sub_read_length - sp) -> acc
-                      | Ok cmo               , wa                      -> (allele, Ok (cmo, wa)) :: acc
-                      | Error ec             , wa                      -> (allele, Error (ec, wa)) :: acc)
-            in
-            match msm with
-            | [] -> printf " everything matched!\n%!"; msm_acc
-            | ba -> printf " see differences.\n%!"; (sub_read, ba) :: msm_acc)
+  let n = List.length reads in
+  let rec over_reads = function
+    | []          -> None
+    | read :: tl  ->
+  (*let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read -> *)
+      let sub_read, sub_read_len =
+        match length with
+        | None       -> read, String.length read
+        | Some index -> String.take read index, index
+      in
+      printf "comparing alignments for %s" read;
+      match manual g idx sub_read with
+      | Error em    ->
+          eprintf "Skipping %s because wasn't able to map because of %s\n"
+            sub_read em;
+          over_reads tl
+      | Ok (pos, m) ->
+          match Alignment.compute_mismatches g sub_read pos with
+          | Error mes ->
+              eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
+                sub_read (Index.show_position pos) mes;
+              over_reads tl
+          | Ok m2     ->
+              let msm =
+                Alleles.Map.fold aindx m ~init:[]
+                  ~f:(fun acc cm allele ->
+                        let with_all = Alleles.Map.get aindx m2 allele in
+                        match cm, with_all with
+                        | Ok (`Finished mismatches) , wa when wa = mismatches                ->
+                            acc
+                        | Ok (`GoOn (msm, sp))      , wa when wa = msm + (sub_read_len - sp) ->
+                            acc
+                        | Ok cmo                    , wa                                     ->
+                            (allele, Ok (cmo, wa)) :: acc
+                        | Error ec                  , wa                                     ->
+                            (allele, Error (ec, wa)) :: acc)
+              in
+              match msm with
+              | [] -> printf " everything matched!\n%!"; over_reads tl
+              | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
-  (n, l)
+  (n, over_reads reads)
 
 let () =
   if !Sys.interactive then () else
@@ -204,17 +214,17 @@ let () =
         end
     | None ->
         begin match compare_reads reads_file ~length ~file with
-        | n, [] -> printf "all %d reads match!\n" n
-        | n, ls -> printf "out of %d reads encountered the following errors:\n" n;
-                    List.iter ls ~f:(fun (read, blst) ->
-                      printf "read: %s\n" read;
-                      List.iter blst ~f:(fun (allele, oe) ->
-                        printf "\t%s: %s\n" allele
-                          (match oe with
-                          | Ok ((`Both m), m2)         -> sprintf "Both %d vs %d" m m2
-                          | Ok ((`First (m, p)), m2)   -> sprintf "First %d vs %d, sp: %d" m m2 p
-                          | Ok ((`Second (m, p)), m2)  -> sprintf "Second %d vs %d, sp: %d" m m2 p
-                          | Error (msg, d)             -> sprintf "Error %s %d" msg d)));
-                    exit 1
+        | n, None              ->
+            printf "all %d reads match!\n" n
+        | n, Some (read, blst) ->
+            printf "out of %d reads encountered the following errors:\n" n;
+            printf "read: %s\n" read;
+            List.iter blst ~f:(fun (allele, oe) ->
+              printf "\t%s: %s\n" allele
+                (match oe with
+                 | Ok ((`Finished m), m2)   -> sprintf "Finished %d vs %d" m m2
+                 | Ok ((`GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m m2 p
+                 | Error (msg, d)           -> sprintf "Error %s %d" msg d));
+            exit 1
         end
 
