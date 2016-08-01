@@ -163,8 +163,10 @@ let compute_mismatches gt search_seq pos =
               | E _              ->
                   assign ~node edge search_str_length;
                   queue
-              | B _              ->
-                  add_successors queue (node, [0, edge])
+              | B (p, _)         ->
+                  let start_mismatches = if p <= pos then 0 else p - pos in
+                  assign ~node edge start_mismatches;
+                  add_successors queue (node, [start_mismatches, edge])
               | N (p, node_seq)  ->
                   let node_offset, start_mismatches =
                     if p <= pos then
