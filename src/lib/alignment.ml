@@ -189,11 +189,17 @@ let compute_mismatches gt search_seq pos =
 let manual_mismatches gt search_seq pos =
   let open Ref_graph in
   let p = pos.Index.alignment + pos.Index.offset in
+  let contains_p sep_lst =
+    List.exists sep_lst ~f:(fun sep -> (fst sep.start) <= p && p <= sep.end_)
+  in
   let n = String.length search_seq in
   let s = sequence ~start:(`PadFront p) ~stop:(`Length n) gt in
-  Alleles.Map.map gt.aindex gt.bounds ~f:(fun _sep_lst allele ->
+  Alleles.Map.map gt.aindex gt.bounds ~f:(fun sep_lst allele ->
+    if contains_p sep_lst then
       s allele >>= fun graph_seq ->
-          Ok (align_sequences ~s1:search_seq ~o1:0 ~s2:graph_seq ~o2:0))
+          Ok (align_sequences ~s1:search_seq ~o1:0 ~s2:graph_seq ~o2:0)
+    else
+      Ok (`Both n))
 
 let align_sequences_backwards ~s1 ~o1 ~s2 ~o2 =
   let rec loop i m =
