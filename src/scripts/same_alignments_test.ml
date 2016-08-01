@@ -143,13 +143,13 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (`Finished mismatches) , wa when wa = mismatches                ->
+          | Ok (`Finished mismatches) , wa when wa = mismatches             ->
             acc
-          | Ok (`GoOn (msm, sp))      , wa when wa = msm + (read_len - sp) ->
+          | Ok (`GoOn (msm, sp))      , wa when wa = msm + (read_len - sp)  ->
             acc
-          | Ok cmo                    , wa                                     ->
+          | Ok cmo                    , wa                                  ->
             (allele, Ok (cmo, wa)) :: acc
-          | Error ec                  , wa                                     ->
+          | Error ec                  , wa                                  ->
             (allele, Error (ec, wa)) :: acc)
 
 
@@ -165,7 +165,6 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
   let rec over_reads i = function
     | []          -> None
     | read :: tl  ->
-  (*let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read -> *)
       let sub_read, sub_read_len =
         match length with
         | None       -> read, String.length read
@@ -196,16 +195,25 @@ let () =
     let reads_file =
       if n <= 1 then
         invalid_argf
-          "%s [reads_file] [alignment_file] length (graph_size for comparison test)"
+          "%s [reads_file] [alignment_file] [length] \
+            'G' [graph_size for stability test] or \
+            'C' [drop number (optional) for comparison test]"
           Sys.argv.(0)
       else
         Sys.argv.(1)
     in
     let file = if n <= 2 then "A_nuc" else Sys.argv.(2) in
     let length = if n <= 3 then 100 else int_of_string Sys.argv.(3) in
-    let start_opt = if n <= 4 then None else Some (int_of_string Sys.argv.(4)) in
-    match start_opt with
-    | Some start ->
+    let test =
+      if n <= 4 then `Comparison None else
+        begin match Sys.argv.(4) with
+        | "G" -> `Stability (int_of_string Sys.argv.(5))
+        | "C" -> `Comparison (Some (int_of_string Sys.argv.(6)))
+        | x   -> invalid_argf "Unrecognized arg: %s" x
+        end
+    in
+    match test with
+    | `Stability start ->
         begin match find_bad reads_file ~length ~file start with
         | Ok s  -> print_endline s
         | Error (bad_size, bad_elems) ->
@@ -213,8 +221,8 @@ let () =
               (List.length bad_elems) bad_size length;
             exit 1
         end
-    | None ->
-        begin match compare_reads reads_file ~length ~file with
+    | `Comparison drop ->
+        begin match compare_reads ?drop reads_file ~length ~file with
         | n, None              ->
             printf "all %d reads match!\n" n
         | n, Some (read, blst) ->
