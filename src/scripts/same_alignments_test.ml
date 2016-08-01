@@ -162,7 +162,7 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
     | Some n -> List.take (List.drop reads drop) n
   in
   let n = List.length reads in
-  let rec over_reads = function
+  let rec over_reads i = function
     | []          -> None
     | read :: tl  ->
   (*let l = List.fold_left reads ~init:[] ~f:(fun msm_acc read -> *)
@@ -171,24 +171,24 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
         | None       -> read, String.length read
         | Some index -> String.take read index, index
       in
-      printf "comparing alignments for %s" read;
+      printf "comparing alignments for %d %s" i read;
       match manual g idx sub_read with
       | Error em        ->
           eprintf "Skipping %s because wasn't able to map because of %s\n"
             sub_read em;
-          over_reads tl
+          over_reads (i + 1) tl
       | Ok (pos, manm)  ->
           match Alignment.compute_mismatches g sub_read pos with
           | Error mes ->
               eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
                 sub_read (Index.show_position pos) mes;
-              over_reads tl
+              over_reads (i + 1) tl
           | Ok m2     ->
               match compare_manual g manm m2 (String.length sub_read) with
-              | [] -> printf " everything matched!\n%!"; over_reads tl
+              | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
               | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
-  (n, over_reads reads)
+  (n, over_reads 0 reads)
 
 let () =
   if !Sys.interactive then () else
