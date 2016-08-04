@@ -1354,7 +1354,8 @@ module Adjacents = struct
 end (* Adjacents *)
 
 (* At or past *)
-let adjacents_at ?(max_height=10000) ({g; aindex; _} as gt)  ~pos =
+let adjacents_at ?max_edge_debug_length ?(max_height=10000) ({g; aindex; _} as gt) ~pos =
+  let max_length = max_edge_debug_length in
   find_node_at gt ~pos >>= fun rootn ->
     let all_edges = alleles_with_data gt ~pos in
     let stop es_acc =
@@ -1362,7 +1363,8 @@ let adjacents_at ?(max_height=10000) ({g; aindex; _} as gt)  ~pos =
         begin
           if !adjacents_debug_ref then
             eprintf "Still missing %s\n"
-              (Alleles.Set.to_human_readable aindex (Alleles.Set.diff all_edges es_acc));
+              (Alleles.Set.to_human_readable ?max_length aindex
+                (Alleles.Set.diff all_edges es_acc));
           false
         end
     in
@@ -1370,7 +1372,7 @@ let adjacents_at ?(max_height=10000) ({g; aindex; _} as gt)  ~pos =
       if !adjacents_debug_ref then
         eprintf "Adding %s <- %s.\n"
           (Nodes.vertex_name node)
-          (Alleles.Set.to_human_readable aindex edge);
+          (Alleles.Set.to_human_readable ?max_length aindex edge);
       Alleles.Set.union edge edge_set
     in
     let init = Alleles.Set.init aindex in
