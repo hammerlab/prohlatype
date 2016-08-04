@@ -303,17 +303,33 @@ let test_consecutive_elements =
   function
   | `Gap close_pos      ->
       begin function
-      | Sequence {start; s} :: tl when start = close_pos ->
+      | (End end_pos) :: tl when end_pos = close_pos      -> `End (close_pos, tl)
+      | Sequence {start; s} :: tl when start = close_pos  ->
           let new_close = start + String.length s in
           `Continue (Some (N (start, s)), (`Sequence new_close), tl)
-      | _ -> `Close close_pos
+      | Start _ :: _                                      ->
+          invalid_argf "Another start after a Gap close %d." close_pos
+      | []  ->
+          invalid_argf "Empty list after Gap close %d." close_pos
+      | Boundary _ :: _
+      | Sequence _ :: _
+      | Gap _ :: _
+      | End _ :: _                                        -> `Close close_pos
       end
   | `Sequence close_pos ->
       begin function
+      | End end_pos :: tl when end_pos = close_pos        -> `End (close_pos, tl)
       | Gap { start; length} :: tl when start = close_pos ->
           let new_close = start + length in
           `Continue (None, (`Gap new_close), tl)
-      | _ -> `Close close_pos
+      | Start _ :: _                                      ->
+          invalid_argf "Another start after a Sequence close %d." close_pos
+      | []  ->
+          invalid_argf "Empty list after Sequence close %d." close_pos
+      | Boundary _ :: _
+      | Sequence _ :: _
+      | Gap _ :: _
+      | End _ :: _                                        -> `Close close_pos
       end
 
 let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
@@ -521,6 +537,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
      (ex. "A..C", "...A..C" ) as opposed to linking back to the reference! *)
   and close_position_loop state ~prev ~next ~allele_node pe lst =
     match test_consecutive_elements pe lst with
+    | `End (end_pos, tl)                    ->
+        add_end state end_pos allele_node  tl
     | `Close pos                            ->
         rejoin_after_split pos state ~prev ~next ~new_node:allele_node lst
     | `Continue (new_node_opt, new_pe, lst) ->
