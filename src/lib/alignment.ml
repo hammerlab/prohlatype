@@ -97,7 +97,7 @@ let compute_mismatches gt search_seq pos =
   let assign ?node edge_set mismatches =
     if !debug_ref then
       eprintf "Assigning %d to %s because of:%s\n%!" mismatches
-        (Alleles.Set.to_human_readable gt.aindex edge_set)
+        (Alleles.Set.to_human_readable ~max_length:20000 gt.aindex edge_set)
         (Option.value ~default:"---" (Option.map node ~f:Nodes.vertex_name));
     Alleles.Map.update_from edge_set mis_map ((+) mismatches);
   in
@@ -125,11 +125,12 @@ let compute_mismatches gt search_seq pos =
         | _  -> add_successors queue (node, nsplst)
   and add_edge_node splst (_, edge, node) queue =
     let nsplst = List.map splst ~f:(fun (sp, ep) -> sp, Alleles.Set.inter edge ep) in
-    if !debug_ref then
+    if !debug_ref then begin
       eprintf "Considering adding to queue %s -> %s -> %s\n%!"
         (search_pos_edge_lst_to_string gt.aindex splst)
         (vertex_name node)
-        (search_pos_edge_lst_to_string gt.aindex nsplst);
+        (search_pos_edge_lst_to_string gt.aindex nsplst)
+    end;
     add_to_queue queue node nsplst
   and add_successors queue (node, splst) =
     G.fold_succ_e (add_edge_node splst) gt.g node queue
