@@ -1258,11 +1258,19 @@ module Adjacents = struct
   let add_if_new ~cur n kids =
     if NodeSet.mem n cur then kids else NodeSet.add n kids
 
+  let add_if_new_and_above ~cur ~pos n kids =
+    if NodeSet.mem n cur then kids else
+      if Nodes.position n >= pos then kids else
+        NodeSet.add n kids
+
   let siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc =
     let add ((_pn, _el, n) as e) (kids, adjs, acc) =
       if Nodes.position n >= pos then
-        let nadjs, nacc = if_new e (adjs, acc) in
-        kids, nadjs, nacc
+        let is_new, (nadjs, nacc) = if_new e (adjs, acc) in
+        if is_new then
+          G.fold_pred (add_if_new_and_above ~cur:kids ~pos) g n kids, nadjs, nacc
+        else
+          kids, nadjs, nacc
       else
         let nkids = add_if_new ~cur n kids in
         nkids, adjs, acc
@@ -1276,7 +1284,7 @@ module Adjacents = struct
     in
     let new_cur = NodeSet.union cur new_nodes in
     if NodeSet.is_empty newer_nodes then
-      (* no new nodes don't recurse! *)
+      (* no new nodes: don't recurse! *)
       nadjacents, nacc, new_cur
     else
       down if_new g pos nacc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
@@ -1300,7 +1308,8 @@ module Adjacents = struct
                   (node_set_to_string newer_nodes) (node_set_to_string new_nodes);
               up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
     in
-    let adj_strt, nacc = G.fold_pred_e if_new g node (EdgeNodeSet.empty, init) in
+    let wrap_if_new e a = snd (if_new e a) in
+    let adj_strt, nacc = G.fold_pred_e wrap_if_new g node (EdgeNodeSet.empty, init) in
     let new_nodes = G.fold_pred NodeSet.add g node NodeSet.empty in
     let cur = NodeSet.singleton node in
     up 0 adj_strt nacc ~new_nodes cur
@@ -1312,10 +1321,10 @@ module Adjacents = struct
     let module M = struct exception F of a end in
     let if_new (_, e, n) ((adjacents, acc) as s) =
       let en = e, n in
-      if EdgeNodeSet.mem en adjacents then s else
+      if EdgeNodeSet.mem en adjacents then false, s else
         match f e n acc with
         | `Stop r     -> raise (M.F r)
-        | `Continue r -> EdgeNodeSet.add en adjacents, r
+        | `Continue r -> true, (EdgeNodeSet.add en adjacents, r)
     in
     let pos = Nodes.position node in
     let downc = down if_new g pos  in
@@ -1335,8 +1344,8 @@ module Adjacents = struct
         eprintf "if_new check of %s -> %s\n"
           (Nodes.vertex_name pn) (Nodes.vertex_name n);
       let en = e, n in
-      if EdgeNodeSet.mem en adjacents then s else
-        EdgeNodeSet.add en adjacents, (f e n acc)
+      if EdgeNodeSet.mem en adjacents then false, s else
+        true, (EdgeNodeSet.add en adjacents, (f e n acc))
     in
     let pos = Nodes.position node in
     let downc = down if_new g pos in
