@@ -61,3 +61,17 @@ let short_seq s =
 let index_string s index =
   let (b, a) = String.split_at s ~index in
   b ^ "." ^ a
+
+(** Compare two strings and display bars for vertical mismatches. *)
+let manual_comp_display s1 s2 =
+  let msm = ref 0 in
+  let cs = String.mapi s1 ~f:(fun index c1 ->
+    let c2 = String.get_exn s2 ~index in
+    if c1 = c2 then ' ' else
+      begin incr msm; '|' end)
+  in
+  let ms = string_of_int !msm in
+  let n  = String.length ms + 1 in
+  let pd = String.make n ' ' in
+  sprintf "%s%s\n%s %s\n%s%s"
+    pd s1 ms cs pd s2
