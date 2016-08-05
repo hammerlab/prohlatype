@@ -177,7 +177,7 @@ let compute_mismatches gt search_seq pos =
                     add_successors queue (node, [dist, edge])
                   end else begin
                     assign ~node edge search_str_length;
-                    queue (* Nothing to match. *)
+                    queue (* Nothing left to match. *)
                   end
               | N (p, node_seq)  ->
                   let node_offset, start_mismatches =
