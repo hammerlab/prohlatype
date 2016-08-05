@@ -1210,21 +1210,21 @@ let node_set_to_string s =
   |> String.concat ~sep:"; "
   |> sprintf "{%s}"
 
-let edge_node_set_to_string ?max_length aindex s =
+let edge_node_set_to_string ?max_length ?complement aindex s =
   EdgeNodeSet.fold ~f:(fun (e, n) a ->
     (sprintf "(%s -> %s)"
-      (Alleles.Set.to_human_readable aindex ?max_length ~compress:true e)
+      (Alleles.Set.to_human_readable aindex ?max_length ?complement e)
       (Nodes.vertex_name n)) :: a) ~init:[] s
   |> String.concat ~sep:"; "
   |> sprintf "{%s}"
 
-let edge_node_set_to_table ?max_length aindex s =
+let edge_node_set_to_table ?max_length ?complement aindex s =
   EdgeNodeSet.fold ~f:(fun p l -> p :: l) ~init:[] s
   |> List.sort ~cmp:(fun (_,n1) (_,n2) -> Nodes.compare n1 n2)
   |> List.map ~f:(fun (e, n) ->
       sprintf "%s <- %s"
         (Nodes.vertex_name n)
-        (Alleles.Set.to_human_readable aindex ?max_length ~compress:true e))
+        (Alleles.Set.to_human_readable aindex ?max_length ?complement e))
   |> String.concat ~sep:"\n"
   |> sprintf "%s"
 
