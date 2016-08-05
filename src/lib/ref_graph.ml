@@ -1259,9 +1259,14 @@ module Adjacents = struct
     if NodeSet.mem n cur then kids else NodeSet.add n kids
 
   let add_if_new_and_above ~cur ~pos n kids =
+    (* Start Nodes will have an equal node position to pos but will be "above"
+       and therefore potentially point at adjacents.*)
     if NodeSet.mem n cur then kids else
-      if Nodes.position n >= pos then kids else
-        NodeSet.add n kids
+      let open Nodes in
+      match n with
+      | S (np, _) when np = pos -> NodeSet.add n kids
+      | _                       -> if Nodes.position n >= pos then kids else
+                                     NodeSet.add n kids
 
   let siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc =
     let add ((_pn, _el, n) as e) (kids, adjs, acc) =
