@@ -84,18 +84,27 @@ module Set : sig
 
   (** Construct a string with all of the alleles {b not} found in the edge set.
 
-      @param complement_prefix will determine if the complement string is
-             prefixed (ie. "Complement of ") *)
-  val complement_string : ?compress:bool -> ?complement_prefix:string -> index
-      -> t -> string
+      @param prefix will determine if the complement string is prefixed
+        (ie. "Complement of ") *)
+  val complement_string : ?compress:bool -> ?prefix:string -> index -> t -> string
 
-  (** [to_human_readable] picks the shorter (fewer number of alleles) string
+  (** [to_human_readable] uses some heuristics to pick a shorter string
       representation of the edge set.
 
-      If the algorithm chooses to represent the set with a complement "C. of"
-      will be prepended unless otherwise specified. *)
-  val to_human_readable : ?compress:bool -> ?max_length:int -> ?complement_prefix:string ->
-    index -> t -> string
+      @param compress Use allele run compression
+        (ex. ["A*01:01"; "A*01:02"; .. "A*01:05"] -> "A*01:01-05"), defaults to true.
+
+      @param max_length Trim the string, defaults to first 500 characters.
+      @param complement Whether to consider printing the complement string
+        (defaults to `Yes):
+        [`No]       -> Never print the complement string.
+        [`Yes]      -> If the complement set has fewer alleles then print it with
+                        "C. of" as a prefix
+        [`Prefix s] -> If the complement set has fewer alleles then print it with
+                        [s] as a prefix
+      *)
+  val to_human_readable : ?compress:bool -> ?max_length:int ->
+    ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string
 
 end
 
