@@ -88,7 +88,7 @@ module Set : sig
         (ie. "Complement of ") *)
   val complement_string : ?compress:bool -> ?prefix:string -> index -> t -> string
 
-  (** [to_human_readable] uses some heuristics to pick a shorter string
+  (** [to_human_readable] uses heuristics to pick a shorter string
       representation of the edge set.
 
       @param compress Use allele run compression
