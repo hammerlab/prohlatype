@@ -124,7 +124,11 @@ let compute_mismatches gt search_seq pos =
         | [] -> queue
         | _  -> add_successors queue (node, nsplst)
   and add_edge_node splst (_, edge, node) queue =
-    let nsplst = List.map splst ~f:(fun (sp, ep) -> sp, Alleles.Set.inter edge ep) in
+    let nsplst =
+      List.filter_map splst ~f:(fun (sp, ep) ->
+        let i = Alleles.Set.inter edge ep in
+        if Alleles.Set.is_empty i then None else Some (sp, i))
+    in
     if !debug_ref then begin
       eprintf "Considering adding to queue %s -> %s -> %s\n%!"
         (search_pos_edge_lst_to_string gt.aindex splst)
