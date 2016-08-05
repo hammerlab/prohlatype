@@ -158,7 +158,7 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
   let reads = reads_with_kmers reads_file (g, idx) in
   let reads =
     match num_comp with
-    | None -> reads
+    | None -> List.drop reads drop
     | Some n -> List.take (List.drop reads drop) n
   in
   let n = List.length reads in
@@ -208,7 +208,7 @@ let () =
       if n <= 4 then `Comparison None else
         begin match Sys.argv.(4) with
         | "G" -> `Stability (int_of_string Sys.argv.(5))
-        | "C" -> `Comparison (Some (int_of_string Sys.argv.(6)))
+        | "C" -> `Comparison (Some (int_of_string Sys.argv.(5)))
         | x   -> invalid_argf "Unrecognized arg: %s" x
         end
     in
