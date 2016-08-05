@@ -180,19 +180,24 @@ let compute_mismatches gt search_seq pos =
                     queue (* Nothing left to match. *)
                   end
               | N (p, node_seq)  ->
-                  let node_offset, start_mismatches =
-                    if p <= pos then
-                      pos - p, 0
-                    else
-                      0, p - pos
+                  let nmas_and_assign ~node_offset ~start_mismatches =
+                    match nmas ~search_pos:start_mismatches ~node_seq ~node_offset with
+                    | `Finished mismatches            ->
+                        assign ~node edge (mismatches + start_mismatches);
+                        queue
+                    | `GoOn (mismatches, search_pos)  ->
+                        assign ~node edge (mismatches + start_mismatches);
+                        add_successors queue (node, [search_pos, edge])
                   in
-                  match nmas ~search_pos:start_mismatches ~node_seq ~node_offset with
-                  | `Finished mismatches            ->
-                      assign ~node edge (mismatches + start_mismatches);
-                      queue
-                  | `GoOn (mismatches, search_pos)  ->
-                      assign ~node edge (mismatches + start_mismatches);
-                      add_successors queue (node, [search_pos, edge]))
+                  let dist = p - pos in
+                  if dist <= 0 then
+                    nmas_and_assign ~node_offset:(-dist) ~start_mismatches:0
+                  else if dist < search_str_length then
+                    nmas_and_assign ~node_offset:0 ~start_mismatches:dist
+                  else begin
+                    assign ~node edge search_str_length;
+                    queue
+                  end)
     in
     Ok (assign_loop startq))
 
