@@ -276,4 +276,16 @@ module Map = struct
   let map { to_allele; _} ~f amap =
     Array.mapi amap ~f:(fun i c -> f amap.(i) (to_allele.(i)))
 
+  let values_assoc index amap =
+    Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
+      let a = index.to_allele.(i) in
+      try 
+        let s = List.assoc v asc in
+        (* TODO: make these modules recursive to allow maps to see inside sets *)
+        Set.set index s a;
+        (i + 1, asc)
+      with Not_found ->
+        (i + 1, (v, Set.singleton index a) ::asc))
+    |> snd
+
 end (* Map *)

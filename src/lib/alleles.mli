@@ -147,4 +147,8 @@ module Map : sig
        of [cm]. *)
   val map : index -> f:('a -> allele -> 'b) -> 'a t -> 'b t
 
+  (** [values_assoc index m] compress (invert) the values found in [m] into
+      an association list. *)
+  val values_assoc : index -> 'a t -> ('a * Set.t) list
+
 end
