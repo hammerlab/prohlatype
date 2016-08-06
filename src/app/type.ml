@@ -81,6 +81,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
                 let len = String.length seq in
                 Alleles.Map.update2 md amap (fun m c -> c +. weight *. (likelihood ~len m))));
 
+  let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
+  let amap = Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap in
   match print_top with
   | None ->
       (* Round the values so that it is easier to display. *)
