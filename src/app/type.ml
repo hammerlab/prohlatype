@@ -4,7 +4,7 @@ open Common_options
 
 let app_name = "type"
 
-let shitty_fastq_sequence_reader file f init =
+let shitty_fastq_sequence_reader file ~f ~init =
   let ic = open_in file in
   let r = ref init in
   try
@@ -48,7 +48,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fa
   let amap = Alignment.init_alignment_map g.aindex in
   if verbose then
     printf " Aligning!\n%!";
-  shitty_fastq_sequence_reader fastq_file ~init:() (fun () seq ->
+  shitty_fastq_sequence_reader fastq_file ~init:() ~f:(fun () seq ->
     if verbose then
       printf "aligning: %s, %!" seq;
     match String.index_of_character seq 'N' with
@@ -70,8 +70,19 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fa
           Alleles.Map.update2 md amap (fun m c ->
             c +. likelihood ~len m));
 
+  (* Round the values so that it is easier to display. *)
+  Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
+  |> Alleles.Map.values_assoc g.aindex
+  |> List.sort ~cmp:(fun (v1, _) (v2, _) -> compare v2 v1)  (* higher values first! *)
+  |> List.iter ~f:(fun (w, a) ->
+      printf "%0.8f\t%s\n" w
+        (insert_chars ['\t'; '\t'; '\n']
+          (Alleles.Set.to_human_readable g.aindex ~max_length:1000 ~complement:`No a)))
+
+  (*
   Alignment.most_likely g.aindex amap
   |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
+  *)
 
 let () =
   let open Cmdliner in
