@@ -4,17 +4,19 @@ open Common_options
 
 let app_name = "type"
 
-let shitty_fastq_sequence_reader file f =
+let shitty_fastq_sequence_reader file f init =
   let ic = open_in file in
+  let r = ref init in
   try
     let rec loop i =
       let line = input_line ic in
-      if i mod 4 = 1 then f line;
+      if i mod 4 = 1 then r := f !r line;
       loop (i + 1)
     in
     loop 0
   with End_of_file ->
-    close_in ic
+    close_in ic;
+    !r
 
   (*
   let freader = Future.Reader.open_file file in
@@ -33,8 +35,7 @@ let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let c = len - mismatches in
   exp ((float c) *. lcp +. (float mismatches) *. lmp)
 
-
-let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file not_join_same_seq =
+let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file not_join_same_seq =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -42,23 +43,28 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
       (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  printf " Got graph and index!\n%!";
+  if verbose then
+    printf " Got graph and index!\n%!";
   let amap = Alignment.init_alignment_map g.aindex in
-  printf " Aligning!\n%!";
-  shitty_fastq_sequence_reader fastq_file (fun seq ->
-    printf "aligning: %s, %!" seq;
+  if verbose then
+    printf " Aligning!\n%!";
+  shitty_fastq_sequence_reader fastq_file ~init:() (fun () seq ->
+    if verbose then
+      printf "aligning: %s, %!" seq;
     match String.index_of_character seq 'N' with
-    | Some _ -> printf "skipping N!\n"
+    | Some _ -> if verbose then printf "skipping N!%!\n"
     | None   ->
       match Index.lookup idx seq with
-      | Error m     -> printf "error looking up %s.\n" m
-      | Ok []       -> printf "empty positions. \n"
+      | Error m     -> if verbose then printf "error looking up %s.\n" m
+      | Ok []       -> if verbose then printf "empty positions. \n"
       | Ok (p :: t) ->  (* TODO, more than one! *)
-          printf " found more than one alignment %d... \n"
-            (1 + List.length t);
+          if verbose then
+            printf " found %d alignments, using first... \n"
+              (1 + List.length t);
           match Alignment.compute_mismatches g seq p with
           | Error m ->
-              printf "error during mismatch "
+              if verbose then
+                printf "error during mismatch "
           | Ok md ->
           let len = String.length seq in
           Alleles.Map.update2 md amap (fun m c ->
@@ -83,6 +89,11 @@ let () =
     let doc = "Fastq formatted DNA reads file." in
     Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
   in
+  let verbose_flag =
+    let docv = "Be verbose" in
+    let doc = "Print progress messages to stdout." in
+    Arg.(value & flag & info ~doc ~docv ["v"; "verbose"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -99,6 +110,7 @@ let () =
       ]
     in
     Term.(const type_
+            $ verbose_flag
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
             $ do_not_join_same_sequence_paths_flag
