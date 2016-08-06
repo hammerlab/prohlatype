@@ -55,20 +55,20 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fa
     | Some _ -> if verbose then printf "skipping N!%!\n"
     | None   ->
       match Index.lookup idx seq with
-      | Error m     -> if verbose then printf "error looking up %s.\n" m
-      | Ok []       -> if verbose then printf "empty positions. \n"
-      | Ok (p :: t) ->  (* TODO, more than one! *)
-          if verbose then
-            printf " found %d alignments, using first... \n"
-              (1 + List.length t);
-          match Alignment.compute_mismatches g seq p with
-          | Error m ->
-              if verbose then
-                printf "error during mismatch "
-          | Ok md ->
-          let len = String.length seq in
-          Alleles.Map.update2 md amap (fun m c ->
-            c +. likelihood ~len m));
+      | Error m -> if verbose then printf "error looking up %s.\n" m
+      | Ok []   -> if verbose then printf "empty positions. \n"
+      | Ok lst  ->  (* TODO, more than one! *)
+          let n = List.length lst in
+          if verbose then printf " found %d alignments, averaging... \n" n;
+          let weight = 1. /. (float n) in
+          List.iter lst ~f:(fun p ->
+            match Alignment.compute_mismatches g seq p with
+            | Error m ->
+                if verbose then
+                  printf "error during mismatch "
+            | Ok md ->
+                let len = String.length seq in
+                Alleles.Map.update2 md amap (fun m c -> c +. weight *. (likelihood ~len m))));
 
   (* Round the values so that it is easier to display. *)
   Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
@@ -78,11 +78,6 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fa
       printf "%0.8f\t%s\n" w
         (insert_chars ['\t'; '\t'; '\n']
           (Alleles.Set.to_human_readable g.aindex ~max_length:1000 ~complement:`No a)))
-
-  (*
-  Alignment.most_likely g.aindex amap
-  |> List.iter ~f:(fun (w, a) -> printf "%f \t %s\n" w a)
-  *)
 
 let () =
   let open Cmdliner in
