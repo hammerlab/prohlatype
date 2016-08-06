@@ -51,8 +51,8 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
     | Some _ -> printf "skipping N!\n"
     | None   ->
       match Index.lookup idx seq with
-      | Error m     -> printf "error looking up %s\n" m
-      | Ok []       -> printf "empty positions %s\n"
+      | Error m     -> printf "error looking up %s.\n" m
+      | Ok []       -> printf "empty positions. \n"
       | Ok (p :: t) ->  (* TODO, more than one! *)
           printf " found more than one alignment %d... \n"
             (1 + List.length t);
