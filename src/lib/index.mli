@@ -30,6 +30,8 @@ type position =
   ; offset    : int                   (* An offset into the the sequence. *)
   }
 
+val show_position : position -> string
+
 val specific_position : Ref_graph.t -> Alleles.allele -> alignment_position ->
   (position, string) result
     

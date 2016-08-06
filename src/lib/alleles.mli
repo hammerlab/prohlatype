@@ -84,18 +84,27 @@ module Set : sig
 
   (** Construct a string with all of the alleles {b not} found in the edge set.
 
-      @param complement_prefix will determine if the complement string is
-             prefixed (ie. "Complement of ") *)
-  val complement_string : ?compress:bool -> ?complement_prefix:string -> index
-      -> t -> string
+      @param prefix will determine if the complement string is prefixed
+        (ie. "Complement of ") *)
+  val complement_string : ?compress:bool -> ?prefix:string -> index -> t -> string
 
-  (** [to_human_readable] picks the shorter (fewer number of alleles) string
+  (** [to_human_readable] uses heuristics to pick a shorter string
       representation of the edge set.
 
-      If the algorithm chooses to represent the set with a complement "C. of"
-      will be prepended unless otherwise specified. *)
-  val to_human_readable : ?compress:bool -> ?max_length:int -> ?complement_prefix:string ->
-    index -> t -> string
+      @param compress Use allele run compression
+        (ex. ["A*01:01"; "A*01:02"; .. "A*01:05"] -> "A*01:01-05"), defaults to true.
+
+      @param max_length Trim the string, defaults to first 500 characters.
+      @param complement Whether to consider printing the complement string
+        (defaults to `Yes):
+        [`No]       -> Never print the complement string.
+        [`Yes]      -> If the complement set has fewer alleles then print it with
+                        "C. of" as a prefix
+        [`Prefix s] -> If the complement set has fewer alleles then print it with
+                        [s] as a prefix
+      *)
+  val to_human_readable : ?compress:bool -> ?max_length:int ->
+    ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string
 
 end
 
@@ -112,6 +121,9 @@ module Map : sig
 
   (** [get index map allele]. *)
   val get : index -> 'a t -> allele -> 'a
+
+  (** [cardinal m] size of the map [m]. *)
+  val cardinal : 'a t -> int
 
   (** [update_all set map f] apply [f] to all alleles in [map] where whether
       they are in [set] is passed the first arg to [f]. *)
@@ -130,5 +142,9 @@ module Map : sig
 
   (** [iter index f map] iter over all allele assignments in the [map]. *)
   val iter : index -> f:('b -> allele -> unit) -> 'b t -> unit
+
+  (** [map index f cm] return a new map based on applying [f] to each element
+       of [cm]. *)
+  val map : index -> f:('a -> allele -> 'b) -> 'a t -> 'b t
 
 end

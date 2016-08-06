@@ -46,15 +46,20 @@ let type_ alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file
   let amap = Alignment.init_alignment_map g.aindex in
   printf " Aligning!\n%!";
   shitty_fastq_sequence_reader fastq_file (fun seq ->
-    Printf.printf "aligning: %s\n%!" seq;
+    printf "aligning: %s, %!" seq;
     match String.index_of_character seq 'N' with
     | Some _ -> printf "skipping N!\n"
     | None   ->
       match Index.lookup idx seq with
-      | Error m     -> printf "Error looking up %s\n" m
-      | Ok []       -> printf "Empty for %s\n" seq
-      | Ok (p :: _) ->  (* TODO, more than one! *)
-          let md = Alignment.compute_mismatches g seq p in
+      | Error m     -> printf "error looking up %s\n" m
+      | Ok []       -> printf "empty positions %s\n"
+      | Ok (p :: t) ->  (* TODO, more than one! *)
+          printf " found more than one alignment %d... \n"
+            (1 + List.length t);
+          match Alignment.compute_mismatches g seq p with
+          | Error m ->
+              printf "error during mismatch "
+          | Ok md ->
           let len = String.length seq in
           Alleles.Map.update2 md amap (fun m c ->
             c +. likelihood ~len m));

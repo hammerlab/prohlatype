@@ -195,7 +195,7 @@ module Set = struct
     |> (fun l -> if compress then CompressNames.f l else l)
     |> String.concat ~sep:";"
 
-  let complement_string ?(compress=false) ?complement_prefix { to_allele; _} s =
+  let complement_string ?(compress=false) ?prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
         ~f:(fun (i, acc) a -> if BitSet.is_set s i
                               then (i + 1, acc)
@@ -206,21 +206,23 @@ module Set = struct
     |> String.concat ~sep:";"
     |> function
         | ""  -> invalid_argf "Complement of everything!"
-        | s   -> match complement_prefix with
+        | s   -> match prefix with
                  | None    -> s
                  | Some cp -> cp ^ s
 
-  let to_human_readable ?compress ?(max_length=500) ?complement_prefix t s =
+  let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) t s =
     let make_shorter =
       if BitSet.count s = t.size then
         "Everything"
-      else if BitSet.count s > t.size / 2 then
-        let complement_prefix =
-          Option.value complement_prefix ~default:"C. of "
-        in
-        complement_string ?compress ~complement_prefix t s
+      else if BitSet.count s = 0 then
+        "Nothing"
+      else if BitSet.count s <= t.size / 2 then
+        to_string ~compress t s
       else
-        to_string ?compress t s
+        match complement with
+        | `Yes           -> complement_string ~compress ~prefix:"C. of " t s
+        | `Prefix prefix -> complement_string ~compress ~prefix t s
+        | `No            -> to_string ~compress t s
     in
     String.take make_shorter ~index:max_length
 
@@ -238,6 +240,8 @@ module Map = struct
 
   let get { to_index; _} m a =
     m.(SMap.find a to_index)
+
+  let cardinal = Array.length
 
   (* let map { to_allele; _} s f =
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
@@ -268,5 +272,8 @@ module Map = struct
 
   let iter i ~f amap =
     fold i ~init:() ~f:(fun () m a -> f m a) amap
+
+  let map { to_allele; _} ~f amap =
+    Array.mapi amap ~f:(fun i c -> f amap.(i) (to_allele.(i)))
 
 end (* Map *)

@@ -114,7 +114,7 @@ type position =
   { alignment : alignment_position
   ; sequence  : sequence
   ; offset    : int       (* into sequence *)
-  }
+  } [@@deriving show]
 
 let specific_position g allele pos =
   let open Nodes in

@@ -8,10 +8,10 @@ module A = Alleles
   - Turn fold_succ_e from O(n) into something better
 *)
 
-type alignment_position = int [@@deriving eq, ord]
+type alignment_position = int [@@deriving eq, ord, show]
 type start = alignment_position * (A.allele [@equal A.equal] [@compare A.compare]) [@@deriving eq, ord]
 type end_ = alignment_position [@@deriving eq, ord]
-type sequence = string [@@deriving eq, ord]
+type sequence = string [@@deriving eq, ord, show]
 
 (* start end pairs *)
 type sep = { start : start ; end_ : end_ } [@@deriving eq, ord]
@@ -303,17 +303,33 @@ let test_consecutive_elements =
   function
   | `Gap close_pos      ->
       begin function
-      | Sequence {start; s} :: tl when start = close_pos ->
+      | (End end_pos) :: tl when end_pos = close_pos      -> `End (close_pos, tl)
+      | Sequence {start; s} :: tl when start = close_pos  ->
           let new_close = start + String.length s in
           `Continue (Some (N (start, s)), (`Sequence new_close), tl)
-      | _ -> `Close close_pos
+      | Start _ :: _                                      ->
+          invalid_argf "Another start after a Gap close %d." close_pos
+      | []  ->
+          invalid_argf "Empty list after Gap close %d." close_pos
+      | Boundary _ :: _
+      | Sequence _ :: _
+      | Gap _ :: _
+      | End _ :: _                                        -> `Close close_pos
       end
   | `Sequence close_pos ->
       begin function
+      | End end_pos :: tl when end_pos = close_pos        -> `End (close_pos, tl)
       | Gap { start; length} :: tl when start = close_pos ->
           let new_close = start + length in
           `Continue (None, (`Gap new_close), tl)
-      | _ -> `Close close_pos
+      | Start _ :: _                                      ->
+          invalid_argf "Another start after a Sequence close %d." close_pos
+      | []  ->
+          invalid_argf "Empty list after Sequence close %d." close_pos
+      | Boundary _ :: _
+      | Sequence _ :: _
+      | Gap _ :: _
+      | End _ :: _                                        -> `Close close_pos
       end
 
 let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
@@ -521,6 +537,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
      (ex. "A..C", "...A..C" ) as opposed to linking back to the reference! *)
   and close_position_loop state ~prev ~next ~allele_node pe lst =
     match test_consecutive_elements pe lst with
+    | `End (end_pos, tl)                    ->
+        add_end state end_pos allele_node  tl
     | `Close pos                            ->
         rejoin_after_split pos state ~prev ~next ~new_node:allele_node lst
     | `Continue (new_node_opt, new_pe, lst) ->
@@ -606,7 +624,7 @@ module FoldAtSamePosition = struct
 
   let at_min_position q =
     let rec loop p q acc =
-      if q = NodeQueue.empty then
+      if NodeQueue.is_empty q then
         q, acc
       else
         let me = NodeQueue.min_elt q in
@@ -1029,44 +1047,86 @@ let find_node_at ?allele ?ongap ~pos { g; aindex; offset; posarr; _} =
   in
   lookup_at true (pos - offset)
 
+(* - A list of nodes to start searching from. If there is more than one it
+     is a list of the start nodes.
+   - A function to modify the accumulated string. For example when we wish
+     to start the sequence at a position inside of a node.
+   - An initialization of a count of how many characters we've seen. This
+     accounts for starting a node that we're going to trim with the function
+     of the previous argument.  *)
 let parse_start_arg g allele =
   let id x = x in
   let open Nodes in function
-  | Some (`Node s)      ->
+  | Some (`Node s)        ->
       if G.mem_vertex g.g s then
-        Ok ([s], id)
+        Ok ([s], id, 0)
       else
         error "%s vertex not in graph" (vertex_name s)
-  | Some (`AtPos pos)   ->
+  | Some (`AtPos pos)     ->
       find_node_at ~allele ~pos g >>= fun v ->
-        Ok ([v], String.drop ~index:(pos - position v))
-  | Some (`AtNext pos)  ->
-      find_position_old ~allele ~pos g >>= fun (v, precise) ->
-        Ok ([v], if precise then id else String.drop ~index:(pos - position v))
-  | None                ->
-      match A.Map.get g.aindex g.bounds allele with
+        let pv = position v in
+        let index = pos - pv in
+        Ok ([v], String.drop ~index, max 0 (-index))
+  | Some (`AtNext pos)    ->
+      (* find_node_at is O(1) but it doesn't currently accomodate
+         finding the next node if necessary. *)
+      find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
+        let pv = position v in
+        let index = pos - pv in
+        if precise || index < 0 then
+          Ok ([v], id, 0)
+        else
+          Ok ([v], String.drop ~index, -index)
+  | Some (`Pad pos)       ->
+      find_position_old ~next_after:true ~allele ~pos g >>= fun (v, precise) ->
+        let pv = position v in
+        let index = pos - pv in
+        if precise then
+          Ok ([v], id, 0)
+        else if index < 0 then
+          Ok ([v], (fun s -> (String.make (-index) '.') ^ s), index)
+        else
+          Ok ([v], String.drop ~index, -index)
+  | None                  ->
+      begin match A.Map.get g.aindex g.bounds allele with
       | []  -> error "Allele %s not found in graph!" allele
       | spl -> Ok (List.map spl ~f:(fun sep ->
-                        Nodes.S (fst sep.start, allele)), id)
+                        Nodes.S (fst sep.start, allele)), id, 0)
+      end
 
-let parse_stop_arg =
+let parse_stop_arg ?(count=0) =
   let stop_if b = if b then `Stop else `Continue in
   let open Nodes in function
-  | None             -> (fun _ -> `Continue)                  , (fun x -> x)
-  | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))  , (fun x -> x)
-  | Some (`Length n) -> let r = ref 0 in
+  | None             -> (fun _ -> `Continue)
+                        , (fun x -> x)
+  | Some (`AtPos p)  -> (fun n -> stop_if (position n >= p))
+                        , (fun x -> x)
+  | Some (`Length n) -> let r = ref count in
                         (function
                           | S _ | E _ | B _ -> `Continue
                           | N (_, s) ->
                               r := !r + String.length s;
-                              stop_if (!r >= n))              , String.take ~index:n
+                              stop_if (!r >= n))
+                        , String.take ~index:n
+  | Some (`Pad n)    -> let r = ref count in
+                        (function
+                          | S _ | E _ | B _ -> `Continue
+                          | N (_, s) ->
+                              r := !r + String.length s;
+                              stop_if (!r >= n))
+                        , (fun s ->
+                            let l = String.length s in
+                            if l < n then
+                              s ^ String.make (n - l) '.'
+                            else
+                              String.take ~index:n s)
 
 (** Accessors. *)
 let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
   let open Nodes in
   parse_start_arg gt allele start
-    >>= fun (start, pre) ->
-      let stop, post = parse_stop_arg stop in
+    >>= fun (start, pre, count) ->
+      let stop, post = parse_stop_arg ~count stop in
       List.fold_left start ~init:[] ~f:(fun acc start ->
         fold_along_allele g aindex allele ~start ~init:acc
           ~f:(fun clst node ->
@@ -1150,21 +1210,21 @@ let node_set_to_string s =
   |> String.concat ~sep:"; "
   |> sprintf "{%s}"
 
-let edge_node_set_to_string aindex s =
+let edge_node_set_to_string ?max_length ?complement aindex s =
   EdgeNodeSet.fold ~f:(fun (e, n) a ->
     (sprintf "(%s -> %s)"
-      (Alleles.Set.to_human_readable aindex ~compress:true e)
+      (Alleles.Set.to_human_readable aindex ?max_length ?complement e)
       (Nodes.vertex_name n)) :: a) ~init:[] s
   |> String.concat ~sep:"; "
   |> sprintf "{%s}"
 
-let edge_node_set_to_table aindex s =
+let edge_node_set_to_table ?max_length ?complement aindex s =
   EdgeNodeSet.fold ~f:(fun p l -> p :: l) ~init:[] s
   |> List.sort ~cmp:(fun (_,n1) (_,n2) -> Nodes.compare n1 n2)
   |> List.map ~f:(fun (e, n) ->
       sprintf "%s <- %s"
         (Nodes.vertex_name n)
-        (Alleles.Set.to_human_readable aindex ~compress:true e))
+        (Alleles.Set.to_human_readable aindex ?max_length ?complement e))
   |> String.concat ~sep:"\n"
   |> sprintf "%s"
 
@@ -1198,11 +1258,24 @@ module Adjacents = struct
   let add_if_new ~cur n kids =
     if NodeSet.mem n cur then kids else NodeSet.add n kids
 
+  let add_if_new_and_above ~cur ~pos n kids =
+    (* Start Nodes will have an equal node position to pos but will be "above"
+       and therefore potentially point at adjacents.*)
+    if NodeSet.mem n cur then kids else
+      let open Nodes in
+      match n with
+      | S (np, _) when np = pos -> NodeSet.add n kids
+      | _                       -> if Nodes.position n >= pos then kids else
+                                     NodeSet.add n kids
+
   let siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc =
     let add ((_pn, _el, n) as e) (kids, adjs, acc) =
       if Nodes.position n >= pos then
-        let nadjs, nacc = if_new e (adjs, acc) in
-        kids, nadjs, nacc
+        let is_new, (nadjs, nacc) = if_new e (adjs, acc) in
+        if is_new then
+          G.fold_pred (add_if_new_and_above ~cur:kids ~pos) g n kids, nadjs, nacc
+        else
+          kids, nadjs, nacc
       else
         let nkids = add_if_new ~cur n kids in
         nkids, adjs, acc
@@ -1216,10 +1289,10 @@ module Adjacents = struct
     in
     let new_cur = NodeSet.union cur new_nodes in
     if NodeSet.is_empty newer_nodes then
-      (* no new nodes don't recurse! *)
+      (* no new nodes: don't recurse! *)
       nadjacents, nacc, new_cur
     else
-      down if_new g pos acc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
+      down if_new g pos nacc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
 
   let look_above g cur =
     NodeSet.fold cur ~f:(G.fold_pred (add_if_new ~cur) g) ~init:NodeSet.empty
@@ -1232,7 +1305,7 @@ module Adjacents = struct
       | Some h when i >= h  -> adjacents, acc, NodeSet.union new_nodes cur
       | None | Some _       ->
           match down acc ~adjacents ~new_nodes cur with
-          | `Stop t         -> t
+          | `Stop t                            -> t
           | `Continue (nadjacents, nacc, ncur) ->
               let newer_nodes = look_above g new_nodes in
               if !adjacents_debug_ref then
@@ -1240,7 +1313,8 @@ module Adjacents = struct
                   (node_set_to_string newer_nodes) (node_set_to_string new_nodes);
               up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
     in
-    let adj_strt, nacc = G.fold_pred_e if_new g node (EdgeNodeSet.empty, init) in
+    let wrap_if_new e a = snd (if_new e a) in
+    let adj_strt, nacc = G.fold_pred_e wrap_if_new g node (EdgeNodeSet.empty, init) in
     let new_nodes = G.fold_pred NodeSet.add g node NodeSet.empty in
     let cur = NodeSet.singleton node in
     up 0 adj_strt nacc ~new_nodes cur
@@ -1252,10 +1326,10 @@ module Adjacents = struct
     let module M = struct exception F of a end in
     let if_new (_, e, n) ((adjacents, acc) as s) =
       let en = e, n in
-      if EdgeNodeSet.mem en adjacents then s else
+      if EdgeNodeSet.mem en adjacents then false, s else
         match f e n acc with
         | `Stop r     -> raise (M.F r)
-        | `Continue r -> EdgeNodeSet.add en adjacents, r
+        | `Continue r -> true, (EdgeNodeSet.add en adjacents, r)
     in
     let pos = Nodes.position node in
     let downc = down if_new g pos  in
@@ -1275,8 +1349,8 @@ module Adjacents = struct
         eprintf "if_new check of %s -> %s\n"
           (Nodes.vertex_name pn) (Nodes.vertex_name n);
       let en = e, n in
-      if EdgeNodeSet.mem en adjacents then s else
-        EdgeNodeSet.add en adjacents, (f e n acc)
+      if EdgeNodeSet.mem en adjacents then false, s else
+        true, (EdgeNodeSet.add en adjacents, (f e n acc))
     in
     let pos = Nodes.position node in
     let downc = down if_new g pos in
@@ -1294,25 +1368,26 @@ module Adjacents = struct
 end (* Adjacents *)
 
 (* At or past *)
-let adjacents_at ?(max_height=10) ({g; aindex; _} as gt)  ~pos =
- find_node_at gt ~pos >>= fun rootn ->
+let adjacents_at ?max_edge_debug_length ?(max_height=10000) ({g; aindex; _} as gt) ~pos =
+  let max_length = max_edge_debug_length in
+  find_node_at gt ~pos >>= fun rootn ->
     let all_edges = alleles_with_data gt ~pos in
     let stop es_acc =
       if es_acc = all_edges then true else
         begin
           if !adjacents_debug_ref then
             eprintf "Still missing %s\n"
-              (Alleles.Set.to_human_readable aindex (Alleles.Set.diff all_edges es_acc));
+              (Alleles.Set.to_human_readable ?max_length aindex
+                (Alleles.Set.diff all_edges es_acc));
           false
         end
     in
     let f edge node edge_set =
       if !adjacents_debug_ref then
-        eprintf "Adding %s <- %s\n"
+        eprintf "Adding %s <- %s.\n"
           (Nodes.vertex_name node)
-          (Alleles.Set.to_human_readable aindex edge);
+          (Alleles.Set.to_human_readable ?max_length aindex edge);
       Alleles.Set.union edge edge_set
     in
     let init = Alleles.Set.init aindex in
     Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
-

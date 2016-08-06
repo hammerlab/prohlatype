@@ -19,11 +19,12 @@ let dir = ".cache"
 
 let graph_cache_dir = Filename.concat dir "graphs"
 
+let graph_no_cache { alignment_file; which; join_same_sequence } =
+  Ref_graph.construct_from_file ~join_same_sequence ?which alignment_file
+
 let graph =
   let dir = Filename.concat (Sys.getcwd ()) graph_cache_dir in
-  disk_memoize ~dir graph_args_to_string
-    (fun { alignment_file; which; join_same_sequence } ->
-       Ref_graph.construct_from_file ~join_same_sequence ?which alignment_file)
+  disk_memoize ~dir graph_args_to_string graph_no_cache
 
 type index_args =
   { k : int
@@ -35,10 +36,12 @@ let index_args_to_string {k; g} =
 
 let index_cache_dir = Filename.concat dir "indices"
 
+let graph_and_two_index_no_cache {k; g} =
+  let gr = graph_no_cache g in
+  let id = Index.create ~k gr in
+  gr, id
+
 let graph_and_two_index =
   let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
-  disk_memoize ~dir index_args_to_string
-    (fun {k; g} ->
-        let gr = graph g in
-        let id = Index.create ~k gr in
-        gr, id)
+  disk_memoize ~dir index_args_to_string graph_and_two_index_no_cache
+
