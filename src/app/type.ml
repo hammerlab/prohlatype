@@ -35,7 +35,18 @@ let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let c = len - mismatches in
   exp ((float c) *. lcp +. (float mismatches) *. lmp)
 
-let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fastq_file not_join_same_seq =
+let sort_values_assoc =
+  (* higher values first! *)
+  List.sort ~cmp:(fun (v1, _) (v2, _) -> compare v2 v1)
+
+let output_values_assoc aindex =
+  List.iter ~f:(fun (w, a) ->
+    printf "%0.8f\t%s\n" w
+      (insert_chars ['\t'; '\t'; '\n']
+        (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
+
+let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
+  fastq_file not_join_same_seq print_top =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -70,14 +81,18 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache fa
                 let len = String.length seq in
                 Alleles.Map.update2 md amap (fun m c -> c +. weight *. (likelihood ~len m))));
 
-  (* Round the values so that it is easier to display. *)
-  Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
-  |> Alleles.Map.values_assoc g.aindex
-  |> List.sort ~cmp:(fun (v1, _) (v2, _) -> compare v2 v1)  (* higher values first! *)
-  |> List.iter ~f:(fun (w, a) ->
-      printf "%0.8f\t%s\n" w
-        (insert_chars ['\t'; '\t'; '\n']
-          (Alleles.Set.to_human_readable g.aindex ~max_length:1000 ~complement:`No a)))
+  match print_top with
+  | None ->
+      (* Round the values so that it is easier to display. *)
+      Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
+      |> Alleles.Map.values_assoc g.aindex
+      |> sort_values_assoc
+      |> output_values_assoc g.aindex
+  | Some n ->
+      Alleles.Map.values_assoc g.aindex amap
+      |> sort_values_assoc
+      |> fun l -> List.take l n
+      |> output_values_assoc g.aindex
 
 let () =
   let open Cmdliner in
@@ -100,6 +115,11 @@ let () =
     let doc = "Print progress messages to stdout." in
     Arg.(value & flag & info ~doc ~docv ["v"; "verbose"])
   in
+  let print_top_flag =
+    let docv = "Print only most likely" in
+    let doc = "Print only the specified number (positive integer) of alleles" in
+    Arg.(value & opt (some int) None & info ~doc ~docv ["print-top"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -120,6 +140,7 @@ let () =
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
             $ do_not_join_same_sequence_paths_flag
+            $ print_top_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
