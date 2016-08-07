@@ -91,7 +91,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       |> sort_values_assoc
       |> output_values_assoc g.aindex
   | Some n ->
-      Alleles.Map.values_assoc g.aindex amap
+      Alleles.Map.fold g.aindex amap ~init:[]
+        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
       |> sort_values_assoc
       |> fun l -> List.take l n
       |> output_values_assoc g.aindex
