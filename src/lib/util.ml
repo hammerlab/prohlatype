@@ -75,3 +75,16 @@ let manual_comp_display s1 s2 =
   let pd = String.make n ' ' in
   sprintf "%s%s\n%s %s\n%s%s"
     pd s1 ms cs pd s2
+
+let insert_chars ?(every=120) ?(token=';') ics s =
+  String.to_character_list s
+  |> List.fold_left ~init:(0,[]) ~f:(fun (i, acc) c ->
+      if i > every && c = token then
+        (0, ics @ (c :: acc))
+      else
+        (i + 1, c :: acc))
+  |> snd
+  |> List.rev
+  |> String.of_character_list
+
+

@@ -152,21 +152,11 @@ let create_compressed_starts t =
     end);
   { t with g = ng }
 
-let insert_newline ?(every=120) ?(token=';') s =
-  String.to_character_list s
-  |> List.fold_left ~init:(0,[]) ~f:(fun (i, acc) c ->
-      if i > every && c = token then
-        (0, '\n' :: c :: acc)
-      else
-        (i + 1, c :: acc))
-  |> snd
-  |> List.rev
-  |> String.of_character_list
-
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
   let { aindex; g; _} = if compress_start then create_compressed_starts t else t in
   let oc = open_out fname in
+  let insert_newline = insert_chars ['\n'] in
   let module Dot = Graphviz.Dot (
     struct
       include G
