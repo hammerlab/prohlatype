@@ -653,18 +653,18 @@ module FoldAtSamePosition = struct
 
 end (* FoldAtSamePosition *)
 
-let range_pr aindex bounds =
-  Alleles.Map.fold aindex bounds ~init:(max_int, min_int)
-    ~f:(fun p sep_lst _allele ->
+let range_pr bounds =
+  Alleles.Map.fold_wa bounds ~init:(max_int, min_int)
+    ~f:(fun p sep_lst ->
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
 
 (** [range g] returns the minimum and maximum alignment position in [g]. *)
-let range { aindex; bounds; _ } =
-  range_pr aindex bounds
+let range { bounds; _ } =
+  range_pr bounds
 
 let create_by_position g aindex bounds =
-  let st, en = range_pr aindex bounds in
+  let st, en = range_pr bounds in
   let len = en - st + 1 in
   let arr = Array.make len [] in
   FoldAtSamePosition.(f g aindex bounds ~init:() ~f:(fun () lst ->
@@ -951,7 +951,7 @@ let construct_from_parsed ?which ?(join_same_sequence=true) r =
   in
   if join_same_sequence then
     JoinSameSequencePaths.do_it g aindex bounds; (* mutates 'g' *)
-  let offset = fst (range_pr aindex bounds) in
+  let offset = fst (range_pr bounds) in
   let posarr = create_by_position g aindex bounds in
   { g
   ; aindex
