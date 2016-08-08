@@ -147,6 +147,18 @@ module Map : sig
        of [cm]. *)
   val map : index -> f:('a -> allele -> 'b) -> 'a t -> 'b t
 
+  (** [fold_wa index f init map] fold over all values found in the [map],
+      without regard for the allele key (wa = without allele). *)
+  val fold_wa : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a
+
+  (** [iter_wa index f map] iter over all allele assignments in the [map],
+      without regard for the allele key (wa = without allele). *)
+  val iter_wa : f:('b -> unit) -> 'b t -> unit
+
+  (** [map_wa f m] maps the values of the map [m] without regard to the allele
+      key (wa = without allele) .*)
+  val map_wa : f:('a -> 'b) -> 'a t -> 'b t
+
   (** [values_assoc index m] compress (invert) the values found in [m] into
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list

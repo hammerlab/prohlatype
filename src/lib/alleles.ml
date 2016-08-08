@@ -276,6 +276,13 @@ module Map = struct
   let map { to_allele; _} ~f amap =
     Array.mapi amap ~f:(fun i c -> f amap.(i) (to_allele.(i)))
 
+  let fold_wa = Array.fold_left
+
+  let iter_wa = Array.iter
+
+  let map_wa ~f amap =
+    Array.map amap ~f
+
   let values_assoc index amap =
     Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
       let a = index.to_allele.(i) in
