@@ -4,14 +4,19 @@ open Common_options
 
 let app_name = "type"
 
-let shitty_fastq_sequence_reader file ~f ~init =
+let shitty_fastq_sequence_reader ?num_reads file ~f ~init =
   let ic = open_in file in
   let r = ref init in
+  let n = match num_reads with | None -> max_int | Some n -> 4 * n in
   try
     let rec loop i =
-      let line = input_line ic in
-      if i mod 4 = 1 then r := f !r line;
-      loop (i + 1)
+      if i >= n then begin
+        close_in ic;
+        !r
+      end else
+        let line = input_line ic in
+        if i mod 4 = 1 then r := f !r line;
+        loop (i + 1)
     in
     loop 0
   with End_of_file ->
@@ -46,7 +51,7 @@ let output_values_assoc aindex =
         (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
-  fastq_file not_join_same_seq print_top =
+  fastq_file not_join_same_seq num_reads print_top =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -57,7 +62,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   let init, f = Path_inference.multiple_fold ~multi_pos:`Average g idx in
   let amap =
     (* This is backwards .. *)
-    shitty_fastq_sequence_reader fastq_file ~init ~f:(fun amap seq ->
+    shitty_fastq_sequence_reader ?num_reads fastq_file ~init ~f:(fun amap seq ->
       match f amap seq with
       | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
       | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
@@ -104,6 +109,11 @@ let () =
     let doc = "Print only the specified number (positive integer) of alleles" in
     Arg.(value & opt (some int) None & info ~doc ~docv ["print-top"])
   in
+  let num_reads_flag =
+    let docv = "Number of reads" in
+    let doc = "Number of reads to take from the front of the FASTA file" in
+    Arg.(value & opt (some int) None & info ~doc ~docv ["reads"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -124,6 +134,7 @@ let () =
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
             $ do_not_join_same_sequence_paths_flag
+            $ num_reads_flag
             $ print_top_flag
         , info app_name ~version ~doc ~man)
   in
