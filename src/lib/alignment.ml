@@ -446,9 +446,6 @@ let to_weights lst =
   let s = List.fold_left ~f:(+.) ~init:0. ilst in
   List.map ~f:(fun x -> x /. s) ilst
 
-let init_alignment_map aindex =
-  Alleles.Map.make aindex 0.
-
 (* Weighing Alignments ... inference *)
 
 let most_likely aindex amap =
