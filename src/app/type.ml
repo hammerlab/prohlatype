@@ -54,33 +54,14 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  if verbose then
-    printf " Got graph and index!\n%!";
-  let amap = Alignment.init_alignment_map g.aindex in
-  if verbose then
-    printf " Aligning!\n%!";
-  shitty_fastq_sequence_reader fastq_file ~init:() ~f:(fun () seq ->
-    if verbose then
-      printf "aligning: %s, %!" seq;
-    match String.index_of_character seq 'N' with
-    | Some _ -> if verbose then printf "skipping N!%!\n"
-    | None   ->
-      match Index.lookup idx seq with
-      | Error m -> if verbose then printf "error looking up %s.\n" m
-      | Ok []   -> if verbose then printf "empty positions. \n"
-      | Ok lst  ->  (* TODO, more than one! *)
-          let n = List.length lst in
-          if verbose then printf " found %d alignments, averaging... \n" n;
-          let weight = 1. /. (float n) in
-          List.iter lst ~f:(fun p ->
-            match Alignment.compute_mismatches g seq p with
-            | Error m ->
-                if verbose then
-                  printf "error during mismatch "
-            | Ok md ->
-                let len = String.length seq in
-                Alleles.Map.update2 md amap (fun m c -> c +. weight *. (likelihood ~len m))));
-
+  let init, f = Path_inference.multiple_fold ~multi_pos:`Average g idx in
+  let amap =
+    (* This is backwards .. *)
+    shitty_fastq_sequence_reader fastq_file ~init ~f:(fun amap seq ->
+      match f amap seq with
+      | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
+      | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
+  in
   let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
   let amap = Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap in
   match print_top with

@@ -20,8 +20,8 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
         | [] -> Ok lm
         | tl ->
             match multi_pos with
-            | `TakeFirst -> Ok lm
-            | `Average ->
+            | `TakeFirst        -> Ok lm
+            | `Average          ->
                 let n = 1 + List.length t in
                 let weight = 1. /. (float n) in
                 let lm = Alleles.Map.map_wa lm ~f:(fun m -> m /. weight) in
@@ -34,7 +34,7 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
                 in
                 loop tl
             (* Find the best alignment over all positions! *)
-            | `Best ->
+            | `Best             ->
                 let current_best = Alleles.Map.fold_wa mm ~init:max_int ~f:min in
                 let rec loop b bm = function
                   | []     -> Ok (Alleles.Map.map_wa mm ~f:(likelihood ~len))
@@ -49,4 +49,19 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
                             loop b bm t
                 in
                 loop current_best mm tl
+
+let multiple_fold ?multi_pos g idx =
+  let init = Alleles.Map.make g.Ref_graph.aindex 0. in
+  let fold amap seq =
+    one ?multi_pos g idx seq >>= fun m -> Alleles.Map.update2 m amap (+.); Ok amap
+  in
+  init, fold
+
+let multiple ?multi_pos g idx =
+  let init, f = multiple_fold g idx in
+  let rec loop a = function
+    | []     -> Ok a
+    | h :: t -> f a h >>= fun m -> loop m t
+  in
+  loop init
 
