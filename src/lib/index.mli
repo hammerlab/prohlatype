@@ -47,4 +47,4 @@ val starting_with : t -> string -> (position list, string) result
 (** What [k] are we using to index the graph. *)
 val k : t -> int
 
-val lookup: ?n:int -> t ->  string -> (position list, string) result
+val lookup: ?max_neighbors:int -> t ->  string -> (position list, string) result
