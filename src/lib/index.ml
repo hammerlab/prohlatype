@@ -198,23 +198,24 @@ let starting_with index s =
   | None    -> error "Not long enough %s for index size %d" s k
   | Some ss -> Ok (Kmer_table.lookup_kmer index ss)
 
-let lookup ?(n=0) index s =
+let lookup ?(max_neighbors=0) index s =
   let k = Kmer_table.k index in
   match String.sub s ~index:0 ~length:k with
   | None    -> error "Not long enough %s for index size %d" s k
   | Some ss ->
-    if n = 0 then
-      Ok (Kmer_table.lookup_kmer index ss)
-    else if n = 1 then
-      let ns = Kmer_to_int.neighbors ~k (Kmer_to_int.encode ss) in
-      let init = Kmer_table.lookup_kmer index ss in
-      Array.fold_left ~init ~f:(fun acc n ->
-        List.append acc (Kmer_table.lookup index n)) ns
-      |> fun lst -> Ok lst
-    else
-      invalid_argf "not implemented n: %d" n
-
-
+      match String.index_of_character ss 'N' with
+      | Some p -> error "'N' at %d in read" p
+      | None   ->
+        if max_neighbors = 0 then
+          Ok (Kmer_table.lookup_kmer index ss)
+        else if max_neighbors = 1 then
+          let ns = Kmer_to_int.neighbors ~k (Kmer_to_int.encode ss) in
+          let init = Kmer_table.lookup_kmer index ss in
+          Array.fold_left ~init ~f:(fun acc n ->
+            List.append acc (Kmer_table.lookup index n)) ns
+          |> fun lst -> Ok lst
+        else
+          error "not implemented max_neighbors: %d" max_neighbors
 
 
 let k = Kmer_table.k
