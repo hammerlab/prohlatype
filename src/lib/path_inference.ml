@@ -17,40 +17,42 @@ let report_mismatches aindex mm =
         (insert_chars ['\t'; '\t'; '\n']
           (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
-let one ?(verbose=false) ?(multi_pos=`Best) g idx seq =
+let one ?(verbose=false) ?(multi_pos=`Best) ?(as_likelihood=true) g idx seq =
   let report mm =
     if verbose then report_mismatches g.Ref_graph.aindex mm else ()
   in
   let len = String.length seq in
+  let to_output m = if as_likelihood then likelihood ~len m else float m in
+  let to_output_mm mm = Alleles.Map.map_wa mm ~f:to_output in
   Index.lookup idx seq >>= function
     | []      -> error "no index found!"
     | h :: t  ->
       Alignment.compute_mismatches g seq h >>= fun mm ->
         report mm;
-        let lm = Alleles.Map.map_wa mm ~f:(likelihood ~len) in
         match t with
-        | [] -> Ok lm
+        | [] -> Ok (to_output_mm mm)
         | tl ->
             match multi_pos with
-            | `TakeFirst        -> Ok lm
+            | `TakeFirst        -> Ok (to_output_mm mm)
             | `Average          ->
                 let n = 1 + List.length t in
                 let weight = 1. /. (float n) in
-                let lm = Alleles.Map.map_wa lm ~f:(fun m -> m /. weight) in
+                let lm = Alleles.Map.map_wa (to_output_mm mm) ~f:(fun m -> m /. weight) in
                 let rec loop = function
                   | []     -> Ok lm
                   | p :: t ->
                       Alignment.compute_mismatches g seq p >>= fun mm ->
                           report mm;
-                          Alleles.Map.update2 mm lm (fun m c -> c +. weight *. (likelihood ~len m));
+                          Alleles.Map.update2 mm lm (fun m c -> c +. weight *. (to_output m));
                           loop t
                 in
                 loop tl
-            (* Find the best alignment over all positions! *)
+            (* Find the best alignment, the one with the lowest number of
+               mismatches, over all positions! *)
             | `Best             ->
                 let current_best = Alleles.Map.fold_wa mm ~init:max_int ~f:min in
                 let rec loop b bm = function
-                  | []     -> Ok (Alleles.Map.map_wa mm ~f:(likelihood ~len))
+                  | []     -> Ok (to_output_mm bm)
                   | p :: t ->
                       (* TODO: If this becomes a bottleneck, we can stop [compute_mismatches]
                          early if the min mismatch > b *)
@@ -64,14 +66,15 @@ let one ?(verbose=false) ?(multi_pos=`Best) g idx seq =
                 in
                 loop current_best mm tl
 
-let multiple_fold ?verbose ?multi_pos g idx =
+let multiple_fold ?verbose ?multi_pos ?as_likelihood g idx =
   let init = Alleles.Map.make g.Ref_graph.aindex 0. in
   let fold amap seq =
-    one ?verbose ?multi_pos g idx seq >>= fun m -> Alleles.Map.update2 m amap (+.); Ok amap
+    one ?verbose ?multi_pos ?as_likelihood g idx seq >>= fun m ->
+      Alleles.Map.update2 m amap (+.); Ok amap
   in
   init, fold
 
-let multiple ?multi_pos g idx =
+let multiple ?multi_pos ?as_likelihood g idx =
   let init, f = multiple_fold g idx in
   let rec loop a = function
     | []     -> Ok a

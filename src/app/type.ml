@@ -40,9 +40,13 @@ let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let c = len - mismatches in
   exp ((float c) *. lcp +. (float mismatches) *. lmp)
 
-let sort_values_assoc =
+let sort_values_by_likelihood_assoc =
   (* higher values first! *)
   List.sort ~cmp:(fun (v1, _) (v2, _) -> compare v2 v1)
+
+let sort_values_by_mismatches_assoc =
+  (* lower values first! *)
+  List.sort ~cmp:(fun (v1, _) (v2, _) -> compare v1 v2)
 
 let output_values_assoc aindex =
   List.iter ~f:(fun (w, a) ->
@@ -51,7 +55,7 @@ let output_values_assoc aindex =
         (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
-  fastq_file not_join_same_seq num_reads print_top multi_pos =
+  fastq_file not_join_same_seq num_reads print_top multi_pos as_mismatches =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -59,7 +63,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  let init, f = Path_inference.multiple_fold ~verbose ~multi_pos g idx in
+  let as_likelihood = not as_mismatches in
+  let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_likelihood g idx in
   let amap =
     (* This is backwards .. *)
     shitty_fastq_sequence_reader ?num_reads fastq_file ~init ~f:(fun amap seq ->
@@ -68,21 +73,35 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
       | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
   in
-  let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
-  let amap = Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap in
-  match print_top with
-  | None ->
-      (* Round the values so that it is easier to display. *)
-      Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
-      |> Alleles.Map.values_assoc g.aindex
-      |> sort_values_assoc
-      |> output_values_assoc g.aindex
-  | Some n ->
-      Alleles.Map.fold g.aindex amap ~init:[]
-        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-      |> sort_values_assoc
-      |> fun l -> List.take l n
-      |> output_values_assoc g.aindex
+  if as_likelihood then begin
+    let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
+    let amap = Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap in
+    match print_top with
+    | None ->
+        (* Round the values so that it is easier to display. *)
+        Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
+        |> Alleles.Map.values_assoc g.aindex
+        |> sort_values_by_likelihood_assoc
+        |> output_values_assoc g.aindex
+    | Some n ->
+        Alleles.Map.fold g.aindex amap ~init:[]
+          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+        |> sort_values_by_likelihood_assoc
+        |> fun l -> List.take l n
+        |> output_values_assoc g.aindex
+  end else begin
+    match print_top with
+    | None ->
+        Alleles.Map.values_assoc g.aindex amap
+        |> sort_values_by_mismatches_assoc
+        |> output_values_assoc g.aindex
+    | Some n ->
+        Alleles.Map.fold g.aindex amap ~init:[]
+          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+        |> sort_values_by_mismatches_assoc
+        |> fun l -> List.take l n
+        |> output_values_assoc g.aindex
+  end
 
 let () =
   let open Cmdliner in
@@ -123,6 +142,11 @@ let () =
       ; `Best,      info ~doc:(d ^ "the best over all positions (default).") ["pos-best"]
       ])
   in
+  let as_mismatches_flag =
+    let docv = "Print mismatches" in
+    let doc = "Print mismatches for read as opposed to converting to likelihood." in
+    Arg.(value & flag & info ~doc ~docv ["as-mismatches"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -146,6 +170,7 @@ let () =
             $ num_reads_flag
             $ print_top_flag
             $ multi_pos_flag
+            $ as_mismatches_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
