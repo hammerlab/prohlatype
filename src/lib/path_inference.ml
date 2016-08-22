@@ -9,12 +9,24 @@ let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let c = len - mismatches in
   exp ((float c) *. lcp +. (float mismatches) *. lmp)
 
-let one ?(multi_pos=`TakeFirst) g idx seq =
+let report_mismatches aindex mm =
+  Alleles.Map.values_assoc aindex mm
+  |> List.sort ~cmp:(fun (i1,_) (i2,_) -> compare i1 i2)
+  |> List.iter ~f:(fun (w, a) ->
+      printf "%02d\t%s\n" w
+        (insert_chars ['\t'; '\t'; '\n']
+          (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
+
+let one ?(verbose=false) ?(multi_pos=`TakeFirst) g idx seq =
+  let report mm =
+    if verbose then report_mismatches g.Ref_graph.aindex mm else ()
+  in
   let len = String.length seq in
   Index.lookup idx seq >>= function
     | []      -> error "no index found!"
     | h :: t  ->
       Alignment.compute_mismatches g seq h >>= fun mm ->
+        report mm;
         let lm = Alleles.Map.map_wa mm ~f:(likelihood ~len) in
         match t with
         | [] -> Ok lm
@@ -29,6 +41,7 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
                   | []     -> Ok lm
                   | p :: t ->
                       Alignment.compute_mismatches g seq p >>= fun mm ->
+                          report mm;
                           Alleles.Map.update2 mm lm (fun m c -> c +. weight *. (likelihood ~len m));
                           loop t
                 in
@@ -42,6 +55,7 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
                       (* TODO: If this becomes a bottleneck, we can stop [compute_mismatches]
                          early if the min mismatch > b *)
                       Alignment.compute_mismatches g seq p >>= fun nbm ->
+                          report nbm;
                           let nb = Alleles.Map.fold_wa nbm ~init:max_int ~f:min in
                           if nb < b then
                             loop nb nbm t
@@ -50,10 +64,10 @@ let one ?(multi_pos=`TakeFirst) g idx seq =
                 in
                 loop current_best mm tl
 
-let multiple_fold ?multi_pos g idx =
+let multiple_fold ?verbose ?multi_pos g idx =
   let init = Alleles.Map.make g.Ref_graph.aindex 0. in
   let fold amap seq =
-    one ?multi_pos g idx seq >>= fun m -> Alleles.Map.update2 m amap (+.); Ok amap
+    one ?verbose ?multi_pos g idx seq >>= fun m -> Alleles.Map.update2 m amap (+.); Ok amap
   in
   init, fold
 

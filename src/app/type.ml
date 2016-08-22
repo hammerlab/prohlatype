@@ -59,7 +59,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  let init, f = Path_inference.multiple_fold ~multi_pos:`Average g idx in
+  let init, f = Path_inference.multiple_fold ~verbose ~multi_pos:`Best g idx in
   let amap =
     (* This is backwards .. *)
     shitty_fastq_sequence_reader ?num_reads fastq_file ~init ~f:(fun amap seq ->
