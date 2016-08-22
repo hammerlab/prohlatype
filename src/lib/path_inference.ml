@@ -17,7 +17,7 @@ let report_mismatches aindex mm =
         (insert_chars ['\t'; '\t'; '\n']
           (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
-let one ?(verbose=false) ?(multi_pos=`TakeFirst) g idx seq =
+let one ?(verbose=false) ?(multi_pos=`Best) g idx seq =
   let report mm =
     if verbose then report_mismatches g.Ref_graph.aindex mm else ()
   in

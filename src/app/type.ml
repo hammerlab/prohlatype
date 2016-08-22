@@ -51,7 +51,7 @@ let output_values_assoc aindex =
         (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
-  fastq_file not_join_same_seq num_reads print_top =
+  fastq_file not_join_same_seq num_reads print_top multi_pos =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -59,10 +59,11 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  let init, f = Path_inference.multiple_fold ~verbose ~multi_pos:`Best g idx in
+  let init, f = Path_inference.multiple_fold ~verbose ~multi_pos g idx in
   let amap =
     (* This is backwards .. *)
     shitty_fastq_sequence_reader ?num_reads fastq_file ~init ~f:(fun amap seq ->
+      if verbose then print_endline "--------------------------------";
       match f amap seq with
       | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
       | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
@@ -114,6 +115,14 @@ let () =
     let doc = "Number of reads to take from the front of the FASTA file" in
     Arg.(value & opt (some int) None & info ~doc ~docv ["reads"])
   in
+  let multi_pos_flag =
+    let d = "How to aggregate multiple position matches: " in
+    Arg.(value & vflag `Best
+      [ `TakeFirst, info ~doc:(d ^ "take the first, as found in Index.") ["pos-take-first"]
+      ; `Average,   info ~doc:(d ^ "average over all positions") ["pos-average"]
+      ; `Best,      info ~doc:(d ^ "the best over all positions (default).") ["pos-best"]
+      ])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -136,6 +145,7 @@ let () =
             $ do_not_join_same_sequence_paths_flag
             $ num_reads_flag
             $ print_top_flag
+            $ multi_pos_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
