@@ -95,7 +95,7 @@ module Align (Ag : Alignment_group) = struct
       | `First (m, _)   -> `Finished m      (* end of the search string *)
       | `Second (m, so) -> `GoOn (m, so)
 
-  let compute_mismatches gt search_seq pos =
+  let compute gt search_seq pos =
     let open Ref_graph in
     let open Nodes in
     let open Index in
@@ -231,7 +231,7 @@ module Mismatches = Align (struct
 end)
 
 let num_mismatches_against_seq = Mismatches.align_against
-let compute_mismatches = Mismatches.compute_mismatches
+let compute_mismatches = Mismatches.compute
 
 module PositionMismatches = Align (struct
   type a = (int * int) list
@@ -245,6 +245,7 @@ module PositionMismatches = Align (struct
 end)
 
 let align_sequences_lst = PositionMismatches.align_against
+let compute_mismatches_lst = PositionMismatches.compute
 
 (* This method is a bad strawman... Would probably be much faster to
    go back to the original file and apply the Mas_parser changes to the
