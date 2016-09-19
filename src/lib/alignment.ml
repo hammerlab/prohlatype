@@ -220,7 +220,7 @@ module Align (Ag : Alignment_group) = struct
       in
       Ok (assign_loop startq))
 
-end
+end (* Align *)
 
 module Mismatches = Align (struct
   type a = int
