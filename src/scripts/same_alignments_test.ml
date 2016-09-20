@@ -1,44 +1,58 @@
+(* Tests of the alignment algorithm.
+  There are two tests, Comparison (C below), default without dropping any
+  reads from the front:
+    Given a file with reads (fastq) and an alignment file (ex A_nuc), test that
+    we get the same alignment of the read against the graph (using the
+    multi-allele algorithm) versus the manual algorithm that first just reads
+    each alleles sequence from the graph and then does a pairwise string
+    comparison.
+
+    ex:
+    $ ./same_alignments_test.native /path/to/foo.fastq /path/to/alignment/file.txt
+      [length of reads; default: 100] [C] [number of reads to drop; default:0]
+
+    alignment file ex: IMGTHLA/alignments/A_nuc.txt
+    If everything works, all of the output will look like:
+    comparing alignments for 1569 TT...........GGAAG everything matched!
+
+  and Stability (G below):
+    Given a file with reads (fastq) and an alignment file (ex A_nuc), test that
+    we get the same alignment of the read irrespective of the number of alleles
+    we use (we should find all alignments of an n-1 graph in the n-graph, n=#of
+    alleles to use in constructing graph). Defaults to starting with a graph with
+    just the reference allele, 0 alternates.
+
+    ex:
+    $ ./same_alignments_test.native /path/to/foo.fastq /path/to//alignment/file.txt \
+      [length of reads; default: 100] G [graph size start; default:0]
+
+    alignment file ex: IMGTHLA/alignments/A_nuc.txt
+
+    If everything works, the output will look like:
+    Testing on 478 reads
+    new gi: 1
+    new gi: 2
+    ..
+    new gi: [# of alleles in alignment file]
+
+ex:
+  /same_alignments_test.native /path/to/foo.fastq ../foreign/IMGTHLA/alignments/A_nuc.txt \
+    [length of reads; default: 100] [G|C] [int]
+
+  C n -> Compare dropping (ignoring) the first n reads from fastq.
+  G n -> Stability test, starting with graphs with n alleles and going up.
+*)
 
 open Util
-
-let (//) = Filename.concat
-let root_dir = "../foreign/IMGTHLA/alignments"
-
-let cargs ?(file="A_nuc") gi =
-  { Cache.alignment_file = (root_dir // file) ^ ".txt"
-  ; Cache.which = Some (Ref_graph.NumberOfAlts gi)
-  ; Cache.join_same_sequence = true
-  }
-
-let all_args ?(file="A_nuc") () =
-  { Cache.alignment_file = (root_dir // file) ^ ".txt"
-  ; Cache.which = None
-  ; Cache.join_same_sequence = true
-  }
+open Common
+open Fastq_reader
 
 let g_and_idx ?(cache=true) ?(k=10) ?file ?gi () =
+  let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
   if cache then
-    match gi with
-    | None   -> Cache.graph_and_two_index { Cache.k = k; Cache.g = all_args ?file () }
-    | Some n -> Cache.graph_and_two_index { Cache.k = k; Cache.g = cargs ?file n }
+    Cache.graph_and_two_index { Cache.k = k; Cache.g = cache_arg ?file ?n () }
   else
-    match gi with
-    | None   -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = all_args ?file () }
-    | Some n -> Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cargs ?file n }
-
-let reads_from_fastq file =
-  let ic = open_in file in
-  let li = ref [] in
-  try
-    let rec loop i =
-      let line = input_line ic in
-      if i mod 4 = 1 then li := line :: !li;
-      loop (i + 1)
-    in
-    loop 0
-  with End_of_file ->
-    close_in ic;
-    !li
+    Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cache_arg ?file ?n () }
 
 let al_to_list idx r =
   Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r
@@ -207,7 +221,7 @@ let () =
     let test =
       if n <= 4 then `Comparison None else
         begin match Sys.argv.(4) with
-        | "G" -> `Stability (int_of_string Sys.argv.(5))
+        | "G" -> `Stability (if n <= 5 then 0 else (int_of_string Sys.argv.(5)))
         | "C" -> `Comparison (Some (int_of_string Sys.argv.(5)))
         | x   -> invalid_argf "Unrecognized arg: %s" x
         end

@@ -5,6 +5,7 @@ let (//) = Filename.concat
 let imgthla_dir = "../foreign/IMGTHLA/"
 
 let to_alignment_file f = imgthla_dir // "alignments" // (f ^ ".txt")
+let to_fasta_file f = imgthla_dir // "fasta" // (f ^ ".fasta")
 let default_file = to_alignment_file "A_nuc"
 
 let cache_arg ?n ?(file=default_file) () =

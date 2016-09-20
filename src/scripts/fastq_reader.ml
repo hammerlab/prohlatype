@@ -1,4 +1,6 @@
 
+open Util
+
 let reads_from_fastq file =
   let ic = open_in file in
   let li = ref [] in
@@ -12,7 +14,6 @@ let reads_from_fastq file =
   with End_of_file ->
     close_in ic;
     !li
-
 
 let fasta_reader file =
   let ic = open_in file in
@@ -39,4 +40,3 @@ let fasta_reader file =
   | Some '>'  -> read_read (allele_from_line first_line) [] [] 
   | None      -> eprintf "empty first line!"; []
   | Some c    -> eprintf "first line doesn't start with '>' %c" c ; []
-

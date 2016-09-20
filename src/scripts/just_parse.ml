@@ -1,4 +1,4 @@
-
+(* Old, deprecated, test of the parsing logic. *)
 let f = "A_nuc.txt" ;;
 let d = "../foreign/IMGTHLA/alignments" ;;
 let mp = Mas_parser.from_file (Filename.concat d f) ;;
