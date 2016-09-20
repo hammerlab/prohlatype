@@ -84,7 +84,7 @@ module Align (Ag : Alignment_group) = struct
       else
         let c1 = String.get_exn s1 i1 in
         let c2 = String.get_exn s2 i2 in
-        loop (i + 1) (if c1 = c2 then m else Ag.incr ~pos:i ~v:1 m)
+        loop (i + 1) (if c1 = c2 then m else Ag.incr ~pos:i1 ~v:1 m)
     in
     loop 0 Ag.zero
 
@@ -110,7 +110,7 @@ module Align (Ag : Alignment_group) = struct
         eprintf "Assigning %d to %s because of:%s\n%!" mismatches
           (Alleles.Set.to_human_readable ~max_length:20000 gt.aindex edge_set)
           (Option.value ~default:"---" (Option.map node ~f:Nodes.vertex_name));
-      Alleles.Map.update_from edge_set mis_map (Ag.incr ~pos:position ~v:mismatches)
+      Alleles.Map.update_from edge_set mis_map (Ag.incr ~pos ~v:mismatches)
     in
     let merge_assign ?node edge_set ag =
       if !debug_ref then
@@ -199,7 +199,12 @@ module Align (Ag : Alignment_group) = struct
                     end
                 | N (p, node_seq)  ->
                     let nmas_and_assign ~node_offset ~start_mismatches =
-                      let start_ag = Ag.incr ~pos:0 ~v:start_mismatches Ag.zero in
+                      let start_ag =
+                        if start_mismatches > 0 then
+                          Ag.incr ~pos:0 ~v:start_mismatches Ag.zero
+                        else
+                          Ag.zero
+                      in
                       match nmas ~search_pos:start_mismatches ~node_seq ~node_offset with
                       | `Finished mismatches            ->
                           merge_assign ~node edge (Ag.merge mismatches start_ag);
