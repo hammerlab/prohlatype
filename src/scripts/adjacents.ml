@@ -1,14 +1,7 @@
+(* Test that we can detect adjacents at all positions along the graph. *)
 
 open Util
-
-let (//) = Filename.concat
-let root_dir = "../foreign/IMGTHLA/"
-
-let all_args ?(file="../foreign/IMGTHLA/alignments/A_nuc.txt") () =
-  { Cache.alignment_file = file
-  ; Cache.which = None
-  ; Cache.join_same_sequence = true
-  }
+open Common
 
 let test_graph file g pos =
   let open Ref_graph in
@@ -20,7 +13,7 @@ let test_graph file g pos =
 
 let test_file file =
   let open Ref_graph in
-  let all_args = all_args ~file:(root_dir // "alignments" // (file ^ ".txt")) () in
+  let all_args = cache_arg ~file:(to_alignment_file file) () in
   let g = Cache.graph all_args in
   let st, en = Ref_graph.range g in
   for i = st to en - 1 do
@@ -28,6 +21,10 @@ let test_file file =
     test_graph file g i
   done
 
+(* Optionally take as input the without-extension name of an alignment
+   file to run as the test against.
+   ex. A_nuc, F_gen
+   default: A_nuc *)
 let () =
   let n = Array.length Sys.argv in
   if !Sys.interactive then

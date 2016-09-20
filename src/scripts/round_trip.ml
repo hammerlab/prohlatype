@@ -1,34 +1,10 @@
-
+(* Compare graph construction, from the alignment files, versus the sequence
+   data represented in the IMGTHLA fasta files for the alleles. *)
 open Util
-
-let fasta_reader file =
-  let ic = open_in file in
-  let allele_from_line line =
-    List.nth_exn (String.split ~on:(`Character ' ') line) 1
-  in
-  let rec read_read allele sacc acc =
-    try
-      let line = input_line ic in
-      match String.get line ~index:0 with
-      | None      -> raise (Invalid_argument "empty line!")
-      | Some '>'  ->
-          let nallele = allele_from_line line in
-          let nacc    = (allele, (String.concat (List.rev sacc))) :: acc in
-          read_read nallele [] nacc
-      | Some _    ->
-          read_read allele (line :: sacc) acc
-    with End_of_file ->
-      close_in ic;
-      (allele, (String.concat (List.rev sacc))) :: acc
-  in
-  let first_line = input_line ic in
-  match String.get first_line ~index:0 with
-  | Some '>'  -> read_read (allele_from_line first_line) [] []
-  | None      -> eprintf "empty first line!"; []
-  | Some c    -> eprintf "first line doesn't start with '>' %c" c ; []
+open Common
+open Fastq_reader
 
 let (//) = Filename.concat
-let root_dir = "../foreign/IMGTHLA/"
 let is_char = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
 
 let apply_changes ~r d =
@@ -58,7 +34,7 @@ let apply_changes ~r d =
 let manual_diff ~reference ~allele ~file () =
   let cmd =
     sprintf "grep -E \"%s|%s\" %s | tr -s ' ' | cut -d ' ' -f 3-"
-      reference allele (root_dir // "alignments" // (file ^ ".txt"))
+      reference allele (to_alignment_file file)
   in
   let ic = Unix.open_process_in cmd in
   let rec loop acc =
@@ -86,14 +62,9 @@ let manual_diff ~reference ~allele ~file () =
   String.concat parsed
 
 let test_sequences file =
-  let all_args =
-    { Cache.alignment_file = root_dir // "alignments" // (file ^ ".txt")
-    ; Cache.which = None
-    ; Cache.join_same_sequence = true
-    }
-  in
+  let all_args = cache_arg ~file:(to_alignment_file file) () in
   let gall = Cache.graph all_args in
-  let a_fasta = fasta_reader (root_dir // "fasta" // (file ^ ".fasta")) in
+  let a_fasta = fasta_reader (to_fasta_file file) in
   List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
     match Ref_graph.sequence gall allele with
     (* TODO: This should be an Error not an exception! *)
