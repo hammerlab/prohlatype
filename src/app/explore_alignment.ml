@@ -40,7 +40,10 @@ let report_msm_lst (gall, _idx) (seq, reslst) =
     |> List.sort ~cmp:(fun (m1,_) (m2,_) -> compare (sum_mismatches m1) (sum_mismatches m2))
     |> List.iter ~f:(fun (nlst, als) ->
         let ma = Alleles.Set.min_elt gall.Ref_graph.aindex als in
-        let as_seq = Ref_graph.sequence ~start:(`AtPos (p.Index.alignment + p.Index.offset)) ~stop:(`Length 100) gall ma |> unwrap_ok in
+        let as_seq =
+          Ref_graph.sequence ~start:(`AtPos (p.Index.alignment + p.Index.offset))
+            ~stop:(`Length 100) gall ma |> unwrap_ok
+        in
         printf "\t%d %s:\n%s\n\t%s\n\t\t%s\n"
           (sum_mismatches nlst)
           ma
@@ -82,7 +85,7 @@ let () =
   let width_arg =
     let docv = "Histogram width" in
     let doc = "Specify the width of the reported mismatch histogram. Defaults to 10." in
-    Arg.(value & opt (some positive_int) (Some 10)
+    Arg.(value & opt positive_int 10
         & info ~doc ~docv ["w"; "width"])
   in
   let mismatch_histogram_ =
