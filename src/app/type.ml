@@ -30,12 +30,13 @@ let sort_values_by_mismatches_assoc =
 
 let output_values_assoc aindex =
   List.iter ~f:(fun (w, a) ->
-    printf "%0.8f\t%s\n" w
+    printf "%0.8e\t%s\n" w
       (insert_chars ['\t'; '\t'; '\n']
         (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
-  fastq_file not_join_same_seq number_of_reads print_top multi_pos as_mismatches =
+  fastq_file not_join_same_seq number_of_reads print_top multi_pos as_mismatches
+  do_not_normalize =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -54,12 +55,15 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
   in
   if as_likelihood then begin
-    let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
-    let amap = Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap in
+    let amap =
+      if do_not_normalize then amap else
+        let sum = Alleles.Map.fold g.aindex ~f:(fun s v _ -> s +. v) ~init:0. amap in
+        Alleles.Map.map g.aindex ~f:(fun v _allele -> v /. sum) amap
+    in
     match print_top with
     | None ->
         (* Round the values so that it is easier to display. *)
-        Alleles.Map.map g.aindex ~f:(fun x _allele -> (ceil (x *. 10.)) /. 10.) amap
+        Alleles.Map.map_wa ~f:(fun x -> (ceil (x *. 10.)) /. 10.) amap
         |> Alleles.Map.values_assoc g.aindex
         |> sort_values_by_likelihood_assoc
         |> output_values_assoc g.aindex
@@ -101,8 +105,13 @@ let () =
   in
   let as_mismatches_flag =
     let docv = "Print mismatches" in
-    let doc = "Print mismatches for read as opposed to converting to likelihood." in
+    let doc  = "Print mismatches for read as opposed to converting to likelihood." in
     Arg.(value & flag & info ~doc ~docv ["as-mismatches"])
+  in
+  let do_not_normalize_flag =
+    let docv = "Do not normalize the likelihoods" in
+    let doc  = "Do not normalize the per allele likelihoods to report accurate probabilities." in
+    Arg.(value & flag & info ~doc ~docv ["do-not-normalize"])
   in
   let type_ =
     let version = "0.0.0" in
@@ -128,6 +137,7 @@ let () =
             $ print_top_flag
             $ multi_pos_flag
             $ as_mismatches_flag
+            $ do_not_normalize_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with

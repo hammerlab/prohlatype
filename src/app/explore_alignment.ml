@@ -64,7 +64,43 @@ let best_matches ars =
   |> List.sort ~cmp:(fun (bm1, _, _, _) (bm2, _, _, _) ->
       compare bm1 bm2)
 
-let mismatch_histogram verbose k file fastq_file number_of_reads width =
+let update_from_pos_amap ?(verbose=false) h =
+  List.iter ~f:(fun (p, a) -> if verbose then printf "updating! from %s" (Index.show_position p);
+    Alleles.Map.update2 h a (fun v1 v2 -> if verbose then printf "%d,%d\n" v1 v2; v1 + v2))
+
+let rec all_matches ?(verbose=false) ((gall,_) as gip) = function
+  | []                -> Alleles.Map.make gall.Ref_graph.aindex 0
+  | Error e :: t      -> printf "%s" e;
+                         all_matches ~verbose gip t
+  | Ok (s, pl) :: [] ->
+      printf "---adding results from %s sequence\n" s;
+      begin match pl with
+      | []          -> Alleles.Map.make gall.Ref_graph.aindex 0
+      | (_, h) :: t -> if verbose then
+                          printf "before: %d %d\n" (Alleles.Map.cardinal h)
+                          (List.length (Alleles.Map.values_assoc gall.Ref_graph.aindex h));
+                       update_from_pos_amap ~verbose h t;
+                       if verbose then
+                          printf "after: %d %d\n" (Alleles.Map.cardinal h)
+                          (List.length (Alleles.Map.values_assoc gall.Ref_graph.aindex h));
+                       h
+      end
+  | Ok (s, pl) :: t  ->
+      printf "starting with results from %s sequence\n" s;
+      let r =
+        match pl with
+        | []          -> Alleles.Map.make gall.Ref_graph.aindex 0
+        | (_, h) :: t -> update_from_pos_amap ~verbose h t;
+                         h
+      in
+      List.iter t ~f:(function
+        | Ok (_s, [])  -> () (* No matches *)
+        | Ok (s, tpl) -> printf "adding results from %s sequence\n" s;
+                         update_from_pos_amap ~verbose r tpl
+        | Error e      -> printf "%s" e);
+      r
+
+let mismatch_histogram verbose k file fastq_file number_of_reads width all =
   let widthf = float width in
   printf "file: %s\n" file;
   let gip = Cache.(graph_and_two_index { k = k; g = graph_arg ~file () }) in
@@ -73,9 +109,20 @@ let mismatch_histogram verbose k file fastq_file number_of_reads width =
   let msms = List.mapi rs ~f:(fun i seq ->
               if verbose then printf ", %d: " i;
               mismatches_from ~verbose gip seq) in
-  let best = best_matches msms in
-  let histo_me = List.map best ~f:(fun (i, _, _, _) -> float i) |> Array.of_list in
-  let hist = Oml.Statistics.Descriptive.histogram (`Width widthf) histo_me in
+  let hist =
+    if all then begin
+      let all = all_matches ~verbose gip msms in
+      if verbose then
+        printf "before float: %d %d\n" (Alleles.Map.cardinal all)
+          (List.length (Alleles.Map.values_assoc (fst gip).Ref_graph.aindex all));
+      Alleles.Map.fold_wa all ~init:[] ~f:(fun a m -> float m :: a)
+      |> Array.of_list
+      |> Oml.Statistics.Descriptive.histogram (`Width 1.)
+    end else
+      List.map (best_matches msms) ~f:(fun (i, _, _, _) -> float i)
+      |> Array.of_list
+      |> Oml.Statistics.Descriptive.histogram (`Width widthf)
+  in
   print_newline ();
   Array.iter hist ~f:(fun (b,v) -> printf "%f \t %d\n" b v)
 
@@ -87,6 +134,11 @@ let () =
     let doc = "Specify the width of the reported mismatch histogram. Defaults to 10." in
     Arg.(value & opt positive_int 10
         & info ~doc ~docv ["w"; "width"])
+  in
+  let all_flag =
+    let docv = "Report all matches" in
+    let doc  = "Report each seq vs each allele matches" in
+    Arg.(value & flag & info ~doc ~docv ["all"])
   in
   let mismatch_histogram_ =
     let version = "0.0.0" in
@@ -110,6 +162,7 @@ let () =
             $ fastq_file_arg
             $ num_reads_arg
             $ width_arg
+            $ all_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval mismatch_histogram_ with
