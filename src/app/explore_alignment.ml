@@ -68,7 +68,7 @@ let mismatch_histogram verbose k file fastq_file number_of_reads width =
   let widthf = float width in
   printf "file: %s\n" file;
   let gip = Cache.(graph_and_two_index { k = k; g = graph_arg ~file () }) in
-  let rs = Fastq_reader.reads_from_fastq ?number_of_reads fastq_file in
+  let rs = Fastq_reader.all ?number_of_reads fastq_file in
   printf "number of reads: %d\n" (List.length rs);
   let msms = List.mapi rs ~f:(fun i seq ->
               if verbose then printf ", %d: " i;

@@ -79,7 +79,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   pos, sub_read, (List.rev lal)
 
 let reads_with_kmers reads_file (g, idx) =
-  let reads = reads_from_fastq reads_file in
+  let reads = Fastq_reader.all reads_file in
   let greads =
     List.filter reads ~f:(fun r ->
       match String.index_of_character r 'N' with | Some _ -> false | _ -> true)

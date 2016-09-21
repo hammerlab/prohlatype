@@ -5,14 +5,14 @@ let to_stop = function
   | None   -> fun _ -> false
   | Some n -> fun r -> r >= n
 
-let reads_from_fastq ?number_of_reads file =
+let fold ?number_of_reads file ~f ~init =
   let ic = open_in file in
-  let li = ref [] in
+  let li = ref init in
   let stop = to_stop number_of_reads in
   try
     let rec loop i =
       let line = input_line ic in
-      if i mod 4 = 1 then li := line :: !li;
+      if i mod 4 = 1 then li := f !li line;
       if stop ((i + 1) / 4) then begin
         close_in ic;
         !li
@@ -23,6 +23,10 @@ let reads_from_fastq ?number_of_reads file =
   with End_of_file ->
     close_in ic;
     !li
+
+let all ?number_of_reads =
+  fold ?number_of_reads
+    ~f:(fun acc el -> el :: acc)  ~init:[]
 
 let fasta_reader file =
   let ic = open_in file in

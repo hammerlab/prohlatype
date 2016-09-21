@@ -3,35 +3,16 @@ open Util
 
 let app_name = "type"
 
-let shitty_fastq_sequence_reader ?num_reads file ~f ~init =
-  let ic = open_in file in
-  let r = ref init in
-  let n = match num_reads with | None -> max_int | Some n -> 4 * n in
-  try
-    let rec loop i =
-      if i >= n then begin
-        close_in ic;
-        !r
-      end else
-        let line = input_line ic in
-        if i mod 4 = 1 then r := f !r line;
-        loop (i + 1)
-    in
-    loop 0
-  with End_of_file ->
-    close_in ic;
-    !r
-
-  (*
-  let freader = Future.Reader.open_file file in
-  let fastq_rdr = Fastq.read freader in
-  Future.Pipe.iter fastq_rdr ~f:(fun oe ->
-    let fastq_item = Or_error.ok_exn oe in
-    let seq = fastq_item.Fastq.sequence in
-    match Alignment.align ~mub:3 g kmt seq with
-    | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-    | Ok als    -> List.iter als ~f:(Alignment.alignments_to_weights amap));
-    *)
+(*
+let freader = Future.Reader.open_file file in
+let fastq_rdr = Fastq.read freader in
+Future.Pipe.iter fastq_rdr ~f:(fun oe ->
+  let fastq_item = Or_error.ok_exn oe in
+  let seq = fastq_item.Fastq.sequence in
+  match Alignment.align ~mub:3 g kmt seq with
+  | Error msg -> eprintf "error %s for seq: %s\n" msg seq
+  | Ok als    -> List.iter als ~f:(Alignment.alignments_to_weights amap));
+  *)
 
 let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
@@ -54,7 +35,7 @@ let output_values_assoc aindex =
         (Alleles.Set.to_human_readable aindex ~max_length:1000 ~complement:`No a)))
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
-  fastq_file not_join_same_seq num_reads print_top multi_pos as_mismatches =
+  fastq_file not_join_same_seq number_of_reads print_top multi_pos as_mismatches =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -66,7 +47,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_likelihood g idx in
   let amap =
     (* This is backwards .. *)
-    shitty_fastq_sequence_reader ?num_reads fastq_file ~init ~f:(fun amap seq ->
+    Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
       if verbose then print_endline "--------------------------------";
       match f amap seq with
       | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
