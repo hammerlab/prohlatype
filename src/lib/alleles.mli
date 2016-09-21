@@ -106,7 +106,7 @@ module Set : sig
   val to_human_readable : ?compress:bool -> ?max_length:int ->
     ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string
 
-end
+end (* Set *)
 
 (** Maps over indexed alleles. *)
 module Map : sig
@@ -163,4 +163,4 @@ module Map : sig
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
-end
+end (* Map *)
