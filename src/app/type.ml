@@ -1,6 +1,5 @@
 
 open Util
-open Common_options
 
 let app_name = "type"
 
@@ -59,8 +58,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
-    to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-      (not not_join_same_seq)
+    Common_options.to_filename_and_graph_args alignment_file num_alt_to_add
+      allele_list (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   let as_likelihood = not as_mismatches in
@@ -105,34 +104,11 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
 
 let () =
   let open Cmdliner in
-  let kmer_size_arg =
-    let default = 5 in
-    let docv = "Kmer size" in
-    let doc =
-      sprintf "Number of consecutive nucleotides to use consider in K-mer
-               index construction. Defaults to %d." default
-    in
-    Arg.(value & opt int default & info ~doc ~docv ["k"; "kmer-size"])
-  in
-  let fastq_file_arg =
-    let docv = "Fastq samples" in
-    let doc = "Fastq formatted DNA reads file." in
-    Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
-  in
-  let verbose_flag =
-    let docv = "Be verbose" in
-    let doc = "Print progress messages to stdout." in
-    Arg.(value & flag & info ~doc ~docv ["v"; "verbose"])
-  in
+  let open Common_options in
   let print_top_flag =
     let docv = "Print only most likely" in
     let doc = "Print only the specified number (positive integer) of alleles" in
     Arg.(value & opt (some int) None & info ~doc ~docv ["print-top"])
-  in
-  let num_reads_flag =
-    let docv = "Number of reads" in
-    let doc = "Number of reads to take from the front of the FASTA file" in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["reads"])
   in
   let multi_pos_flag =
     let d = "How to aggregate multiple position matches: " in
@@ -167,7 +143,7 @@ let () =
             $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
             $ do_not_join_same_sequence_paths_flag
-            $ num_reads_flag
+            $ num_reads_arg
             $ print_top_flag
             $ multi_pos_flag
             $ as_mismatches_flag
@@ -177,4 +153,3 @@ let () =
   | `Ok ()           -> exit 0
   | `Error _         -> failwith "cmdliner error"
   | `Version | `Help -> exit 0
-

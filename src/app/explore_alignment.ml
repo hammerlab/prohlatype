@@ -1,25 +1,21 @@
 (* How good is the alignment? *)
 
 open Util
-open Common
+(*open Common *)
 
-let k = 10
-let n = None
-let file = Some (to_alignment_file "A_nuc")
+let repo = "prohlatype"
+let app_name = "explore_alignment"
 
-let rs = Fastq_reader.reads_from_fastq (List.hd_exn Reads.reads1)
-
-let gall, idx = Cache.graph_and_two_index { Cache.k = k; Cache.g = cache_arg ?file ?n () }
-
-let mismatches_from seq =
+let mismatches_from ?(verbose=false) (gall, idx) seq =
   Index.lookup idx seq >>= fun lst ->
+    if verbose then printf "%d positions %!" (List.length lst);
     List.fold_left lst ~init:(Ok [])
       ~f:(fun ac_err p -> ac_err >>= fun acc ->
             Alignment.compute_mismatches gall seq p >>= fun al ->
               Ok ((p, al) :: acc))
     >>= fun lst -> Ok (seq, lst)
 
-let mismatches_from_lst seq =
+let mismatches_from_lst (gall, idx) seq =
   Index.lookup idx seq >>= fun lst ->
       List.fold_left lst ~init:(Ok [])
         ~f:(fun ac_err p -> ac_err >>= fun acc ->
@@ -27,17 +23,7 @@ let mismatches_from_lst seq =
                 Ok ((p, al) :: acc))
       >>= fun lst -> Ok (seq, lst)
 
-let mismatches n =
-  match List.nth rs n with
-  | None     -> error "n %d out of bounds" n
-  | Some seq -> mismatches_from seq
-
-let mismatches_lst n =
-  match List.nth rs n with
-  | None     -> error "n %d out of bounds" n
-  | Some seq -> mismatches_from_lst seq
-
-let report_msm (seq, reslst) =
+let report_msm (gall, _idx) (seq, reslst) =
   List.iter reslst ~f:(fun (p, res) ->
     printf "At position: %s\n" (Index.show_position p);
     Alleles.Map.values_assoc gall.Ref_graph.aindex res
@@ -47,7 +33,7 @@ let report_msm (seq, reslst) =
 
 let sum_mismatches = List.fold_left ~init:0 ~f:(fun s (_, m) -> s + m)
 
-let report_msm_lst (seq, reslst) =
+let report_msm_lst (gall, _idx) (seq, reslst) =
   List.iter reslst ~f:(fun (p, res) ->
     printf "At position: %s\n" (Index.show_position p);
     Alleles.Map.values_assoc gall.Ref_graph.aindex res
@@ -62,22 +48,6 @@ let report_msm_lst (seq, reslst) =
           (String.concat ~sep:";" (List.map nlst ~f:(fun (p,d) -> sprintf "(%d,%d)" p d)))
           (Alleles.Set.to_human_readable gall.Ref_graph.aindex als)))
 
-let test n =
-  match mismatches_lst n with
-  | Error msg -> printf "error: %s\n" msg
-  | Ok o -> report_msm_lst o
-
-(* Takes a couple of minutes in toploop *)
-let mismatches_for_reads ?n () =
-  let mrs =
-    match n with
-    | None  ->
-        printf "computing mismatches for every read!\n";
-        rs
-    | Some nn -> List.take rs nn
-  in
-  List.mapi mrs ~f:(fun i seq -> printf "%d, %!" i; (mismatches_from seq))
-
 let best_match_allele_map = Alleles.Map.fold_wa ~init:max_int ~f:min
 
 let best_matches ars =
@@ -91,16 +61,55 @@ let best_matches ars =
   |> List.sort ~cmp:(fun (bm1, _, _, _) (bm2, _, _, _) ->
       compare bm1 bm2)
 
+let mismatch_histogram verbose k file fastq_file number_of_reads width =
+  let widthf = float width in
+  printf "file: %s\n" file;
+  let gip = Cache.(graph_and_two_index { k = k; g = graph_arg ~file () }) in
+  let rs = Fastq_reader.reads_from_fastq ?number_of_reads fastq_file in
+  printf "number of reads: %d\n" (List.length rs);
+  let msms = List.mapi rs ~f:(fun i seq ->
+              if verbose then printf ", %d: " i;
+              mismatches_from ~verbose gip seq) in
+  let best = best_matches msms in
+  let histo_me = List.map best ~f:(fun (i, _, _, _) -> float i) |> Array.of_list in
+  let hist = Oml.Statistics.Descriptive.histogram (`Width widthf) histo_me in
+  print_newline ();
+  Array.iter hist ~f:(fun (b,v) -> printf "%f \t %d\n" b v)
+
 let () =
-  if !Sys.interactive then () else
-    let ars =
-      if Array.length Sys.argv >= 2 then
-        mismatches_for_reads ~n:(int_of_string Sys.argv.(1)) ()
-      else
-        mismatches_for_reads ()
+  let open Cmdliner in
+  let open Common_options in
+  let width_arg =
+    let docv = "Histogram width" in
+    let doc = "Specify the width of the reported mismatch histogram. Defaults to 10." in
+    Arg.(value & opt (some positive_int) (Some 10)
+        & info ~doc ~docv ["w"; "width"])
+  in
+  let mismatch_histogram_ =
+    let version = "0.0.0" in
+    let doc = "Report alignment of reads in a fastaq against HLA string graphs." in
+    let bug =
+      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+        repo
     in
-    let foo = best_matches ars in
-    let histo_me = List.map foo ~f:(fun (i, _, _, _) -> float i) |> Array.of_list in
-    let hist = Oml.Statistics.Descriptive.histogram (`Width 10.) histo_me in
-    print_newline ();
-    Array.iter hist ~f:(fun (b,v) -> printf "%f \t %d\n" b v)
+    let man =
+      [ `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
+      ; `Noblank
+      ; `S "BUGS"
+      ; `P bug
+      ]
+    in
+    Term.(const mismatch_histogram
+            $ verbose_flag
+            $ kmer_size_arg
+            $ file_arg
+            $ fastq_file_arg
+            $ num_reads_arg
+            $ width_arg
+        , info app_name ~version ~doc ~man)
+  in
+  match Term.eval mismatch_histogram_ with
+  | `Ok ()           -> exit 0
+  | `Error _         -> failwith "cmdliner error"
+  | `Version | `Help -> exit 0

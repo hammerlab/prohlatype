@@ -47,12 +47,12 @@ open Util
 open Common
 open Fastq_reader
 
-let g_and_idx ?(cache=true) ?(k=10) ?file ?gi () =
+let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
   if cache then
-    Cache.graph_and_two_index { Cache.k = k; Cache.g = cache_arg ?file ?n () }
+    Cache.(graph_and_two_index { k = k; g = graph_arg ~file ?n () })
   else
-    Cache.graph_and_two_index_no_cache { Cache.k = k; Cache.g = cache_arg ?file ?n () }
+    Cache.(graph_and_two_index_no_cache { k = k; g = graph_arg ~file ?n () })
 
 let al_to_list idx r =
   Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r

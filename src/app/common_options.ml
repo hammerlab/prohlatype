@@ -76,3 +76,27 @@ let to_filename_and_graph_args alignment_file num_alt_to_add allele_list join_sa
   in
   option_based_fname, { Cache.alignment_file; Cache.which ; Cache.join_same_sequence }
 
+let verbose_flag =
+  let docv = "Be verbose" in
+  let doc = "Print progress messages to stdout." in
+  Arg.(value & flag & info ~doc ~docv ["v"; "verbose"])
+
+let kmer_size_arg =
+  let default = 10 in
+  let docv = "Kmer size" in
+  let doc =
+    sprintf "Number of consecutive nucleotides to use consider in K-mer
+              index construction. Defaults to %d." default
+  in
+  Arg.(value & opt int default & info ~doc ~docv ["k"; "kmer-size"])
+
+let fastq_file_arg =
+  let docv = "Fastq samples" in
+  let doc = "Fastq formatted DNA reads file." in
+  Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
+
+let num_reads_arg =
+  let docv = "Number of reads" in
+  let doc = "Number of reads to take from the front of the FASTA file" in
+  Arg.(value & opt (some int) None & info ~doc ~docv ["reads"])
+

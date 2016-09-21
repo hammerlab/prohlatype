@@ -1,4 +1,4 @@
-PACKAGES=ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
+PACKAGES=ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib oml
 
 .PHONY: default setup clean build
 
@@ -48,6 +48,9 @@ mhc2gpdf:
 
 type:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app type.native
+
+explore:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app explore_alignment.native
 
 tools: mhc2gpdf type
 

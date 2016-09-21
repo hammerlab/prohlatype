@@ -62,7 +62,7 @@ let manual_diff ~reference ~allele ~file () =
   String.concat parsed
 
 let test_sequences file =
-  let all_args = cache_arg ~file:(to_alignment_file file) () in
+  let all_args = Cache.graph_arg ~file:(to_alignment_file file) () in
   let gall = Cache.graph all_args in
   let a_fasta = fasta_reader (to_fasta_file file) in
   List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
