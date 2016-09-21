@@ -52,7 +52,7 @@ type:
 explore:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app explore_alignment.native
 
-tools: mhc2gpdf type
+tools: mhc2gpdf type explore
 
 ## Throw Away Scripts
 
