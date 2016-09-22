@@ -135,7 +135,7 @@ module Map : sig
 
   val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
 
-  val update2 : 'a t -> 'b t -> ('a -> 'b -> 'b) -> unit
+  val update2 : source:'a t -> dest:'b t -> ('a -> 'b -> 'b) -> unit
 
   (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
