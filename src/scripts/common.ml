@@ -8,12 +8,6 @@ let to_alignment_file f = imgthla_dir // "alignments" // (f ^ ".txt")
 let to_fasta_file f = imgthla_dir // "fasta" // (f ^ ".fasta")
 let default_file = to_alignment_file "A_nuc"
 
-let cache_arg ?n ?(file=default_file) () =
-  { Cache.alignment_file = file
-  ; Cache.which = n
-  ; Cache.join_same_sequence = true
-  }
-
 let common_alignment_files =
   [ "A_nuc"
   ; "B_nuc"

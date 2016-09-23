@@ -36,9 +36,6 @@ adjacents:
 benchmark_k:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts benchmark_k.native
 
-explore_alignment:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -I src/lib/ -I src/scripts explore_alignment.native
-
 tests: parsing round_trip same_alignment check_multiple adjacents benchmark_k
 
 ## Tools:
@@ -49,7 +46,10 @@ mhc2gpdf:
 type:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app type.native
 
-tools: mhc2gpdf type
+explore:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -I src/lib/ -I src/app explore_alignment.native
+
+tools: mhc2gpdf type explore
 
 ## Throw Away Scripts
 

@@ -171,7 +171,7 @@ module Align (Ag : Alignment_group) = struct
         - One approach would be to add the other starts, to the adjacents results.
         *)
       let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
-      (* This is a no-op on empty set but for readability, adding if *)
+      (* The assign is a no-op on an empty set but for readability, adding the if check. *)
       if not (Alleles.Set.is_empty not_seen) then
         assign not_seen ~position:0 search_str_length;
       let startq =

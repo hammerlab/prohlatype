@@ -106,7 +106,7 @@ module Set : sig
   val to_human_readable : ?compress:bool -> ?max_length:int ->
     ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string
 
-end
+end (* Set *)
 
 (** Maps over indexed alleles. *)
 module Map : sig
@@ -135,7 +135,7 @@ module Map : sig
 
   val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
 
-  val update2 : 'a t -> 'b t -> ('a -> 'b -> 'b) -> unit
+  val update2 : source:'a t -> dest:'b t -> ('a -> 'b -> 'b) -> unit
 
   (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
@@ -163,4 +163,7 @@ module Map : sig
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
-end
+  (** [to_array map] returns all of the values in [map]. *)
+  val to_array : 'a t -> 'a array
+
+end (* Map *)

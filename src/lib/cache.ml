@@ -7,6 +7,12 @@ type graph_args =
   ; join_same_sequence  : bool
   }
 
+let graph_arg ?n ?(join_same_sequence=true) ~file () =
+  { alignment_file = file
+  ; which = n
+  ; join_same_sequence
+  }
+
 let graph_args_to_string { alignment_file; which; join_same_sequence } =
   sprintf "%s_%s_%b"
     (Filename.basename alignment_file)

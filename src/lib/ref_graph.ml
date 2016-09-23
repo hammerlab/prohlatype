@@ -1056,7 +1056,7 @@ let parse_start_arg g allele =
       find_node_at ~allele ~pos g >>= fun v ->
         let pv = position v in
         let index = pos - pv in
-        Ok ([v], String.drop ~index, max 0 (-index))
+        Ok ([v], String.drop ~index, -index)
   | Some (`AtNext pos)    ->
       (* find_node_at is O(1) but it doesn't currently accomodate
          finding the next node if necessary. *)

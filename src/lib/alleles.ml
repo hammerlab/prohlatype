@@ -258,9 +258,9 @@ module Map = struct
   let update_from s m f =
     Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
 
-  let update2 m1 m2 f =
-    for i = 0 to Array.length m1 - 1 do
-      m2.(i) <- f m1.(i) m2.(i)
+  let update2 ~source ~dest f =
+    for i = 0 to Array.length source - 1 do
+      dest.(i) <- f source.(i) dest.(i)
     done
 
   let fold { to_allele; size; _} ~f ~init amap =
@@ -294,5 +294,7 @@ module Map = struct
       with Not_found ->
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd
+
+  let to_array amap = amap
 
 end (* Map *)
