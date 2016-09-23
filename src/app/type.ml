@@ -14,12 +14,6 @@ Future.Pipe.iter fastq_rdr ~f:(fun oe ->
   | Ok als    -> List.iter als ~f:(Alignment.alignments_to_weights amap));
   *)
 
-let likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
-  let lmp = log (er /. (float (alph_size - 1))) in
-  let lcp = log (1. -. er) in
-  let c = len - mismatches in
-  exp ((float c) *. lcp +. (float mismatches) *. lmp)
-
 let sort_values_by_likelihood_assoc =
   (* higher values first! *)
   List.sort ~cmp:(fun (v1, a1) (v2, a2) ->
@@ -120,7 +114,15 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
             in
             report_likelihood g amap do_not_bucket print_top
         | `LogLikelihood  ->
-            let mx = Alleles.Map.fold_wa ~init:neg_infinity ~f:max amap in
+            let emap =
+              if do_not_normalize then
+                amap
+              else
+                let sum = Alleles.Map.fold_wa ~init:0. ~f:(fun s v -> v +. s) amap in
+                Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
+            in
+            report_likelihood g emap do_not_bucket print_top
+            (*let mx = Alleles.Map.fold_wa ~init:neg_infinity ~f:max amap in
             let emap =
               if do_not_normalize then
                 Alleles.Map.map_wa ~f:(fun v -> exp (v +. mx)) amap
@@ -129,7 +131,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
                 let sum = Alleles.Map.fold_wa ~init:0. ~f:(fun s v -> v +. s) emap in
                 Alleles.Map.map_wa ~f:(fun v -> v /. sum) emap
             in
-            report_likelihood g emap do_not_bucket print_top
+            report_likelihood g emap do_not_bucket print_top *)
       end
 
 let () =
@@ -151,7 +153,7 @@ let () =
   let stat_flag =
     let d = "What statistics to compute over each sequences: " in
     Arg.(value & vflag `LogLikelihood
-      [ `LogLikelihood, info ~doc:(d ^ "log likelihood, that is log-sum-exp back to likelihood") ["log-likelihood"]
+      [ `LogLikelihood, info ~doc:(d ^ "log likelihood") ["log-likelihood"]
       ; `Likelihood,    info ~doc:(d ^ "likelihood") ["likelihood"]
       ; `Mismatches,    info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
       ; `MisList,       info ~doc:(d ^ "list of mismatches") ["mis-list"]
