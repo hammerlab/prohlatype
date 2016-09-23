@@ -73,8 +73,9 @@ let one ?(verbose=false) ?(multi_pos=`Best) g idx seq =
                 loop current_best mm tl
 
 let mx b amap =
-  let n, s = Alleles.Map.fold_wa ~f:(fun (n,s) v -> (n+1, s+.v)) ~init:(0,0.) amap in
-  (float n) /. s < b
+  let n = Alleles.Map.cardinal amap in
+  let s = Alleles.Map.fold_wa ~init:0. ~f:(+.) amap in
+  s /. (float n) < b
 
 let yes _ = true
 
@@ -102,8 +103,8 @@ let multiple_fold ?verbose ?multi_pos ?as_ ?filter g idx =
     match as_ with
     | None
     | Some `Mismatches    -> zero_map, (+.)
-    | Some `LogLikelihood -> zero_map, (fun s m -> s +. log_likelihood ~len:100 m) (* TODO: dep on seq *)
-    | Some `Likelihood    -> one_map,  (fun s m -> s *. likelihood ~len:100 m)     (* TODO: dep on seq *)
+    | Some `LogLikelihood -> zero_map, (fun m s -> s +. log_likelihood ~len:100 m) (* TODO: dep on seq *)
+    | Some `Likelihood    -> one_map,  (fun m s -> s *. likelihood ~len:100 m)     (* TODO: dep on seq *)
   in
   let fold amap seq =
     one ?verbose ?multi_pos g idx seq >>= fun m ->
