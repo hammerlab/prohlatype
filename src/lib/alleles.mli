@@ -163,4 +163,7 @@ module Map : sig
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
+  (** [to_array map] returns all of the values in [map]. *)
+  val to_array : 'a t -> 'a array
+
 end (* Map *)

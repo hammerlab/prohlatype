@@ -295,4 +295,6 @@ module Map = struct
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd
 
+  let to_array amap = amap
+
 end (* Map *)
