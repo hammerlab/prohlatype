@@ -66,7 +66,8 @@ let best_matches ars =
 
 let update_from_pos_amap ?(verbose=false) h =
   List.iter ~f:(fun (p, a) -> if verbose then printf "updating! from %s" (Index.show_position p);
-    Alleles.Map.update2 h a (fun v1 v2 -> if verbose then printf "%d,%d\n" v1 v2; v1 + v2))
+    Alleles.Map.update2 ~source:a ~dest:h
+      (fun v1 v2 -> (*if verbose then printf "%d,%d\n" v1 v2;*) v1 + v2))
 
 let rec all_matches ?(verbose=false) ((gall,_) as gip) = function
   | []                -> Alleles.Map.make gall.Ref_graph.aindex 0
@@ -76,9 +77,11 @@ let rec all_matches ?(verbose=false) ((gall,_) as gip) = function
       printf "---adding results from %s sequence\n" s;
       begin match pl with
       | []          -> Alleles.Map.make gall.Ref_graph.aindex 0
-      | (_, h) :: t -> if verbose then
+      | (_, h) :: t -> if verbose then begin
+                          printf "adding %d matches\n" (List.length t);
                           printf "before: %d %d\n" (Alleles.Map.cardinal h)
-                          (List.length (Alleles.Map.values_assoc gall.Ref_graph.aindex h));
+                          (List.length (Alleles.Map.values_assoc gall.Ref_graph.aindex h))
+                       end;
                        update_from_pos_amap ~verbose h t;
                        if verbose then
                           printf "after: %d %d\n" (Alleles.Map.cardinal h)
