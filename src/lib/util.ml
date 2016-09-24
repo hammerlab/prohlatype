@@ -17,8 +17,7 @@ let disk_memoize ?dir arg_to_string f =
         close_in i;
         r
       end else begin
-        if Sys.command (sprintf "mkdir -p %s" dir) <> 0 then
-          invalid_argf "Failed to make sure cache dir %s is available" dir;
+        if not (Sys.file_exists dir) then Unix.mkdir dir 0o777;
         let r = f arg in
         let o = open_out file in
         Marshal.to_channel o r [];
