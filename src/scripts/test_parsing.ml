@@ -38,7 +38,7 @@ let to_fnames ?fname ?suffix dir =
 let starts_with_start =
   let open Mas_parser in
   "All sequences have a Start, with only Gaps and Boundaries before the start.",
-  fun lst ->
+  fun _allele lst ->
     let rec test_loop = function
       | []              -> false
       | Start _ :: _t   -> true
@@ -52,7 +52,7 @@ let starts_with_start =
 let ends_with_end =
   let open Mas_parser in
   "All sequences have an End that may be followed only by Boundaries and Gaps.",
-  fun lst ->
+  fun _allele lst ->
     let rec test_loop = function
       | []              -> false
       | End _ :: _t     -> true
@@ -67,7 +67,7 @@ exception Double of string
 let theres_an_end_for_every_start =
   let open Mas_parser in
   "There is an end for every start",
-  fun lst ->
+  fun _allele lst ->
     try
       let c =
         List.fold_left ~f:(fun in_data a ->
@@ -85,26 +85,35 @@ let theres_an_end_for_every_start =
 let sequence_have_diff_elemns =
   let open Mas_parser in
   "Sequence elements are different from previous",
-  function
-  | []     -> true    (* A sequence could be identical to the reference
-                         and therefore the parsed alt will be [] *)
-  | h :: t ->
-      List.fold_left ~f:(fun (s, p) n ->
-        let false_ () =
-          Printf.printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
-          (false && s, n)
-        in
-        match p, n with
-        | Sequence s1, Sequence s2 when s1.start = s2.start -> false_ ()
-        | Gap g1, Gap g2 when g1.start = g2.start           -> false_ ()
-        | _                                                 -> (true && s, n))
-        ~init:(true, h) t
-      |> fst
+  fun _allele lst ->
+    match lst with
+    | []     -> true    (* A sequence could be identical to the reference
+                          and therefore the parsed alt will be [] *)
+    | h :: t ->
+        List.fold_left ~f:(fun (s, p) n ->
+          let false_ () =
+            Printf.printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
+            (false && s, n)
+          in
+          match p, n with
+          | Sequence s1, Sequence s2 when s1.start = s2.start -> false_ ()
+          | Gap g1, Gap g2 when g1.start = g2.start           -> false_ ()
+          | _                                                 -> (true && s, n))
+          ~init:(true, h) t
+        |> fst
+
+let we_can_parse_the_allele_name =
+  let open Mas_parser in
+  "We can parse the allele name",
+  fun allele _lst ->
+    match Nomenclature.parse allele with
+    | Error _ -> false
+    | Ok _    -> true
 
 exception TestFailed of string
 
 let check (desc, pred) allele lst =
-  if pred lst then
+  if pred allele lst then
     ()
   else
     raise (TestFailed (sprintf "%s failed for %s" desc allele))
@@ -118,8 +127,11 @@ let test_result r =
   [ starts_with_start
   ; ends_with_end
   ; sequence_have_diff_elemns
-  ; theres_an_end_for_every_start ]
+  ; theres_an_end_for_every_start
+  ; we_can_parse_the_allele_name
+  ]
   |> List.iter ~f:(fun check -> all_sequences_in_result check r)
+
 
 let () =
   let n = Array.length Sys.argv in
