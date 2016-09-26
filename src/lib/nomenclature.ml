@@ -48,15 +48,26 @@ let parse_ints lst =
   in
   loop [] lst
   
-let parse_numbers s =
+type resolution =
+  | One of int
+  | Two of int * int
+  | Three of int * int * int
+  | Four of int * int * int * int
+
+let parse_resolution s =
   trim_suffix s >>=
     fun (without_suffix, suffix_opt) ->
       String.split ~on:(`Character ':') without_suffix
       |> parse_ints  >>= function
           | []            -> Error (sprintf "Empty allele name: %s" without_suffix)
-          | [ a ]         -> Ok (a, 0, 0, 0)
-          | [ a; b ]      -> Ok (a, b, 0, 0)
-          | [ a; b; c]    -> Ok (a, b, c, 0)
-          | [ a; b; c; d] -> Ok (a, b, c, d)
+          | [ a ]         -> Ok (One a)
+          | [ a; b ]      -> Ok (Two (a, b))
+          | [ a; b; c]    -> Ok (Three (a, b, c))
+          | [ a; b; c; d] -> Ok (Four (a, b, c, d))
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
      
+let parse s =
+  match String.split s ~on:(`Character '*') with
+  | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
+  | _ :: [] -> error "Did not find the '*' separator in %s" s
+  | _       -> error "Found too many '*' separators in %s" s
