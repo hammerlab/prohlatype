@@ -54,7 +54,11 @@ let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   else
     Cache.(graph_and_two_index_no_cache { k = k; g = graph_arg ~file ?n () })
 
+let unwrap_sf = function | `Stopped r | `Finished r -> r
+
 let al_to_list idx r =
+  (* Don't worry about stopping in these tests. *)
+  let r = unwrap_sf r in
   Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r
   |> List.sort ~cmp:compare
 
@@ -74,7 +78,8 @@ let test_case ?compare_pos ~length (g, idx) read =
               | None -> invalid_argf "Couldn't find desired pos %d in second graph index! for sub_read: %s" dp sub_read
               | Some p -> p
   in
-  let al = Alignment.compute_mismatches g sub_read pos |> unwrap_ok in
+  let stop = String.length read + 100 in (* Don't stop ever *)
+  let al = Alignment.compute_mismatches g stop sub_read pos |> unwrap_ok in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
@@ -191,12 +196,14 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
             sub_read em;
           over_reads (i + 1) tl
       | Ok (pos, manm)  ->
-          match Alignment.compute_mismatches g sub_read pos with
+          let stop = String.length sub_read + 100 in
+          match Alignment.compute_mismatches g stop sub_read pos with
           | Error mes ->
               eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
                 sub_read (Index.show_position pos) mes;
               over_reads (i + 1) tl
           | Ok m2     ->
+              let m2 = unwrap_sf m2 in
               match compare_manual g manm m2 (String.length sub_read) with
               | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
               | ba -> printf " see differences.\n%!"; Some (read, ba)
