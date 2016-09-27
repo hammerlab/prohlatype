@@ -1,4 +1,6 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
+TOOLS=mhc2gpdf type explore_alignment
+TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k
 
 .PHONY: default setup clean build
 
@@ -36,7 +38,8 @@ adjacents:
 benchmark_k:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts benchmark_k.native
 
-tests: parsing round_trip same_alignment check_multiple adjacents benchmark_k
+tests:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
 
 ## Tools:
 
@@ -49,7 +52,8 @@ type:
 explore:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -I src/lib/ -I src/app explore_alignment.native
 
-tools: mhc2gpdf type explore
+tools:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)
 
 ## Throw Away Scripts
 
