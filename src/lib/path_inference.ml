@@ -95,22 +95,22 @@ let multiple_fold_lst ?verbose ?multi_pos ?filter g idx =
   in
   list_map, fold
 
-let multiple_fold ?verbose ?multi_pos ?as_ ?filter g idx =
+let multiple_fold ?verbose ?multi_pos ?as_ ?filter ?er g idx =
   let zero_map = Alleles.Map.make g.Ref_graph.aindex 0. in
   let one_map = Alleles.Map.make g.Ref_graph.aindex 1. in
   let filter = match filter with | None -> yes | Some n -> mx n in
   let init, update =
     match as_ with
     | None             (* The order of arguments is not a "fold_left", it is 'a -> 'b -> 'b *)
-    | Some `Mismatches    -> zero_map, (fun ~len m s -> m +. s)
-    | Some `LogLikelihood -> zero_map, (fun ~len m s -> s +. log_likelihood ~len m)
-    | Some `Likelihood    -> one_map,  (fun ~len m s -> s *. likelihood ~len m)
+    | Some `Mismatches    -> zero_map, (fun ?er ~len m s -> m +. s)
+    | Some `LogLikelihood -> zero_map, (fun ?er ~len m s -> s +. log_likelihood ~len ?er m)
+    | Some `Likelihood    -> one_map,  (fun ?er ~len m s -> s *. likelihood ~len ?er m)
   in
   let fold amap seq =
     let len = String.length seq in
     one ?verbose ?multi_pos g idx seq >>= fun m ->
       if filter m then begin
-        Alleles.Map.update2 ~source:m ~dest:amap (update ~len);
+        Alleles.Map.update2 ~source:m ~dest:amap (update ?er ~len);
         match verbose with | Some true -> printf "passed filter\n" | _ -> ()
       end else begin
         match verbose with | Some true -> printf "did not pass filter\n" | _ -> ()
@@ -119,8 +119,8 @@ let multiple_fold ?verbose ?multi_pos ?as_ ?filter g idx =
   in
   init, fold
 
-let multiple ?multi_pos ?as_ g idx =
-  let init, f = multiple_fold g idx in
+let multiple ?multi_pos ?as_ ?er g idx =
+  let init, f = multiple_fold ?er g idx in
   let rec loop a = function
     | []     -> Ok a
     | h :: t -> f a h >>= fun m -> loop m t

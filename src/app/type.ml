@@ -71,7 +71,7 @@ let report_likelihood g amap do_not_bucket =
 
 let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   fastq_file not_join_same_seq number_of_reads print_top multi_pos as_stat
-  filter do_not_normalize do_not_bucket =
+  filter do_not_normalize do_not_bucket likelihood_error =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
@@ -95,7 +95,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       end
   | `Mismatches | `Likelihood | `LogLikelihood as as_ ->
       begin
-        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?filter g idx in
+        let er = likelihood_error in
+        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?filter ?er g idx in
         let amap =
           (* This is backwards .. *)
           Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
@@ -175,6 +176,11 @@ let () =
     let doc  = "When printing the allele probabilities, do not bucket (by 0.1) the final allele sets" in
     Arg.(value & flag & info ~doc ~docv ["do-not-bucket"])
   in
+  let likelihood_error_arg =
+    let docv = "Override the likelihood error" in
+    let doc  = "Specify the error value used in likelihood calculations, defaults to 0.025" in
+    Arg.(value & opt (some float) None & info ~doc ~docv ["likelihood-error"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -202,6 +208,7 @@ let () =
             $ filter_flag
             $ do_not_normalize_flag
             $ do_not_bucket_flag
+            $ likelihood_error_arg
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
