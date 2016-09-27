@@ -101,15 +101,16 @@ let multiple_fold ?verbose ?multi_pos ?as_ ?filter g idx =
   let filter = match filter with | None -> yes | Some n -> mx n in
   let init, update =
     match as_ with
-    | None
-    | Some `Mismatches    -> zero_map, (+.)
-    | Some `LogLikelihood -> zero_map, (fun m s -> s +. log_likelihood ~len:100 m) (* TODO: dep on seq *)
-    | Some `Likelihood    -> one_map,  (fun m s -> s *. likelihood ~len:100 m)     (* TODO: dep on seq *)
+    | None             (* The order of arguments is not a "fold_left", it is 'a -> 'b -> 'b *)
+    | Some `Mismatches    -> zero_map, (fun ~len m s -> m +. s)
+    | Some `LogLikelihood -> zero_map, (fun ~len m s -> s +. log_likelihood ~len m)
+    | Some `Likelihood    -> one_map,  (fun ~len m s -> s *. likelihood ~len m)
   in
   let fold amap seq =
+    let len = String.length seq in
     one ?verbose ?multi_pos g idx seq >>= fun m ->
       if filter m then begin
-        Alleles.Map.update2 ~source:m ~dest:amap update;
+        Alleles.Map.update2 ~source:m ~dest:amap (update ~len);
         match verbose with | Some true -> printf "passed filter\n" | _ -> ()
       end else begin
         match verbose with | Some true -> printf "did not pass filter\n" | _ -> ()
