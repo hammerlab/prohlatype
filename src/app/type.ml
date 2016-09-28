@@ -164,7 +164,7 @@ let () =
     let docv = "Filter out sequences" in
     let doc  = "Filter, do not include in the likelihood calculation, sequences \
                 where the highest number of mismatches is greater than the passed argument." in
-    Arg.(value & opt (some float) None & info ~doc ~docv ["filter-matches"])
+    Arg.(value & opt (some int) None & info ~doc ~docv ["filter-matches"])
   in
   let do_not_normalize_flag =
     let docv = "Do not normalize the likelihoods" in

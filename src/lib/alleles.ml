@@ -255,8 +255,14 @@ module Map = struct
       m.(j) <- f (BitSet.is_set s j) m.(j)
     done
 
-  let update_from s m f =
+  let update_from s ~f m =
     Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
+
+  let update_from_and_fold s ~f ~init m =
+    Enum.fold (fun i acc ->         (* Accumulator in 2nd position. *)
+      let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
+      m.(i) <- nm;
+      nacc) init (BitSet.enum s)
 
   let update2 ~source ~dest f =
     for i = 0 to Array.length source - 1 do

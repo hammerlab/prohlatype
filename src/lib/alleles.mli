@@ -129,9 +129,13 @@ module Map : sig
       they are in [set] is passed the first arg to [f]. *)
   val update_all : Set.t -> 'a t -> (bool -> 'a -> 'a) -> unit
 
-  (** [update_from set map f] apply [f] to all alleles in [map] that are
+  (** [update_from set f map] apply [f] to all alleles in [map] that are
       in [set]. *)
-  val update_from : Set.t -> 'a t -> ('a -> 'a) -> unit
+  val update_from : Set.t -> f:('a -> 'a) -> 'a t -> unit
+
+  (** [update_from_and_fold set f init map] updates and folds over the [set]
+      elements of [map].*)
+  val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 
   val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
 

@@ -28,7 +28,10 @@ let one ?(verbose=false) ?(multi_pos=`Best) ?early_stop g idx seq =
   let report state mm = if verbose then report_mismatches state g.Ref_graph.aindex mm in
   (*let len = String.length seq in *)
   let to_float_map = Alleles.Map.map_wa ~f:float in
-  let early_stop = Option.value early_stop ~default:(String.length seq) in
+  let early_stop =
+    let filter = float (Option.value early_stop ~default:(String.length seq)) in
+    Ref_graph.number_of_alleles g, filter
+  in
   let rec across_positions error_msg = function
     | []     -> error "%s" error_msg
     | h :: t ->
@@ -39,14 +42,14 @@ let one ?(verbose=false) ?(multi_pos=`Best) ?early_stop g idx seq =
         | `Finished mm ->
             report "finished" mm;
             match t with
-            | [] -> Ok (to_float_map mm)
+            | [] -> Ok (`Finished (to_float_map mm))
             | tl ->
                 match multi_pos with
-                | `TakeFirst    -> Ok (to_float_map mm)
+                | `TakeFirst    -> Ok (`Finished (to_float_map mm))
                 | `Average      ->
                     let lm = to_float_map mm in
                     let rec loop n = function
-                      | []     -> Ok lm
+                      | []     -> Ok (`Finished lm)
                       | p :: t ->
                           Alignment.compute_mismatches g early_stop seq p >>= function
                             | `Stopped mm  ->
@@ -63,7 +66,7 @@ let one ?(verbose=false) ?(multi_pos=`Best) ?early_stop g idx seq =
                 | `Best ->
                     let current_best = Alleles.Map.fold_wa mm ~init:max_int ~f:min in
                     let rec loop b bm = function
-                      | []     -> Ok (to_float_map bm)
+                      | []     -> Ok (`Finished (to_float_map bm))
                       | p :: t ->
                           Alignment.compute_mismatches g early_stop seq p >>= function
                             | `Stopped mm ->
@@ -88,26 +91,29 @@ let mx b amap =
 
 let yes _ = true
 
-let multiple_fold_lst ?verbose ?multi_pos ?filter ?early_stop g idx =
+let multiple_fold_lst ?verbose ?multi_pos ?filter g idx =
   let list_map = Alleles.Map.make g.Ref_graph.aindex [] in
-  let filter = match filter with | None -> yes | Some n -> mx n in
+  let early_stop = filter in
+  let v = Option.value verbose ~default:false in
   let update v l = v :: l in
   let fold amap seq =
-    one ?verbose ?multi_pos ?early_stop g idx seq >>= fun m ->
-      if filter m then begin
-        Alleles.Map.update2 ~source:m ~dest:amap update;
-        match verbose with | Some true -> printf "passed filter\n" | _ -> ()
-      end else begin
-        match verbose with | Some true -> printf "did not pass filter\n" | _ -> ()
-      end;
-      Ok amap
+    one ?verbose ?multi_pos ?early_stop g idx seq >>= begin function
+      | `Stopped _m ->
+          if v then printf "stopped result\n";
+          Ok amap
+      | `Finished m ->
+          if v then printf "finished result\n";
+          Alleles.Map.update2 ~source:m ~dest:amap update;
+          Ok amap
+      end
   in
   list_map, fold
 
 let multiple_fold ?verbose ?multi_pos ?as_ ?filter ?early_stop ?er g idx =
   let zero_map = Alleles.Map.make g.Ref_graph.aindex 0. in
   let one_map = Alleles.Map.make g.Ref_graph.aindex 1. in
-  let filter = match filter with | None -> yes | Some n -> mx n in
+  let early_stop = filter in
+  let v = Option.value verbose ~default:false in
   let init, update =
     match as_ with
     | None             (* The order of arguments is not a "fold_left", it is 'a -> 'b -> 'b *)
@@ -117,14 +123,15 @@ let multiple_fold ?verbose ?multi_pos ?as_ ?filter ?early_stop ?er g idx =
   in
   let fold amap seq =
     let len = String.length seq in
-    one ?verbose ?multi_pos ?early_stop g idx seq >>= fun m ->
-      if filter m then begin
-        Alleles.Map.update2 ~source:m ~dest:amap (update ?er ~len);
-        match verbose with | Some true -> printf "passed filter\n" | _ -> ()
-      end else begin
-        match verbose with | Some true -> printf "did not pass filter\n" | _ -> ()
-      end;
-      Ok amap
+    one ?verbose ?multi_pos ?early_stop g idx seq >>= begin function
+      | `Stopped _m ->
+          if v then printf "stopped result\n";
+          Ok amap
+      | `Finished m ->
+          if v then printf "finished result\n";
+          Alleles.Map.update2 ~source:m ~dest:amap (update ?er ~len);
+          Ok amap
+      end
   in
   init, fold
 

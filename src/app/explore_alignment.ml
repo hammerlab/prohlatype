@@ -9,20 +9,24 @@ let app_name = "explore_alignment"
 let unwrap_sf = function | `Stopped r | `Finished r -> r
 
 let mismatches_from ?(verbose=false) (gall, idx) seq =
+  let stop = float (String.length seq) in
+  let n = Ref_graph.number_of_alleles gall in
   Index.lookup idx seq >>= fun lst ->
     if verbose then printf "%d positions %!" (List.length lst);
     List.fold_left lst ~init:(Ok [])
       ~f:(fun ac_err p -> ac_err >>= fun acc ->
-            Alignment.compute_mismatches gall (String.length seq) seq p >>= fun al ->
+            Alignment.compute_mismatches gall (n, stop) seq p >>= fun al ->
               let al = unwrap_sf al in
               Ok ((p, al) :: acc))
     >>= fun lst -> Ok (seq, lst)
 
 let mismatches_from_lst (gall, idx) seq =
+  let stop = float (String.length seq) in
+  let n = Ref_graph.number_of_alleles gall in
   Index.lookup idx seq >>= fun lst ->
       List.fold_left lst ~init:(Ok [])
         ~f:(fun ac_err p -> ac_err >>= fun acc ->
-              Alignment.compute_mismatches_lst gall (String.length seq) seq p >>= fun al ->
+              Alignment.compute_mismatches_lst gall (n, stop) seq p >>= fun al ->
                 let al = unwrap_sf al in
                 Ok ((p, al) :: acc))
       >>= fun lst -> Ok (seq, lst)
