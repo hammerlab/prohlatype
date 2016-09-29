@@ -109,6 +109,9 @@ type t =
   ; offset  : int
   }
 
+let number_of_alleles g =
+  A.Map.cardinal g.bounds
+
 (** Output **)
 
 (* TODO:

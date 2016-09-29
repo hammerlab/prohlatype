@@ -54,7 +54,11 @@ let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   else
     Cache.(graph_and_two_index_no_cache { k = k; g = graph_arg ~file ?n () })
 
+let unwrap_sf = function | `Stopped r | `Finished r -> r
+
 let al_to_list idx r =
+  (* Don't worry about stopping in these tests. *)
+  let r = unwrap_sf r in
   Alleles.Map.fold idx ~f:(fun acc c s -> (s, c) :: acc ) ~init:[] r
   |> List.sort ~cmp:compare
 
@@ -74,7 +78,9 @@ let test_case ?compare_pos ~length (g, idx) read =
               | None -> invalid_argf "Couldn't find desired pos %d in second graph index! for sub_read: %s" dp sub_read
               | Some p -> p
   in
-  let al = Alignment.compute_mismatches g sub_read pos |> unwrap_ok in
+  let stop = float (String.length read + 100) in (* Don't stop ever *)
+  let size = Ref_graph.number_of_alleles g in
+  let al = Alignment.compute_mismatches g (size, stop) sub_read pos |> unwrap_ok in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
@@ -152,18 +158,19 @@ let manual g idx read =
     | []     -> error "read not in index"
 
 let compare_manual g m fm read_len =
+  let open Alignment in
   let aindx = g.Ref_graph.aindex in
   Alleles.Map.fold aindx m ~init:[]
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (`Finished mismatches) , wa when wa = mismatches             ->
+          | Ok (`Finished sa)   , wa when wa = sa.Segment.mismatches ->
             acc
-          | Ok (`GoOn (msm, sp))      , wa when wa = msm + (read_len - sp)  ->
+          | Ok (`GoOn (sa, sp)) , wa when wa = sa.Segment.mismatches + (read_len - sp)  ->
             acc
-          | Ok cmo                    , wa                                  ->
+          | Ok cmo              , wa                                  ->
             (allele, Ok (cmo, wa)) :: acc
-          | Error ec                  , wa                                  ->
+          | Error ec            , wa                                  ->
             (allele, Error (ec, wa)) :: acc)
 
 
@@ -191,15 +198,20 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
             sub_read em;
           over_reads (i + 1) tl
       | Ok (pos, manm)  ->
-          match Alignment.compute_mismatches g sub_read pos with
+          let stop = float (String.length sub_read + 100) in
+          let size = Ref_graph.number_of_alleles g in
+          match Alignment.compute_mismatches g (size, stop) sub_read pos with
           | Error mes ->
               eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
                 sub_read (Index.show_position pos) mes;
               over_reads (i + 1) tl
           | Ok m2     ->
+              let m2 = unwrap_sf m2 in
               match compare_manual g manm m2 (String.length sub_read) with
               | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
-              | ba -> printf " see differences.\n%!"; Some (read, ba)
+              | ba -> printf " see differences.\n%!";
+                      (*let ms = List.map ba ~f:(fun s -> s.Segment.mismatches) in *)
+                      Some (read, ba)
   in
   (n, over_reads 0 reads)
 
@@ -240,13 +252,14 @@ let () =
         | n, None              ->
             printf "all %d reads match!\n" n
         | n, Some (read, blst) ->
+            let open Alignment.Segment in
             printf "out of %d reads encountered the following errors:\n" n;
             printf "read: %s\n" read;
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((`Finished m), m2)   -> sprintf "Finished %d vs %d" m m2
-                 | Ok ((`GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m m2 p
+                 | Ok ((`Finished m), m2)   -> sprintf "Finished %d vs %d" m.mismatches m2
+                 | Ok ((`GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.mismatches m2 p
                  | Error (msg, d)           -> sprintf "Error %s %d" msg d));
             exit 1
         end
