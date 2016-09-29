@@ -18,7 +18,7 @@ let vd =
 
 let _hdr :: data = Csv.load res_fname
 
-let to_res g t = 
+let to_res g t =
   let els = match t with | `Train -> tr | `Valid -> vd in
   List.filter_map data ~f:(fun lst ->
     let k = List.nth_exn lst 4 in
@@ -48,14 +48,15 @@ let position to_prohlatype_fname (key, nmt) =
       |> Option.value ~default:(3000, key, nmt)
   | _ -> invalid_arg "Not 2 in mptt"
 
+let prof_dir_example = "profc/type_out_%"
 
-let analyze () =
+let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir () =
   let open Oml.Statistics in
-  List.fold_left ["A"; "B"; "C"] ~init:[] ~f:(fun acc gene ->
+  List.fold_left genes ~init:[] ~f:(fun acc gene ->
     let train_samples = to_res gene `Train in
-    List.fold_left [1;2] ~init:acc ~f:(fun acc read -> 
-      List.fold_left [2;4;6;8;10;12] ~init:acc ~f:(fun acc filter ->
-        let to_filename k = sprintf "profc/type_out_%d/%s_%d_%s_nuc.txt" filter k read gene in
+    List.fold_left reads ~init:acc ~f:(fun acc read ->
+      List.fold_left filters ~init:acc ~f:(fun acc filter ->
+        let to_filename k = sprintf "%s_%d/%s_%d_%s_nuc.txt" prof_dir filter k read gene in
         let rr = List.map train_samples ~f:(position to_filename) in
         let dt = List.map rr ~f:(fun (p,_,_) -> float p) |> Array.of_list in
         (gene, read, filter, (Descriptive.mean dt)) :: acc)))
