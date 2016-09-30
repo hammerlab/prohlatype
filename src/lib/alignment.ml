@@ -433,10 +433,10 @@ module PhredLikelihood_config = struct
     let cs = String.get_exn s p in
     let er = Array.get a p in
     if cs = c then
-      { m with sum_llhd = m.sum_llhd +. log er }
+      { m with sum_llhd = m.sum_llhd +. log (1. -. er) }
     else
       { mismatches = m.mismatches +. 1.
-      ; sum_llhd = m.sum_llhd +. log (1. -. er)
+      ; sum_llhd = m.sum_llhd +. log er
       }
 
   type a = t
