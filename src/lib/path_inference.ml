@@ -209,7 +209,7 @@ module PhredLikelihood = AgainstOneSeq ( struct
 
 end)
 
-let multiple_phred ?verbose ?multi_pos as_ ?early_stop g idx =
+let multiple_phred ?verbose ?multi_pos ?early_stop g idx =
   let init = Alleles.Map.make g.Ref_graph.aindex 0. in
   let v = Option.value verbose ~default:false in
   let fold amap seq =

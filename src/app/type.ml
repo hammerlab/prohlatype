@@ -125,6 +125,28 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
             in
             report_likelihood g emap do_not_bucket print_top
       end
+  | `PhredLikelihood ->
+      begin
+        let open Core_kernel.Std in
+        let init, f = Path_inference.multiple_phred ~verbose ~multi_pos ?early_stop g idx in
+        let amap =
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let q = i.Biocaml_unix.Fastq.qualities in
+            match Fastq.phred_probabilities q with
+            | Error e -> if verbose then printf "error\t%s: %s" q (Error.to_string_hum e); amap
+            | Ok pro  ->
+                let seq = i.Biocaml_unix.Fastq.sequence in
+                match f amap (seq, pro) with
+                | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
+                | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
+        in
+        let amap =
+          if do_not_normalize then amap else
+            let sum = Alleles.Map.fold_wa ~f:(+.) ~init:0. amap in
+            Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
+        in
+        report_likelihood g amap do_not_bucket print_top
+      end
 
 let () =
   let open Cmdliner in
@@ -149,6 +171,7 @@ let () =
       ; `Likelihood,    info ~doc:(d ^ "likelihood") ["likelihood"]
       ; `Mismatches,    info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
       ; `MisList,       info ~doc:(d ^ "list of mismatches") ["mis-list"]
+      ; `PhredLikelihood, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
       ])
   in
   let filter_flag =

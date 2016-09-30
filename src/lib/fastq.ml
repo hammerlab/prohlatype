@@ -25,3 +25,14 @@ let all ?number_of_reads file =
   fold ?number_of_reads
     ~f:(fun acc el -> el :: acc)  ~init:[] file
   |> List.rev
+
+let phred_probabilities s =
+  let open Biocaml_unix in
+  let n = String.length s in
+  let a = Array.create ~len:n 0. in
+  let rec loop i =
+    if i = n then Ok a else
+      Result.bind (Phred_score.of_char s.[i])
+        (fun c -> a.(i) <- Phred_score.to_probability c; loop (i + 1))
+  in
+  loop 0
