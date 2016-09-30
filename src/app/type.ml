@@ -79,10 +79,11 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       allele_list (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
+  let early_stop = Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n) in
   match as_stat with
   | `MisList  ->
       begin
-        let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?filter g idx in
+        let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?early_stop g idx in
         let amap =
           (* This is backwards .. *)
           Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
@@ -96,7 +97,7 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   | `Mismatches | `Likelihood | `LogLikelihood as as_ ->
       begin
         let er = likelihood_error in
-        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?filter ?er g idx in
+        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?early_stop ?er g idx in
         let amap =
           (* This is backwards .. *)
           Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
@@ -123,16 +124,6 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
                 Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
             in
             report_likelihood g emap do_not_bucket print_top
-            (*let mx = Alleles.Map.fold_wa ~init:neg_infinity ~f:max amap in
-            let emap =
-              if do_not_normalize then
-                Alleles.Map.map_wa ~f:(fun v -> exp (v +. mx)) amap
-              else
-                let emap = Alleles.Map.map_wa ~f:(fun v -> exp (v -. mx)) amap in
-                let sum = Alleles.Map.fold_wa ~init:0. ~f:(fun s v -> v +. s) emap in
-                Alleles.Map.map_wa ~f:(fun v -> v /. sum) emap
-            in
-            report_likelihood g emap do_not_bucket print_top *)
       end
 
 let () =
