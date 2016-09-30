@@ -85,8 +85,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       begin
         let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?early_stop g idx in
         let amap =
-          (* This is backwards .. *)
-          Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let seq = i.Biocaml_unix.Fastq.sequence in
             if verbose then print_endline "--------------------------------";
             match f amap seq with
             | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
@@ -99,8 +99,8 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
         let er = likelihood_error in
         let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?early_stop ?er g idx in
         let amap =
-          (* This is backwards .. *)
-          Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let seq = i.Biocaml_unix.Fastq.sequence in
             if verbose then print_endline "--------------------------------";
             match f amap seq with
             | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap

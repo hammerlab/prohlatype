@@ -1,4 +1,4 @@
-PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib
+PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml.unix
 TOOLS=mhc2gpdf type
 TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k
 
