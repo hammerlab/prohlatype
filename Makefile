@@ -1,4 +1,5 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml.unix
+SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner extlib biocaml
 TOOLS=mhc2gpdf type
 TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k
 
@@ -10,7 +11,7 @@ build:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma
 
 setup:
-	opam install ocamlfind ocamlbuild $(PACKAGES)
+	opam install ocamlfind ocamlbuild $(SETUP_PACKAGE_NAMES)
 
 #cli:
 #	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib -I src/app cli.native
