@@ -6,6 +6,7 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 
 eval `opam config env`
 export OPAMYES="true"
+opam pin add -k git biocaml https://github.com/biocaml/biocaml/
 
 make setup
 make build
