@@ -2,7 +2,7 @@
 set -e
 
 # TODO: pin this to a specific version!
-git clone git@github.com:ANHIG/IMGTHLA.git
+git clone https://github.com/ANHIG/IMGTHLA.git
 
 eval `opam config env`
 export OPAMYES="true"
