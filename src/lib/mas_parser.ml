@@ -195,13 +195,13 @@ let parse_data line =
   String.split line ~on:(`Character ' ')
   |> List.filter ((<>) String.empty)
   |> function
-      | "|" :: _                -> Dash
-      | "AA" :: "codon" :: _    -> Dash (* not really but not modeling this at the moment. *)
-      | "gDNA" :: pos :: _      -> Position (true, int_of_string pos)
-      | "cDNA" :: pos :: _      -> Position (true, int_of_string pos)
-      | "Prot" :: pos :: _      -> Position (false, int_of_string pos)
-      | []                      -> invalid_arg "Empty data line!"
-      | s :: lst                -> SeqData (s, lst)
+      | s :: _ when s.[0] = Some '|' -> Dash
+      | "AA" :: "codon" :: _         -> Dash (* not really but not modeling this at the moment. *)
+      | "gDNA" :: pos :: _           -> Position (true, int_of_string pos)
+      | "cDNA" :: pos :: _           -> Position (true, int_of_string pos)
+      | "Prot" :: pos :: _           -> Position (false, int_of_string pos)
+      | []                           -> invalid_arg "Empty data line!"
+      | s :: lst                     -> SeqData (s, lst)
 
 type parse_state =
   | Header
