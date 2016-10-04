@@ -29,10 +29,15 @@ let to_fnames ?fname ?suffix dir =
         let suffix = to_suffix t in
         String.is_suffix ~suffix
   in
-  let not_swap_f s = not (String.is_prefix ~prefix:"." s) in
+  let not_swap s = not (String.is_prefix ~prefix:"." s) in
+  let not_readme s =
+    (* Get the original, not Sosa strings *)
+    not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
+          = "readme")
+  in
   Sys.readdir dir
   |> Array.to_list
-  |> List.filter ~f:(fun f -> fname_f f && suffix_f f && not_swap_f f)
+  |> List.filter ~f:(fun f -> fname_f f && suffix_f f && not_swap f && not_readme f)
   |> List.map ~f:(Filename.concat dir)
 
 let starts_with_start =
