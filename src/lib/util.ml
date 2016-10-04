@@ -4,6 +4,18 @@ module String = Sosa.Native_string
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
+let make_full_path ?(perm=0o777) path =
+  let rec loop p = function
+    | []     -> ()
+    | h :: t ->
+        let pp = Filename.concat p h in
+        Unix.mkdir pp perm;
+        loop pp t
+  in
+  String.split ~on:(`String Filename.dir_sep) path
+  |> List.filter ~f:(fun s -> not (String.is_empty s))
+  |> loop ""
+
 let disk_memoize ?dir arg_to_string f =
   let dir = Option.value dir ~default:(Filename.get_temp_dir_name ()) in
   fun ?(skip_disk_cache=false) arg ->
@@ -17,7 +29,7 @@ let disk_memoize ?dir arg_to_string f =
         close_in i;
         r
       end else begin
-        if not (Sys.file_exists dir) then Unix.mkdir dir 0o777;
+        if not (Sys.file_exists dir) then make_full_path dir;
         let r = f arg in
         let o = open_out file in
         Marshal.to_channel o r [];
