@@ -3,6 +3,7 @@
 #require "ocamlgraph"
 #require "extlib"
 #require "ppx_deriving.runtime"
+#require "biocaml.unix"
 
 #directory "_build/src/lib"
 #load_rec "prohlatype.cma"
