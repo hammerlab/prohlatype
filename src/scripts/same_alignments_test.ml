@@ -45,7 +45,6 @@ ex:
 
 open Util
 open Common
-open Fastq_reader
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
@@ -80,15 +79,17 @@ let test_case ?compare_pos ~length (g, idx) read =
   in
   let stop = float (String.length read + 100) in (* Don't stop ever *)
   let size = Ref_graph.number_of_alleles g in
-  let al = Alignment.compute_mismatches g (size, stop) sub_read pos |> unwrap_ok in
+  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos |> unwrap_ok in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
 let reads_with_kmers reads_file (g, idx) =
-  let reads = Fastq_reader.all reads_file in
+  let reads = Fastq.all reads_file in
   let greads =
-    List.filter reads ~f:(fun r ->
-      match String.index_of_character r 'N' with | Some _ -> false | _ -> true)
+    List.filter_map reads ~f:(fun r ->
+      let s = r.Biocaml_unix.Fastq.sequence in
+      match String.index_of_character s 'N' with
+      | Some _ -> None | _ -> Some s)
     |> Array.of_list
   in
   Array.to_list greads
@@ -164,13 +165,13 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (`Finished sa)   , wa when wa = sa.Segment.mismatches ->
+          | Ok (Mismatches.Finished sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
             acc
-          | Ok (`GoOn (sa, sp)) , wa when wa = sa.Segment.mismatches + (read_len - sp)  ->
+          | Ok (Mismatches.GoOn (sa, sp)) , wa when wa = sa.MismatchesCounts.mismatches + (read_len - sp)  ->
             acc
-          | Ok cmo              , wa                                  ->
+          | Ok cmo             , wa                                  ->
             (allele, Ok (cmo, wa)) :: acc
-          | Error ec            , wa                                  ->
+          | Error ec           , wa                                  ->
             (allele, Error (ec, wa)) :: acc)
 
 
@@ -200,7 +201,7 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
       | Ok (pos, manm)  ->
           let stop = float (String.length sub_read + 100) in
           let size = Ref_graph.number_of_alleles g in
-          match Alignment.compute_mismatches g (size, stop) sub_read pos with
+          match Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos with
           | Error mes ->
               eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
                 sub_read (Index.show_position pos) mes;
@@ -209,9 +210,7 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
               let m2 = unwrap_sf m2 in
               match compare_manual g manm m2 (String.length sub_read) with
               | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
-              | ba -> printf " see differences.\n%!";
-                      (*let ms = List.map ba ~f:(fun s -> s.Segment.mismatches) in *)
-                      Some (read, ba)
+              | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
   (n, over_reads 0 reads)
 
@@ -252,15 +251,15 @@ let () =
         | n, None              ->
             printf "all %d reads match!\n" n
         | n, Some (read, blst) ->
-            let open Alignment.Segment in
+            let open Alignment in
             printf "out of %d reads encountered the following errors:\n" n;
             printf "read: %s\n" read;
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((`Finished m), m2)   -> sprintf "Finished %d vs %d" m.mismatches m2
-                 | Ok ((`GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.mismatches m2 p
-                 | Error (msg, d)           -> sprintf "Error %s %d" msg d));
+                 | Ok ((Mismatches.Finished m), m2)   -> sprintf "Finished %d vs %d" m.Mismatches_config.mismatches m2
+                 | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.Mismatches_config.mismatches m2 p
+                 | Error (msg, d)          -> sprintf "Error %s %d" msg d));
             exit 1
         end
 

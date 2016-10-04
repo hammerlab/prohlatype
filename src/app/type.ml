@@ -79,13 +79,14 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
       allele_list (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
+  let early_stop = Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n) in
   match as_stat with
   | `MisList  ->
       begin
-        let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?filter g idx in
+        let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?early_stop g idx in
         let amap =
-          (* This is backwards .. *)
-          Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let seq = i.Biocaml_unix.Fastq.sequence in
             if verbose then print_endline "--------------------------------";
             match f amap seq with
             | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
@@ -96,10 +97,10 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
   | `Mismatches | `Likelihood | `LogLikelihood as as_ ->
       begin
         let er = likelihood_error in
-        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?filter ?er g idx in
+        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?early_stop ?er g idx in
         let amap =
-          (* This is backwards .. *)
-          Fastq_reader.fold ?number_of_reads fastq_file ~init ~f:(fun amap seq ->
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let seq = i.Biocaml_unix.Fastq.sequence in
             if verbose then print_endline "--------------------------------";
             match f amap seq with
             | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
@@ -123,16 +124,28 @@ let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
                 Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
             in
             report_likelihood g emap do_not_bucket print_top
-            (*let mx = Alleles.Map.fold_wa ~init:neg_infinity ~f:max amap in
-            let emap =
-              if do_not_normalize then
-                Alleles.Map.map_wa ~f:(fun v -> exp (v +. mx)) amap
-              else
-                let emap = Alleles.Map.map_wa ~f:(fun v -> exp (v -. mx)) amap in
-                let sum = Alleles.Map.fold_wa ~init:0. ~f:(fun s v -> v +. s) emap in
-                Alleles.Map.map_wa ~f:(fun v -> v /. sum) emap
-            in
-            report_likelihood g emap do_not_bucket print_top *)
+      end
+  | `PhredLikelihood ->
+      begin
+        let open Core_kernel.Std in
+        let init, f = Path_inference.multiple_phred ~verbose ~multi_pos ?early_stop g idx in
+        let amap =
+          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
+            let q = i.Biocaml_unix.Fastq.qualities in
+            match Fastq.phred_probabilities q with
+            | Error e -> if verbose then printf "error\t%s: %s" q (Error.to_string_hum e); amap
+            | Ok pro  ->
+                let seq = i.Biocaml_unix.Fastq.sequence in
+                match f amap (seq, pro) with
+                | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
+                | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
+        in
+        let amap =
+          if do_not_normalize then amap else
+            let sum = Alleles.Map.fold_wa ~f:(+.) ~init:0. amap in
+            Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
+        in
+        report_likelihood g amap do_not_bucket print_top
       end
 
 let () =
@@ -158,6 +171,7 @@ let () =
       ; `Likelihood,    info ~doc:(d ^ "likelihood") ["likelihood"]
       ; `Mismatches,    info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
       ; `MisList,       info ~doc:(d ^ "list of mismatches") ["mis-list"]
+      ; `PhredLikelihood, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
       ])
   in
   let filter_flag =

@@ -2,7 +2,6 @@
    data represented in the IMGTHLA fasta files for the alleles. *)
 open Util
 open Common
-open Fastq_reader
 
 let (//) = Filename.concat
 let is_char = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
@@ -64,7 +63,7 @@ let manual_diff ~reference ~allele ~file () =
 let test_sequences file =
   let all_args = Cache.graph_arg ~file:(to_alignment_file file) () in
   let gall = Cache.graph all_args in
-  let a_fasta = fasta_reader (to_fasta_file file) in
+  let a_fasta = Fasta.all (to_fasta_file file) in
   List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
     match Ref_graph.sequence gall allele with
     (* TODO: This should be an Error not an exception! *)
