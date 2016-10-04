@@ -22,8 +22,8 @@ echo testing parsing
 ./test_parsing.native
 
 echo testing round trip graph construction
-cp src/scripts/round_trip_test.sh .
-./round_trip_test.sh
+cp src/scripts/round_trip_tests.sh .
+./round_trip_tests.sh
 
 echo testing same alignment
 ./same_alignments_test.native
