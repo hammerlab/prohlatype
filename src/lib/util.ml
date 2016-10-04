@@ -9,12 +9,14 @@ let make_full_path ?(perm=0o777) path =
     | []     -> ()
     | h :: t ->
         let pp = Filename.concat p h in
-        Unix.mkdir pp perm;
+        if not (Sys.file_exists pp) then Unix.mkdir pp perm;
         loop pp t
   in
+  (* TODO: Probably need to do something different on Windows. *)
+  let start = if Filename.is_implicit path then "" else Filename.dir_sep in
   String.split ~on:(`String Filename.dir_sep) path
   |> List.filter ~f:(fun s -> not (String.is_empty s))
-  |> loop ""
+  |> loop start
 
 let disk_memoize ?dir arg_to_string f =
   let dir = Option.value dir ~default:(Filename.get_temp_dir_name ()) in
