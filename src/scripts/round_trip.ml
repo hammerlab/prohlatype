@@ -64,7 +64,8 @@ let test_sequences file =
   let all_args = Cache.graph_arg ~file:(to_alignment_file file) () in
   let gall = Cache.graph all_args in
   let a_fasta = Fasta.all (to_fasta_file file) in
-  List.fold_left a_fasta ~init:[] ~f:(fun acc (allele, seq) ->
+  List.fold_left a_fasta ~init:[] ~f:(fun acc (header, seq) ->
+    let allele = List.nth_exn (String.split ~on:(`Character ' ') header) 1 in
     match Ref_graph.sequence gall allele with
     (* TODO: This should be an Error not an exception! *)
     | exception Not_found -> eprintf "Coudn't find sequence for %s\n" allele;
