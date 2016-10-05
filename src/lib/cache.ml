@@ -50,4 +50,3 @@ let graph_and_two_index_no_cache {k; g} =
 let graph_and_two_index =
   let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
   disk_memoize ~dir index_args_to_string graph_and_two_index_no_cache
-
