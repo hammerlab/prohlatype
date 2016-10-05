@@ -1,6 +1,7 @@
 
 open Util
 open Graph
+open MoreLabels
 module A = Alleles
 
 (* TODO:
@@ -586,60 +587,64 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   in
   start_loop [] alt_lst
 
-module FoldAtSamePosition = struct
+(* TODO: use a real heap/pq ds?
+  - The one in Graph doesn't allow you to control not putting in duplicates
+*)
+module NodeQueue = struct
 
-  (* TODO: use a real heap/pq ds?
-    - The one in Graph doesn't allow you to control not putting in duplicates
-  *)
-  module NodeQueue =
-    Set.Make(struct
+  include Set.Make(struct
       type t = Nodes.t
       let compare = Nodes.compare_by_position_first
     end)
 
-  let add_successors g = G.fold_succ NodeQueue.add g
-
-  let with_start_nodes g aindex bounds =
-    let open Nodes in
-    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
-      ~f:(fun q sep_lst allele ->
-            List.fold_left sep_lst ~init:q
-              ~f:(fun q sep ->
-                    NodeQueue.add (S (fst sep.start, allele)) q))
-
-  let after_start_nodes g aindex bounds =
-    let open Nodes in
-    Alleles.Map.fold aindex bounds ~init:NodeQueue.empty
-      ~f:(fun q sep_lst allele ->
-            List.fold_left sep_lst ~init:q
-              ~f:(fun q sep ->
-                    add_successors g (S (fst sep.start, allele)) q))
+  let add_successors g = G.fold_succ add g
 
   let at_min_position q =
     let rec loop p q acc =
-      if NodeQueue.is_empty q then
+      if is_empty q then
         q, acc
       else
-        let me = NodeQueue.min_elt q in
+        let me = min_elt q in
         match acc with
-        | [] -> loop (Nodes.position me) (NodeQueue.remove me q) [me]
+        | [] -> loop (Nodes.position me) (remove me q) [me]
         | _  -> if Nodes.position me = p then
-                  loop p (NodeQueue.remove me q) (me :: acc)
+                  loop p (remove me q) (me :: acc)
                 else
                   q, acc
     in
     loop min_int q []
 
+end
+
+let node_queue_with_start_nodes aindex bounds =
+  let open Nodes in
+  A.Map.fold aindex bounds ~init:NodeQueue.empty
+    ~f:(fun q sep_lst allele ->
+          List.fold_left sep_lst ~init:q
+            ~f:(fun q sep ->
+                  NodeQueue.add (S (fst sep.start, allele)) q))
+
+module FoldAtSamePosition = struct
+
+  let after_start_nodes g aindex bounds =
+    let open Nodes in
+    A.Map.fold aindex bounds ~init:NodeQueue.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                    NodeQueue.add_successors g (S (fst sep.start, allele)) q))
+
   let step g q =
-    let without_old, amp = at_min_position q in
+    let without_old, amp = NodeQueue.at_min_position q in
     let withnew =
-      List.fold_left amp ~init:without_old ~f:(fun q n -> add_successors g n q)
+      List.fold_left amp ~init:without_old
+        ~f:(fun q n -> NodeQueue.add_successors g n q)
     in
     withnew, amp
 
   let fold_from g q ~f ~init =
     let rec loop a q =
-      if q = NodeQueue.empty then
+      if NodeQueue.is_empty q then
         a
       else
         let nq, amp = step g q in
@@ -652,12 +657,12 @@ module FoldAtSamePosition = struct
     fold_from g (after_start_nodes g aindex bounds) ~f ~init
 
   let f g aindex bounds ~f ~init =
-    fold_from g (with_start_nodes g aindex bounds) ~f ~init
+    fold_from g (node_queue_with_start_nodes aindex bounds) ~f ~init
 
 end (* FoldAtSamePosition *)
 
 let range_pr bounds =
-  Alleles.Map.fold_wa bounds ~init:(max_int, min_int)
+  A.Map.fold_wa bounds ~init:(max_int, min_int)
     ~f:(fun p sep_lst ->
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
@@ -763,7 +768,7 @@ module JoinSameSequencePaths = struct
   let after_starts g aindex bounds =
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
-    Alleles.Map.fold aindex bounds ~init:Apsq.empty
+    A.Map.fold aindex bounds ~init:Apsq.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
@@ -777,7 +782,7 @@ module JoinSameSequencePaths = struct
       try
         let ecur = G.find_edge g pv nv in
         let into = G.E.label ecur in
-        Alleles.Set.unite ~into e;
+        A.Set.unite ~into e;
       with Not_found ->
           G.add_edge_e g (G.E.create pv e nv)
     in
@@ -908,6 +913,63 @@ module JoinSameSequencePaths = struct
 
 end (* JoinSameSequencePaths *)
 
+module RemoveSequence = struct
+
+  let do_it seq g aindex bounds =
+    let open Nodes in
+    let naindex =
+      A.to_alleles aindex
+      |> List.filter ~f:((<>) seq)
+      |> A.index
+    in
+    let nbounds = A.Map.init naindex (A.Map.get aindex bounds) in
+    let newe oe =
+      let ne = A.Set.init naindex in
+      A.Set.iter aindex (fun a -> if a <> seq then A.Set.set naindex ne a) oe;
+      ne
+    in
+    (* As is the norm, new_graph is mutated. *)
+    let new_graph = G.create ~size:(A.Map.cardinal nbounds) () in
+    let rec loop q =
+      if NodeQueue.is_empty q then
+        ()
+      else
+        let nq, me = NodeQueue.at_min_position q in
+        List.fold_left me ~init:nq ~f:(fun queue node ->
+          let nq = G.fold_succ_e (fun (p, e, sn) queue ->
+            let ne = newe e in
+            if A.Set.is_empty ne then
+              queue
+            else begin
+              match sn with
+              | S _ -> invalid_argf "pointing back at a start %s while remove %s"
+                          (vertex_name sn) seq
+              | E _ -> G.add_vertex new_graph sn;
+                       G.add_edge_e new_graph (p, ne, sn);
+                       queue
+              | B _
+              | N _ -> G.add_vertex new_graph sn;
+                       G.add_edge_e new_graph (p, ne, sn);
+                       NodeQueue.add sn queue
+            end) g node queue
+          in
+          nq)
+        |> loop
+    in
+    let start_queue =
+      A.Map.fold naindex nbounds ~init:NodeQueue.empty
+        ~f:(fun q sep_lst allele ->
+              List.fold_left sep_lst ~init:q
+                ~f:(fun q sep ->
+                      let start_node = S (fst sep.start, allele) in
+                      G.add_vertex new_graph start_node;
+                      NodeQueue.add start_node q))
+    in
+    loop start_queue;
+    new_graph, naindex, nbounds
+
+end (* RemoveSequence *)
+
 type construct_which_args =
   | NumberOfAlts of int
   | Alleles of { specific : string list
@@ -969,7 +1031,7 @@ let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=f
     JoinSameSequencePaths.do_it g aindex bounds; (* mutates 'g' *)
   let g, aindex, bounds =
     if remove_reference then
-      failwith "Not implemented!"
+      RemoveSequence.do_it reference g aindex bounds
     else
       g, aindex, bounds
   in
@@ -987,7 +1049,7 @@ let construct_from_file ~join_same_sequence ~remove_reference ?which file =
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =
-  Alleles.Map.get aindex bounds allele
+  A.Map.get aindex bounds allele
 
 let find_bound g allele ~pos =
   all_bounds g allele
@@ -1031,7 +1093,7 @@ let find_node_at ?allele ?ongap ~pos { g; aindex; offset; posarr; _} =
         let is_along_allele node =
           try
             G.fold_pred_e (fun (_, e, _) _b ->
-              if Alleles.Set.is_set aindex e a then
+              if A.Set.is_set aindex e a then
                 raise M.Found else false) g node false
           with M.Found ->
             true
@@ -1152,11 +1214,11 @@ let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
       |> fun s -> Ok s
 
 let alleles_with_data { aindex; bounds; _} ~pos =
-  let es = Alleles.Set.init aindex in
-  Alleles.Map.iter aindex bounds ~f:(fun sep_lst allele ->
+  let es = A.Set.init aindex in
+  A.Map.iter aindex bounds ~f:(fun sep_lst allele ->
     List.iter sep_lst ~f:(fun sep ->
       if (fst sep.start) <= pos && pos < sep.end_ then
-        Alleles.Set.set aindex es allele
+        A.Set.set aindex es allele
       (* No need to clear! *)));
   es
 
@@ -1191,12 +1253,12 @@ let search_through_gap g node ~pos =
 
 (*let find_root_position ({g; aindex; _} as gt) ~pos =
   let all_edges = alleles_with_data gt ~pos in
-  let root_allele = Alleles.Set.min_elt aindex all_edges in
+  let root_allele = A.Set.min_elt aindex all_edges in
   find_node_at ~next_if_gap:true gt root_allele ~pos >>=
     fun rootn ->
       if Nodes.position rootn > pos then begin  (* In a gap, work backwards! *)
         search_through_gap g rootn ~pos >>= fun (n, e) ->
-          let new_root_allele = Alleles.Set.min_elt aindex e in
+          let new_root_allele = A.Set.min_elt aindex e in
           Ok (new_root_allele, all_edges, n)
       end else
         Ok (root_allele, all_edges, rootn) *)
@@ -1225,7 +1287,7 @@ let node_set_to_string s =
 let edge_node_set_to_string ?max_length ?complement aindex s =
   EdgeNodeSet.fold ~f:(fun (e, n) a ->
     (sprintf "(%s -> %s)"
-      (Alleles.Set.to_human_readable aindex ?max_length ?complement e)
+      (A.Set.to_human_readable aindex ?max_length ?complement e)
       (Nodes.vertex_name n)) :: a) ~init:[] s
   |> String.concat ~sep:"; "
   |> sprintf "{%s}"
@@ -1236,7 +1298,7 @@ let edge_node_set_to_table ?max_length ?complement aindex s =
   |> List.map ~f:(fun (e, n) ->
       sprintf "%s <- %s"
         (Nodes.vertex_name n)
-        (Alleles.Set.to_human_readable aindex ?max_length ?complement e))
+        (A.Set.to_human_readable aindex ?max_length ?complement e))
   |> String.concat ~sep:"\n"
   |> sprintf "%s"
 
@@ -1389,8 +1451,8 @@ let adjacents_at ?max_edge_debug_length ?(max_height=10000) ({g; aindex; _} as g
         begin
           if !adjacents_debug_ref then
             eprintf "Still missing %s\n"
-              (Alleles.Set.to_human_readable ?max_length aindex
-                (Alleles.Set.diff all_edges es_acc));
+              (A.Set.to_human_readable ?max_length aindex
+                (A.Set.diff all_edges es_acc));
           false
         end
     in
@@ -1398,8 +1460,8 @@ let adjacents_at ?max_edge_debug_length ?(max_height=10000) ({g; aindex; _} as g
       if !adjacents_debug_ref then
         eprintf "Adding %s <- %s.\n"
           (Nodes.vertex_name node)
-          (Alleles.Set.to_human_readable ?max_length aindex edge);
-      Alleles.Set.union edge edge_set
+          (A.Set.to_human_readable ?max_length aindex edge);
+      A.Set.union edge edge_set
     in
-    let init = Alleles.Set.init aindex in
+    let init = A.Set.init aindex in
     Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
