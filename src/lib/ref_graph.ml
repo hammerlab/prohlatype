@@ -716,7 +716,7 @@ let create_by_position g aindex bounds =
 
 module JoinSameSequencePaths = struct
 
-  (* Alignment and sequence pair set used as queue *)
+  (* Alignment and sequence pair, set used as queue *)
   module Apsq =
     Set.Make(struct
       type t = alignment_position * sequence
@@ -923,7 +923,7 @@ let construct_which_args_to_string = function
                                         |> Digest.to_hex
                                         |> sprintf "R%s"
 
-let construct_from_parsed ?which ?(join_same_sequence=true) r =
+let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=false) r =
   let open Mas_parser in
   let { reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
@@ -967,6 +967,12 @@ let construct_from_parsed ?which ?(join_same_sequence=true) r =
   in
   if join_same_sequence then
     JoinSameSequencePaths.do_it g aindex bounds; (* mutates 'g' *)
+  let g, aindex, bounds =
+    if remove_reference then
+      failwith "Not implemented!"
+    else
+      g, aindex, bounds
+  in
   let offset = fst (range_pr bounds) in
   let posarr = create_by_position g aindex bounds in
   { g
@@ -976,8 +982,8 @@ let construct_from_parsed ?which ?(join_same_sequence=true) r =
   ; posarr
   }
 
-let construct_from_file ~join_same_sequence ?which file =
-  construct_from_parsed ~join_same_sequence ?which (Mas_parser.from_file file)
+let construct_from_file ~join_same_sequence ~remove_reference ?which file =
+  construct_from_parsed ~join_same_sequence ~remove_reference ?which (Mas_parser.from_file file)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =

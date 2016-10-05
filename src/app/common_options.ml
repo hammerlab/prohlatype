@@ -37,28 +37,40 @@ let num_alt_arg =
 
 let allele_arg =
   let docv = "allele name" in
-  let doc = "Specify specfic alternate alleles to add to the graph.\
-             By default the behavior is to add [num_alt] alleles (in \
-             alphabetical order) to the graph. Use this option to construct \
-             a graph with specific alleles (ex. A*01:02). Specify multiple \
-             alleles with multiple arguments. This argument will override the \
-             [num_alt] flag but may be used in tandem with the allele-regex \
-             arguments."
+  let doc  = "Specify specfic alternate alleles to add to the graph.\
+              By default the behavior is to add [num_alt] alleles (in \
+              alphabetical order) to the graph. Use this option to construct \
+              a graph with specific alleles (ex. A*01:02). Specify multiple \
+              alleles with multiple arguments. This argument will override the \
+              [num_alt] flag but may be used in tandem with the allele-regex \
+              arguments."
   in
   Arg.(value & opt_all string [] & info ~doc ~docv ["a"; "allele"])
 
 let allele_regex_arg =
   let docv = "allele name regex" in
-  let doc = "Specify specfic alternate alleles to add to the graph via a regex.\
-             This option is similar to allele, but lets the user specify a class
-             (specifically a pattern) of alleles to include in the graph, \
-             without having to add them individually via the allele option. \
-             This argument will override [num_alt] but may be used in tandem \
-             with allele flag. The regex format is POSIX, and the '*' used in \
-             HLA allele names must be properly escaped from the command line:
-             ex. -ar \"A\\*02:03\""
+  let doc  = "Specify specfic alternate alleles to add to the graph via a \
+              regex. This option is similar to allele, but lets the user \
+              specify a class (specifically a pattern) of alleles to include \
+              in the graph, without having to add them individually via the \
+              allele option. This argument will override [num_alt] but may be \
+              used in tandem with allele flag. The regex format is POSIX, and \
+              the '*' used in HLA allele names must be properly escaped from \
+              the command line: ex. -ar \"A\\*02:03\""
   in
   Arg.(value & opt_all string [] & info ~doc ~docv ["ar"; "allele-regex"])
+
+let remove_reference_flag =
+  let docv = "remove reference allele" in
+  let doc  = "Remove the reference allele from the graph. The reference \
+              allele is the one that is listed first in the alignments file. \
+              Graphs are currently constructed based upon their \"diff\" to \
+              the reference as represented in the alignments file. Therefore \
+              the original reference sequence must be a part of the graph \
+              during construction. Specifying this flag will remove it from \
+              the graph."
+  in
+  Arg.(value & flag & info ~doc ~docv ["no-reference"])
 
 let no_cache_flag =
   let doc =
@@ -76,7 +88,7 @@ let do_not_join_same_sequence_paths_flag =
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
 let to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-  allele_regex_list join_same_sequence =
+  allele_regex_list join_same_sequence remove_reference =
   let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =
@@ -84,15 +96,25 @@ let to_filename_and_graph_args alignment_file num_alt_to_add allele_list
     | [], [] ->
         begin
           match num_alt_to_add with
-          | None      -> sprintf "%s_%b_all" base join_same_sequence
+          | None      -> sprintf "%s_%b_%b_all" base join_same_sequence remove_reference
                          , None
-          | Some n    -> sprintf "%s_%b_%d" base join_same_sequence n
+          | Some n    -> sprintf "%s_%b_%b_%d" base join_same_sequence remove_reference n
                          , (Some (NumberOfAlts n))
         end
-    | specific, regex -> sprintf "%s_spec_%d" base (Hashtbl.hash (specific, regex))
+    | specific, regex -> let sr_dig =
+                            String.concat (specific @ regex)
+                            |> Digest.string
+                            |> Digest.to_hex
+                         in
+                         sprintf "%s_spec_%s_%b" base sr_dig remove_reference
                          , (Some (Alleles { specific; regex }))
   in
-  option_based_fname, { Cache.alignment_file; Cache.which ; Cache.join_same_sequence }
+  option_based_fname
+  , { Cache.alignment_file
+    ; Cache.which
+    ; Cache.join_same_sequence
+    ; Cache.remove_reference
+    }
 
 let verbose_flag =
   let docv = "Be verbose" in
