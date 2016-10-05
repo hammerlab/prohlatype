@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.org/hammerlab/prohlatype.svg?branch=master)](https://travis-ci.org/hammerlab/prohlatype)
+
 HLA Typing 
 ----------
 
