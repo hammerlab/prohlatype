@@ -54,7 +54,9 @@ let allele_regex_arg =
              (specifically a pattern) of alleles to include in the graph, \
              without having to add them individually via the allele option. \
              This argument will override [num_alt] but may be used in tandem \
-             with allele flag."
+             with allele flag. The regex format is POSIX, and the '*' used in \
+             HLA allele names must be properly escaped from the command line:
+             ex. -ar \"A\\*02:03\""
   in
   Arg.(value & opt_all string [] & info ~doc ~docv ["ar"; "allele-regex"])
 
