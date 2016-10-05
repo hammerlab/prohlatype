@@ -3,64 +3,64 @@
 set -e
 set -x
 
-./adjacents.native A_gen
-./adjacents.native A_nuc
-./adjacents.native B_gen
-./adjacents.native B_nuc
-./adjacents.native C_gen
-./adjacents.native C_nuc
-./adjacents.native DRB_nuc
-./adjacents.native DRB1_gen
-./adjacents.native DMA_gen
-./adjacents.native DMA_nuc
-./adjacents.native DMB_gen
-./adjacents.native DMB_nuc
-./adjacents.native DOA_gen
-./adjacents.native DOA_nuc
-./adjacents.native DOB_gen
-./adjacents.native DOB_nuc
-./adjacents.native DPA1_gen
-./adjacents.native DPA1_nuc
-./adjacents.native DPB1_gen
-./adjacents.native DPB1_nuc
-./adjacents.native DPB2_gen
-./adjacents.native DPB2_nuc
-./adjacents.native DQA1_gen
-./adjacents.native DQA1_nuc
-./adjacents.native DQB1_gen
-./adjacents.native DQB1_nuc
-./adjacents.native DRA_gen
-./adjacents.native DRA_nuc
-./adjacents.native DRB1_gen
-./adjacents.native DRB3_gen
-./adjacents.native DRB4_gen
-./adjacents.native DRB_nuc
-./adjacents.native E_gen
-./adjacents.native E_nuc
-./adjacents.native F_gen
-./adjacents.native F_nuc
-./adjacents.native G_gen
-./adjacents.native G_nuc
-./adjacents.native HFE_gen
-./adjacents.native HFE_nuc
-./adjacents.native H_gen
-./adjacents.native H_nuc
-./adjacents.native J_gen
-./adjacents.native J_nuc
-./adjacents.native K_gen
-./adjacents.native K_nuc
-./adjacents.native L_gen
-./adjacents.native L_nuc
-./adjacents.native MICA_gen
-./adjacents.native MICA_nuc
-./adjacents.native MICB_gen
-./adjacents.native MICB_nuc
-./adjacents.native P_gen
-./adjacents.native TAP1_gen
-./adjacents.native TAP1_nuc
-./adjacents.native TAP2_gen
-./adjacents.native TAP2_nuc
-./adjacents.native V_gen
-./adjacents.native V_nuc
-./adjacents.native Y_gen
-./adjacents.native Y_nuc
+./adjacents.native A_gen > A_gen_adjacent.log
+./adjacents.native A_nuc > A_nuc_adjacent.log
+./adjacents.native B_gen > B_gen_adjacent.log
+./adjacents.native B_nuc > B_nuc_adjacent.log
+./adjacents.native C_gen > C_gen_adjacent.log
+./adjacents.native C_nuc > C_nuc_adjacent.log
+./adjacents.native DRB_nuc > DRB_nuc_adjacent.log
+./adjacents.native DRB1_gen > DRB1_gen_adjacent.log
+./adjacents.native DMA_gen > DMA_gen_adjacent.log
+./adjacents.native DMA_nuc > DMA_nuc_adjacent.log
+./adjacents.native DMB_gen > DMB_gen_adjacent.log
+./adjacents.native DMB_nuc > DMB_nuc_adjacent.log
+./adjacents.native DOA_gen > DOA_gen_adjacent.log
+./adjacents.native DOA_nuc > DOA_nuc_adjacent.log
+./adjacents.native DOB_gen > DOB_gen_adjacent.log
+./adjacents.native DOB_nuc > DOB_nuc_adjacent.log
+./adjacents.native DPA1_gen > DPA1_gen_adjacent.log
+./adjacents.native DPA1_nuc > DPA1_nuc_adjacent.log
+./adjacents.native DPB1_gen > DPB1_gen_adjacent.log
+./adjacents.native DPB1_nuc > DPB1_nuc_adjacent.log
+./adjacents.native DPB2_gen > DPB2_gen_adjacent.log
+./adjacents.native DPB2_nuc > DPB2_nuc_adjacent.log
+./adjacents.native DQA1_gen > DQA1_gen_adjacent.log
+./adjacents.native DQA1_nuc > DQA1_nuc_adjacent.log
+./adjacents.native DQB1_gen > DQB1_gen_adjacent.log
+./adjacents.native DQB1_nuc > DQB1_nuc_adjacent.log
+./adjacents.native DRA_gen > DRA_gen_adjacent.log
+./adjacents.native DRA_nuc > DRA_nuc_adjacent.log
+./adjacents.native DRB1_gen > DRB1_gen_adjacent.log
+./adjacents.native DRB3_gen > DRB3_gen_adjacent.log
+./adjacents.native DRB4_gen > DRB4_gen_adjacent.log
+./adjacents.native DRB_nuc > DRB_nuc_adjacent.log
+./adjacents.native E_gen > E_gen_adjacent.log
+./adjacents.native E_nuc > E_nuc_adjacent.log
+./adjacents.native F_gen > F_gen_adjacent.log
+./adjacents.native F_nuc > F_nuc_adjacent.log
+./adjacents.native G_gen > G_gen_adjacent.log
+./adjacents.native G_nuc > G_nuc_adjacent.log
+./adjacents.native HFE_gen > HFE_gen_adjacent.log
+./adjacents.native HFE_nuc > HFE_nuc_adjacent.log
+./adjacents.native H_gen > H_gen_adjacent.log
+./adjacents.native H_nuc > H_nuc_adjacent.log
+./adjacents.native J_gen > J_gen_adjacent.log
+./adjacents.native J_nuc > J_nuc_adjacent.log
+./adjacents.native K_gen > K_gen_adjacent.log
+./adjacents.native K_nuc > K_nuc_adjacent.log
+./adjacents.native L_gen > L_gen_adjacent.log
+./adjacents.native L_nuc > L_nuc_adjacent.log
+./adjacents.native MICA_gen > MICA_gen_adjacent.log
+./adjacents.native MICA_nuc > MICA_nuc_adjacent.log
+./adjacents.native MICB_gen > MICB_gen_adjacent.log
+./adjacents.native MICB_nuc > MICB_nuc_adjacent.log
+./adjacents.native P_gen > P_gen_adjacent.log
+./adjacents.native TAP1_gen > TAP1_gen_adjacent.log
+./adjacents.native TAP1_nuc > TAP1_nuc_adjacent.log
+./adjacents.native TAP2_gen > TAP2_gen_adjacent.log
+./adjacents.native TAP2_nuc > TAP2_nuc_adjacent.log
+./adjacents.native V_gen > V_gen_adjacent.log
+./adjacents.native V_nuc > V_nuc_adjacent.log
+./adjacents.native Y_gen > Y_gen_adjacent.log
+./adjacents.native Y_nuc > Y_nuc_adjacent.log
