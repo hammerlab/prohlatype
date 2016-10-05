@@ -28,6 +28,8 @@ cp src/scripts/round_trip_tests.sh .
 #echo testing same alignment
 #./same_alignments_test.native
 
-echo testing adjcent finding
-cp src/scripts/adjacent_tests.sh .
-./adjacent_tests.sh
+# Full adjacents calculation takes too long
+#cp src/scripts/adjacent_tests.sh .
+#./adjacent_tests.sh
+echo testing adjcent finding for A_nuc only
+./adjacents.native A_nuc > A_nuc_adjacent.log
