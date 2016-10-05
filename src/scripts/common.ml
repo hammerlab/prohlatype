@@ -2,7 +2,9 @@
 (** Common script declarations *)
 
 let (//) = Filename.concat
-let imgthla_dir = "../foreign/IMGTHLA/"
+let imgthla_dir =
+  try Sys.getenv "IMGTHLA_DIR"
+  with _ -> "../foreign/IMGTHLA"
 
 let to_alignment_file f = imgthla_dir // "alignments" // (f ^ ".txt")
 let to_fasta_file f = imgthla_dir // "fasta" // (f ^ ".fasta")
