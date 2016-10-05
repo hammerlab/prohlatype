@@ -69,14 +69,15 @@ let report_likelihood g amap do_not_bucket =
       |> fun l -> List.take l n
       |> output_values_assoc g.aindex
 
-let type_ verbose alignment_file num_alt_to_add allele_list k skip_disk_cache
+let type_ verbose alignment_file num_alt_to_add allele_list allele_regex_list
+  k skip_disk_cache
   fastq_file not_join_same_seq number_of_reads print_top multi_pos as_stat
   filter do_not_normalize do_not_bucket likelihood_error =
   let open Cache in
   let open Ref_graph in
   let option_based_fname, g =
     Common_options.to_filename_and_graph_args alignment_file num_alt_to_add
-      allele_list (not not_join_same_seq)
+      allele_list allele_regex_list (not not_join_same_seq)
   in
   let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
   let early_stop = Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n) in
@@ -212,7 +213,8 @@ let () =
     in
     Term.(const type_
             $ verbose_flag
-            $ file_arg $ num_alt_arg $ allele_arg $ kmer_size_arg $ no_cache_flag
+            $ file_arg $ num_alt_arg $ allele_arg $ allele_regex_arg
+            $ kmer_size_arg $ no_cache_flag
             $ fastq_file_arg
             $ do_not_join_same_sequence_paths_flag
             $ num_reads_arg

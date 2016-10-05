@@ -910,11 +910,18 @@ end (* JoinSameSequencePaths *)
 
 type construct_which_args =
   | NumberOfAlts of int
-  | SpecificAlleles of string list
+  | Alleles of { specific : string list
+               ; regex    : string list
+               }
 
 let construct_which_args_to_string = function
-  | NumberOfAlts n    -> sprintf "N%d" n
-  | SpecificAlleles l -> sprintf "S%s" (String.concat ~sep:"_" l)
+  | NumberOfAlts n                   -> sprintf "N%d" n
+  | Alleles { specific; regex = [] } when List.length specific < 5
+                                     -> sprintf "S%s" (String.concat ~sep:"_" specific)
+  | Alleles { specific; regex }      -> String.concat (specific @ regex)
+                                        |> Digest.string
+                                        |> Digest.to_hex
+                                        |> sprintf "R%s"
 
 let construct_from_parsed ?which ?(join_same_sequence=true) r =
   let open Mas_parser in
@@ -926,16 +933,22 @@ let construct_from_parsed ?which ?(join_same_sequence=true) r =
         alt_elems
     | Some (NumberOfAlts num_alt_to_add) ->
         List.take alt_elems num_alt_to_add
-    | Some (SpecificAlleles alst)        ->
+    | Some (Alleles {specific; regex})   ->
         let assoc_wrap name =
           if name = reference then None else
             try Some (name, List.assoc name alt_elems)
             with Not_found ->
-              eprintf "Ignoring requested allele %s in graph construction."
+              eprintf "Ignoring Not_found requested allele %s in graph construction."
                 name;
               None
         in
-        List.filter_map alst ~f:assoc_wrap
+        let from_specific = List.filter_map specific ~f:assoc_wrap in
+        let from_regex =
+          let regexes = List.map regex ~f:(Re_posix.compile_pat) in
+          List.filter alt_elems ~f:(fun (alt, alt_seq) ->
+            List.exists regexes ~f:(fun r -> Re.execp r alt))
+        in
+        from_specific @ from_regex
   in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
