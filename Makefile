@@ -3,7 +3,7 @@ SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmd
 TOOLS=mhc2gpdf type
 TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k
 
-.PHONY: default setup clean build
+.PHONY: default setup clean build tools tests
 
 default: build
 
