@@ -1,0 +1,54 @@
+digraph G {
+  "S83-DRA*01:02:01" [shape=box, ];
+  "655GTGG...GGA" [shape=box, ];
+  "B1-330" [shape=box, ];
+  "356A" [shape=box, ];
+  "E769" [shape=box, ];
+  "357AACA...CAT" [shape=box, ];
+  "331TACC...CAC" [shape=box, ];
+  "B0-83" [shape=box, ];
+  "614AGTT...GAA" [shape=box, ];
+  "1ATGG...AAG" [shape=box, ];
+  "S1-DRA*01:01:01:01-03;DRA*01:01:02;DRA*01:02:02-03" [shape=box, ];
+  "84AAGA...ATG" [shape=box, ];
+  "356G" [shape=box, ];
+  "404C" [shape=box, ];
+  "728TGCG...TAA" [shape=box, ];
+  "654C" [shape=box, ];
+  "727G" [shape=box, ];
+  "404A" [shape=box, ];
+  "B2-613" [shape=box, ];
+  "727T" [shape=box, ];
+  "654T" [shape=box, ];
+  "405GACA...GGG" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "S83-DRA*01:02:01" -> "B0-83" [label="DRA*01:02:01", ];
+  "655GTGG...GGA" -> "727G" [label="C. of DRA*01:02:01-03", ];
+  "655GTGG...GGA" -> "727T" [label="DRA*01:02:01-03", ];
+  "B1-330" -> "331TACC...CAC" [label="Everything", ];
+  "356A" -> "357AACA...CAT" [label="DRA*01:02:03", ];
+  "357AACA...CAT" -> "404A" [label="DRA*01:01:02;DRA*01:02:02-03", ];
+  "357AACA...CAT" -> "404C" [label="C. of DRA*01:01:02;DRA*01:02:02-03", ];
+  "331TACC...CAC" -> "356A" [label="DRA*01:02:03", ];
+  "331TACC...CAC" -> "356G" [label="C. of DRA*01:02:03", ];
+  "B0-83" -> "84AAGA...ATG" [label="Everything", ];
+  "614AGTT...GAA" -> "654C" [label="C. of DRA*01:01:02", ];
+  "614AGTT...GAA" -> "654T" [label="DRA*01:01:02", ];
+  "1ATGG...AAG" -> "B0-83" [label="C. of DRA*01:02:01", ];
+  "S1-DRA*01:01:01:01-03;DRA*01:01:02;DRA*01:02:02-03" -> "1ATGG...AAG" [
+  label="C. of DRA*01:02:01", ];
+  "84AAGA...ATG" -> "B1-330" [label="Everything", ];
+  "356G" -> "357AACA...CAT" [label="C. of DRA*01:02:03", ];
+  "404C" -> "405GACA...GGG" [label="C. of DRA*01:01:02;DRA*01:02:02-03", ];
+  "728TGCG...TAA" -> "E769" [label="Everything", ];
+  "654C" -> "655GTGG...GGA" [label="C. of DRA*01:01:02", ];
+  "727G" -> "728TGCG...TAA" [label="C. of DRA*01:02:01-03", ];
+  "404A" -> "405GACA...GGG" [label="DRA*01:01:02;DRA*01:02:02-03", ];
+  "B2-613" -> "614AGTT...GAA" [label="Everything", ];
+  "727T" -> "728TGCG...TAA" [label="DRA*01:02:01-03", ];
+  "654T" -> "655GTGG...GGA" [label="DRA*01:01:02", ];
+  "405GACA...GGG" -> "B2-613" [label="Everything", ];
+  
+  }
