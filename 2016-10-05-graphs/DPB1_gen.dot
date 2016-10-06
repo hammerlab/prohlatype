@@ -1,0 +1,2514 @@
+digraph G {
+  "10430A" [shape=box, ];
+  "4853A" [shape=box, ];
+  "1177TTTC...CGC" [shape=box, ];
+  "6664G" [shape=box, ];
+  "9941A" [shape=box, ];
+  "7918AGAGGAGGAA" [shape=box, ];
+  "9643C" [shape=box, ];
+  "7940C" [shape=box, ];
+  "10349GC" [shape=box, ];
+  "10295ACTG...CAA" [shape=box, ];
+  "8091ATAAA" [shape=box, ];
+  "9552AGAA...TCC" [shape=box, ];
+  "10219ACAG...TTG" [shape=box, ];
+  "6845G" [shape=box, ];
+  "2155A" [shape=box, ];
+  "4657T" [shape=box, ];
+  "10924C" [shape=box, ];
+  "10660A" [shape=box, ];
+  "4789A" [shape=box, ];
+  "10545A" [shape=box, ];
+  "8826GGAAGGAAG" [shape=box, ];
+  "2942GCCC...TGC" [shape=box, ];
+  "E11182" [shape=box, ];
+  "10434T" [shape=box, ];
+  "8552GTTG...CAG" [shape=box, ];
+  "2139CAGT...GAC" [shape=box, ];
+  "1145T" [shape=box, ];
+  "10890G" [shape=box, ];
+  "10435GCA" [shape=box, ];
+  "8383A" [shape=box, ];
+  "6586ATGA...AAG" [shape=box, ];
+  "1397C" [shape=box, ];
+  "8909CTTCC" [shape=box, ];
+  "10380C" [shape=box, ];
+  "9643G" [shape=box, ];
+  "8580CTGA...ACT" [shape=box, ];
+  "5402T" [shape=box, ];
+  "8325C" [shape=box, ];
+  "341ATGCTT" [shape=box, ];
+  "10506TTTA...TGA" [shape=box, ];
+  "10371AGCATTGC" [shape=box, ];
+  "10604TCA" [shape=box, ];
+  "10534T" [shape=box, ];
+  "6316G" [shape=box, ];
+  "10434C" [shape=box, ];
+  "10274G" [shape=box, ];
+  "7691G" [shape=box, ];
+  "8204A" [shape=box, ];
+  "7915C" [shape=box, ];
+  "6862A" [shape=box, ];
+  "4792A" [shape=box, ];
+  "7874T" [shape=box, ];
+  "10914T" [shape=box, ];
+  "9654T" [shape=box, ];
+  "6560G" [shape=box, ];
+  "7912CA" [shape=box, ];
+  "6275T" [shape=box, ];
+  "6236T" [shape=box, ];
+  "10862G" [shape=box, ];
+  "10925ACAT...ACC" [shape=box, ];
+  "10753A" [shape=box, ];
+  "8418C" [shape=box, ];
+  "7880C" [shape=box, ];
+  "6298A" [shape=box, ];
+  "7928C" [shape=box, ];
+  "B3-4903" [shape=box, ];
+  "10753G" [shape=box, ];
+  "10072A" [shape=box, ];
+  "9001A" [shape=box, ];
+  "8967TGCA...GAC" [shape=box, ];
+  "7468A" [shape=box, ];
+  "10348A" [shape=box, ];
+  "7020G" [shape=box, ];
+  "6215C" [shape=box, ];
+  "10355G" [shape=box, ];
+  "10379T" [shape=box, ];
+  "6309T" [shape=box, ];
+  "9366A" [shape=box, ];
+  "8760GACACTCCA" [shape=box, ];
+  "8419CTAT...TAC" [shape=box, ];
+  "7753A" [shape=box, ];
+  "7981C" [shape=box, ];
+  "10915GGCCTGTTA" [shape=box, ];
+  "10143C" [shape=box, ];
+  "6378CCAGACTCA" [shape=box, ];
+  "4877CG" [shape=box, ];
+  "6471GATA...AAG" [shape=box, ];
+  "10359A" [shape=box, ];
+  "6414A" [shape=box, ];
+  "4647C" [shape=box, ];
+  "8417T" [shape=box, ];
+  "10557A" [shape=box, ];
+  "7330G" [shape=box, ];
+  "7933AAAAGGA" [shape=box, ];
+  "6716C" [shape=box, ];
+  "10370A" [shape=box, ];
+  "9595A" [shape=box, ];
+  "8037A" [shape=box, ];
+  "7968A" [shape=box, ];
+  "10755G" [shape=box, ];
+  "9598C" [shape=box, ];
+  "7928T" [shape=box, ];
+  "3622ACAT...TGG" [shape=box, ];
+  "10294T" [shape=box, ];
+  "4876A" [shape=box, ];
+  "1336T" [shape=box, ];
+  "10860AC" [shape=box, ];
+  "10661TTCT...CAT" [shape=box, ];
+  "5403GGAT...AAA" [shape=box, ];
+  "8812T" [shape=box, ];
+  "7982TGTA...GTA" [shape=box, ];
+  "7749C" [shape=box, ];
+  "4830G" [shape=box, ];
+  "6270C" [shape=box, ];
+  "6846GCCT...CGC" [shape=box, ];
+  "10603C" [shape=box, ];
+  "9938G" [shape=box, ];
+  "10277T" [shape=box, ];
+  "4876G" [shape=box, ];
+  "10438G" [shape=box, ];
+  "10144TATC...TGA" [shape=box, ];
+  "6310AGGCCC" [shape=box, ];
+  "4884A" [shape=box, ];
+  "10360AGTGGGGAAA" [shape=box, ];
+  "7331CTGT...CTC" [shape=box, ];
+  "8699G" [shape=box, ];
+  "6560C" [shape=box, ];
+  "6174C" [shape=box, ];
+  "3655C" [shape=box, ];
+  "10345C" [shape=box, ];
+  "8770CTCA...GAA" [shape=box, ];
+  "6874G" [shape=box, ];
+  "10438T" [shape=box, ];
+  "7585T" [shape=box, ];
+  "10558C" [shape=box, ];
+  "10143T" [shape=box, ];
+  "7162AAAC...GTT" [shape=box, ];
+  "3655T" [shape=box, ];
+  "8167TTTTGC" [shape=box, ];
+  "10584T" [shape=box, ];
+  "11064A" [shape=box, ];
+  "4854TGCA...TGG" [shape=box, ];
+  "9929T" [shape=box, ];
+  "B1-101" [shape=box, ];
+  "8031TAGGTT" [shape=box, ];
+  "6716T" [shape=box, ];
+  "9069TGTC...AGA" [shape=box, ];
+  "10091A" [shape=box, ];
+  "8038TTTA...TGT" [shape=box, ];
+  "7242A" [shape=box, ];
+  "10069G" [shape=box, ];
+  "7499CCATCATG" [shape=box, ];
+  "6544C" [shape=box, ];
+  "10603T" [shape=box, ];
+  "10013G" [shape=box, ];
+  "9929C" [shape=box, ];
+  "3802GGTG...TCC" [shape=box, ];
+  "7691A" [shape=box, ];
+  "4649G" [shape=box, ];
+  "9179A" [shape=box, ];
+  "4880G" [shape=box, ];
+  "8917CTC" [shape=box, ];
+  "6718CACC...TCA" [shape=box, ];
+  "1748AAGG...GGG" [shape=box, ];
+  "7916A" [shape=box, ];
+  "8513CTTT...GGC" [shape=box, ];
+  "6280G" [shape=box, ];
+  "10021G" [shape=box, ];
+  "9990A" [shape=box, ];
+  "8864AAGG" [shape=box, ];
+  "8524C" [shape=box, ];
+  "6664A" [shape=box, ];
+  "6215A" [shape=box, ];
+  "10091G" [shape=box, ];
+  "8769C" [shape=box, ];
+  "10250GGGGTGGGTT" [shape=box, ];
+  "7745T" [shape=box, ];
+  "10352T" [shape=box, ];
+  "10348G" [shape=box, ];
+  "8512A" [shape=box, ];
+  "9068A" [shape=box, ];
+  "8908C" [shape=box, ];
+  "2123G" [shape=box, ];
+  "9226TCTA...GGG" [shape=box, ];
+  "6269A" [shape=box, ];
+  "7914G" [shape=box, ];
+  "4728C" [shape=box, ];
+  "6717T" [shape=box, ];
+  "10756TGTT...GCA" [shape=box, ];
+  "7941GGGA...AGG" [shape=box, ];
+  "4879A" [shape=box, ];
+  "10545T" [shape=box, ];
+  "7881ATCT...GAC" [shape=box, ];
+  "10576T" [shape=box, ];
+  "8636A" [shape=box, ];
+  "3220C" [shape=box, ];
+  "10485GCAA...GTC" [shape=box, ];
+  "6633C" [shape=box, ];
+  "10070GT" [shape=box, ];
+  "10471C" [shape=box, ];
+  "7914T" [shape=box, ];
+  "11094CTTA...TAA" [shape=box, ];
+  "10878G" [shape=box, ];
+  "10104TGG" [shape=box, ];
+  "4793GGA" [shape=box, ];
+  "8418T" [shape=box, ];
+  "6690G" [shape=box, ];
+  "8551A" [shape=box, ];
+  "9506T" [shape=box, ];
+  "8925TCCAGCCTA" [shape=box, ];
+  "10576C" [shape=box, ];
+  "4853G" [shape=box, ];
+  "1444T" [shape=box, ];
+  "9148C" [shape=box, ];
+  "8875GAAG...AAT" [shape=box, ];
+  "7468G" [shape=box, ];
+  "10260G" [shape=box, ];
+  "9973A" [shape=box, ];
+  "8893CTAT...TTT" [shape=box, ];
+  "8447G" [shape=box, ];
+  "6712G" [shape=box, ];
+  "7917T" [shape=box, ];
+  "2941C" [shape=box, ];
+  "8966T" [shape=box, ];
+  "4796G" [shape=box, ];
+  "10107G" [shape=box, ];
+  "8325T" [shape=box, ];
+  "7651T" [shape=box, ];
+  "6516A" [shape=box, ];
+  "1461C" [shape=box, ];
+  "4882CC" [shape=box, ];
+  "7507A" [shape=box, ];
+  "5402C" [shape=box, ];
+  "4649T" [shape=box, ];
+  "102GTAA...AGT" [shape=box, ];
+  "7068A" [shape=box, ];
+  "B8-10197" [shape=box, ];
+  "9595G" [shape=box, ];
+  "10261CAGG...TGA" [shape=box, ];
+  "B2-4638" [shape=box, ];
+  "9676C" [shape=box, ];
+  "2601A" [shape=box, ];
+  "10878C" [shape=box, ];
+  "10430G" [shape=box, ];
+  "10249G" [shape=box, ];
+  "10607A" [shape=box, ];
+  "2138G" [shape=box, ];
+  "6349T" [shape=box, ];
+  "9756AGGC...AAG" [shape=box, ];
+  "10351T" [shape=box, ];
+  "7981A" [shape=box, ];
+  "8868AAGG" [shape=box, ];
+  "B0-0" [shape=box, ];
+  "10483T" [shape=box, ];
+  "10789A" [shape=box, ];
+  "9551C" [shape=box, ];
+  "9156T" [shape=box, ];
+  "8524T" [shape=box, ];
+  "7586GTAC...GGC" [shape=box, ];
+  "7471C" [shape=box, ];
+  "10886G" [shape=box, ];
+  "10618GGAT...ATC" [shape=box, ];
+  "8384TGCT...TAT" [shape=box, ];
+  "9180TGGA" [shape=box, ];
+  "6237TTCT...CAG" [shape=box, ];
+  "1462TGTC...CTA" [shape=box, ];
+  "7685GCCTCA" [shape=box, ];
+  "6271AGCC" [shape=box, ];
+  "4647G" [shape=box, ];
+  "4729TCG" [shape=box, ];
+  "8383G" [shape=box, ];
+  "6874A" [shape=box, ];
+  "6227T" [shape=box, ];
+  "6335T" [shape=box, ];
+  "B9-10218" [shape=box, ];
+  "2272C" [shape=box, ];
+  "10483C" [shape=box, ];
+  "4791G" [shape=box, ];
+  "9469T" [shape=box, ];
+  "11010G" [shape=box, ];
+  "10823ACAG...TTA" [shape=box, ];
+  "8326TATT...CTA" [shape=box, ];
+  "6275C" [shape=box, ];
+  "9447G" [shape=box, ];
+  "7940T" [shape=box, ];
+  "-299C" [shape=box, ];
+  "10859A" [shape=box, ];
+  "9654C" [shape=box, ];
+  "8759C" [shape=box, ];
+  "8942GTTT...CCC" [shape=box, ];
+  "10484G" [shape=box, ];
+  "7917C" [shape=box, ];
+  "10344C" [shape=box, ];
+  "10755C" [shape=box, ];
+  "9366C" [shape=box, ];
+  "7659AAAC...TCA" [shape=box, ];
+  "6517GAAG...AGA" [shape=box, ];
+  "7745C" [shape=box, ];
+  "4830A" [shape=box, ];
+  "10172T" [shape=box, ];
+  "10358C" [shape=box, ];
+  "9506C" [shape=box, ];
+  "9451A" [shape=box, ];
+  "10169T" [shape=box, ];
+  "6423G" [shape=box, ];
+  "6376C" [shape=box, ];
+  "8447A" [shape=box, ];
+  "8012GTGA...AAA" [shape=box, ];
+  "7968G" [shape=box, ];
+  "6316A" [shape=box, ];
+  "2931C" [shape=box, ];
+  "1176G" [shape=box, ];
+  "10344T" [shape=box, ];
+  "9939T" [shape=box, ];
+  "2155G" [shape=box, ];
+  "10584C" [shape=box, ];
+  "10078G" [shape=box, ];
+  "8174TCCT...AAG" [shape=box, ];
+  "6170G" [shape=box, ];
+  "10353TC" [shape=box, ];
+  "10088A" [shape=box, ];
+  "8226AAAT...CTA" [shape=box, ];
+  "8921TAG" [shape=box, ];
+  "8500C" [shape=box, ];
+  "7471T" [shape=box, ];
+  "10419TTTA...CCT" [shape=box, ];
+  "6394G" [shape=box, ];
+  "6175GCAA...CAC" [shape=box, ];
+  "11093C" [shape=box, ];
+  "6862C" [shape=box, ];
+  "6414G" [shape=box, ];
+  "1146TGTC...ATG" [shape=box, ];
+  "10589C" [shape=box, ];
+  "B6-9755" [shape=box, ];
+  "10914G" [shape=box, ];
+  "10782T" [shape=box, ];
+  "10278TTTC...TAA" [shape=box, ];
+  "8500T" [shape=box, ];
+  "8269A" [shape=box, ];
+  "9448CTG" [shape=box, ];
+  "8700GAGG...GAG" [shape=box, ];
+  "10585CTGG" [shape=box, ];
+  "9471AGGA...TTC" [shape=box, ];
+  "10528C" [shape=box, ];
+  "10089GC" [shape=box, ];
+  "6691AGTA...GTG" [shape=box, ];
+  "4790G" [shape=box, ];
+  "9930GATGAGGG" [shape=box, ];
+  "3104T" [shape=box, ];
+  "10418C" [shape=box, ];
+  "4656G" [shape=box, ];
+  "10073CTCAG" [shape=box, ];
+  "7508CTCA...ACA" [shape=box, ];
+  "9156C" [shape=box, ];
+  "6174T" [shape=box, ];
+  "8579G" [shape=box, ];
+  "10013A" [shape=box, ];
+  "6415GGGAGGTC" [shape=box, ];
+  "10294C" [shape=box, ];
+  "7469CT" [shape=box, ];
+  "2123A" [shape=box, ];
+  "4881C" [shape=box, ];
+  "6632A" [shape=box, ];
+  "7658A" [shape=box, ];
+  "8173T" [shape=box, ];
+  "10790TCTCTCAT" [shape=box, ];
+  "2931T" [shape=box, ];
+  "8205T" [shape=box, ];
+  "6712T" [shape=box, ];
+  "4657G" [shape=box, ];
+  "1176A" [shape=box, ];
+  "6632G" [shape=box, ];
+  "10754A" [shape=box, ];
+  "9184C" [shape=box, ];
+  "10616T" [shape=box, ];
+  "6349C" [shape=box, ];
+  "10799ACTT...GTA" [shape=box, ];
+  "4570AGAG...CAG" [shape=box, ];
+  "1444C" [shape=box, ];
+  "1337ATAA...ATA" [shape=box, ];
+  "8696CCC" [shape=box, ];
+  "10411C" [shape=box, ];
+  "8915C" [shape=box, ];
+  "9940C" [shape=box, ];
+  "9596GA" [shape=box, ];
+  "8812C" [shape=box, ];
+  "6634ATGA...AAA" [shape=box, ];
+  "-298CCAA...TCC" [shape=box, ];
+  "S-366-DPB1*02:01:02;DPB1*02:02;DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*398:01;
+DPB1*463:01;DPB1*464:01" [
+  shape=box, ];
+  "1ATGA...CAG" [shape=box, ];
+  "10358T" [shape=box, ];
+  "10798T" [shape=box, ];
+  "10505T" [shape=box, ];
+  "11010A" [shape=box, ];
+  "6370A" [shape=box, ];
+  "1445TTGA...ACA" [shape=box, ];
+  "6394C" [shape=box, ];
+  "4639AGAATTAC" [shape=box, ];
+  "10590TCCA...ACC" [shape=box, ];
+  "1398CCAG...ATC" [shape=box, ];
+  "6376A" [shape=box, ];
+  "4733GCGC...CTG" [shape=box, ];
+  "9677GCTC...CAG" [shape=box, ];
+  "9179C" [shape=box, ];
+  "4650T" [shape=box, ];
+  "8689G" [shape=box, ];
+  "3220T" [shape=box, ];
+  "2273TGCT...AAA" [shape=box, ];
+  "8916A" [shape=box, ];
+  "4569A" [shape=box, ];
+  "10410G" [shape=box, ];
+  "8892T" [shape=box, ];
+  "6236C" [shape=box, ];
+  "10183C" [shape=box, ];
+  "9973G" [shape=box, ];
+  "8611G" [shape=box, ];
+  "10169A" [shape=box, ];
+  "9148T" [shape=box, ];
+  "8636G" [shape=box, ];
+  "8856AAGGAAGG" [shape=box, ];
+  "10822A" [shape=box, ];
+  "3656CCAC...CCA" [shape=box, ];
+  "9068G" [shape=box, ];
+  "10108CAAT...TAA" [shape=box, ];
+  "10410A" [shape=box, ];
+  "10370G" [shape=box, ];
+  "4648T" [shape=box, ];
+  "4851G" [shape=box, ];
+  "10418A" [shape=box, ];
+  "9991TCGG...TAT" [shape=box, ];
+  "8030C" [shape=box, ];
+  "7585C" [shape=box, ];
+  "6360TCTGTGATGC" [shape=box, ];
+  "9676G" [shape=box, ];
+  "10172C" [shape=box, ];
+  "8824AA" [shape=box, ];
+  "6713ATG" [shape=box, ];
+  "6665GGGA...AAG" [shape=box, ];
+  "10608CTTCC" [shape=box, ];
+  "10021A" [shape=box, ];
+  "7831G" [shape=box, ];
+  "7652GGTCTC" [shape=box, ];
+  "8448TAGT...GCC" [shape=box, ];
+  "11065TATT...ATA" [shape=box, ];
+  "2851C" [shape=box, ];
+  "1747G" [shape=box, ];
+  "10170TA" [shape=box, ];
+  "6934TGGA...GTA" [shape=box, ];
+  "9225C" [shape=box, ];
+  "8908T" [shape=box, ];
+  "7242G" [shape=box, ];
+  "9551T" [shape=box, ];
+  "4818C" [shape=box, ];
+  "10079CTCCTGCGG" [shape=box, ];
+  "3104A" [shape=box, ];
+  "4651A" [shape=box, ];
+  "10380T" [shape=box, ];
+  "8769T" [shape=box, ];
+  "4792C" [shape=box, ];
+  "1397T" [shape=box, ];
+  "9981A" [shape=box, ];
+  "8800AGAG...TTA" [shape=box, ];
+  "6377C" [shape=box, ];
+  "8375TCTTTTCA" [shape=box, ];
+  "9157CTGC...AGC" [shape=box, ];
+  "8934G" [shape=box, ];
+  "7021GTAA...GAC" [shape=box, ];
+  "10431AGA" [shape=box, ];
+  "4879G" [shape=box, ];
+  "10356GG" [shape=box, ];
+  "9184T" [shape=box, ];
+  "8173A" [shape=box, ];
+  "9883A" [shape=box, ];
+  "9940T" [shape=box, ];
+  "10439CCTC...TTA" [shape=box, ];
+  "10078A" [shape=box, ];
+  "8914C" [shape=box, ];
+  "8011A" [shape=box, ];
+  "4818A" [shape=box, ];
+  "10103A" [shape=box, ];
+  "8551C" [shape=box, ];
+  "6585G" [shape=box, ];
+  "10546TGTGCCTTAG" [shape=box, ];
+  "8695G" [shape=box, ];
+  "4569G" [shape=box, ];
+  "10379A" [shape=box, ];
+  "6561TAGA...GGA" [shape=box, ];
+  "4732C" [shape=box, ];
+  "8166A" [shape=box, ];
+  "8096G" [shape=box, ];
+  "10556G" [shape=box, ];
+  "10616G" [shape=box, ];
+  "8369TTTCTA" [shape=box, ];
+  "7969GCTC...ATT" [shape=box, ];
+  "9644CTGCACTGTC" [shape=box, ];
+  "6633A" [shape=box, ];
+  "8037T" [shape=box, ];
+  "9883G" [shape=box, ];
+  "7816ACCT...CAG" [shape=box, ];
+  "10352C" [shape=box, ];
+  "4789C" [shape=box, ];
+  "10022GGGA...CCA" [shape=box, ];
+  "9599ATGA...TCC" [shape=box, ];
+  "7754AGGA...ATT" [shape=box, ];
+  "7069TTGA...CTG" [shape=box, ];
+  "6216AATC...ACA" [shape=box, ];
+  "8611A" [shape=box, ];
+  "8270ATGT...TAA" [shape=box, ];
+  "B5-9207" [shape=box, ];
+  "1461A" [shape=box, ];
+  "7929TTG" [shape=box, ];
+  "9655TCAT...TAT" [shape=box, ];
+  "3106GGGG...AGA" [shape=box, ];
+  "8935GGTGAA" [shape=box, ];
+  "4292GCCC...ATT" [shape=box, ];
+  "7831A" [shape=box, ];
+  "4658ACGG...GAG" [shape=box, ];
+  "9469A" [shape=box, ];
+  "6654C" [shape=box, ];
+  "9942GACA...GAG" [shape=box, ];
+  "9941T" [shape=box, ];
+  "10862A" [shape=box, ];
+  "7161T" [shape=box, ];
+  "4851A" [shape=box, ];
+  "7832ACAA...ACA" [shape=box, ];
+  "7880T" [shape=box, ];
+  "4852T" [shape=box, ];
+  "2271C" [shape=box, ];
+  "10879CATGAAA" [shape=box, ];
+  "9990G" [shape=box, ];
+  "8512C" [shape=box, ];
+  "7684T" [shape=box, ];
+  "4831AGCG...AGG" [shape=box, ];
+  "10558A" [shape=box, ];
+  "4884G" [shape=box, ];
+  "4881G" [shape=box, ];
+  "10275TC" [shape=box, ];
+  "10072G" [shape=box, ];
+  "7746TTC" [shape=box, ];
+  "7507G" [shape=box, ];
+  "10783CAAATC" [shape=box, ];
+  "9868GTGA...GCA" [shape=box, ];
+  "8920G" [shape=box, ];
+  "8914A" [shape=box, ];
+  "10274C" [shape=box, ];
+  "6655ACAGAGGCA" [shape=box, ];
+  "8417A" [shape=box, ];
+  "6270G" [shape=box, ];
+  "8011G" [shape=box, ];
+  "6470G" [shape=box, ];
+  "4651T" [shape=box, ];
+  "9367AATG...CTG" [shape=box, ];
+  "8695C" [shape=box, ];
+  "7874C" [shape=box, ];
+  "6371CAGAT" [shape=box, ];
+  "6377T" [shape=box, ];
+  "11011CTAT...CCC" [shape=box, ];
+  "4819TCCT...GAG" [shape=box, ];
+  "10534C" [shape=box, ];
+  "10107T" [shape=box, ];
+  "6317CAGG...ACT" [shape=box, ];
+  "8941T" [shape=box, ];
+  "8108ACAG...TAA" [shape=box, ];
+  "4885TGAC...GAG" [shape=box, ];
+  "10577GTTAGCA" [shape=box, ];
+  "6395AGAC...GGT" [shape=box, ];
+  "6340GAAGACTCT" [shape=box, ];
+  "10260A" [shape=box, ];
+  "6933A" [shape=box, ];
+  "9447A" [shape=box, ];
+  "7651C" [shape=box, ];
+  "6388TGCCCC" [shape=box, ];
+  "1336A" [shape=box, ];
+  "6359A" [shape=box, ];
+  "8098TATTAGATT" [shape=box, ];
+  "4790T" [shape=box, ];
+  "8225T" [shape=box, ];
+  "8030A" [shape=box, ];
+  "6690A" [shape=box, ];
+  "10359G" [shape=box, ];
+  "10556A" [shape=box, ];
+  "8941C" [shape=box, ];
+  "-299G" [shape=box, ];
+  "8026A" [shape=box, ];
+  "7498A" [shape=box, ];
+  "2916CTGG...TTT" [shape=box, ];
+  "9667T" [shape=box, ];
+  "9225G" [shape=box, ];
+  "6933G" [shape=box, ];
+  "9470C" [shape=box, ];
+  "10092TCCA...GTG" [shape=box, ];
+  "4797TACT...GAC" [shape=box, ];
+  "10660G" [shape=box, ];
+  "10559AAGC...TTT" [shape=box, ];
+  "7911G" [shape=box, ];
+  "10859C" [shape=box, ];
+  "8058AAGC...GAA" [shape=box, ];
+  "7498G" [shape=box, ];
+  "3801G" [shape=box, ];
+  "347GTCT...TTT" [shape=box, ];
+  "10613C" [shape=box, ];
+  "10103G" [shape=box, ];
+  "7749T" [shape=box, ];
+  "2915C" [shape=box, ];
+  "6585A" [shape=box, ];
+  "10782C" [shape=box, ];
+  "10346TC" [shape=box, ];
+  "10277C" [shape=box, ];
+  "10891GATA...ATG" [shape=box, ];
+  "B4-8924" [shape=box, ];
+  "8501GTAA...AGC" [shape=box, ];
+  "10535GAAAAGACTA" [shape=box, ];
+  "9925TCCA" [shape=box, ];
+  "9507TTCA...TTC" [shape=box, ];
+  "8579C" [shape=box, ];
+  "6339T" [shape=box, ];
+  "6228GGCAGCAT" [shape=box, ];
+  "6170A" [shape=box, ];
+  "6339C" [shape=box, ];
+  "10863TAGG...GAA" [shape=box, ];
+  "9981T" [shape=box, ];
+  "4291T" [shape=box, ];
+  "6350CTGGAGATC" [shape=box, ];
+  "4291C" [shape=box, ];
+  "6863CCCT...GTC" [shape=box, ];
+  "9974CCACTGA" [shape=box, ];
+  "11093T" [shape=box, ];
+  "7750GAG" [shape=box, ];
+  "9002GATT...GTC" [shape=box, ];
+  "8206AGGT...GAT" [shape=box, ];
+  "2852TGAA...GGC" [shape=box, ];
+  "3105A" [shape=box, ];
+  "9924C" [shape=box, ];
+  "6717C" [shape=box, ];
+  "2272T" [shape=box, ];
+  "11064G" [shape=box, ];
+  "7875CTGGT" [shape=box, ];
+  "6516C" [shape=box, ];
+  "8107C" [shape=box, ];
+  "8788TGAA...GAA" [shape=box, ];
+  "7932A" [shape=box, ];
+  "6387C" [shape=box, ];
+  "10886A" [shape=box, ];
+  "7330A" [shape=box, ];
+  "4652CCAG" [shape=box, ];
+  "9452TCTC...CAC" [shape=box, ];
+  "8759T" [shape=box, ];
+  "6276TGAT" [shape=box, ];
+  "10614AA" [shape=box, ];
+  "8027TAC" [shape=box, ];
+  "2156GGCA...AAA" [shape=box, ];
+  "9884GGTG...TTA" [shape=box, ];
+  "6335C" [shape=box, ];
+  "8269T" [shape=box, ];
+  "2602TGAA...CAA" [shape=box, ];
+  "10528G" [shape=box, ];
+  "8107A" [shape=box, ];
+  "8525GAGC...AGG" [shape=box, ];
+  "8097G" [shape=box, ];
+  "2124GCAT...TGG" [shape=box, ];
+  "1747A" [shape=box, ];
+  "2271T" [shape=box, ];
+  "6545TACT...TGG" [shape=box, ];
+  "10822G" [shape=box, ];
+  "10069A" [shape=box, ];
+  "9598T" [shape=box, ];
+  "8057A" [shape=box, ];
+  "B7-9867" [shape=box, ];
+  "7916C" [shape=box, ];
+  "9149GTCTACA" [shape=box, ];
+  "3621A" [shape=box, ];
+  "10355A" [shape=box, ];
+  "2138A" [shape=box, ];
+  "9451G" [shape=box, ];
+  "8920C" [shape=box, ];
+  "8097T" [shape=box, ];
+  "7932G" [shape=box, ];
+  "9470T" [shape=box, ];
+  "10607G" [shape=box, ];
+  "10472AGGA...GGC" [shape=box, ];
+  "8934A" [shape=box, ];
+  "6359C" [shape=box, ];
+  "3801C" [shape=box, ];
+  "7020C" [shape=box, ];
+  "6309C" [shape=box, ];
+  "7472TGTC...GGC" [shape=box, ];
+  "4656T" [shape=box, ];
+  "8699T" [shape=box, ];
+  "6470A" [shape=box, ];
+  "10887TGG" [shape=box, ];
+  "8637GTGG...TTG" [shape=box, ];
+  "8225C" [shape=box, ];
+  "6227C" [shape=box, ];
+  "4796C" [shape=box, ];
+  "10381GGCT...TCA" [shape=box, ];
+  "10198TTCA...TAA" [shape=box, ];
+  "6299GTTTCTCCTC" [shape=box, ];
+  "10351C" [shape=box, ];
+  "7068G" [shape=box, ];
+  "2851T" [shape=box, ];
+  "8204G" [shape=box, ];
+  "9938T" [shape=box, ];
+  "8612ATAA...TGA" [shape=box, ];
+  "6654G" [shape=box, ];
+  "9001G" [shape=box, ];
+  "6387G" [shape=box, ];
+  "10173ATAACCTTTC" [shape=box, ];
+  "7684C" [shape=box, ];
+  "10798C" [shape=box, ];
+  "8166T" [shape=box, ];
+  "2941G" [shape=box, ];
+  "6544T" [shape=box, ];
+  "7815G" [shape=box, ];
+  "6875CTGA...CTC" [shape=box, ];
+  "6423T" [shape=box, ];
+  "8205C" [shape=box, ];
+  "1145C" [shape=box, ];
+  "8966C" [shape=box, ];
+  "8057C" [shape=box, ];
+  "10411T" [shape=box, ];
+  "2932AGGGTCTGG" [shape=box, ];
+  "4904GTGA...GAC" [shape=box, ];
+  "2915T" [shape=box, ];
+  "10471A" [shape=box, ];
+  "-366TAAT...CTC" [shape=box, ];
+  "3105G" [shape=box, ];
+  "8813GTCT...AAA" [shape=box, ];
+  "7658G" [shape=box, ];
+  "10484A" [shape=box, ];
+  "10088G" [shape=box, ];
+  "7911A" [shape=box, ];
+  "7161A" [shape=box, ];
+  "6280A" [shape=box, ];
+  "10014GCGAGAG" [shape=box, ];
+  "8835GAAG...AGG" [shape=box, ];
+  "10184TCTT...CAG" [shape=box, ];
+  "10183G" [shape=box, ];
+  "8872AAA" [shape=box, ];
+  "6845A" [shape=box, ];
+  "6298G" [shape=box, ];
+  "10505C" [shape=box, ];
+  "10249T" [shape=box, ];
+  "9924T" [shape=box, ];
+  "8690TTGAA" [shape=box, ];
+  "10589T" [shape=box, ];
+  "8689C" [shape=box, ];
+  "7692CCTC...TGC" [shape=box, ];
+  "6281CCAG...GTG" [shape=box, ];
+  "7753G" [shape=box, ];
+  "10617T" [shape=box, ];
+  "10345G" [shape=box, ];
+  "10613A" [shape=box, ];
+  "3221ACTC...AAA" [shape=box, ];
+  "6424GGGG...GCC" [shape=box, ];
+  "6269G" [shape=box, ];
+  "10789G" [shape=box, ];
+  "9185AGTC...GGA" [shape=box, ];
+  "6370G" [shape=box, ];
+  "8892G" [shape=box, ];
+  "10617A" [shape=box, ];
+  "8916G" [shape=box, ];
+  "7815C" [shape=box, ];
+  "10890A" [shape=box, ];
+  "10529CTCAC" [shape=box, ];
+  "9668CTGCATCA" [shape=box, ];
+  "8699A" [shape=box, ];
+  "9208GTGA...ACC" [shape=box, ];
+  "4728T" [shape=box, ];
+  "6336CTC" [shape=box, ];
+  "10924T" [shape=box, ];
+  "9982ATCAGATA" [shape=box, ];
+  "6171TAA" [shape=box, ];
+  "10412TCTGTT" [shape=box, ];
+  "9667G" [shape=box, ];
+  "4732T" [shape=box, ];
+  "3621C" [shape=box, ];
+  "7243GGGT...TGA" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "10430A" -> "10431AGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4853A" -> "4854TGCA...TGG" [label="DPB1*03:01:01", ];
+  "1177TTTC...CGC" -> "1336A" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "1177TTTC...CGC" -> "1336T" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6664G" -> "6665GGGA...AAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9941A" -> "9942GACA...GAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7918AGAGGAGGAA" -> "7928C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9643C" -> "9644CTGCACTGTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7940C" -> "7941GGGA...AGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10349GC" -> "10351C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10349GC" -> "10351T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10295ACTG...CAA" -> "10344C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10295ACTG...CAA" -> "10344T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8091ATAAA" -> "8096G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9552AGAA...TCC" -> "9595A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9552AGAA...TCC" -> "9595G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10219ACAG...TTG" -> "10249G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10219ACAG...TTG" -> "10249T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6845G" -> "6846GCCT...CGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2155A" -> "2156GGCA...AAA" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4657T" -> "4658ACGG...GAG" [label="DPB1*03:01:01", ];
+  "10924C" -> "10925ACAT...ACC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10660A" -> "10661TTCT...CAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4789A" -> "4790G" [label="DPB1*02:02", ];
+  "4789A" -> "4790T" [label="DPB1*02:01:02;DPB1*03:01:01;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                      ];
+  "10545A" -> "10546TGTGCCTTAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8826GGAAGGAAG" -> "8835GAAG...AGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                       ];
+  "8826GGAAGGAAG" -> "8875GAAG...AAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                       ];
+  "2942GCCC...TGC" -> "3104A" [label="DPB1*03:01:01", ];
+  "2942GCCC...TGC" -> "3104T" [label="C. of DPB1*03:01:01", ];
+  "10434T" -> "10435GCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8552GTTG...CAG" -> "8579C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8552GTTG...CAG" -> "8579G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2139CAGT...GAC" -> "2155A" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2139CAGT...GAC" -> "2155G" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "1145T" -> "1146TGTC...ATG" [label="C. of DPB1*04:02:01:01-02", ];
+  "10890G" -> "10891GATA...ATG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10435GCA" -> "10438G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10435GCA" -> "10438T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "8383A" -> "8384TGCT...TAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6586ATGA...AAG" -> "6632A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6586ATGA...AAG" -> "6632G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1397C" -> "1398CCAG...ATC" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8909CTTCC" -> "8914A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "8909CTTCC" -> "8914C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10380C" -> "10381GGCT...TCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9643G" -> "9644CTGCACTGTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8580CTGA...ACT" -> "8611A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8580CTGA...ACT" -> "8611G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "5402T" -> "5403GGAT...AAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8325C" -> "8326TATT...CTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "341ATGCTT" -> "347GTCT...TTT" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                                  ];
+  "10506TTTA...TGA" -> "10528C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10506TTTA...TGA" -> "10528G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10371AGCATTGC" -> "10379A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10371AGCATTGC" -> "10379T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10604TCA" -> "10607A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10604TCA" -> "10607G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10534T" -> "10535GAAAAGACTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6316G" -> "6317CAGG...ACT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10434C" -> "10435GCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10274G" -> "10275TC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "7691G" -> "7692CCTC...TGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8204A" -> "8205C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7915C" -> "7916A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7915C" -> "7916C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6862A" -> "6863CCCT...GTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4792A" -> "4793GGA" [label="DPB1*02:01:02;DPB1*03:01:01;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7874T" -> "7875CTGGT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10914T" -> "10915GGCCTGTTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "9654T" -> "9655TCAT...TAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6560G" -> "6561TAGA...GGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7912CA" -> "7914G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7912CA" -> "7914T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6275T" -> "6276TGAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6236T" -> "6237TTCT...CAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10862G" -> "10863TAGG...GAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10925ACAT...ACC" -> "11010A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10925ACAT...ACC" -> "11010G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10753A" -> "10754A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8418C" -> "8419CTAT...TAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7880C" -> "7881ATCT...GAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6298A" -> "6299GTTTCTCCTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7928C" -> "7929TTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "B3-4903" -> "4904GTGA...GAC" [label="Everything", ];
+  "10753G" -> "10754A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10072A" -> "10073CTCAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "9001A" -> "9002GATT...GTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8967TGCA...GAC" -> "9001A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8967TGCA...GAC" -> "9001G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7468A" -> "7469CT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10348A" -> "10349GC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "7020G" -> "7021GTAA...GAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6215C" -> "6216AATC...ACA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10355G" -> "10356GG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10379T" -> "10380T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "6309T" -> "6310AGGCCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9366A" -> "9367AATG...CTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8760GACACTCCA" -> "8769C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8760GACACTCCA" -> "8769T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8419CTAT...TAC" -> "8447A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8419CTAT...TAC" -> "8447G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7753A" -> "7754AGGA...ATT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7981C" -> "7982TGTA...GTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10915GGCCTGTTA" -> "10924C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "10915GGCCTGTTA" -> "10924T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "10143C" -> "10144TATC...TGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6378CCAGACTCA" -> "6387C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6378CCAGACTCA" -> "6387G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "4877CG" -> "4879A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "4877CG" -> "4879G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "6471GATA...AAG" -> "6516A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6471GATA...AAG" -> "6516C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10359A" -> "10360AGTGGGGAAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6414A" -> "6415GGGAGGTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4647C" -> "4648T" [label="C. of DPB1*03:01:01", ];
+  "8417T" -> "8418C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10557A" -> "10558A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10557A" -> "10558C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7330G" -> "7331CTGT...CTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7933AAAAGGA" -> "7940C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "7933AAAAGGA" -> "7940T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6716C" -> "6717T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10370A" -> "10371AGCATTGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9595A" -> "9596GA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8037A" -> "8038TTTA...TGT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7968A" -> "7969GCTC...ATT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10755G" -> "10756TGTT...GCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9598C" -> "9599ATGA...TCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7928T" -> "7929TTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "3622ACAT...TGG" -> "3655C" [label="DPB1*03:01:01", ];
+  "3622ACAT...TGG" -> "3655T" [label="C. of DPB1*03:01:01", ];
+  "10294T" -> "10295ACTG...CAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4876A" -> "4877CG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "1336T" -> "1337ATAA...ATA" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10860AC" -> "10862A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10860AC" -> "10862G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10661TTCT...CAT" -> "10753A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10661TTCT...CAT" -> "10753G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "5403GGAT...AAA" -> "6170A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "5403GGAT...AAA" -> "6170G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8812T" -> "8813GTCT...AAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7982TGTA...GTA" -> "8011A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7982TGTA...GTA" -> "8011G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7749C" -> "7750GAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4830G" -> "4831AGCG...AGG" [label="DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01",
+                               ];
+  "6270C" -> "6271AGCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6846GCCT...CGC" -> "6862A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6846GCCT...CGC" -> "6862C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10603C" -> "10604TCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9938G" -> "9939T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10277T" -> "10278TTTC...TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4876G" -> "4877CG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "10438G" -> "10439CCTC...TTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10144TATC...TGA" -> "10169A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10144TATC...TGA" -> "10169T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6310AGGCCC" -> "6316A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6310AGGCCC" -> "6316G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "4884A" -> "4885TGAC...GAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01",
+                               ];
+  "10360AGTGGGGAAA" -> "10370A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10360AGTGGGGAAA" -> "10370G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7331CTGT...CTC" -> "7468A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7331CTGT...CTC" -> "7468G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8699G" -> "8700GAGG...GAG" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6560C" -> "6561TAGA...GGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6174C" -> "6175GCAA...CAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3655C" -> "3656CCAC...CCA" [label="DPB1*03:01:01", ];
+  "10345C" -> "10346TC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8770CTCA...GAA" -> "8788TGAA...GAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                        ];
+  "8770CTCA...GAA" -> "8800AGAG...TTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                        ];
+  "6874G" -> "6875CTGA...CTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10438T" -> "10439CCTC...TTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7585T" -> "7586GTAC...GGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10558C" -> "10559AAGC...TTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10143T" -> "10144TATC...TGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7162AAAC...GTT" -> "7242A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7162AAAC...GTT" -> "7242G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3655T" -> "3656CCAC...CCA" [label="C. of DPB1*03:01:01", ];
+  "8167TTTTGC" -> "8173A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8167TTTTGC" -> "8173T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "10584T" -> "10585CTGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "11064A" -> "11065TATT...ATA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4854TGCA...TGG" -> "4876A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01",
+                               ];
+  "4854TGCA...TGG" -> "4876G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01",
+                               ];
+  "9929T" -> "9930GATGAGGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "B1-101" -> "102GTAA...AGT" [label="Everything", ];
+  "8031TAGGTT" -> "8037A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8031TAGGTT" -> "8037T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "6716T" -> "6717C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9069TGTC...AGA" -> "9148C" [label="DPB1*03:01:01;DPB1*04:01:31;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9069TGTC...AGA" -> "9148T" [label="C. of DPB1*03:01:01;DPB1*04:01:31;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10091A" -> "10092TCCA...GTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8038TTTA...TGT" -> "8057A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8038TTTA...TGT" -> "8057C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7242A" -> "7243GGGT...TGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10069G" -> "10070GT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7499CCATCATG" -> "7507A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7499CCATCATG" -> "7507G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "6544C" -> "6545TACT...TGG" [label="C. of DPB1*04:02:01:01", ];
+  "10603T" -> "10604TCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10013G" -> "10014GCGAGAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "9929C" -> "9930GATGAGGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "3802GGTG...TCC" -> "4291C" [label="C. of DPB1*03:01:01", ];
+  "3802GGTG...TCC" -> "4291T" [label="DPB1*03:01:01", ];
+  "7691A" -> "7692CCTC...TGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4649G" -> "4650T" [label="DPB1*03:01:01", ];
+  "9179A" -> "9180TGGA" [label="DPB1*04:02:01:01-02", ];
+  "4880G" -> "4881C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "4880G" -> "4881G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "8917CTC" -> "8920C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8917CTC" -> "8920G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6718CACC...TCA" -> "6845A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6718CACC...TCA" -> "6845G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1748AAGG...GGG" -> "2123A" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1748AAGG...GGG" -> "2123G" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "7916A" -> "7917C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8513CTTT...GGC" -> "8524C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8513CTTT...GGC" -> "8524T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6280G" -> "6281CCAG...GTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10021G" -> "10022GGGA...CCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9990A" -> "9991TCGG...TAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8864AAGG" -> "8868AAGG" [label="DPB1*02:01:02;DPB1*04:01:01:01;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                            ];
+  "8864AAGG" -> "8872AAA" [label="DPB1*02:02", ];
+  "8524C" -> "8525GAGC...AGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6664A" -> "6665GGGA...AAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6215A" -> "6216AATC...ACA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10091G" -> "10092TCCA...GTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8769C" -> "8770CTCA...GAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10250GGGGTGGGTT" -> "10260A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10250GGGGTGGGTT" -> "10260G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7745T" -> "7746TTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10352T" -> "10353TC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10348G" -> "10349GC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8512A" -> "8513CTTT...GGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9068A" -> "9069TGTC...AGA" [label="DPB1*464:01", ];
+  "8908C" -> "8909CTTCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2123G" -> "2124GCAT...TGG" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "9226TCTA...GGG" -> "9366A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9226TCTA...GGG" -> "9366C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6269A" -> "6270C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7914G" -> "7915C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4728C" -> "4729TCG" [label="DPB1*02:02", ];
+  "6717T" -> "6718CACC...TCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10756TGTT...GCA" -> "10782C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10756TGTT...GCA" -> "10782T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7941GGGA...AGG" -> "7968A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7941GGGA...AGG" -> "7968G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4879A" -> "4880G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "10545T" -> "10546TGTGCCTTAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7881ATCT...GAC" -> "7911A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7881ATCT...GAC" -> "7911G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10576T" -> "10577GTTAGCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8636A" -> "8637GTGG...TTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3220C" -> "3221ACTC...AAA" [label="DPB1*03:01:01", ];
+  "10485GCAA...GTC" -> "10505C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10485GCAA...GTC" -> "10505T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6633C" -> "6634ATGA...AAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10070GT" -> "10072A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10070GT" -> "10072G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10471C" -> "10472AGGA...GGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7914T" -> "7915C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "11094CTTA...TAA" -> "E11182" [label="Everything", ];
+  "10878G" -> "10879CATGAAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10104TGG" -> "10107G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10104TGG" -> "10107T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4793GGA" -> "4796C" [label="DPB1*03:01:01", ];
+  "4793GGA" -> "4796G" [label="C. of DPB1*03:01:01", ];
+  "8418T" -> "8419CTAT...TAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6690G" -> "6691AGTA...GTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8551A" -> "8552GTTG...CAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9506T" -> "9507TTCA...TTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8925TCCAGCCTA" -> "8934A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8925TCCAGCCTA" -> "8934G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10576C" -> "10577GTTAGCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "4853G" -> "4854TGCA...TGG" [label="C. of DPB1*03:01:01", ];
+  "1444T" -> "1445TTGA...ACA" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "9148C" -> "9149GTCTACA" [label="DPB1*03:01:01;DPB1*04:01:31;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "8875GAAG...AAT" -> "8892G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8875GAAG...AAT" -> "8892T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7468G" -> "7469CT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10260G" -> "10261CAGG...TGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9973A" -> "9974CCACTGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8893CTAT...TTT" -> "8908C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8893CTAT...TTT" -> "8908T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8447G" -> "8448TAGT...GCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6712G" -> "6713ATG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7917T" -> "7928T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2941C" -> "2942GCCC...TGC" [label="DPB1*03:01:01", ];
+  "8966T" -> "8967TGCA...GAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4796G" -> "4797TACT...GAC" [label="C. of DPB1*03:01:01", ];
+  "10107G" -> "10108CAAT...TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8325T" -> "8326TATT...CTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7651T" -> "7652GGTCTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6516A" -> "6517GAAG...AGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1461C" -> "1462TGTC...CTA" [label="C. of DPB1*04:02:01:01-02", ];
+  "4882CC" -> "4884A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "4882CC" -> "4884G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "7507A" -> "7508CTCA...ACA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "5402C" -> "5403GGAT...AAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4649T" -> "4650T" [label="C. of DPB1*03:01:01", ];
+  "102GTAA...AGT" -> "341ATGCTT" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                                  ];
+  "102GTAA...AGT" -> "347GTCT...TTT" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                                      ];
+  "7068A" -> "7069TTGA...CTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "B8-10197" -> "10198TTCA...TAA" [label="Everything", ];
+  "9595G" -> "9596GA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10261CAGG...TGA" -> "10274C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10261CAGG...TGA" -> "10274G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "B2-4638" -> "4639AGAATTAC" [label="Everything", ];
+  "9676C" -> "9677GCTC...CAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2601A" -> "2602TGAA...CAA" [label="C. of DPB1*03:01:01", ];
+  "10878C" -> "10879CATGAAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10430G" -> "10431AGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10249G" -> "10250GGGGTGGGTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10607A" -> "10608CTTCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "2138G" -> "2139CAGT...GAC" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "6349T" -> "6350CTGGAGATC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "9756AGGC...AAG" -> "B7-9867" [label="Everything", ];
+  "10351T" -> "10352C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7981A" -> "7982TGTA...GTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8868AAGG" -> "8872AAA" [label="DPB1*02:01:02;DPB1*04:01:01:01;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                           ];
+  "B0-0" -> "1ATGA...CAG" [label="Everything", ];
+  "10483T" -> "10484G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10789A" -> "10790TCTCTCAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9551C" -> "9552AGAA...TCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9156T" -> "9157CTGC...AGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8524T" -> "8525GAGC...AGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7586GTAC...GGC" -> "7651C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7586GTAC...GGC" -> "7651T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7471C" -> "7472TGTC...GGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10886G" -> "10887TGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10618GGAT...ATC" -> "10660A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10618GGAT...ATC" -> "10660G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8384TGCT...TAT" -> "8417A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8384TGCT...TAT" -> "8417T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9180TGGA" -> "9184C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9180TGGA" -> "9184T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6237TTCT...CAG" -> "6269A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6237TTCT...CAG" -> "6269G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1462TGTC...CTA" -> "1747A" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1462TGTC...CTA" -> "1747G" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "7685GCCTCA" -> "7691A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "7685GCCTCA" -> "7691G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6271AGCC" -> "6275C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6271AGCC" -> "6275T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4647G" -> "4648T" [label="DPB1*03:01:01", ];
+  "4729TCG" -> "4732C" [label="DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                        ];
+  "4729TCG" -> "4732T" [label="C. of DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                        ];
+  "8383G" -> "8384TGCT...TAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6874A" -> "6875CTGA...CTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6227T" -> "6228GGCAGCAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "6335T" -> "6336CTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "B9-10218" -> "10219ACAG...TTG" [label="Everything", ];
+  "2272C" -> "2273TGCT...AAA" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "10483C" -> "10484A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4791G" -> "4792A" [label="DPB1*02:01:02;DPB1*03:01:01;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                      ];
+  "4791G" -> "4792C" [label="DPB1*02:02;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                      ];
+  "9469T" -> "9470T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "11010G" -> "11011CTAT...CCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10823ACAG...TTA" -> "10859A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10823ACAG...TTA" -> "10859C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8326TATT...CTA" -> "8369TTTCTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                    ];
+  "8326TATT...CTA" -> "8375TCTTTTCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                      ];
+  "6275C" -> "6276TGAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "9447G" -> "9448CTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7940T" -> "7941GGGA...AGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "-299C" -> "-298CCAA...TCC" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10859A" -> "10860AC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "9654C" -> "9655TCAT...TAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8759C" -> "8760GACACTCCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8942GTTT...CCC" -> "8966C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8942GTTT...CCC" -> "8966T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10484G" -> "10485GCAA...GTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7917C" -> "7918AGAGGAGGAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10344C" -> "10345C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10755C" -> "10756TGTT...GCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9366C" -> "9367AATG...CTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7659AAAC...TCA" -> "7684C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7659AAAC...TCA" -> "7684T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6517GAAG...AGA" -> "6544C" [label="C. of DPB1*04:02:01:01", ];
+  "6517GAAG...AGA" -> "6544T" [label="DPB1*04:02:01:01", ];
+  "7745C" -> "7746TTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4830A" -> "4831AGCG...AGG" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01",
+                               ];
+  "10172T" -> "10173ATAACCTTTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10358C" -> "10359A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "9506C" -> "9507TTCA...TTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9451A" -> "9452TCTC...CAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10169T" -> "10170TA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6423G" -> "6424GGGG...GCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6376C" -> "6377T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8447A" -> "8448TAGT...GCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8012GTGA...AAA" -> "8026A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8012GTGA...AAA" -> "8027TAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7968G" -> "7969GCTC...ATT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6316A" -> "6317CAGG...ACT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2931C" -> "2932AGGGTCTGG" [label="DPB1*03:01:01", ];
+  "1176G" -> "1177TTTC...CGC" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10344T" -> "10345G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "9939T" -> "9940C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9939T" -> "9940T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2155G" -> "2156GGCA...AAA" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "10584C" -> "10585CTGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10078G" -> "10079CTCCTGCGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "8174TCCT...AAG" -> "8204A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8174TCCT...AAG" -> "8204G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6170G" -> "6171TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10353TC" -> "10355A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10353TC" -> "10355G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10088A" -> "10089GC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "8226AAAT...CTA" -> "8269A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8226AAAT...CTA" -> "8269T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8921TAG" -> "B4-8924" [label="Everything", ];
+  "8500C" -> "8501GTAA...AGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7471T" -> "7472TGTC...GGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10419TTTA...CCT" -> "10430A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10419TTTA...CCT" -> "10430G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6394G" -> "6395AGAC...GGT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6175GCAA...CAC" -> "6215A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6175GCAA...CAC" -> "6215C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "11093C" -> "11094CTTA...TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6862C" -> "6863CCCT...GTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6414G" -> "6415GGGAGGTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "1146TGTC...ATG" -> "1176A" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "1146TGTC...ATG" -> "1176G" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10589C" -> "10590TCCA...ACC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "B6-9755" -> "9756AGGC...AAG" [label="Everything", ];
+  "10914G" -> "10915GGCCTGTTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "10782T" -> "10783CAAATC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10278TTTC...TAA" -> "10294C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10278TTTC...TAA" -> "10294T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8500T" -> "8501GTAA...AGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8269A" -> "8270ATGT...TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9448CTG" -> "9451A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9448CTG" -> "9451G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8700GAGG...GAG" -> "8759C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8700GAGG...GAG" -> "8759T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10585CTGG" -> "10589C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "10585CTGG" -> "10589T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9471AGGA...TTC" -> "9506C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9471AGGA...TTC" -> "9506T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10528C" -> "10529CTCAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10089GC" -> "10091A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10089GC" -> "10091G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6691AGTA...GTG" -> "6712G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6691AGTA...GTG" -> "6712T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4790G" -> "4791G" [label="DPB1*02:02", ];
+  "9930GATGAGGG" -> "9938G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "9930GATGAGGG" -> "9938T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "3104T" -> "3105A" [label="C. of DPB1*03:01:01;DPB1*04:02:01:01", ];
+  "3104T" -> "3105G" [label="DPB1*04:02:01:01", ];
+  "10418C" -> "10419TTTA...CCT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4656G" -> "4657G" [label="C. of DPB1*03:01:01", ];
+  "10073CTCAG" -> "10078A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10073CTCAG" -> "10078G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "7508CTCA...ACA" -> "7585C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7508CTCA...ACA" -> "7585T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9156C" -> "9157CTGC...AGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6174T" -> "6175GCAA...CAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8579G" -> "8580CTGA...ACT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10013A" -> "10014GCGAGAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6415GGGAGGTC" -> "6423G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6415GGGAGGTC" -> "6423T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "10294C" -> "10295ACTG...CAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7469CT" -> "7471C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7469CT" -> "7471T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2123A" -> "2124GCAT...TGG" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4881C" -> "4882CC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "6632A" -> "6633A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7658A" -> "7659AAAC...TCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8173T" -> "8174TCCT...AAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10790TCTCTCAT" -> "10798C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10790TCTCTCAT" -> "10798T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2931T" -> "2932AGGGTCTGG" [label="C. of DPB1*03:01:01", ];
+  "8205T" -> "8206AGGT...GAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6712T" -> "6713ATG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4657G" -> "4658ACGG...GAG" [label="C. of DPB1*03:01:01", ];
+  "1176A" -> "1177TTTC...CGC" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "6632G" -> "6633C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10754A" -> "10755C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10754A" -> "10755G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9184C" -> "9185AGTC...GGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10616T" -> "10617T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "6349C" -> "6350CTGGAGATC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10799ACTT...GTA" -> "10822A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10799ACTT...GTA" -> "10822G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4570AGAG...CAG" -> "B2-4638" [label="Everything", ];
+  "1444C" -> "1445TTGA...ACA" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1337ATAA...ATA" -> "1397C" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1337ATAA...ATA" -> "1397T" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "8696CCC" -> "8699A" [label="DPB1*02:01:02;DPB1*02:02", ];
+  "8696CCC" -> "8699G" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8696CCC" -> "8699T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10411C" -> "10412TCTGTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "8915C" -> "8916A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8915C" -> "8916G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9940C" -> "9941A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9596GA" -> "9598C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9596GA" -> "9598T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8812C" -> "8813GTCT...AAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6634ATGA...AAA" -> "6654C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6634ATGA...AAA" -> "6654G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "-298CCAA...TCC" -> "B0-0" [label="Everything", ];
+  "S-366-DPB1*02:01:02;DPB1*02:02;DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*398:01;
+DPB1*463:01;DPB1*464:01" -> "-366TAAT...CTC" [
+  label="Everything", ];
+  "1ATGA...CAG" -> "B1-101" [label="Everything", ];
+  "10358T" -> "10359G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10798T" -> "10799ACTT...GTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10505T" -> "10506TTTA...TGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "11010A" -> "11011CTAT...CCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6370A" -> "6371CAGAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "1445TTGA...ACA" -> "1461A" [label="DPB1*04:02:01:01-02", ];
+  "1445TTGA...ACA" -> "1461C" [label="C. of DPB1*04:02:01:01-02", ];
+  "6394C" -> "6395AGAC...GGT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4639AGAATTAC" -> "4647C" [label="C. of DPB1*03:01:01", ];
+  "4639AGAATTAC" -> "4647G" [label="DPB1*03:01:01", ];
+  "10590TCCA...ACC" -> "10603C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10590TCCA...ACC" -> "10603T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "1398CCAG...ATC" -> "1444C" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1398CCAG...ATC" -> "1444T" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "6376A" -> "6377C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4733GCGC...CTG" -> "4789A" [label="C. of DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "4733GCGC...CTG" -> "4789C" [label="DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "9677GCTC...CAG" -> "B6-9755" [label="Everything", ];
+  "9179C" -> "9180TGGA" [label="C. of DPB1*04:02:01:01-02", ];
+  "4650T" -> "4651A" [label="DPB1*03:01:01", ];
+  "4650T" -> "4651T" [label="C. of DPB1*03:01:01", ];
+  "8689G" -> "8690TTGAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "3220T" -> "3221ACTC...AAA" [label="C. of DPB1*03:01:01", ];
+  "2273TGCT...AAA" -> "2601A" [label="C. of DPB1*03:01:01", ];
+  "2273TGCT...AAA" -> "2602TGAA...CAA" [label="DPB1*03:01:01", ];
+  "8916A" -> "8917CTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4569A" -> "4570AGAG...CAG" [label="DPB1*03:01:01", ];
+  "10410G" -> "10411T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8892T" -> "8893CTAT...TTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6236C" -> "6237TTCT...CAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10183C" -> "10184TCTT...CAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9973G" -> "9974CCACTGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "8611G" -> "8612ATAA...TGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10169A" -> "10170TA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9148T" -> "9149GTCTACA" [label="C. of DPB1*03:01:01;DPB1*04:01:31;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "8636G" -> "8637GTGG...TTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8856AAGGAAGG" -> "8864AAGG" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:01:01:01;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                                ];
+  "8856AAGGAAGG" -> "8872AAA" [label="DPB1*04:01:01:02", ];
+  "10822A" -> "10823ACAG...TTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "3656CCAC...CCA" -> "3801C" [label="DPB1*03:01:01", ];
+  "3656CCAC...CCA" -> "3801G" [label="C. of DPB1*03:01:01", ];
+  "9068G" -> "9069TGTC...AGA" [label="C. of DPB1*464:01", ];
+  "10108CAAT...TAA" -> "10143C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10108CAAT...TAA" -> "10143T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10410A" -> "10411C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10370G" -> "10371AGCATTGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4648T" -> "4649G" [label="DPB1*03:01:01", ];
+  "4648T" -> "4649T" [label="C. of DPB1*03:01:01", ];
+  "4851G" -> "4852T" [label="DPB1*03:01:01", ];
+  "10418A" -> "10419TTTA...CCT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9991TCGG...TAT" -> "10013A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "9991TCGG...TAT" -> "10013G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "8030C" -> "8031TAGGTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7585C" -> "7586GTAC...GGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6360TCTGTGATGC" -> "6370A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6360TCTGTGATGC" -> "6370G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9676G" -> "9677GCTC...CAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10172C" -> "10173ATAACCTTTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8824AA" -> "8826GGAAGGAAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6713ATG" -> "6716C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6713ATG" -> "6716T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "6665GGGA...AAG" -> "6690A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6665GGGA...AAG" -> "6690G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10608CTTCC" -> "10613A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "10608CTTCC" -> "10613C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10021A" -> "10022GGGA...CCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7831G" -> "7832ACAA...ACA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7652GGTCTC" -> "7658A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "7652GGTCTC" -> "7658G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8448TAGT...GCC" -> "8500C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8448TAGT...GCC" -> "8500T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "11065TATT...ATA" -> "11093C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "11065TATT...ATA" -> "11093T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "2851C" -> "2852TGAA...GGC" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1747G" -> "1748AAGG...GGG" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "10170TA" -> "10172C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10170TA" -> "10172T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "6934TGGA...GTA" -> "7020C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6934TGGA...GTA" -> "7020G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9225C" -> "9226TCTA...GGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8908T" -> "8909CTTCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "7242G" -> "7243GGGT...TGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9551T" -> "9552AGAA...TCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4818C" -> "4819TCCT...GAG" [label="DPB1*03:01:01", ];
+  "10079CTCCTGCGG" -> "10088A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "10079CTCCTGCGG" -> "10088G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "3104A" -> "3105A" [label="DPB1*03:01:01", ];
+  "4651A" -> "4652CCAG" [label="DPB1*03:01:01", ];
+  "10380T" -> "10381GGCT...TCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8769T" -> "8770CTCA...GAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4792C" -> "4793GGA" [label="DPB1*02:02;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                        ];
+  "1397T" -> "1398CCAG...ATC" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "9981A" -> "9982ATCAGATA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8800AGAG...TTA" -> "8812C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8800AGAG...TTA" -> "8812T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6377C" -> "6378CCAGACTCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8375TCTTTTCA" -> "8383A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "8375TCTTTTCA" -> "8383G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9157CTGC...AGC" -> "9179A" [label="DPB1*04:02:01:01-02", ];
+  "9157CTGC...AGC" -> "9179C" [label="C. of DPB1*04:02:01:01-02", ];
+  "8934G" -> "8935GGTGAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "7021GTAA...GAC" -> "7068A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7021GTAA...GAC" -> "7068G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10431AGA" -> "10434C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10431AGA" -> "10434T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4879G" -> "4880G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "10356GG" -> "10358C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10356GG" -> "10358T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9184T" -> "9185AGTC...GGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8173A" -> "8174TCCT...AAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9883A" -> "9884GGTG...TTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9940T" -> "9941T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10439CCTC...TTA" -> "10471A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10439CCTC...TTA" -> "10471C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10078A" -> "10079CTCCTGCGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "8914C" -> "8915C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8011A" -> "8012GTGA...AAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4818A" -> "4819TCCT...GAG" [label="C. of DPB1*03:01:01", ];
+  "10103A" -> "10104TGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "8551C" -> "8552GTTG...CAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6585G" -> "6586ATGA...AAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10546TGTGCCTTAG" -> "10556A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10546TGTGCCTTAG" -> "10556G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8695G" -> "8696CCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "4569G" -> "4570AGAG...CAG" [label="C. of DPB1*03:01:01", ];
+  "10379A" -> "10380C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6561TAGA...GGA" -> "6585A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6561TAGA...GGA" -> "6585G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4732C" -> "4733GCGC...CTG" [label="DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "8166A" -> "8167TTTTGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "8096G" -> "8097G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8096G" -> "8097T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10556G" -> "10557A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10616G" -> "10617A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8369TTTCTA" -> "8375TCTTTTCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                  ];
+  "7969GCTC...ATT" -> "7981A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7969GCTC...ATT" -> "7981C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9644CTGCACTGTC" -> "9654C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9644CTGCACTGTC" -> "9654T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6633A" -> "6634ATGA...AAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8037T" -> "8038TTTA...TGT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9883G" -> "9884GGTG...TTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7816ACCT...CAG" -> "7831A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7816ACCT...CAG" -> "7831G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10352C" -> "10353TC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4789C" -> "4790T" [label="DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                      ];
+  "10022GGGA...CCA" -> "10069A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10022GGGA...CCA" -> "10069G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9599ATGA...TCC" -> "9643C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9599ATGA...TCC" -> "9643G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7754AGGA...ATT" -> "7815C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7754AGGA...ATT" -> "7815G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7069TTGA...CTG" -> "7161A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7069TTGA...CTG" -> "7161T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6216AATC...ACA" -> "6227C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6216AATC...ACA" -> "6227T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8611A" -> "8612ATAA...TGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8270ATGT...TAA" -> "8325C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8270ATGT...TAA" -> "8325T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "B5-9207" -> "9208GTGA...ACC" [label="Everything", ];
+  "1461A" -> "1462TGTC...CTA" [label="DPB1*04:02:01:01-02", ];
+  "7929TTG" -> "7932A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7929TTG" -> "7932G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9655TCAT...TAT" -> "9667G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9655TCAT...TAT" -> "9667T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3106GGGG...AGA" -> "3220C" [label="DPB1*03:01:01", ];
+  "3106GGGG...AGA" -> "3220T" [label="C. of DPB1*03:01:01", ];
+  "8935GGTGAA" -> "8941C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8935GGTGAA" -> "8941T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "4292GCCC...ATT" -> "4569A" [label="DPB1*03:01:01", ];
+  "4292GCCC...ATT" -> "4569G" [label="C. of DPB1*03:01:01", ];
+  "7831A" -> "7832ACAA...ACA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4658ACGG...GAG" -> "4728C" [label="DPB1*02:02", ];
+  "4658ACGG...GAG" -> "4728T" [label="C. of DPB1*02:02", ];
+  "9469A" -> "9470C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6654C" -> "6655ACAGAGGCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "9942GACA...GAG" -> "9973A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9942GACA...GAG" -> "9973G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9941T" -> "9942GACA...GAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10862A" -> "10863TAGG...GAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7161T" -> "7162AAAC...GTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4851A" -> "4852T" [label="C. of DPB1*03:01:01", ];
+  "7832ACAA...ACA" -> "7874C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7832ACAA...ACA" -> "7874T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7880T" -> "7881ATCT...GAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4852T" -> "4853A" [label="DPB1*03:01:01", ];
+  "4852T" -> "4853G" [label="C. of DPB1*03:01:01", ];
+  "2271C" -> "2272C" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                      ];
+  "10879CATGAAA" -> "10886A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10879CATGAAA" -> "10886G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "9990G" -> "9991TCGG...TAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8512C" -> "8513CTTT...GGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7684T" -> "7685GCCTCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "4831AGCG...AGG" -> "4851A" [label="C. of DPB1*03:01:01", ];
+  "4831AGCG...AGG" -> "4851G" [label="DPB1*03:01:01", ];
+  "10558A" -> "10559AAGC...TTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4884G" -> "4885TGAC...GAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01",
+                               ];
+  "4881G" -> "4882CC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*398:01", ];
+  "10275TC" -> "10277C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10275TC" -> "10277T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10072G" -> "10073CTCAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7746TTC" -> "7749C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7746TTC" -> "7749T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7507G" -> "7508CTCA...ACA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10783CAAATC" -> "10789A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "10783CAAATC" -> "10789G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9868GTGA...GCA" -> "9883A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9868GTGA...GCA" -> "9883G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8920G" -> "8921TAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8914A" -> "8915C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10274C" -> "10275TC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6655ACAGAGGCA" -> "6664A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6655ACAGAGGCA" -> "6664G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8417A" -> "8418T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6270G" -> "6271AGCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8011G" -> "8012GTGA...AAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6470G" -> "6471GATA...AAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4651T" -> "4652CCAG" [label="C. of DPB1*03:01:01", ];
+  "9367AATG...CTG" -> "9447A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9367AATG...CTG" -> "9447G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8695C" -> "8696CCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7874C" -> "7875CTGGT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "6371CAGAT" -> "6376A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6371CAGAT" -> "6376C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "6377T" -> "6378CCAGACTCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "11011CTAT...CCC" -> "11064A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "11011CTAT...CCC" -> "11064G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4819TCCT...GAG" -> "4830A" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01",
+                               ];
+  "4819TCCT...GAG" -> "4830G" [label="DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01",
+                               ];
+  "10534C" -> "10535GAAAAGACTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10107T" -> "10108CAAT...TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6317CAGG...ACT" -> "6335C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6317CAGG...ACT" -> "6335T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8941T" -> "8942GTTT...CCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8108ACAG...TAA" -> "8166A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8108ACAG...TAA" -> "8166T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4885TGAC...GAG" -> "B3-4903" [label="Everything", ];
+  "10577GTTAGCA" -> "10584C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10577GTTAGCA" -> "10584T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6395AGAC...GGT" -> "6414A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6395AGAC...GGT" -> "6414G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6340GAAGACTCT" -> "6349C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6340GAAGACTCT" -> "6349T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10260A" -> "10261CAGG...TGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6933A" -> "6934TGGA...GTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9447A" -> "9448CTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7651C" -> "7652GGTCTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "6388TGCCCC" -> "6394C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "6388TGCCCC" -> "6394G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "1336A" -> "1337ATAA...ATA" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "6359A" -> "6360TCTGTGATGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8098TATTAGATT" -> "8107A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8098TATTAGATT" -> "8107C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "4790T" -> "4791G" [label="C. of DPB1*02:02", ];
+  "8225T" -> "8226AAAT...CTA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8030A" -> "8031TAGGTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "6690A" -> "6691AGTA...GTG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10359G" -> "10360AGTGGGGAAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10556A" -> "10557A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8941C" -> "8942GTTT...CCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "-299G" -> "-298CCAA...TCC" [label="DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8026A" -> "8027TAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7498A" -> "7499CCATCATG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "2916CTGG...TTT" -> "2931C" [label="DPB1*03:01:01", ];
+  "2916CTGG...TTT" -> "2931T" [label="C. of DPB1*03:01:01", ];
+  "9667T" -> "9668CTGCATCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9225G" -> "9226TCTA...GGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6933G" -> "6934TGGA...GTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9470C" -> "9471AGGA...TTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10092TCCA...GTG" -> "10103A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10092TCCA...GTG" -> "10103G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "4797TACT...GAC" -> "4818A" [label="C. of DPB1*03:01:01", ];
+  "4797TACT...GAC" -> "4818C" [label="DPB1*03:01:01", ];
+  "10660G" -> "10661TTCT...CAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10559AAGC...TTT" -> "10576C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10559AAGC...TTT" -> "10576T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7911G" -> "7912CA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10859C" -> "10860AC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8058AAGC...GAA" -> "8091ATAAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                   ];
+  "8058AAGC...GAA" -> "8096G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7498G" -> "7499CCATCATG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "3801G" -> "3802GGTG...TCC" [label="C. of DPB1*03:01:01", ];
+  "347GTCT...TTT" -> "1145C" [label="DPB1*04:02:01:01-02", ];
+  "347GTCT...TTT" -> "1145T" [label="C. of DPB1*04:02:01:01-02", ];
+  "10613C" -> "10614AA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10103G" -> "10104TGG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7749T" -> "7750GAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "2915C" -> "2916CTGG...TTT" [label="DPB1*03:01:01", ];
+  "6585A" -> "6586ATGA...AAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10782C" -> "10783CAAATC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "10346TC" -> "10348A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10346TC" -> "10348G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10277C" -> "10278TTTC...TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10891GATA...ATG" -> "10914G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10891GATA...ATG" -> "10914T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "B4-8924" -> "8925TCCAGCCTA" [label="Everything", ];
+  "8501GTAA...AGC" -> "8512A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8501GTAA...AGC" -> "8512C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10535GAAAAGACTA" -> "10545A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10535GAAAAGACTA" -> "10545T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9925TCCA" -> "9929C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "9925TCCA" -> "9929T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9507TTCA...TTC" -> "9551C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9507TTCA...TTC" -> "9551T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8579C" -> "8580CTGA...ACT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6339T" -> "6340GAAGACTCT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6228GGCAGCAT" -> "6236C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6228GGCAGCAT" -> "6236T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "6170A" -> "6171TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "6339C" -> "6340GAAGACTCT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10863TAGG...GAA" -> "10878C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10863TAGG...GAA" -> "10878G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9981T" -> "9982ATCAGATA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "4291T" -> "4292GCCC...ATT" [label="DPB1*03:01:01", ];
+  "6350CTGGAGATC" -> "6359A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6350CTGGAGATC" -> "6359C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "4291C" -> "4292GCCC...ATT" [label="C. of DPB1*03:01:01", ];
+  "6863CCCT...GTC" -> "6874A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6863CCCT...GTC" -> "6874G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9974CCACTGA" -> "9981A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9974CCACTGA" -> "9981T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "11093T" -> "11094CTTA...TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7750GAG" -> "7753A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7750GAG" -> "7753G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "9002GATT...GTC" -> "9068A" [label="DPB1*464:01", ];
+  "9002GATT...GTC" -> "9068G" [label="C. of DPB1*464:01", ];
+  "8206AGGT...GAT" -> "8225C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8206AGGT...GAT" -> "8225T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2852TGAA...GGC" -> "2915C" [label="DPB1*03:01:01", ];
+  "2852TGAA...GGC" -> "2915T" [label="C. of DPB1*03:01:01", ];
+  "3105A" -> "3106GGGG...AGA" [label="C. of DPB1*04:02:01:01", ];
+  "9924C" -> "9925TCCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6717C" -> "6718CACC...TCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2272T" -> "2273TGCT...AAA" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "11064G" -> "11065TATT...ATA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7875CTGGT" -> "7880C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "7875CTGGT" -> "7880T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6516C" -> "6517GAAG...AGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8107C" -> "8108ACAG...TAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8788TGAA...GAA" -> "8800AGAG...TTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                        ];
+  "7932A" -> "7933AAAAGGA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "6387C" -> "6388TGCCCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10886A" -> "10887TGG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "7330A" -> "7331CTGT...CTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4652CCAG" -> "4656G" [label="C. of DPB1*03:01:01", ];
+  "4652CCAG" -> "4656T" [label="DPB1*03:01:01", ];
+  "9452TCTC...CAC" -> "9469A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9452TCTC...CAC" -> "9469T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8759T" -> "8760GACACTCCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "6276TGAT" -> "6280A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6276TGAT" -> "6280G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10614AA" -> "10616G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10614AA" -> "10616T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "8027TAC" -> "8030A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8027TAC" -> "8030C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2156GGCA...AAA" -> "2271C" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "2156GGCA...AAA" -> "2271T" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9884GGTG...TTA" -> "9924C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9884GGTG...TTA" -> "9924T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6335C" -> "6336CTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8269T" -> "8270ATGT...TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2602TGAA...CAA" -> "2851C" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2602TGAA...CAA" -> "2851T" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "10528G" -> "10529CTCAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "8107A" -> "8108ACAG...TAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8525GAGC...AGG" -> "8551A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8525GAGC...AGG" -> "8551C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8097G" -> "8098TATTAGATT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "2124GCAT...TGG" -> "2138A" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2124GCAT...TGG" -> "2138G" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "1747A" -> "1748AAGG...GGG" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2271T" -> "2272T" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                      ];
+  "6545TACT...TGG" -> "6560C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6545TACT...TGG" -> "6560G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10822G" -> "10823ACAG...TTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10069A" -> "10070GT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "9598T" -> "9599ATGA...TCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8057A" -> "8058AAGC...GAA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "B7-9867" -> "9868GTGA...GCA" [label="Everything", ];
+  "7916C" -> "7917T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9149GTCTACA" -> "9156C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "9149GTCTACA" -> "9156T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "3621A" -> "3622ACAT...TGG" [label="C. of DPB1*03:01:01", ];
+  "10355A" -> "10356GG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "2138A" -> "2139CAGT...GAC" [label="DPB1*02:01:02;DPB1*02:02;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9451G" -> "9452TCTC...CAC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8920C" -> "8921TAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "8097T" -> "8098TATTAGATT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "7932G" -> "7933AAAAGGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9470T" -> "9471AGGA...TTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10607G" -> "10608CTTCC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10472AGGA...GGC" -> "10483C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10472AGGA...GGC" -> "10483T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8934A" -> "8935GGTGAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6359C" -> "6360TCTGTGATGC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3801C" -> "3802GGTG...TCC" [label="DPB1*03:01:01", ];
+  "7020C" -> "7021GTAA...GAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6309C" -> "6310AGGCCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "7472TGTC...GGC" -> "7498A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7472TGTC...GGC" -> "7498G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4656T" -> "4657T" [label="DPB1*03:01:01", ];
+  "8699T" -> "8700GAGG...GAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6470A" -> "6471GATA...AAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10887TGG" -> "10890A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10887TGG" -> "10890G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "8637GTGG...TTG" -> "8689C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8637GTGG...TTG" -> "8689G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8225C" -> "8226AAAT...CTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6227C" -> "6228GGCAGCAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "4796C" -> "4797TACT...GAC" [label="DPB1*03:01:01", ];
+  "10381GGCT...TCA" -> "10410A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10381GGCT...TCA" -> "10410G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10198TTCA...TAA" -> "B9-10218" [label="Everything", ];
+  "6299GTTTCTCCTC" -> "6309C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6299GTTTCTCCTC" -> "6309T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10351C" -> "10352T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7068G" -> "7069TTGA...CTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2851T" -> "2852TGAA...GGC" [label="DPB1*03:01:01;DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "8204G" -> "8205T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9938T" -> "9939T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8612ATAA...TGA" -> "8636A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8612ATAA...TGA" -> "8636G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6654G" -> "6655ACAGAGGCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "9001G" -> "9002GATT...GTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6387G" -> "6388TGCCCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                           ];
+  "10173ATAACCTTTC" -> "10183C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10173ATAACCTTTC" -> "10183G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "7684C" -> "7685GCCTCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10798C" -> "10799ACTT...GTA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8166T" -> "8167TTTTGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2941G" -> "2942GCCC...TGC" [label="C. of DPB1*03:01:01", ];
+  "6544T" -> "6545TACT...TGG" [label="DPB1*04:02:01:01", ];
+  "7815G" -> "7816ACCT...CAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6875CTGA...CTC" -> "6933A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6875CTGA...CTC" -> "6933G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6423T" -> "6424GGGG...GCC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8205C" -> "8206AGGT...GAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "1145C" -> "1146TGTC...ATG" [label="DPB1*04:02:01:01-02", ];
+  "8966C" -> "8967TGCA...GAC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "8057C" -> "8058AAGC...GAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10411T" -> "10412TCTGTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "2932AGGGTCTGG" -> "2941C" [label="DPB1*03:01:01", ];
+  "2932AGGGTCTGG" -> "2941G" [label="C. of DPB1*03:01:01", ];
+  "4904GTGA...GAC" -> "5402C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4904GTGA...GAC" -> "5402T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "2915T" -> "2916CTGG...TTT" [label="C. of DPB1*03:01:01", ];
+  "10471A" -> "10472AGGA...GGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "-366TAAT...CTC" -> "-299C" [label="C. of DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "-366TAAT...CTC" -> "-299G" [label="DPB1*02:01:02;DPB1*02:02;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "3105G" -> "3106GGGG...AGA" [label="DPB1*04:02:01:01", ];
+  "8813GTCT...AAA" -> "8824AA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                ];
+  "8813GTCT...AAA" -> "8826GGAAGGAAG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                       ];
+  "7658G" -> "7659AAAC...TCA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10484A" -> "10485GCAA...GTC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10088G" -> "10089GC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7911A" -> "7912CA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7161A" -> "7162AAAC...GTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6280A" -> "6281CCAG...GTG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10014GCGAGAG" -> "10021A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "10014GCGAGAG" -> "10021G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                              ];
+  "8835GAAG...AGG" -> "8856AAGGAAGG" [label="C. of DPB1*03:01:01;DPB1*04:02:01:01-02;DPB1*16:01:01;DPB1*463:01",
+                                      ];
+  "8835GAAG...AGG" -> "8872AAA" [label="DPB1*04:02:01:01-02", ];
+  "10184TCTT...CAG" -> "B8-10197" [label="Everything", ];
+  "10183G" -> "10184TCTT...CAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8872AAA" -> "8875GAAG...AAT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "6845A" -> "6846GCCT...CGC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6298G" -> "6299GTTTCTCCTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10505C" -> "10506TTTA...TGA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10249T" -> "10250GGGGTGGGTT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9924T" -> "9925TCCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "8690TTGAA" -> "8695C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8690TTGAA" -> "8695G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                          ];
+  "10589T" -> "10590TCCA...ACC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8689C" -> "8690TTGAA" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "7692CCTC...TGC" -> "7745C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7692CCTC...TGC" -> "7745T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6281CCAG...GTG" -> "6298A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6281CCAG...GTG" -> "6298G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7753G" -> "7754AGGA...ATT" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10617T" -> "10618GGAT...ATC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10345G" -> "10346TC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "10613A" -> "10614AA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                         ];
+  "3221ACTC...AAA" -> "3621A" [label="C. of DPB1*03:01:01", ];
+  "3221ACTC...AAA" -> "3621C" [label="DPB1*03:01:01", ];
+  "6424GGGG...GCC" -> "6470A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6424GGGG...GCC" -> "6470G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "6269G" -> "6270G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10789G" -> "10790TCTCTCAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9185AGTC...GGA" -> "B5-9207" [label="Everything", ];
+  "6370G" -> "6371CAGAT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "8892G" -> "8893CTAT...TTT" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10617A" -> "10618GGAT...ATC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "8916G" -> "8917CTC" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "7815C" -> "7816ACCT...CAG" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "10890A" -> "10891GATA...ATG" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "10529CTCAC" -> "10534C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10529CTCAC" -> "10534T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                            ];
+  "9668CTGCATCA" -> "9676C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9668CTGCATCA" -> "9676G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "8699A" -> "8700GAGG...GAG" [label="DPB1*02:01:02;DPB1*02:02", ];
+  "9208GTGA...ACC" -> "9225C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "9208GTGA...ACC" -> "9225G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "4728T" -> "4729TCG" [label="C. of DPB1*02:02", ];
+  "6336CTC" -> "6339C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6336CTC" -> "6339T" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "10924T" -> "10925ACAT...ACC" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                                 ];
+  "9982ATCAGATA" -> "9990A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "9982ATCAGATA" -> "9990G" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "6171TAA" -> "6174C" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                        ];
+  "6171TAA" -> "6174T" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "10412TCTGTT" -> "10418A" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "10412TCTGTT" -> "10418C" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01", ];
+  "9667G" -> "9668CTGCATCA" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                             ];
+  "4732T" -> "4733GCGC...CTG" [label="C. of DPB1*04:01:01:01-02;DPB1*04:01:31;DPB1*398:01;DPB1*464:01",
+                               ];
+  "3621C" -> "3622ACAT...TGG" [label="DPB1*03:01:01", ];
+  "7243GGGT...TGA" -> "7330A" [label="DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  "7243GGGT...TGA" -> "7330G" [label="C. of DPB1*03:01:01;DPB1*16:01:01;DPB1*463:01",
+                               ];
+  
+  }

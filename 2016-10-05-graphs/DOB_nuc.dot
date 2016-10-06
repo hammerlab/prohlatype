@@ -1,0 +1,86 @@
+digraph G {
+  "B1-363" [shape=box, ];
+  "630G" [shape=box, ];
+  "631TTTC...GGA" [shape=box, ];
+  "1ATGG...CCC" [shape=box, ];
+  "B3-758" [shape=box, ];
+  "593C" [shape=box, ];
+  "B4-791" [shape=box, ];
+  "594ACCT...CCT" [shape=box, ];
+  "703T" [shape=box, ];
+  "97C" [shape=box, ];
+  "287AGGA...AAG" [shape=box, ];
+  "792GTCT...TAA" [shape=box, ];
+  "53G" [shape=box, ];
+  "97T" [shape=box, ];
+  "364TGCA...CTA" [shape=box, ];
+  "704TTGG...ATC" [shape=box, ];
+  "593T" [shape=box, ];
+  "E829" [shape=box, ];
+  "B2-646" [shape=box, ];
+  "98TTTG...GGA" [shape=box, ];
+  "S1-DOB*01:01:01:01-04;DOB*01:01:02;DOB*01:01:03:01-02;DOB*01:02:01-02;DOB*01:03;DOB*01:04:01:01-02;DOB*01:05" [
+  shape=box, ];
+  "54ACTG...CAG" [shape=box, ];
+  "759GATA...GAG" [shape=box, ];
+  "B0-92" [shape=box, ];
+  "93AAGA" [shape=box, ];
+  "828G" [shape=box, ];
+  "703C" [shape=box, ];
+  "286G" [shape=box, ];
+  "E828" [shape=box, ];
+  "647GAGC...CTA" [shape=box, ];
+  "733G" [shape=box, ];
+  "286A" [shape=box, ];
+  "733A" [shape=box, ];
+  "630A" [shape=box, ];
+  "734TCAT...AAG" [shape=box, ];
+  "53A" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "B1-363" -> "364TGCA...CTA" [label="Everything", ];
+  "630G" -> "631TTTC...GGA" [label="C. of DOB*01:05", ];
+  "631TTTC...GGA" -> "B2-646" [label="Everything", ];
+  "1ATGG...CCC" -> "53A" [label="DOB*01:02:01-02", ];
+  "1ATGG...CCC" -> "53G" [label="C. of DOB*01:02:01-02", ];
+  "B3-758" -> "759GATA...GAG" [label="Everything", ];
+  "593C" -> "594ACCT...CCT" [label="C. of DOB*01:04:01:01-02", ];
+  "B4-791" -> "792GTCT...TAA" [label="Everything", ];
+  "594ACCT...CCT" -> "630A" [label="DOB*01:05", ];
+  "594ACCT...CCT" -> "630G" [label="C. of DOB*01:05", ];
+  "703T" -> "704TTGG...ATC" [label="DOB*01:04:01:01-02", ];
+  "97C" -> "98TTTG...GGA" [label="DOB*01:01:03:01-02", ];
+  "287AGGA...AAG" -> "B1-363" [label="Everything", ];
+  "792GTCT...TAA" -> "E828" [label="DOB*01:02:01;DOB*01:03", ];
+  "792GTCT...TAA" -> "828G" [label="C. of DOB*01:02:01;DOB*01:03", ];
+  "53G" -> "54ACTG...CAG" [label="C. of DOB*01:02:01-02", ];
+  "97T" -> "98TTTG...GGA" [label="C. of DOB*01:01:03:01-02", ];
+  "364TGCA...CTA" -> "593C" [label="C. of DOB*01:04:01:01-02", ];
+  "364TGCA...CTA" -> "593T" [label="DOB*01:04:01:01-02", ];
+  "704TTGG...ATC" -> "733A" [label="DOB*01:03", ];
+  "704TTGG...ATC" -> "733G" [label="C. of DOB*01:03", ];
+  "593T" -> "594ACCT...CCT" [label="DOB*01:04:01:01-02", ];
+  "B2-646" -> "647GAGC...CTA" [label="Everything", ];
+  "98TTTG...GGA" -> "286A" [label="DOB*01:01:02;DOB*01:02:02", ];
+  "98TTTG...GGA" -> "286G" [label="C. of DOB*01:01:02;DOB*01:02:02", ];
+  "S1-DOB*01:01:01:01-04;DOB*01:01:02;DOB*01:01:03:01-02;DOB*01:02:01-02;DOB*01:03;DOB*01:04:01:01-02;DOB*01:05" -> "1ATGG...CCC" [
+  label="Everything", ];
+  "54ACTG...CAG" -> "B0-92" [label="Everything", ];
+  "759GATA...GAG" -> "B4-791" [label="Everything", ];
+  "B0-92" -> "93AAGA" [label="Everything", ];
+  "93AAGA" -> "97C" [label="DOB*01:01:03:01-02", ];
+  "93AAGA" -> "97T" [label="C. of DOB*01:01:03:01-02", ];
+  "828G" -> "E829" [label="C. of DOB*01:02:01;DOB*01:03", ];
+  "703C" -> "704TTGG...ATC" [label="C. of DOB*01:04:01:01-02", ];
+  "286G" -> "287AGGA...AAG" [label="C. of DOB*01:01:02;DOB*01:02:02", ];
+  "647GAGC...CTA" -> "703C" [label="C. of DOB*01:04:01:01-02", ];
+  "647GAGC...CTA" -> "703T" [label="DOB*01:04:01:01-02", ];
+  "733G" -> "734TCAT...AAG" [label="C. of DOB*01:03", ];
+  "286A" -> "287AGGA...AAG" [label="DOB*01:01:02;DOB*01:02:02", ];
+  "733A" -> "734TCAT...AAG" [label="DOB*01:03", ];
+  "630A" -> "631TTTC...GGA" [label="DOB*01:05", ];
+  "734TCAT...AAG" -> "B3-758" [label="Everything", ];
+  "53A" -> "54ACTG...CAG" [label="DOB*01:02:01-02", ];
+  
+  }

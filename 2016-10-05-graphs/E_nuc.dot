@@ -1,0 +1,151 @@
+digraph G {
+  "295T" [shape=box, ];
+  "515C" [shape=box, ];
+  "614AGCC...CGT" [shape=box, ];
+  "B5-1042" [shape=box, ];
+  "534G" [shape=box, ];
+  "1043GGAG...TAA" [shape=box, ];
+  "699G" [shape=box, ];
+  "891AGCC...GTG" [shape=box, ];
+  "S1-E*01:01:01:01-05;E*01:03:01:01-03;E*01:03:02:01-02;E*01:03:03-05;E*01:08N;E*01:06,09-10" [
+  shape=box, ];
+  "539CTAC...CTG" [shape=box, ];
+  "B3-890" [shape=box, ];
+  "385GGCG...TGC" [shape=box, ];
+  "535GAG" [shape=box, ];
+  "975TTGC...CAG" [shape=box, ];
+  "633G" [shape=box, ];
+  "1009GTGG...AGT" [shape=box, ];
+  "E614" [shape=box, ];
+  "337GGTC...GAC" [shape=box, ];
+  "S65-E*01:01:02;E*01:05,07" [shape=box, ];
+  "B2-613" [shape=box, ];
+  "B1-336" [shape=box, ];
+  "534A" [shape=box, ];
+  "831GAGA...CTA" [shape=box, ];
+  "516TCTG...CAG" [shape=box, ];
+  "865T" [shape=box, ];
+  "612G" [shape=box, ];
+  "316G" [shape=box, ];
+  "E612" [shape=box, ];
+  "330AGGCCG" [shape=box, ];
+  "296CTGC...CTA" [shape=box, ];
+  "699A" [shape=box, ];
+  "634ACTC...TGC" [shape=box, ];
+  "E1084" [shape=box, ];
+  "329G" [shape=box, ];
+  "538T" [shape=box, ];
+  "515T" [shape=box, ];
+  "B0-65" [shape=box, ];
+  "830C" [shape=box, ];
+  "974A" [shape=box, ];
+  "974G" [shape=box, ];
+  "295C" [shape=box, ];
+  "1ATGG...CGG" [shape=box, ];
+  "S336-E*01:04" [shape=box, ];
+  "E891" [shape=box, ];
+  "538C" [shape=box, ];
+  "B4-1008" [shape=box, ];
+  "866CCGA...GGA" [shape=box, ];
+  "384G" [shape=box, ];
+  "633C" [shape=box, ];
+  "384A" [shape=box, ];
+  "830A" [shape=box, ];
+  "329A" [shape=box, ];
+  "317TACA...AGC" [shape=box, ];
+  "66GCTC...GAA" [shape=box, ];
+  "316C" [shape=box, ];
+  "865C" [shape=box, ];
+  "700GAGA...AGC" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "295T" -> "296CTGC...CTA" [label="E*01:01:02;E*01:03:02:01-02;E*01:03:03-04",
+                             ];
+  "515C" -> "516TCTG...CAG" [label="C. of E*01:03:03", ];
+  "614AGCC...CGT" -> "633C" [label="E*01:03:05", ];
+  "614AGCC...CGT" -> "633G" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                             ];
+  "B5-1042" -> "1043GGAG...TAA" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                                 ];
+  "534G" -> "535GAG" [label="E*01:04", ];
+  "1043GGAG...TAA" -> "E1084" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                               ];
+  "699G" -> "700GAGA...AGC" [label="C. of E*01:01:02;E*01:03:04;E*01:04-05,07",
+                             ];
+  "891AGCC...GTG" -> "974A" [label="E*01:10", ];
+  "891AGCC...GTG" -> "974G" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07,10",
+                             ];
+  "S1-E*01:01:01:01-05;E*01:03:01:01-03;E*01:03:02:01-02;E*01:03:03-05;E*01:08N;E*01:06,09-10" -> "1ATGG...CGG" [
+  label="C. of E*01:01:02;E*01:04-05,07", ];
+  "539CTAC...CTG" -> "E612" [label="E*01:04", ];
+  "539CTAC...CTG" -> "612G" [label="C. of E*01:04", ];
+  "B3-890" -> "E891" [label="E*01:03:05", ];
+  "B3-890" -> "891AGCC...GTG" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                               ];
+  "385GGCG...TGC" -> "515C" [label="C. of E*01:03:03", ];
+  "385GGCG...TGC" -> "515T" [label="E*01:03:03", ];
+  "535GAG" -> "538C" [label="C. of E*01:07", ];
+  "535GAG" -> "538T" [label="E*01:07", ];
+  "975TTGC...CAG" -> "B4-1008" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                                ];
+  "633G" -> "634ACTC...TGC" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                             ];
+  "1009GTGG...AGT" -> "B5-1042" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                                 ];
+  "337GGTC...GAC" -> "384A" [label="E*01:01:01:01-05;E*01:01:02;E*01:07,09", ];
+  "337GGTC...GAC" -> "384G" [label="C. of E*01:01:01:01-05;E*01:01:02;E*01:07,09",
+                             ];
+  "S65-E*01:01:02;E*01:05,07" -> "B0-65" [label="E*01:01:02;E*01:05,07", ];
+  "B2-613" -> "E614" [label="E*01:01:02;E*01:05,07", ];
+  "B2-613" -> "614AGCC...CGT" [label="C. of E*01:01:02;E*01:04-05,07", ];
+  "B1-336" -> "337GGTC...GAC" [label="Everything", ];
+  "534A" -> "535GAG" [label="C. of E*01:04", ];
+  "831GAGA...CTA" -> "865C" [label="C. of E*01:01:02;E*01:04-07", ];
+  "831GAGA...CTA" -> "865T" [label="E*01:06", ];
+  "516TCTG...CAG" -> "534A" [label="C. of E*01:04", ];
+  "516TCTG...CAG" -> "534G" [label="E*01:04", ];
+  "865T" -> "866CCGA...GGA" [label="E*01:06", ];
+  "612G" -> "B2-613" [label="C. of E*01:04", ];
+  "316G" -> "317TACA...AGC" [label="E*01:08N", ];
+  "330AGGCCG" -> "B1-336" [label="C. of E*01:04", ];
+  "296CTGC...CTA" -> "316C" [label="C. of E*01:08N;E*01:04", ];
+  "296CTGC...CTA" -> "316G" [label="E*01:08N", ];
+  "699A" -> "700GAGA...AGC" [label="E*01:03:04", ];
+  "634ACTC...TGC" -> "699A" [label="E*01:03:04", ];
+  "634ACTC...TGC" -> "699G" [label="C. of E*01:01:02;E*01:03:04;E*01:04-05,07",
+                             ];
+  "329G" -> "330AGGCCG" [label="C. of E*01:04-05", ];
+  "538T" -> "539CTAC...CTG" [label="E*01:07", ];
+  "515T" -> "516TCTG...CAG" [label="E*01:03:03", ];
+  "B0-65" -> "66GCTC...GAA" [label="C. of E*01:04", ];
+  "830C" -> "831GAGA...CTA" [label="E*01:09", ];
+  "974A" -> "975TTGC...CAG" [label="E*01:10", ];
+  "974G" -> "975TTGC...CAG" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07,10",
+                             ];
+  "295C" -> "296CTGC...CTA" [label="C. of E*01:01:02;E*01:03:02:01-02;E*01:03:03-04;E*01:04",
+                             ];
+  "1ATGG...CGG" -> "B0-65" [label="C. of E*01:01:02;E*01:04-05,07", ];
+  "S336-E*01:04" -> "B1-336" [label="E*01:04", ];
+  "538C" -> "539CTAC...CTG" [label="C. of E*01:07", ];
+  "B4-1008" -> "1009GTGG...AGT" [label="C. of E*01:01:02;E*01:03:05;E*01:04-05,07",
+                                 ];
+  "866CCGA...GGA" -> "B3-890" [label="C. of E*01:01:02;E*01:04-05,07", ];
+  "384G" -> "385GGCG...TGC" [label="C. of E*01:01:01:01-05;E*01:01:02;E*01:07,09",
+                             ];
+  "633C" -> "634ACTC...TGC" [label="E*01:03:05", ];
+  "384A" -> "385GGCG...TGC" [label="E*01:01:01:01-05;E*01:01:02;E*01:07,09", ];
+  "830A" -> "831GAGA...CTA" [label="C. of E*01:01:02;E*01:04-05,07,09", ];
+  "329A" -> "330AGGCCG" [label="E*01:05", ];
+  "317TACA...AGC" -> "329A" [label="E*01:05", ];
+  "317TACA...AGC" -> "329G" [label="C. of E*01:04-05", ];
+  "66GCTC...GAA" -> "295C" [label="C. of E*01:01:02;E*01:03:02:01-02;E*01:03:03-04;E*01:04",
+                            ];
+  "66GCTC...GAA" -> "295T" [label="E*01:01:02;E*01:03:02:01-02;E*01:03:03-04",
+                            ];
+  "316C" -> "317TACA...AGC" [label="C. of E*01:08N;E*01:04", ];
+  "865C" -> "866CCGA...GGA" [label="C. of E*01:01:02;E*01:04-07", ];
+  "700GAGA...AGC" -> "830A" [label="C. of E*01:01:02;E*01:04-05,07,09", ];
+  "700GAGA...AGC" -> "830C" [label="E*01:09", ];
+  
+  }
