@@ -25,13 +25,11 @@ let report_mismatches el_to_string state aindex mm =
   in
   printf "finished reporting mismatches\n%!"
 
-module type Config = sig
+module type Single_config = sig
 
   type t  (* How we measure the alignment of a sequence against an allele. *)
 
   val to_string : t -> string           (* Display *)
-
-  val to_final_float : t -> float       (* For projecting to floats *)
 
   type stop_parameter
   type thread
@@ -41,149 +39,116 @@ module type Config = sig
   val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread -> Index.position ->
     ([ `Finished of t Alleles.Map.t | `Stopped of t Alleles.Map.t ], string) result
 
-  type alignment_measure
+  val reduce_across_positions : t Alleles.Map.t -> t Alleles.Map.t list -> t Alleles.Map.t
 
-  val to_am : t Alleles.Map.t -> alignment_measure
+end (* Single_config *)
 
-  val compare_am : alignment_measure -> alignment_measure -> int
+type sequence_alignment_error =
+  | NoPositions
+  | AllStopped of int
+  | Other of string
 
+module AgainstSequence (C : Single_config) = struct
+
+  let one ?early_stop g idx seq =
+    match Index.lookup idx (C.thread_to_seq seq) with
+    | Error e -> Error (Other e)
+    | Ok []   -> Error NoPositions
+    | Ok ps   ->
+        let rec loop acc = function
+          | []     -> `Fin acc
+          | h :: t ->
+              match C.compute ?early_stop g seq h with
+              | Error e -> `Errored e
+              | Ok r -> loop (r :: acc) t
+        in
+        match loop [] ps with
+        | `Errored e -> Error (Other e)
+        | `Fin res ->
+            let f = function | `Finished f -> `Fst f | `Stopped s -> `Snd s in
+            match List.partition_map res ~f with
+            | [], []      -> assert false
+            | [], als     -> Error (AllStopped (List.length als))
+            | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
+
+  type stop_parameter = C.stop_parameter
+  type thread = C.thread
+
+end (* AgainstSequence *)
+
+module ThreadIsJustSequence = struct
+  type thread = string
+  let thread_to_seq s = s
 end
 
-module AgainstOneSeq (C : Config) = struct
+module ListMismatches_config = struct
 
-  let one ?(verbose=false) ?(multi_pos=`Best) ?early_stop g idx seq =
-    let report state mm =
-      if verbose then
-        report_mismatches C.to_string state g.Ref_graph.aindex mm
-    in
-    let to_final_map = Alleles.Map.map_wa ~f:C.to_final_float in
-    let rec across_positions error_msg = function
-      | []     -> error "%s" error_msg
-      | h :: t ->
-        C.compute ?early_stop g seq h >>= function
-          | `Stopped mm  ->
-              report "stopped" mm;
-              across_positions "stopped on previous indexed positions" t
-          | `Finished mm ->
-              report "finished" mm;
-              match t with
-              | [] -> Ok (`Finished (to_final_map mm))
-              | tl ->
-                  match multi_pos with
-                  | `TakeFirst    -> Ok (`Finished (to_final_map mm))
-                  | `Average      ->
-                      let lm = to_final_map mm in
-                      let rec loop n = function
-                        | []     -> Ok (`Finished lm)
-                        | p :: t ->
-                            C.compute ?early_stop g seq p >>= function
-                              | `Stopped mm  ->
-                                  report "stopped during averaging" mm;
-                                  loop n t
-                              | `Finished mm ->
-                                  report "finished during averaging" mm;
-                                  (* Online mean update formula *)
-                                  Alleles.Map.update2 ~source:mm ~dest:lm
-                                    (fun v m -> m +. n *. ((C.to_final_float v) -. m) /. (n +. 1.));
-                                  loop (n +. 1.) t
-                      in
-                      loop 1.0 tl
-                  | `Best ->
-                      let current_best = C.to_am mm in
-                      (*let current_best = Alleles.Map.fold_wa mm ~init:max_int ~f:min in *)
-                      let rec loop b bm = function
-                        | []     -> Ok (`Finished (to_final_map bm))
-                        | p :: t ->
-                            C.compute ?early_stop g seq p >>= function
-                              | `Stopped mm ->
-                                  report "stopped during best search" mm;
-                                  loop b bm t
-                              | `Finished mm ->
-                                  report "finished during best search" mm;
-                                  let nb = C.to_am mm in
-                                  (*let nb = Alleles.Map.fold_wa mm ~init:max_int ~f:min in *)
-                                  if C.compare_am nb b < 0 then
-                                    loop nb mm t
-                                  else
-                                    loop b bm t
-                      in
-                      loop current_best mm tl
-    in
-    Index.lookup idx (C.thread_to_seq seq) >>= (across_positions "no index found!")
+  type t = (int * int) list
+  let to_string l =
+    String.concat ~sep:"; "
+      (List.map l ~f:(fun (p,v) -> sprintf "(%d,%d)" p v))
 
-end (* AgainstOneSeq *)
+  type stop_parameter = int * float
 
-module SequenceMismatches = AgainstOneSeq ( struct
+  include ThreadIsJustSequence
+
+  let compute = Alignment.compute_mismatches_lst
+
+  (* Lowest mismatch across all alleles. *)
+  let to_min =
+    Alleles.Map.fold_wa ~init:max_int ~f:(fun mx lst ->
+      let s = List.fold_left lst ~init:0 ~f:(fun s (_, v) -> s + v) in
+      min mx s)
+
+  let reduce_across_positions s = function
+    | [] -> s
+    | ts ->
+        let b = to_min s in
+        List.fold_left ts ~init:(b, s) ~f:(fun (b, s) m ->
+          let bm = to_min m in
+          if bm < b then
+            (bm, m)
+          else
+            (b, s))
+        |> snd
+
+end (* ListMismatches_config *)
+
+module ListMismatches = AgainstSequence (ListMismatches_config)
+
+module SequenceMismatches = AgainstSequence (struct
 
   type t = int
   let to_string = sprintf "%d"
-  let to_final_float m = float m
 
   type stop_parameter = int * float
-  type thread = string
 
-  let thread_to_seq t = t
+  include ThreadIsJustSequence
 
   let compute = Alignment.compute_mismatches
 
   (* Lowest mismatch across all alleles. *)
-  type alignment_measure = int
-
-  (* Keep the map with the lowest mismatch across all alleles *)
-  let to_am = Alleles.Map.fold_wa ~init:max_int ~f:min
-  let compare_am am1 am2 = am1 - am2
+  let to_min = Alleles.Map.fold_wa ~init:max_int ~f:min
+  let reduce_across_positions s = function
+    | [] -> s
+    | ts ->
+        let b = to_min s in
+        List.fold_left ts ~init:(b, s) ~f:(fun (b, s) m ->
+          let bm = to_min m in
+          if bm < b then
+            (bm, m)
+          else
+            (b, s))
+        |> snd
 
 end)
 
-let multiple_fold_lst ?verbose ?multi_pos ?early_stop g idx =
-  let list_map = Alleles.Map.make g.Ref_graph.aindex [] in
-  let v = Option.value verbose ~default:false in
-  let update v l = v :: l in
-  let fold amap seq =
-    SequenceMismatches.one ?verbose ?multi_pos ?early_stop g idx seq >>= begin function
-      | `Stopped _m ->
-          if v then printf "stopped result\n";
-          Ok amap
-      | `Finished m ->
-          if v then printf "finished result\n";
-          Alleles.Map.update2 ~source:m ~dest:amap update;
-          Ok amap
-      end
-  in
-  list_map, fold
-
-let multiple_fold ?verbose ?multi_pos ?as_ ?early_stop ?er g idx =
-  let zero_map = Alleles.Map.make g.Ref_graph.aindex 0. in
-  let one_map = Alleles.Map.make g.Ref_graph.aindex 1. in
-  let v = Option.value verbose ~default:false in
-  let init, update =
-    match as_ with
-    | None             (* The order of arguments is not a "fold_left", it is 'a -> 'b -> 'b *)
-    | Some `Mismatches    -> zero_map, (fun ?er ~len m s -> m +. s)
-    | Some `LogLikelihood -> zero_map, (fun ?er ~len m s -> s +. log_likelihood ~len ?er m)
-    | Some `Likelihood    -> one_map,  (fun ?er ~len m s -> s *. likelihood ~len ?er m)
-  in
-  let fold amap seq =
-    let len = String.length seq in
-    SequenceMismatches.one ?verbose ?multi_pos ?early_stop g idx seq >>= begin function
-      | `Stopped _m ->
-          if v then printf "stopped result\n";
-          Ok amap
-      | `Finished m ->
-          if v then printf "finished result\n";
-          Alleles.Map.update2 ~source:m ~dest:amap (update ?er ~len);
-          Ok amap
-      end
-  in
-  init, fold
-
-module PhredLikelihood = AgainstOneSeq ( struct
+module PhredLlhdMismatches = AgainstSequence ( struct
 
   open Alignment
 
   type t = PhredLikelihood_config.t
   let to_string = PhredLikelihood_config.to_string
-  let to_final_float t = t.PhredLikelihood_config.sum_llhd
 
   type stop_parameter = int * float
   type thread = string * float array
@@ -196,31 +161,170 @@ module PhredLikelihood = AgainstOneSeq ( struct
      1. lowest number of mismatches as in the other mismatch counting algorithms
      2. highest sum of log likelihoods -> highest probability
      we use 2. *)
-  type alignment_measure = float
-
-  let to_am =
+  let to_max =
     Alleles.Map.fold_wa ~init:neg_infinity
       ~f:(fun a t -> max a t.PhredLikelihood_config.sum_llhd)
 
-  let compare_am am1 am2 =
-    (* Higher is better. *)
-    let d = am2 -. am1 in
-    if d = 0. then 0 else if d < 0. then -1 else 1
+  let reduce_across_positions s = function
+    | [] -> s
+    | ts ->
+        let b = to_max s in
+        List.fold_left ts ~init:(b, s) ~f:(fun (b, s) m ->
+          let bm = to_max m in
+          if bm > b then
+            (bm, m)
+          else
+            (b, s))
+        |> snd
 
+end) (* PhredLlhdMismatches *)
+
+module type Multiple_config = sig
+
+  type mp     (* map step *)
+  type re     (* reduce across alleles *)
+
+  val empty : re
+
+  type stop_parameter
+  type thread
+
+  val to_thread : Biocaml_unix.Fastq.item -> (thread, string) result
+
+  val map :
+    ?early_stop:stop_parameter ->
+    Ref_graph.t -> Index.t ->
+    thread ->
+    (mp Alleles.Map.t, sequence_alignment_error) result
+
+  val reduce : mp -> re -> re
+
+end (* Multiple_config *)
+
+module Multiple (C : Multiple_config) = struct
+
+  exception DidNotMap of Biocaml_unix.Fastq.item * sequence_alignment_error
+
+  let f ?early_stop g idx =
+    let init = Alleles.Map.make g.Ref_graph.aindex C.empty in
+    let fold amap fqi =
+      match C.to_thread fqi with
+      | Error e -> raise (DidNotMap (fqi, Other e))
+      | Ok seq  ->
+          match C.map ?early_stop g idx seq with
+          | Error e -> raise (DidNotMap (fqi, e))
+          | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
+                      amap
+    in
+    init, fold
+
+  let against_fastq ?number_of_reads fastq_file ?early_stop g idx =
+    let init, f = f ?early_stop g idx in
+    try
+      Ok (Fastq.fold ?number_of_reads ~init ~f fastq_file)
+    with DidNotMap (s,e) ->
+      Error (s,e)
+
+end (* Multiple *)
+
+(** Typing. *)
+let report_sequence_alignment_error fqi = function
+  | NoPositions  -> printf "For %s No positions found\n" fqi.Biocaml_unix.Fastq.sequence
+  | AllStopped n -> printf "For %s Stopped %d positions\n" fqi.Biocaml_unix.Fastq.sequence n
+  | Other m      -> printf "For %s Error: %s\n" fqi.Biocaml_unix.Fastq.sequence m
+
+module MismatchesLists = Multiple (struct
+  type mp = (int * int) list
+  type re = (int * int) list list
+  let empty = []
+
+  type stop_parameter = ListMismatches.stop_parameter
+  type thread = ListMismatches.thread
+
+  let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
+  let map = ListMismatches.one
+  let reduce v l = v :: l
 end)
 
-let multiple_phred ?verbose ?multi_pos ?early_stop g idx =
-  let init = Alleles.Map.make g.Ref_graph.aindex 0. in
-  let v = Option.value verbose ~default:false in
-  let fold amap seq =
-    PhredLikelihood.one ?verbose ?multi_pos ?early_stop g idx seq >>= begin function
-      | `Stopped _m ->
-          if v then printf "stopped result\n";
-          Ok amap
-      | `Finished m ->
-          if v then printf "finished result\n";
-          Alleles.Map.update2 ~source:m ~dest:amap (+.);
-          Ok amap
-      end
+module Mismatches = Multiple (struct
+  type mp = int
+  type re = int
+  let empty = 0
+
+  type stop_parameter = SequenceMismatches.stop_parameter
+  type thread = SequenceMismatches.thread
+
+  let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
+  let map = SequenceMismatches.one
+  let reduce = (+)
+end)
+
+module Llhd_config = struct
+  type mp = float
+  type re = float
+
+  type stop_parameter = SequenceMismatches.stop_parameter
+  type thread = SequenceMismatches.thread
+
+  let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
+  let map l ?early_stop g idx th =
+    SequenceMismatches.one ?early_stop g idx th >>= fun m ->
+      Ok (Alleles.Map.map_wa ~f:(fun m -> l ~len:(String.length th) m) m)
+
+end (* Llhd_config *)
+
+module Phred_lhd = Multiple (struct
+  type mp = float
+  type re = float
+
+  let empty = 0.
+
+  type stop_parameter = PhredLlhdMismatches.stop_parameter
+  type thread = PhredLlhdMismatches.thread
+
+  let to_thread fqi =
+    let module CE = Core_kernel.Error in
+    let module CR = Core_kernel.Std.Result in
+    match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
+    | CR.Error e -> Error (CE.to_string_hum e)
+    | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr)
+
+  let map ?early_stop g idx th =
+    let open Alignment in
+    PhredLlhdMismatches.one ?early_stop g idx th >>= fun amap ->
+      Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
+
+  let reduce = (+.)
+
+end) (* Phred_lhd *)
+
+let type_ ?verbose ?filter ~as_(*=`PhredLlhdMismatches*) g idx ?number_of_reads fastq_file =
+  let early_stop =
+    Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
-  init, fold
+  match as_ with
+  | `MisList              ->
+      MismatchesLists.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
+        fun m -> Ok (`MisList m)
+  | `Mismatches           ->
+      Mismatches.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
+        fun m -> Ok (`Mismatches m)
+  | `Likelihood error     ->
+      let module Ml = Multiple (struct
+        include Llhd_config
+        let empty = 1.
+        let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
+        let reduce l a = a *. l
+      end) in
+      Ml.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
+        fun m -> Ok (`Likelihood m)
+  | `LogLikelihood error  ->
+      let module Ml = Multiple (struct
+        include Llhd_config
+        let empty = 0.
+        let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
+        let reduce l a = a +. l
+      end) in
+      Ml.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
+        fun m -> Ok (`LogLikelihood m)
+  | `PhredLikelihood ->
