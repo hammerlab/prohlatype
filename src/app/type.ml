@@ -15,10 +15,11 @@ let sort_values_by_mismatches_assoc assoc =
     let r = compare v1 v2 in
     if r = 0 then compare a2 a1 else r)
 
-let output_values_assoc ?(set_size=true) aindex assoc =
+let output_values_assoc ?(set_size=true) to_string aindex assoc =
   let max_length = if set_size then 60 else 1000 in
   List.iter assoc ~f:(fun (w, a) ->
-    printf "%0.8f\t%s%s\n" w
+    printf "%s\t%s%s\n"
+      (to_string w)
       (if set_size then sprintf "%d\t" (Alleles.Set.cardinal a) else "")
       (insert_chars ['\t'; '\t'; '\n']
         (Alleles.Set.to_human_readable aindex ~max_length ~complement:`No a)))
@@ -37,24 +38,25 @@ let report_errors ~error_output elst =
       (Path_inference.sequence_alignment_error_to_string sae));
   if close then close_out oc
 
-let report_mismatches ~print_top _ = ()
+let report_mismatches ~print_top g amap =
+  let open Ref_graph in
+  begin match print_top with
+    | None ->
+        Alleles.Map.values_assoc g.aindex amap
+        |> sort_values_by_mismatches_assoc
+    | Some n ->
+        Alleles.Map.fold g.aindex amap ~init:[]
+          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+        |> sort_values_by_mismatches_assoc
+        |> fun l -> List.take l n
+  end
+  |> output_values_assoc (sprintf "%3d") g.aindex
+
+
 let report_mismatches_list ~print_top _ = ()
 let report_likelihood ~print_top _ = ()
 
 (*
-let report_mismatches g amap =
-  let open Ref_graph in function
-  | None ->
-      Alleles.Map.values_assoc g.aindex amap
-      |> sort_values_by_mismatches_assoc
-      |> output_values_assoc g.aindex
-  | Some n ->
-      Alleles.Map.fold g.aindex amap ~init:[]
-        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-      |> sort_values_by_mismatches_assoc
-      |> fun l -> List.take l n
-      |> output_values_assoc g.aindex
-
 let report_mismatches_list g amap =
   let open Ref_graph in
   Alleles.Map.iter g.aindex amap ~f:(fun l a ->
@@ -112,7 +114,7 @@ let type_ verbose
   in
   match Path_inference.type_ ?filter ~as_:new_as g idx ?number_of_reads ~fastq_file with
   | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_mismatches ~print_top amap
+                                           report_mismatches ~print_top g amap
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
                                            report_mismatches_list ~print_top amap
   | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
