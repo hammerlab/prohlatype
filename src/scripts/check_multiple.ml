@@ -4,7 +4,7 @@ open Common
 open Util
 
 let graph ~file ?n () =
-  let g = Cache.(graph (graph_arg ?n ~file ())) in
+  let g = Cache.(graph (graph_args ?n ~file ())) in
   n, g
 
 let more_than_one_sb g =

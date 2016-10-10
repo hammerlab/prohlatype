@@ -47,6 +47,7 @@ type sequence_alignment_error =
   | NoPositions
   | AllStopped of int
   | Other of string
+  | ToThread of string
 
 module AgainstSequence (C : Single_config) = struct
 
@@ -203,27 +204,31 @@ end (* Multiple_config *)
 
 module Multiple (C : Multiple_config) = struct
 
-  exception DidNotMap of Biocaml_unix.Fastq.item * sequence_alignment_error
-
-  let f ?early_stop g idx =
-    let init = Alleles.Map.make g.Ref_graph.aindex C.empty in
-    let fold amap fqi =
+  let fold_over_fastq ?number_of_reads fastq_file ?early_stop g idx =
+    let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
+    let f (errors, amap) fqi =
       match C.to_thread fqi with
-      | Error e -> raise (DidNotMap (fqi, Other e))
+      | Error e     -> ((ToThread e, fqi) :: errors), amap
       | Ok seq  ->
           match C.map ?early_stop g idx seq with
-          | Error e -> raise (DidNotMap (fqi, e))
+          | Error e -> ((e, fqi) :: errors), amap
           | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
-                      amap
+                       errors, amap
     in
-    init, fold
+    Fastq.fold ?number_of_reads ~init:([], amap) ~f fastq_file
 
-  let against_fastq ?number_of_reads fastq_file ?early_stop g idx =
-    let init, f = f ?early_stop g idx in
-    try
-      Ok (Fastq.fold ?number_of_reads ~init ~f fastq_file)
-    with DidNotMap (s,e) ->
-      Error (s,e)
+  let map_over_fastq ?number_of_reads fastq_file ?early_stop g idx =
+    let f fqi =
+      match C.to_thread fqi with
+      | Error e     -> Error (ToThread e, fqi)
+      | Ok seq  ->
+          match C.map ?early_stop g idx seq with
+          | Error e -> Error (e, fqi)
+          | Ok a    -> Ok a
+    in
+    Fastq.fold ?number_of_reads ~init:[] fastq_file
+      ~f:(fun acc fqi -> (f fqi) :: acc)
+    |> List.rev
 
 end (* Multiple *)
 
@@ -232,8 +237,9 @@ let report_sequence_alignment_error fqi = function
   | NoPositions  -> printf "For %s No positions found\n" fqi.Biocaml_unix.Fastq.sequence
   | AllStopped n -> printf "For %s Stopped %d positions\n" fqi.Biocaml_unix.Fastq.sequence n
   | Other m      -> printf "For %s Error: %s\n" fqi.Biocaml_unix.Fastq.sequence m
+  | ToThread m   -> printf "For %s ToThread: %s\n" fqi.Biocaml_unix.Fastq.sequence m
 
-module MismatchesLists = Multiple (struct
+module MismatchesList = Multiple (struct
   type mp = (int * int) list
   type re = (int * int) list list
   let empty = []
@@ -298,17 +304,17 @@ module Phred_lhd = Multiple (struct
 
 end) (* Phred_lhd *)
 
-let type_ ?verbose ?filter ~as_(*=`PhredLlhdMismatches*) g idx ?number_of_reads fastq_file =
+let map ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
-  | `MisList              ->
-      MismatchesLists.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
-        fun m -> Ok (`MisList m)
+  | `MismatchesList       ->
+      `MismatchesList (MismatchesList.map_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
   | `Mismatches           ->
-      Mismatches.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
-        fun m -> Ok (`Mismatches m)
+      `Mismatches (Mismatches.map_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
   | `Likelihood error     ->
       let module Ml = Multiple (struct
         include Llhd_config
@@ -316,8 +322,8 @@ let type_ ?verbose ?filter ~as_(*=`PhredLlhdMismatches*) g idx ?number_of_reads 
         let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
         let reduce l a = a *. l
       end) in
-      Ml.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
-        fun m -> Ok (`Likelihood m)
+      `Likelihood (Ml.map_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
   | `LogLikelihood error  ->
       let module Ml = Multiple (struct
         include Llhd_config
@@ -325,6 +331,41 @@ let type_ ?verbose ?filter ~as_(*=`PhredLlhdMismatches*) g idx ?number_of_reads 
         let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
         let reduce l a = a +. l
       end) in
-      Ml.against_fastq ?number_of_reads fastq_file ?early_stop g idx >>=
-        fun m -> Ok (`LogLikelihood m)
+      `LogLikelihood (Ml.map_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
   | `PhredLikelihood ->
+      `PhredLikelihood (Phred_lhd.map_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
+
+let type_ ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
+  let early_stop =
+    Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
+  in
+  match as_ with
+  | `MismatchesList       ->
+      `MismatchesList (MismatchesList.fold_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
+  | `Mismatches           ->
+      `Mismatches (Mismatches.fold_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
+  | `Likelihood error     ->
+      let module Ml = Multiple (struct
+        include Llhd_config
+        let empty = 1.
+        let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
+        let reduce l a = a *. l
+      end) in
+      `Likelihood (Ml.fold_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
+  | `LogLikelihood error  ->
+      let module Ml = Multiple (struct
+        include Llhd_config
+        let empty = 0.
+        let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
+        let reduce l a = a +. l
+      end) in
+      `LogLikelihood (Ml.fold_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)
+  | `PhredLikelihood ->
+      `PhredLikelihood (Phred_lhd.fold_over_fastq
+          ?number_of_reads fastq_file ?early_stop g idx)

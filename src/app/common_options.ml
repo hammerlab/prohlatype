@@ -87,8 +87,8 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-  allele_regex_list join_same_sequence remove_reference =
+let to_filename_and_graph_args ~alignment_file num_alt_to_add ~allele_list
+  ~allele_regex_list ~join_same_sequence ~remove_reference =
   let open Ref_graph in
   let base = Filename.basename alignment_file |> Filename.chop_extension in
   let option_based_fname, which =

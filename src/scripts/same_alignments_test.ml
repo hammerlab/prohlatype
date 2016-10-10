@@ -49,9 +49,9 @@ open Common
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
   if cache then
-    Cache.(graph_and_two_index { k = k; g = graph_arg ~file ?n () })
+    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~file ?n () })
   else
-    Cache.(graph_and_two_index_no_cache { k = k; g = graph_arg ~file ?n () })
+    Cache.(graph_and_two_index_no_cache { k = k; graph_args = graph_args ~file ?n () })
 
 let unwrap_sf = function | `Stopped r | `Finished r -> r
 
