@@ -23,7 +23,19 @@ let output_values_assoc ?(set_size=true) aindex assoc =
       (insert_chars ['\t'; '\t'; '\n']
         (Alleles.Set.to_human_readable aindex ~max_length ~complement:`No a)))
 
-let report_errors _ = () (*failwith "NI" *)
+let default_error_fname = "typing_errors.log"
+
+let report_errors ~error_output elst =
+  let oc, close =
+    match error_output with
+    | `DefaultFile -> open_out default_error_fname, true
+    | `Stderr      -> stderr, false
+    | `Stdout      -> stdout, false
+  in
+  List.iter elst ~f:(fun (sae, fqi) ->
+    fprintf oc "%s\n%s" fqi.Biocaml_unix.Fastq.sequence
+      (Path_inference.sequence_alignment_error_to_string sae));
+  if close then close_out oc
 
 let report_mismatches ~print_top _ = ()
 let report_mismatches_list ~print_top _ = ()
@@ -79,7 +91,7 @@ let type_ verbose
   (* How are we typing *)
     filter multi_pos as_stat likelihood_error
   (* Output *)
-    print_top do_not_normalize do_not_bucket =
+    print_top do_not_normalize do_not_bucket error_output =
   let open Cache in
   let open Ref_graph in
   let _option_based_fname, graph_args =
@@ -99,15 +111,15 @@ let type_ verbose
     | `PhredLikelihood  -> `PhredLikelihood
   in
   match Path_inference.type_ ?filter ~as_:new_as g idx ?number_of_reads ~fastq_file with
-  | `Mismatches (error_list, amap)      -> report_errors error_list;
+  | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
                                            report_mismatches ~print_top amap
-  | `MismatchesList (error_list, amap)  -> report_errors error_list;
+  | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
                                            report_mismatches_list ~print_top amap
-  | `Likelihood (error_list, amap)      -> report_errors error_list;
+  | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
                                            report_likelihood ~print_top amap
-  | `LogLikelihood (error_list, amap)   -> report_errors error_list;
+  | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
                                            report_likelihood ~print_top amap
-  | `PhredLikelihood (error_list, amap) -> report_errors error_list;
+  | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
                                            report_likelihood ~print_top amap
 
        (*    let amap =
@@ -201,6 +213,17 @@ let () =
     in
     Arg.(value & opt float default & info ~doc ~docv ["likelihood-error"])
   in
+  let error_output_flag =
+    let doc dest =
+      sprintf "Output errors such as sequences that don't match to %s. \
+               By default output is written to %s." dest default_error_fname
+    in
+    Arg.(value & vflag `DefaultFile
+      [ `Stdout,      info ~doc:(doc "standard output") ["error-stdout"]
+      ; `Stderr,      info ~doc:(doc "standard error") ["error-stderr"]
+      ; `DefaultFile, info ~doc:(doc "default filename") ["error-default"]
+      ])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -218,21 +241,23 @@ let () =
     in
     Term.(const type_
             $ verbose_flag
-
+            (* Graph construction args *)
             $ file_arg $ num_alt_arg $ allele_arg $ allele_regex_arg
               $ do_not_join_same_sequence_paths_flag
               $ remove_reference_flag
-
+            (* Index *)
             $ kmer_size_arg
+            (* Process *)
             $ no_cache_flag
-
+            (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg
-
+            (* How are we typing *)
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
-
+            (* Output *)
             $ print_top_flag
-            $ do_not_normalize_flag
-            $ do_not_bucket_flag
+              $ do_not_normalize_flag
+              $ do_not_bucket_flag
+              $ error_output_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with

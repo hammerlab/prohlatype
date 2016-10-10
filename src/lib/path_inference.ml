@@ -233,11 +233,11 @@ module Multiple (C : Multiple_config) = struct
 end (* Multiple *)
 
 (** Typing. *)
-let report_sequence_alignment_error fqi = function
-  | NoPositions  -> printf "For %s No positions found\n" fqi.Biocaml_unix.Fastq.sequence
-  | AllStopped n -> printf "For %s Stopped %d positions\n" fqi.Biocaml_unix.Fastq.sequence n
-  | Other m      -> printf "For %s Error: %s\n" fqi.Biocaml_unix.Fastq.sequence m
-  | ToThread m   -> printf "For %s ToThread: %s\n" fqi.Biocaml_unix.Fastq.sequence m
+let sequence_alignment_error_to_string = function
+  | NoPositions  -> "No positions found"
+  | AllStopped n -> sprintf "Stopped %d positions" n
+  | Other m      -> sprintf "Error: %s" m
+  | ToThread m   -> sprintf "ToThread: %s" m
 
 module MismatchesList = Multiple (struct
   type mp = (int * int) list
