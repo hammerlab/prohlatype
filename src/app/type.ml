@@ -34,7 +34,9 @@ let report_errors ~error_output elst =
     | `Stdout      -> stdout, false
   in
   List.iter elst ~f:(fun (sae, fqi) ->
-    fprintf oc "%s\n%s\n" fqi.Biocaml_unix.Fastq.sequence
+    fprintf oc "%s\n%s\n%s\n"
+      fqi.Biocaml_unix.Fastq.name
+      fqi.Biocaml_unix.Fastq.sequence
       (Path_inference.sequence_alignment_error_to_string sae));
   if close then close_out oc
 
