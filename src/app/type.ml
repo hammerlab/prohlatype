@@ -76,35 +76,55 @@ let report_mismatches_list ~print_top g amap =
           |> insert_chars ~every:100 ~token:';' ['\t'; '\n']  (* in reverse *)
           |> printf "\t%s\n"))
 
-let report_likelihood ?bucket ~print_top contents g amap =
+let report_likelihood ?reduce_resolution ?bucket ~print_top contents g amap =
   let open Ref_graph in
-  begin match print_top with
-    | None ->
-        begin
-          match bucket with
-          | None   -> Alleles.Map.values_assoc g.aindex amap
-          | Some n ->
-              let s,e =
-                Alleles.Map.fold_wa amap ~init:(infinity, neg_infinity)
-                  ~f:(fun (s, e) v -> (min s v, max e v))
-              in
-              let nf = float n in
-              let d = (e -. s) /. nf in
-              let arr = Array.init n (fun _ -> Alleles.Set.init g.aindex) in
-              Alleles.Map.iter g.aindex amap ~f:(fun v allele ->
-                let index = if v = e then n - 1 else truncate ((v -. s) /. d) in
-                Alleles.Set.set g.aindex arr.(index) allele);
-              Array.mapi ~f:(fun i set -> s +. d *. (float i), set) arr
-              |> Array.to_list
-        end
-        |> sort_values_by_likelihood_assoc
-    | Some n ->
-        Alleles.Map.fold g.aindex amap ~init:[]
-          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-        |> sort_values_by_likelihood_assoc
-        |> fun l -> List.take l n
-  end
-  |> output_values_assoc contents (sprintf "%0.3f") g.aindex
+  match reduce_resolution with
+  | None ->
+    begin match print_top with
+      | None ->
+          begin
+            match bucket with
+            | None   -> Alleles.Map.values_assoc g.aindex amap
+            | Some n ->
+                let s,e =
+                  Alleles.Map.fold_wa amap ~init:(infinity, neg_infinity)
+                    ~f:(fun (s, e) v -> (min s v, max e v))
+                in
+                let nf = float n in
+                let d = (e -. s) /. nf in
+                let arr = Array.init n (fun _ -> Alleles.Set.init g.aindex) in
+                Alleles.Map.iter g.aindex amap ~f:(fun v allele ->
+                  let index = if v = e then n - 1 else truncate ((v -. s) /. d) in
+                  Alleles.Set.set g.aindex arr.(index) allele);
+                Array.mapi ~f:(fun i set -> s +. d *. (float i), set) arr
+                |> Array.to_list
+          end
+          |> sort_values_by_likelihood_assoc
+      | Some n ->
+          Alleles.Map.fold g.aindex amap ~init:[]
+            ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+          |> sort_values_by_likelihood_assoc
+          |> fun l -> List.take l n
+    end
+    |> output_values_assoc contents (sprintf "%0.3f") g.aindex
+  | Some n ->
+      let values =
+        (* TODO: move this logic to Alleles.. *)
+        Alleles.Map.fold g.Ref_graph.aindex ~init:[]
+          ~f:(fun l v al -> (al, v) :: l) amap
+      in
+      let sort values =
+        List.sort values ~cmp:(fun (a1, v1) (a2, v2) ->
+          let r = compare v2 v1 in
+          if r = 0 then compare a2 a1 else r)
+      in
+      let output l = List.iter l ~f:(fun (a, l) -> printf "%0.3f\t%s\n" l a) in
+      match n with
+      | 4 -> sort values |> output
+      | 3 -> sort values |> Compress.compress ~level:`Three |> sort |> output
+      | 2 -> sort values |> Compress.compress ~level:`Two |> sort |> output
+      | 1 -> sort values |> Compress.compress ~level:`One |> sort |> output
+      | _ -> invalid_argf "You promised me parsing! %d" n
 
 let type_
   (* Graph construction args. *)
@@ -119,7 +139,7 @@ let type_
   (* How are we typing *)
     filter multi_pos as_stat likelihood_error
   (* Output *)
-    print_top do_not_normalize bucket error_output =
+    print_top do_not_normalize bucket error_output reduce_resolution =
   let open Cache in
   let open Ref_graph in
   let _option_based_fname, graph_args =
@@ -144,11 +164,14 @@ let type_
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
                                            report_mismatches_list ~print_top g amap
   | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_likelihood ?bucket ~print_top "likelihood" g amap
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "likelihood" g amap
   | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                           report_likelihood ?bucket ~print_top "loglikelihood" g amap
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "loglikelihood" g amap
   | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                           report_likelihood ?bucket ~print_top "phredlihood" g amap
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "phredlihood" g amap
 
        (*    let amap =
               if do_not_normalize then amap else
@@ -253,6 +276,28 @@ let () =
       ; `DefaultFile, info ~doc:(doc "default filename") ["error-default"]
       ])
   in
+  let reduce_resolution_arg =
+    let docv = "Reduce the resolution" in
+    let doc  = "Reduce the resolution of the PDF, to a lower number of \
+                \"digits\". The general HLA allele nomenclature \
+                has 4 levels of specificity depending on the number of colons \
+                in the name. For example A*01:01:01:01 has 4 and A*01:95 \
+                has 2. This argument specifies the number (1,2,or 3) of \
+                digits to reduce results to. For example, specifying 2 will \
+                choose the best (depending on metric) allele out of \
+                A*02:01:01:01, A*02:01:01:03, ...  A*02:01:02, ... \
+                A*02:01:100 for A*02:01. The resulting set will have at most \
+                the specified number of digit groups, but may have less."
+    in
+    let one_to_three_parser s =
+      match positive_int_parser s with
+      | `Ok x when x = 1 || x = 2 || x = 3 -> `Ok x
+      | `Ok x                              -> `Error (sprintf  "not 1 to 3: %d" x)
+      | `Error e                           -> `Error e
+    in
+    let one_to_three = one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d") in
+    Arg.(value & opt (some one_to_three) None & info ~doc ~docv ["reduce-resolution"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -286,6 +331,7 @@ let () =
               $ do_not_normalize_flag
               $ bucket_arg
               $ error_output_flag
+              $ reduce_resolution_arg
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
