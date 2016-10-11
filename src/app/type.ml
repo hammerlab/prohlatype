@@ -104,7 +104,7 @@ let report_likelihood ?bucket ~print_top contents g amap =
   end
   |> output_values_assoc contents (sprintf "%0.3f") g.aindex
 
-let type_ verbose
+let type_
   (* Graph construction args. *)
   alignment_file
     num_alt_to_add allele_list allele_regex_list not_join_same_seq remove_reference
@@ -267,7 +267,6 @@ let () =
       ]
     in
     Term.(const type_
-            $ verbose_flag
             (* Graph construction args *)
             $ file_arg $ num_alt_arg $ allele_arg $ allele_regex_arg
               $ do_not_join_same_sequence_paths_flag
