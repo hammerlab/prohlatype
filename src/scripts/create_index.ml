@@ -5,12 +5,12 @@ let k = 10 ;;
 
 let file = to_alignment_file "A_nuc"
 let gall, idxall =
-  Cache.(graph_and_two_index { k = k ; g = graph_arg ~file () }) ;;
+  Cache.(graph_and_two_index { k = k ; graph_args = graph_args ~file () }) ;;
 
 let g_and_idx ?(k=10) ?file ?n () =
   let file = Option.value file ~default:(to_alignment_file "A_nuc") in
   let g2 =
-    Cache.(graph_and_two_index { k = k; g = graph_arg ?n ~file () })
+    Cache.(graph_and_two_index { k = k; graph_args = graph_args ?n ~file () })
   in
   n, g2
 
