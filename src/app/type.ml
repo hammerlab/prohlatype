@@ -15,14 +15,14 @@ let sort_values_by_mismatches_assoc assoc =
     let r = compare v1 v2 in
     if r = 0 then compare a2 a1 else r)
 
-let output_values_assoc ?(set_size=true) to_string aindex assoc =
-  let max_length = if set_size then 60 else 1000 in
+let output_values_assoc contents to_string aindex assoc =
+  printf "%s\tset size\tset contents\n" contents;
   List.iter assoc ~f:(fun (w, a) ->
-    printf "%s\t%s%s\n"
+    printf "%s\t\t%d\t\t%s\n"
       (to_string w)
-      (if set_size then sprintf "%d\t" (Alleles.Set.cardinal a) else "")
+      (Alleles.Set.cardinal a)
       (insert_chars ['\t'; '\t'; '\n']
-        (Alleles.Set.to_human_readable aindex ~max_length ~complement:`No a)))
+        (Alleles.Set.to_human_readable aindex ~max_length:60 ~complement:`No a)))
 
 let default_error_fname = "typing_errors.log"
 
@@ -34,7 +34,7 @@ let report_errors ~error_output elst =
     | `Stdout      -> stdout, false
   in
   List.iter elst ~f:(fun (sae, fqi) ->
-    fprintf oc "%s\n%s" fqi.Biocaml_unix.Fastq.sequence
+    fprintf oc "%s\n%s\n" fqi.Biocaml_unix.Fastq.sequence
       (Path_inference.sequence_alignment_error_to_string sae));
   if close then close_out oc
 
@@ -50,35 +50,46 @@ let report_mismatches ~print_top g amap =
         |> sort_values_by_mismatches_assoc
         |> fun l -> List.take l n
   end
-  |> output_values_assoc (sprintf "%3d") g.aindex
+  |> output_values_assoc "mismatches" (sprintf "%3d") g.aindex
 
-
-let report_mismatches_list ~print_top _ = ()
-let report_likelihood ~print_top _ = ()
-
-(*
-let report_mismatches_list g amap =
+let report_mismatches_list ~print_top g amap =
   let open Ref_graph in
-  Alleles.Map.iter g.aindex amap ~f:(fun l a ->
-      let s = List.rev l |> List.map ~f:(sprintf "%.2f") |> String.concat ~sep:"," in
-      printf "%s,\t%s\n" a s)
+  let mismatch_sum_across_lists =
+    List.fold_left ~init:0 ~f:(fun init l ->
+      List.fold_left l ~init ~f:(fun s (_, m) -> s + m))
+  in
+  Alleles.Map.fold g.aindex amap ~init:[] ~f:(fun acc l allele ->
+    (mismatch_sum_across_lists l, l, allele) :: acc)
+  |> List.sort ~cmp:(fun (s1, _, _) (s2, _, _) -> compare s1 s2)
+  |> begin fun l ->
+      match print_top with
+      | None -> l
+      | Some n -> List.take l n
+     end
+  |> List.iter ~f:(fun (_sum, l, allele) ->
+        printf "%s\n" allele;
+        List.iter l ~f:(fun l ->
+          List.map l ~f:(fun (p, m) -> sprintf "(%3d,%2d)" p m)
+          |> String.concat ~sep:"; "
+          |> insert_chars ~every:100 ~token:';' ['\t'; '\n']  (* in reverse *)
+          |> printf "\t%s\n"))
 
-let report_likelihood g amap do_not_bucket =
-  let open Ref_graph in function
-  | None ->
-      (if do_not_bucket then amap else
-        (* Round the values so that it is easier to display. *)
-        Alleles.Map.map_wa ~f:(fun x -> (ceil (x *. 10.)) /. 10.) amap)
-      |> Alleles.Map.values_assoc g.aindex
-      |> sort_values_by_likelihood_assoc
-      |> output_values_assoc g.aindex
-  | Some n ->
-      Alleles.Map.fold g.aindex amap ~init:[]
-        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-      |> sort_values_by_likelihood_assoc
-      |> fun l -> List.take l n
-      |> output_values_assoc g.aindex
-      *)
+let report_likelihood ~print_top contents g amap do_not_bucket =
+  let open Ref_graph in
+  begin match print_top with
+    | None ->
+        (if do_not_bucket then amap else
+          (* Round the values so that it is easier to display. *)
+          Alleles.Map.map_wa ~f:(fun x -> (ceil (x *. 10.)) /. 10.) amap)
+        |> Alleles.Map.values_assoc g.aindex
+        |> sort_values_by_likelihood_assoc
+    | Some n ->
+        Alleles.Map.fold g.aindex amap ~init:[]
+          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+        |> sort_values_by_likelihood_assoc
+        |> fun l -> List.take l n
+  end
+  |> output_values_assoc contents (sprintf "%0.3f") g.aindex
 
 let type_ verbose
   (* Graph construction args. *)
@@ -116,13 +127,13 @@ let type_ verbose
   | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
                                            report_mismatches ~print_top g amap
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
-                                           report_mismatches_list ~print_top amap
+                                           report_mismatches_list ~print_top g amap
   | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top amap
+                                           report_likelihood ~print_top "likelihood" g amap do_not_bucket
   | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top amap
+                                           report_likelihood ~print_top "loglikelihood" g amap do_not_bucket
   | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top amap
+                                           report_likelihood ~print_top "phredlihood" g amap do_not_bucket
 
        (*    let amap =
               if do_not_normalize then amap else
