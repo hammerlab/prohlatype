@@ -74,14 +74,27 @@ let report_mismatches_list ~print_top g amap =
           |> insert_chars ~every:100 ~token:';' ['\t'; '\n']  (* in reverse *)
           |> printf "\t%s\n"))
 
-let report_likelihood ~print_top contents g amap do_not_bucket =
+let report_likelihood ?bucket ~print_top contents g amap =
   let open Ref_graph in
   begin match print_top with
     | None ->
-        (if do_not_bucket then amap else
-          (* Round the values so that it is easier to display. *)
-          Alleles.Map.map_wa ~f:(fun x -> (ceil (x *. 10.)) /. 10.) amap)
-        |> Alleles.Map.values_assoc g.aindex
+        begin
+          match bucket with
+          | None   -> Alleles.Map.values_assoc g.aindex amap
+          | Some n ->
+              let s,e =
+                Alleles.Map.fold_wa amap ~init:(infinity, neg_infinity)
+                  ~f:(fun (s, e) v -> (min s v, max e v))
+              in
+              let nf = float n in
+              let d = (e -. s) /. nf in
+              let arr = Array.init n (fun _ -> Alleles.Set.init g.aindex) in
+              Alleles.Map.iter g.aindex amap ~f:(fun v allele ->
+                let index = if v = e then n - 1 else truncate ((v -. s) /. d) in
+                Alleles.Set.set g.aindex arr.(index) allele);
+              Array.mapi ~f:(fun i set -> s +. d *. (float i), set) arr
+              |> Array.to_list
+        end
         |> sort_values_by_likelihood_assoc
     | Some n ->
         Alleles.Map.fold g.aindex amap ~init:[]
@@ -104,7 +117,7 @@ let type_ verbose
   (* How are we typing *)
     filter multi_pos as_stat likelihood_error
   (* Output *)
-    print_top do_not_normalize do_not_bucket error_output =
+    print_top do_not_normalize bucket error_output =
   let open Cache in
   let open Ref_graph in
   let _option_based_fname, graph_args =
@@ -129,11 +142,11 @@ let type_ verbose
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
                                            report_mismatches_list ~print_top g amap
   | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top "likelihood" g amap do_not_bucket
+                                           report_likelihood ?bucket ~print_top "likelihood" g amap
   | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top "loglikelihood" g amap do_not_bucket
+                                           report_likelihood ?bucket ~print_top "loglikelihood" g amap
   | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                           report_likelihood ~print_top "phredlihood" g amap do_not_bucket
+                                           report_likelihood ?bucket ~print_top "phredlihood" g amap
 
        (*    let amap =
               if do_not_normalize then amap else
@@ -212,10 +225,11 @@ let () =
     let doc  = "Do not normalize the per allele likelihoods to report accurate probabilities." in
     Arg.(value & flag & info ~doc ~docv ["do-not-normalize"])
   in
-  let do_not_bucket_flag =
-    let docv = "Do not bucket the probabilities" in
-    let doc  = "When printing the allele probabilities, do not bucket (by 0.1) the final allele sets" in
-    Arg.(value & flag & info ~doc ~docv ["do-not-bucket"])
+  let bucket_arg =
+    let docv = "Bucket the likelihoods." in
+    let doc  = "When printing the allele likelihoods, aggregate the PDF in the \
+                specified number of buckets." in
+    Arg.(value & opt (some int) None & info ~doc ~docv ["bucket"])
   in
   let likelihood_error_arg =
     let default = 0.025 in
@@ -269,7 +283,7 @@ let () =
             (* Output *)
             $ print_top_flag
               $ do_not_normalize_flag
-              $ do_not_bucket_flag
+              $ bucket_arg
               $ error_output_flag
         , info app_name ~version ~doc ~man)
   in
