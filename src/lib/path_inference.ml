@@ -35,6 +35,7 @@ module type Single_config = sig
   type thread
 
   val thread_to_seq : thread -> string
+  val reverse_complement : thread -> thread
 
   val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread -> Index.position ->
     ([ `Finished of t Alleles.Map.t | `Stopped of t Alleles.Map.t ], string) result
@@ -51,26 +52,36 @@ type sequence_alignment_error =
 
 module AgainstSequence (C : Single_config) = struct
 
-  let one ?early_stop g idx seq =
+  let one ?(check_rc=true) ?early_stop g idx seq =
+    let against_positions ps seq =
+      let rec loop acc = function
+        | []     -> `Fin acc
+        | h :: t ->
+            match C.compute ?early_stop g seq h with
+            | Error e -> `Errored e
+            | Ok r -> loop (r :: acc) t
+      in
+      match loop [] ps with
+      | `Errored e -> Error (Other e)
+      | `Fin res ->
+          let f = function | `Finished f -> `Fst f | `Stopped s -> `Snd s in
+          match List.partition_map res ~f with
+          | [], []      -> assert false
+          | [], als     -> Error (AllStopped (List.length als))
+          | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
+    in
     match Index.lookup idx (C.thread_to_seq seq) with
     | Error e -> Error (Other e)
-    | Ok []   -> Error NoPositions
-    | Ok ps   ->
-        let rec loop acc = function
-          | []     -> `Fin acc
-          | h :: t ->
-              match C.compute ?early_stop g seq h with
-              | Error e -> `Errored e
-              | Ok r -> loop (r :: acc) t
-        in
-        match loop [] ps with
-        | `Errored e -> Error (Other e)
-        | `Fin res ->
-            let f = function | `Finished f -> `Fst f | `Stopped s -> `Snd s in
-            match List.partition_map res ~f with
-            | [], []      -> assert false
-            | [], als     -> Error (AllStopped (List.length als))
-            | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
+    | Ok []   ->
+        if check_rc then
+          let revt = C.reverse_complement seq in
+            match Index.lookup idx (C.thread_to_seq revt) with
+            | Error e -> Error (Other e)
+            | Ok []   -> Error NoPositions
+            | Ok ps   -> against_positions ps revt
+        else
+          Error NoPositions
+    | Ok ps   -> against_positions ps seq
 
   type stop_parameter = C.stop_parameter
   type thread = C.thread
@@ -80,6 +91,7 @@ end (* AgainstSequence *)
 module ThreadIsJustSequence = struct
   type thread = string
   let thread_to_seq s = s
+  let reverse_complement = Util.reverse_complement
 end
 
 module ListMismatches_config = struct
@@ -154,6 +166,11 @@ module PhredLlhdMismatches = AgainstSequence ( struct
   type stop_parameter = int * float
   type thread = string * float array
 
+  let reverse_complement (s, a) =
+    let n = Array.length a in
+    Util.reverse_complement s
+    , Array.init n ~f:(fun i -> a.(n - i - 1))
+
   let thread_to_seq (s, _) = s
 
   let compute = Alignment.compute_plhd
@@ -193,6 +210,7 @@ module type Multiple_config = sig
   val to_thread : Biocaml_unix.Fastq.item -> (thread, string) result
 
   val map :
+    ?check_rc:bool ->
     ?early_stop:stop_parameter ->
     Ref_graph.t -> Index.t ->
     thread ->
@@ -204,25 +222,25 @@ end (* Multiple_config *)
 
 module Multiple (C : Multiple_config) = struct
 
-  let fold_over_fastq ?number_of_reads fastq_file ?early_stop g idx =
+  let fold_over_fastq ?number_of_reads fastq_file ?check_rc ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi =
       match C.to_thread fqi with
       | Error e     -> ((ToThread e, fqi) :: errors), amap
       | Ok seq  ->
-          match C.map ?early_stop g idx seq with
+          match C.map ?check_rc ?early_stop g idx seq with
           | Error e -> ((e, fqi) :: errors), amap
           | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                        errors, amap
     in
     Fastq.fold ?number_of_reads ~init:([], amap) ~f fastq_file
 
-  let map_over_fastq ?number_of_reads fastq_file ?early_stop g idx =
+  let map_over_fastq ?number_of_reads fastq_file ?check_rc ?early_stop g idx =
     let f fqi =
       match C.to_thread fqi with
       | Error e     -> Error (ToThread e, fqi)
       | Ok seq  ->
-          match C.map ?early_stop g idx seq with
+          match C.map ?check_rc ?early_stop g idx seq with
           | Error e -> Error (e, fqi)
           | Ok a    -> Ok a
     in
@@ -273,8 +291,8 @@ module Llhd_config = struct
   type thread = SequenceMismatches.thread
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map l ?early_stop g idx th =
-    SequenceMismatches.one ?early_stop g idx th >>= fun m ->
+  let map l ?check_rc ?early_stop g idx th =
+    SequenceMismatches.one ?check_rc ?early_stop g idx th >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(fun m -> l ~len:(String.length th) m) m)
 
 end (* Llhd_config *)
@@ -295,9 +313,9 @@ module Phred_lhd = Multiple (struct
     | CR.Error e -> Error (CE.to_string_hum e)
     | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr)
 
-  let map ?early_stop g idx th =
+  let map ?check_rc ?early_stop g idx th =
     let open Alignment in
-    PhredLlhdMismatches.one ?early_stop g idx th >>= fun amap ->
+    PhredLlhdMismatches.one ?check_rc ?early_stop g idx th >>= fun amap ->
       Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
 
   let reduce = (+.)
@@ -337,17 +355,17 @@ let map ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
       `PhredLikelihood (Phred_lhd.map_over_fastq
           ?number_of_reads fastq_file ?early_stop g idx)
 
-let type_ ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
+let type_ ?filter ?check_rc ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
   | `MismatchesList       ->
       `MismatchesList (MismatchesList.fold_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
+          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
   | `Mismatches           ->
       `Mismatches (Mismatches.fold_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
+          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
   | `Likelihood error     ->
       let module Ml = Multiple (struct
         include Llhd_config
@@ -356,7 +374,7 @@ let type_ ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
         let reduce l a = a *. l
       end) in
       `Likelihood (Ml.fold_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
+          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
   | `LogLikelihood error  ->
       let module Ml = Multiple (struct
         include Llhd_config
@@ -368,4 +386,4 @@ let type_ ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
           ?number_of_reads fastq_file ?early_stop g idx)
   | `PhredLikelihood ->
       `PhredLikelihood (Phred_lhd.fold_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
+          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)

@@ -137,7 +137,7 @@ let type_
   (* What are we typing. *)
     fastq_file number_of_reads
   (* How are we typing *)
-    filter multi_pos as_stat likelihood_error
+    filter multi_pos as_stat likelihood_error dont_check_rc
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
   let open Cache in
@@ -158,7 +158,8 @@ let type_
     | `LogLikelihood    -> `LogLikelihood likelihood_error
     | `PhredLikelihood  -> `PhredLikelihood
   in
-  match Path_inference.type_ ?filter ~as_:new_as g idx ?number_of_reads ~fastq_file with
+  let check_rc = not dont_check_rc in
+  match Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file with
   | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
                                            report_mismatches ~print_top g amap
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
@@ -298,6 +299,10 @@ let () =
     let one_to_three = one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d") in
     Arg.(value & opt (some one_to_three) None & info ~doc ~docv ["reduce-resolution"])
   in
+  let do_not_check_rc_flag =
+    let docv = "Do not check reverse complement" in
+    Arg.(value & flag & info ~docv ["do-not-check-rc"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -326,6 +331,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg
             (* How are we typing *)
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
+              $ do_not_check_rc_flag
             (* Output *)
             $ print_top_flag
               $ do_not_normalize_flag
