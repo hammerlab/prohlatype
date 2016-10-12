@@ -100,4 +100,14 @@ let insert_chars ?(every=120) ?(token=';') ics s =
   |> List.rev
   |> String.of_character_list
 
+let complement = function
+  | 'A' -> 'T'
+  | 'C' -> 'G'
+  | 'G' -> 'C'
+  | 'T' -> 'A'
+  |  c  ->  c   (* could complain, but there are 'N' 's *)
+
+let reverse_complement s =
+  String.fold s ~init:[] ~f:(fun l c -> complement c :: l)
+  |> String.of_character_list
 
