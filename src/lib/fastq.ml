@@ -36,3 +36,64 @@ let phred_probabilities s =
         (fun c -> a.(i) <- Phred_score.to_probability c; loop (i + 1))
   in
   loop 0
+
+let rec same cmp l1 l2 =
+  let rec single_loop search acc = function
+    | []                   -> None, acc
+    | h :: t when search h -> (Some h), (List.rev acc) @ t
+    | h :: t               -> single_loop search (h :: acc) t
+  in
+  let rec double_loop l2 acc = function
+    | []     -> None
+    | h :: t ->
+        match single_loop (cmp h) [] l2 with
+        | None, _     -> double_loop l2 (h :: acc) t
+        | Some f, lst -> Some (h, f, (List.rev acc) @ t, lst)
+  in
+  double_loop l2 [] l1
+
+let fold_paired ?number_of_reads file1 file2 ~f ~init to_key =
+  let open Biocaml_unix in
+  let stop = to_stop number_of_reads in
+  let cmp r1 r2 = (to_key r1) = (to_key r2) in
+  let same = same cmp in
+  Future_unix.Reader.with_file file1 ~f:(fun rdr1 ->
+    Future_unix.Reader.with_file file2 ~f:(fun rdr2 ->
+      (* Avoid circular dep *)
+      let fr1 = Biocaml_unix.Fastq.read rdr1 in
+      let fr2 = Biocaml_unix.Fastq.read rdr2 in
+      let rec two_pipe_fold c acc s1 s2 =
+        if stop c then
+          `DesiredReads acc
+        else
+          let r1 = Future_unix.Pipe.read fr1 in
+          let r2 = Future_unix.Pipe.read fr2 in
+          match r1, r2 with
+          | `Eof, `Eof                      -> `BothFinished acc
+          (* TODO: Add continuations to finish off the rest of the sequence as
+             single read. *)
+          | `Eof, _                         -> `OneReadPairedFinished (1, acc)
+          | _   , `Eof                      -> `OneReadPairedFinished (2, acc)
+          | `Ok (Error ea), `Ok (Error eb)  ->
+              eprintf "%s\n" (Error.to_string_hum ea);
+              eprintf "%s\n" (Error.to_string_hum eb);
+              two_pipe_fold c acc s1 s2
+          | `Ok (Error ea), `Ok (Ok b)      ->
+              eprintf "%s\n" (Error.to_string_hum ea);
+              two_pipe_fold c acc s1 (b::s2)
+          | `Ok (Ok a), `Ok (Error eb)      ->
+              eprintf "%s\n" (Error.to_string_hum eb);
+              two_pipe_fold c acc (a::s1) s2
+          | `Ok (Ok a), `Ok (Ok b)          ->
+              if cmp a b then
+                two_pipe_fold (c + 1) (f acc a b) s1 s2
+              else
+                let ns1 = a :: s1 in
+                let ns2 = b :: s2 in
+                match same ns1 ns2 with
+                | Some (r1, r2, ns1, ns2) ->
+                    two_pipe_fold (c + 1) (f acc r1 r2) ns1 ns2
+                | None ->
+                    two_pipe_fold c acc ns1 ns2
+      in
+      two_pipe_fold 0 init [] []))
