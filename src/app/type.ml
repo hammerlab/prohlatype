@@ -135,7 +135,7 @@ let type_
   (* Process *)
     skip_disk_cache
   (* What are we typing. *)
-    fastq_file number_of_reads
+    fastq_file_lst number_of_reads
   (* How are we typing *)
     filter multi_pos as_stat likelihood_error dont_check_rc
   (* Output *)
@@ -158,8 +158,17 @@ let type_
     | `LogLikelihood    -> `LogLikelihood likelihood_error
     | `PhredLikelihood  -> `PhredLikelihood
   in
-  let check_rc = not dont_check_rc in
-  match Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file with
+  let res =
+    match fastq_file_lst with
+    | []              -> invalid_argf "Cmdliner lied!"
+    | [fastq_file]    ->
+        let check_rc = not dont_check_rc in
+        Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
+     | [read1; read2] ->
+        Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
+    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+  in
+  match res with
   | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
                                            report_mismatches ~print_top g amap
   | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
@@ -173,6 +182,7 @@ let type_
   | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
                                            report_likelihood ?reduce_resolution
                                              ?bucket ~print_top "phredlihood" g amap
+
 
        (*    let amap =
               if do_not_normalize then amap else

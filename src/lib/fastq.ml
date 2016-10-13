@@ -57,43 +57,45 @@ let fold_paired ?number_of_reads file1 file2 ~f ~init to_key =
   let stop = to_stop number_of_reads in
   let cmp r1 r2 = (to_key r1) = (to_key r2) in
   let same = same cmp in
-  Future_unix.Reader.with_file file1 ~f:(fun rdr1 ->
-    Future_unix.Reader.with_file file2 ~f:(fun rdr2 ->
+  let open Future_unix in
+  let open Deferred in
+  Reader.with_file file1 ~f:(fun rdr1 ->
+    Reader.with_file file2 ~f:(fun rdr2 ->
       (* Avoid circular dep *)
       let fr1 = Biocaml_unix.Fastq.read rdr1 in
       let fr2 = Biocaml_unix.Fastq.read rdr2 in
-      let rec two_pipe_fold c acc s1 s2 =
+      let rec two_pipe_fold c s1 s2 acc =
         if stop c then
-          `DesiredReads acc
+          return (`DesiredReads acc)
         else
-          let r1 = Future_unix.Pipe.read fr1 in
-          let r2 = Future_unix.Pipe.read fr2 in
-          match r1, r2 with
-          | `Eof, `Eof                      -> `BothFinished acc
-          (* TODO: Add continuations to finish off the rest of the sequence as
-             single read. *)
-          | `Eof, _                         -> `OneReadPairedFinished (1, acc)
-          | _   , `Eof                      -> `OneReadPairedFinished (2, acc)
-          | `Ok (Error ea), `Ok (Error eb)  ->
-              eprintf "%s\n" (Error.to_string_hum ea);
-              eprintf "%s\n" (Error.to_string_hum eb);
-              two_pipe_fold c acc s1 s2
-          | `Ok (Error ea), `Ok (Ok b)      ->
-              eprintf "%s\n" (Error.to_string_hum ea);
-              two_pipe_fold c acc s1 (b::s2)
-          | `Ok (Ok a), `Ok (Error eb)      ->
-              eprintf "%s\n" (Error.to_string_hum eb);
-              two_pipe_fold c acc (a::s1) s2
-          | `Ok (Ok a), `Ok (Ok b)          ->
-              if cmp a b then
-                two_pipe_fold (c + 1) (f acc a b) s1 s2
-              else
-                let ns1 = a :: s1 in
-                let ns2 = b :: s2 in
-                match same ns1 ns2 with
-                | Some (r1, r2, ns1, ns2) ->
-                    two_pipe_fold (c + 1) (f acc r1 r2) ns1 ns2
-                | None ->
-                    two_pipe_fold c acc ns1 ns2
+          Pipe.read fr1 >>= fun r1 ->
+            Pipe.read fr2 >>= fun r2 ->
+              match r1, r2 with
+              | `Eof, `Eof                      -> return (`BothFinished acc)
+              (* TODO: Add continuations to finish off the rest of the sequence as
+                single read. *)
+              | `Eof, _                         -> return (`OneReadPairedFinished (1, acc))
+              | _   , `Eof                      -> return (`OneReadPairedFinished (2, acc))
+              | `Ok (Error ea), `Ok (Error eb)  ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  two_pipe_fold c s1 s2 acc
+              | `Ok (Error ea), `Ok (Ok b)      ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  two_pipe_fold c s1 (b::s2) acc
+              | `Ok (Ok a), `Ok (Error eb)      ->
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  two_pipe_fold c (a::s1) s2 acc
+              | `Ok (Ok a), `Ok (Ok b)          ->
+                  if cmp a b then
+                    two_pipe_fold (c + 1) s1 s2 (f acc a b)
+                  else
+                    let ns1 = a :: s1 in
+                    let ns2 = b :: s2 in
+                    match same ns1 ns2 with
+                    | Some (r1, r2, ns1, ns2) ->
+                        two_pipe_fold (c + 1) ns1 ns2 (f acc r1 r2)
+                    | None ->
+                        two_pipe_fold c ns1 ns2 acc
       in
-      two_pipe_fold 0 init [] []))
+      two_pipe_fold 0 [] [] init))

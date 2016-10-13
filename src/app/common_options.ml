@@ -133,7 +133,7 @@ let kmer_size_arg =
 let fastq_file_arg =
   let docv = "Fastq samples" in
   let doc = "Fastq formatted DNA reads file." in
-  Arg.(required & pos 0 (some file) None & info ~doc ~docv [])
+  Arg.(non_empty & pos_all file [] & info ~doc ~docv [])
 
 let num_reads_arg =
   let docv = "Number of reads" in

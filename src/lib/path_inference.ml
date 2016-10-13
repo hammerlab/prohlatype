@@ -312,8 +312,15 @@ module Multiple (C : Multiple_config) = struct
             | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                          errors, amap
     in
-    Fastq.fold_paired ?number_of_reads ~init:([], amap) ~f file1 file2
-
+    let res =
+      Fastq.fold_paired ?number_of_reads ~init:([], amap) ~f file1 file2
+        (fun fqi -> fqi.Biocaml_unix.Fastq.name)
+    in
+    match res with
+    | `DesiredReads (errors, amap)               -> errors, amap
+    | `BothFinished (errors, amap)               -> errors, amap
+    (* TODO, go to single. *)
+    | `OneReadPairedFinished (_, (errors, amap)) -> errors, amap
 
 end (* Multiple *)
 
