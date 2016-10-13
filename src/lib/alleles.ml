@@ -269,6 +269,9 @@ module Map = struct
       dest.(i) <- f source.(i) dest.(i)
     done
 
+  let map2_wa ~f m1 m2 =
+    Array.init (Array.length m1) ~f:(fun i -> f m1.(i) m2.(i))
+
   let fold { to_allele; size; _} ~f ~init amap =
     let s = ref init in
     for i = 0 to size - 1 do

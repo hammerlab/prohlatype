@@ -139,7 +139,12 @@ module Map : sig
 
   val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
 
+  (** [update2 source dest u] update the value of [dest] with the result of
+      [u] and the values of the same allele of [source] and [dest]. *)
   val update2 : source:'a t -> dest:'b t -> ('a -> 'b -> 'b) -> unit
+
+  (** [map2_wa f m1 m2] map from two maps. *)
+  val map2_wa : f:('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
 
   (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
