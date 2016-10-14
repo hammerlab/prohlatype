@@ -228,9 +228,8 @@ let () =
   let open Cmdliner in
   let open Common_options in
   let print_top_flag =
-    let docv = "Print only most likely" in
     let doc = "Print only the specified number (positive integer) of alleles" in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["print-top"])
+    Arg.(value & opt (some int) None & info ~doc ["print-top"])
   in
   let multi_pos_flag =
     let d = "How to aggregate multiple position matches: " in
@@ -251,30 +250,26 @@ let () =
       ])
   in
   let filter_flag =
-    let docv = "Filter out sequences" in
     let doc  = "Filter, do not include in the likelihood calculation, sequences \
                 where the highest number of mismatches is greater than the passed argument." in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["filter-matches"])
+    Arg.(value & opt (some int) None & info ~doc ["filter-matches"])
   in
   let do_not_normalize_flag =
-    let docv = "Do not normalize the likelihoods" in
     let doc  = "Do not normalize the per allele likelihoods to report accurate probabilities." in
-    Arg.(value & flag & info ~doc ~docv ["do-not-normalize"])
+    Arg.(value & flag & info ~doc ["do-not-normalize"])
   in
   let bucket_arg =
-    let docv = "Bucket the likelihoods." in
     let doc  = "When printing the allele likelihoods, aggregate the PDF in the \
                 specified number of buckets." in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["bucket"])
+    Arg.(value & opt (some int) None & info ~doc ["bucket"])
   in
   let likelihood_error_arg =
     let default = 0.025 in
-    let docv = "Override the likelihood error" in
     let doc  =
       sprintf "Specify the error value used in likelihood calculations, defaults to %f"
         default
     in
-    Arg.(value & opt float default & info ~doc ~docv ["likelihood-error"])
+    Arg.(value & opt float default & info ~doc ["likelihood-error"])
   in
   let error_output_flag =
     let doc dest =
@@ -288,7 +283,6 @@ let () =
       ])
   in
   let reduce_resolution_arg =
-    let docv = "Reduce the resolution" in
     let doc  = "Reduce the resolution of the PDF, to a lower number of \
                 \"digits\". The general HLA allele nomenclature \
                 has 4 levels of specificity depending on the number of colons \
@@ -307,11 +301,10 @@ let () =
       | `Error e                           -> `Error e
     in
     let one_to_three = one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d") in
-    Arg.(value & opt (some one_to_three) None & info ~doc ~docv ["reduce-resolution"])
+    Arg.(value & opt (some one_to_three) None & info ~doc ["reduce-resolution"])
   in
   let do_not_check_rc_flag =
-    let docv = "Do not check reverse complement" in
-    Arg.(value & flag & info ~docv ["do-not-check-rc"])
+    Arg.(value & flag & info ["do-not-check-rc"])
   in
   let type_ =
     let version = "0.0.0" in

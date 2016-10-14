@@ -30,9 +30,9 @@ let app_name = "mhc2gpdf"
 let () =
   let open Cmdliner in
   let output_fname_arg =
-    let docv = "file" in
+    let docv = "FILE" in
     let doc  = "Output file name, defaults to a file (input file)_(number of \
-                non reference alleles).[pdf|dot]."
+                non reference alleles). [pdf|dot]."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
   in
@@ -65,7 +65,7 @@ let () =
     Arg.(value & flag & info ~doc ["not-human-edges"])
   in
   let max_edge_char_length_flag =
-    let docv = "positive integer" in
+    let docv = "POSITIVE INTEGER" in
     let doc = "Specify a max number of characters to label the edges. (ex 100)" in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
   in
