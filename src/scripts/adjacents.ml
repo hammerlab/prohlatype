@@ -13,7 +13,7 @@ let test_graph file g pos =
 
 let test_file file =
   let open Ref_graph in
-  let all_args = Cache.graph_arg ~file:(to_alignment_file file) () in
+  let all_args = Cache.graph_args ~file:(to_alignment_file file) () in
   let g = Cache.graph all_args in
   let st, en = Ref_graph.range g in
   for i = st to en - 1 do

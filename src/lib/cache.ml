@@ -8,7 +8,7 @@ type graph_args =
   ; remove_reference    : bool
   }
 
-let graph_arg ?n ?(join_same_sequence=true) ?(remove_reference=false) ~file () =
+let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~file () =
   { alignment_file = file
   ; which = n
   ; join_same_sequence
@@ -37,17 +37,17 @@ let graph =
   disk_memoize ~dir graph_args_to_string graph_no_cache
 
 type index_args =
-  { k : int
-  ; g : graph_args
+  { k          : int
+  ; graph_args : graph_args
   }
 
-let index_args_to_string {k; g} =
-  sprintf "%d_%s" k (graph_args_to_string g)
+let index_args_to_string {k; graph_args} =
+  sprintf "%d_%s" k (graph_args_to_string graph_args)
 
 let index_cache_dir = Filename.concat dir "indices"
 
-let graph_and_two_index_no_cache {k; g} =
-  let gr = graph_no_cache g in
+let graph_and_two_index_no_cache {k; graph_args} =
+  let gr = graph_no_cache graph_args in
   let id = Index.create ~k gr in
   gr, id
 

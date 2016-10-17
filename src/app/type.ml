@@ -3,115 +3,188 @@ open Util
 
 let app_name = "type"
 
-(*
-let freader = Future.Reader.open_file file in
-let fastq_rdr = Fastq.read freader in
-Future.Pipe.iter fastq_rdr ~f:(fun oe ->
-  let fastq_item = Or_error.ok_exn oe in
-  let seq = fastq_item.Fastq.sequence in
-  match Alignment.align ~mub:3 g kmt seq with
-  | Error msg -> eprintf "error %s for seq: %s\n" msg seq
-  | Ok als    -> List.iter als ~f:(Alignment.alignments_to_weights amap));
-  *)
-
-let sort_values_by_likelihood_assoc =
+let sort_values_by_likelihood_assoc assoc =
   (* higher values first! *)
-  List.sort ~cmp:(fun (v1, a1) (v2, a2) ->
+  List.sort assoc ~cmp:(fun (v1, a1) (v2, a2) ->
     let r = compare v2 v1 in
     if r = 0 then compare a2 a1 else r)
 
-let sort_values_by_mismatches_assoc =
+let sort_values_by_mismatches_assoc assoc =
   (* lower values first! *)
-  List.sort ~cmp:(fun (v1, a1) (v2, a2) ->
+  List.sort assoc ~cmp:(fun (v1, a1) (v2, a2) ->
     let r = compare v1 v2 in
     if r = 0 then compare a2 a1 else r)
 
-let output_values_assoc ?(set_size=true) aindex =
-  let max_length = if set_size then 60 else 1000 in
-  List.iter ~f:(fun (w, a) ->
-    printf "%0.8f\t%s%s\n" w
-      (if set_size then sprintf "%d\t" (Alleles.Set.cardinal a) else "")
+let output_values_assoc contents to_string aindex assoc =
+  printf "%s\tset size\tset contents\n" contents;
+  List.iter assoc ~f:(fun (w, a) ->
+    printf "%s\t\t%d\t\t%s\n"
+      (to_string w)
+      (Alleles.Set.cardinal a)
       (insert_chars ['\t'; '\t'; '\n']
-        (Alleles.Set.to_human_readable aindex ~max_length ~complement:`No a)))
+        (Alleles.Set.to_human_readable aindex ~max_length:60 ~complement:`No a)))
 
-let report_mismatches g amap =
-  let open Ref_graph in function
-  | None ->
-      Alleles.Map.values_assoc g.aindex amap
-      |> sort_values_by_mismatches_assoc
-      |> output_values_assoc g.aindex
-  | Some n ->
-      Alleles.Map.fold g.aindex amap ~init:[]
-        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-      |> sort_values_by_mismatches_assoc
-      |> fun l -> List.take l n
-      |> output_values_assoc g.aindex
+let default_error_fname = "typing_errors.log"
 
-let report_mislist g amap =
+let report_errors ~error_output elst =
+  let oc, close =
+    match error_output with
+    | `DefaultFile -> open_out default_error_fname, true
+    | `Stderr      -> stderr, false
+    | `Stdout      -> stdout, false
+  in
+  List.iter elst ~f:(fun (sae, fqi) ->
+    fprintf oc "%s\n%s\n%s\n"
+      fqi.Biocaml_unix.Fastq.name
+      fqi.Biocaml_unix.Fastq.sequence
+      (Path_inference.sequence_alignment_error_to_string sae));
+  if close then close_out oc
+
+let report_mismatches ~print_top g amap =
   let open Ref_graph in
-  Alleles.Map.iter g.aindex amap ~f:(fun l a ->
-      let s = List.rev l |> List.map ~f:(sprintf "%.2f") |> String.concat ~sep:"," in
-      printf "%s,\t%s\n" a s)
+  begin match print_top with
+    | None ->
+        Alleles.Map.values_assoc g.aindex amap
+        |> sort_values_by_mismatches_assoc
+    | Some n ->
+        Alleles.Map.fold g.aindex amap ~init:[]
+          ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+        |> sort_values_by_mismatches_assoc
+        |> fun l -> List.take l n
+  end
+  |> output_values_assoc "mismatches" (sprintf "%3d") g.aindex
 
-let report_likelihood g amap do_not_bucket =
-  let open Ref_graph in function
+let report_mismatches_list ~print_top g amap =
+  let open Ref_graph in
+  let mismatch_sum_across_lists =
+    List.fold_left ~init:0 ~f:(fun init l ->
+      List.fold_left l ~init ~f:(fun s (_, m) -> s + m))
+  in
+  Alleles.Map.fold g.aindex amap ~init:[] ~f:(fun acc l allele ->
+    (mismatch_sum_across_lists l, l, allele) :: acc)
+  |> List.sort ~cmp:(fun (s1, _, _) (s2, _, _) -> compare s1 s2)
+  |> begin fun l ->
+      match print_top with
+      | None -> l
+      | Some n -> List.take l n
+     end
+  |> List.iter ~f:(fun (_sum, l, allele) ->
+        printf "%s\n" allele;
+        List.iter l ~f:(fun l ->
+          List.map l ~f:(fun (p, m) -> sprintf "(%3d,%2d)" p m)
+          |> String.concat ~sep:"; "
+          |> insert_chars ~every:100 ~token:';' ['\t'; '\n']  (* in reverse *)
+          |> printf "\t%s\n"))
+
+let report_likelihood ?reduce_resolution ?bucket ~print_top contents g amap =
+  let open Ref_graph in
+  match reduce_resolution with
   | None ->
-      (if do_not_bucket then amap else
-        (* Round the values so that it is easier to display. *)
-        Alleles.Map.map_wa ~f:(fun x -> (ceil (x *. 10.)) /. 10.) amap)
-      |> Alleles.Map.values_assoc g.aindex
-      |> sort_values_by_likelihood_assoc
-      |> output_values_assoc g.aindex
+    begin match print_top with
+      | None ->
+          begin
+            match bucket with
+            | None   -> Alleles.Map.values_assoc g.aindex amap
+            | Some n ->
+                let s,e =
+                  Alleles.Map.fold_wa amap ~init:(infinity, neg_infinity)
+                    ~f:(fun (s, e) v -> (min s v, max e v))
+                in
+                let nf = float n in
+                let d = (e -. s) /. nf in
+                let arr = Array.init n (fun _ -> Alleles.Set.init g.aindex) in
+                Alleles.Map.iter g.aindex amap ~f:(fun v allele ->
+                  let index = if v = e then n - 1 else truncate ((v -. s) /. d) in
+                  Alleles.Set.set g.aindex arr.(index) allele);
+                Array.mapi ~f:(fun i set -> s +. d *. (float i), set) arr
+                |> Array.to_list
+          end
+          |> sort_values_by_likelihood_assoc
+      | Some n ->
+          Alleles.Map.fold g.aindex amap ~init:[]
+            ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
+          |> sort_values_by_likelihood_assoc
+          |> fun l -> List.take l n
+    end
+    |> output_values_assoc contents (sprintf "%0.3f") g.aindex
   | Some n ->
-      Alleles.Map.fold g.aindex amap ~init:[]
-        ~f:(fun a v al -> (v, Alleles.Set.singleton g.aindex al) :: a)
-      |> sort_values_by_likelihood_assoc
-      |> fun l -> List.take l n
-      |> output_values_assoc g.aindex
+      let values =
+        (* TODO: move this logic to Alleles.. *)
+        Alleles.Map.fold g.Ref_graph.aindex ~init:[]
+          ~f:(fun l v al -> (al, v) :: l) amap
+      in
+      let sort values =
+        List.sort values ~cmp:(fun (a1, v1) (a2, v2) ->
+          let r = compare v2 v1 in
+          if r = 0 then compare a2 a1 else r)
+      in
+      let output l = List.iter l ~f:(fun (a, l) -> printf "%0.3f\t%s\n" l a) in
+      match n with
+      | 4 -> sort values |> output
+      | 3 -> sort values |> Compress.compress ~level:`Three |> sort |> output
+      | 2 -> sort values |> Compress.compress ~level:`Two |> sort |> output
+      | 1 -> sort values |> Compress.compress ~level:`One |> sort |> output
+      | _ -> invalid_argf "You promised me parsing! %d" n
 
-let type_ verbose alignment_file num_alt_to_add allele_list allele_regex_list
-  remove_reference
-  k skip_disk_cache
-  fastq_file not_join_same_seq number_of_reads print_top multi_pos as_stat
-  filter do_not_normalize do_not_bucket likelihood_error =
+let type_
+  (* Graph construction args. *)
+  alignment_file
+    num_alt_to_add allele_list allele_regex_list not_join_same_seq remove_reference
+  (* Index *)
+    k
+  (* Process *)
+    skip_disk_cache
+  (* What are we typing. *)
+    fastq_file_lst number_of_reads
+  (* How are we typing *)
+    filter multi_pos as_stat likelihood_error dont_check_rc
+  (* Output *)
+    print_top do_not_normalize bucket error_output reduce_resolution =
   let open Cache in
   let open Ref_graph in
-  let option_based_fname, g =
-    Common_options.to_filename_and_graph_args alignment_file num_alt_to_add
-      allele_list allele_regex_list (not not_join_same_seq) remove_reference
+  let _option_based_fname, graph_args =
+    Common_options.to_filename_and_graph_args
+      ~alignment_file num_alt_to_add
+      ~allele_list ~allele_regex_list
+        ~join_same_sequence:(not not_join_same_seq)
+        ~remove_reference
   in
-  let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; g } in
-  let early_stop = Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n) in
-  match as_stat with
-  | `MisList  ->
-      begin
-        let init, f = Path_inference.multiple_fold_lst ~verbose ~multi_pos ?early_stop g idx in
-        let amap =
-          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
-            let seq = i.Biocaml_unix.Fastq.sequence in
-            if verbose then print_endline "--------------------------------";
-            match f amap seq with
-            | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
-            | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
-        in
-        report_mislist g amap
-      end
-  | `Mismatches | `Likelihood | `LogLikelihood as as_ ->
-      begin
-        let er = likelihood_error in
-        let init, f = Path_inference.multiple_fold ~verbose ~multi_pos ~as_ ?early_stop ?er g idx in
-        let amap =
-          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
-            let seq = i.Biocaml_unix.Fastq.sequence in
-            if verbose then print_endline "--------------------------------";
-            match f amap seq with
-            | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
-            | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
-        in
-        match as_ with
-        | `Mismatches     -> report_mismatches g amap print_top
-        | `Likelihood     ->
-            let amap =
+  let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; graph_args } in
+  let new_as =
+    match as_stat with
+    | `MismatchesList   -> `MismatchesList
+    | `Mismatches       -> `Mismatches
+    | `Likelihood       -> `Likelihood likelihood_error
+    | `LogLikelihood    -> `LogLikelihood likelihood_error
+    | `PhredLikelihood  -> `PhredLikelihood
+  in
+  let res =
+    match fastq_file_lst with
+    | []              -> invalid_argf "Cmdliner lied!"
+    | [fastq_file]    ->
+        let check_rc = not dont_check_rc in
+        Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
+     | [read1; read2] ->
+        Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
+    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+  in
+  match res with
+  | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
+                                           report_mismatches ~print_top g amap
+  | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
+                                           report_mismatches_list ~print_top g amap
+  | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "likelihood" g amap
+  | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "loglikelihood" g amap
+  | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
+                                           report_likelihood ?reduce_resolution
+                                             ?bucket ~print_top "phredlihood" g amap
+
+
+       (*    let amap =
               if do_not_normalize then amap else
                 let sum = Alleles.Map.fold_wa ~f:(+.) ~init:0. amap in
                 Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
@@ -150,13 +223,13 @@ let type_ verbose alignment_file num_alt_to_add allele_list allele_regex_list
         report_likelihood g amap do_not_bucket print_top
       end
 
+*)
 let () =
   let open Cmdliner in
   let open Common_options in
   let print_top_flag =
-    let docv = "Print only most likely" in
     let doc = "Print only the specified number (positive integer) of alleles" in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["print-top"])
+    Arg.(value & opt (some int) None & info ~doc ["print-top"])
   in
   let multi_pos_flag =
     let d = "How to aggregate multiple position matches: " in
@@ -169,33 +242,69 @@ let () =
   let stat_flag =
     let d = "What statistics to compute over each sequences: " in
     Arg.(value & vflag `LogLikelihood
-      [ `LogLikelihood, info ~doc:(d ^ "log likelihood") ["log-likelihood"]
-      ; `Likelihood,    info ~doc:(d ^ "likelihood") ["likelihood"]
-      ; `Mismatches,    info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
-      ; `MisList,       info ~doc:(d ^ "list of mismatches") ["mis-list"]
+      [ `LogLikelihood,   info ~doc:(d ^ "log likelihood") ["log-likelihood"]
+      ; `Likelihood,      info ~doc:(d ^ "likelihood") ["likelihood"]
+      ; `Mismatches,      info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
+      ; `MismatchesList,  info ~doc:(d ^ "list of mismatches") ["mis-list"]
       ; `PhredLikelihood, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
       ])
   in
   let filter_flag =
-    let docv = "Filter out sequences" in
     let doc  = "Filter, do not include in the likelihood calculation, sequences \
                 where the highest number of mismatches is greater than the passed argument." in
-    Arg.(value & opt (some int) None & info ~doc ~docv ["filter-matches"])
+    Arg.(value & opt (some int) None & info ~doc ["filter-matches"])
   in
   let do_not_normalize_flag =
-    let docv = "Do not normalize the likelihoods" in
     let doc  = "Do not normalize the per allele likelihoods to report accurate probabilities." in
-    Arg.(value & flag & info ~doc ~docv ["do-not-normalize"])
+    Arg.(value & flag & info ~doc ["do-not-normalize"])
   in
-  let do_not_bucket_flag =
-    let docv = "Do not bucket the probabilities" in
-    let doc  = "When printing the allele probabilities, do not bucket (by 0.1) the final allele sets" in
-    Arg.(value & flag & info ~doc ~docv ["do-not-bucket"])
+  let bucket_arg =
+    let doc  = "When printing the allele likelihoods, aggregate the PDF in the \
+                specified number of buckets." in
+    Arg.(value & opt (some int) None & info ~doc ["bucket"])
   in
   let likelihood_error_arg =
-    let docv = "Override the likelihood error" in
-    let doc  = "Specify the error value used in likelihood calculations, defaults to 0.025" in
-    Arg.(value & opt (some float) None & info ~doc ~docv ["likelihood-error"])
+    let default = 0.025 in
+    let doc  =
+      sprintf "Specify the error value used in likelihood calculations, defaults to %f"
+        default
+    in
+    Arg.(value & opt float default & info ~doc ["likelihood-error"])
+  in
+  let error_output_flag =
+    let doc dest =
+      sprintf "Output errors such as sequences that don't match to %s. \
+               By default output is written to %s." dest default_error_fname
+    in
+    Arg.(value & vflag `DefaultFile
+      [ `Stdout,      info ~doc:(doc "standard output") ["error-stdout"]
+      ; `Stderr,      info ~doc:(doc "standard error") ["error-stderr"]
+      ; `DefaultFile, info ~doc:(doc "default filename") ["error-default"]
+      ])
+  in
+  let reduce_resolution_arg =
+    let doc  = "Reduce the resolution of the PDF, to a lower number of \
+                \"digits\". The general HLA allele nomenclature \
+                has 4 levels of specificity depending on the number of colons \
+                in the name. For example A*01:01:01:01 has 4 and A*01:95 \
+                has 2. This argument specifies the number (1,2,or 3) of \
+                digits to reduce results to. For example, specifying 2 will \
+                choose the best (depending on metric) allele out of \
+                A*02:01:01:01, A*02:01:01:03, ...  A*02:01:02, ... \
+                A*02:01:100 for A*02:01. The resulting set will have at most \
+                the specified number of digit groups, but may have less."
+    in
+    let one_to_three_parser s =
+      match positive_int_parser s with
+      | `Ok x when x = 1 || x = 2 || x = 3 -> `Ok x
+      | `Ok x                              -> `Error (sprintf  "not 1 to 3: %d" x)
+      | `Error e                           -> `Error e
+    in
+    let one_to_three = one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d") in
+    Arg.(value & opt (some one_to_three) None & info ~doc ["reduce-resolution"])
+  in
+  let do_not_check_rc_flag =
+    Arg.(value & flag & info ["do-not-check-rc"])
   in
   let type_ =
     let version = "0.0.0" in
@@ -213,20 +322,25 @@ let () =
       ]
     in
     Term.(const type_
-            $ verbose_flag
-            $ file_arg
-            $ num_alt_arg $ allele_arg $ allele_regex_arg $ remove_reference_flag
-            $ kmer_size_arg $ no_cache_flag
-            $ fastq_file_arg
-            $ do_not_join_same_sequence_paths_flag
-            $ num_reads_arg
+            (* Graph construction args *)
+            $ file_arg $ num_alt_arg $ allele_arg $ allele_regex_arg
+              $ do_not_join_same_sequence_paths_flag
+              $ remove_reference_flag
+            (* Index *)
+            $ kmer_size_arg
+            (* Process *)
+            $ no_cache_flag
+            (* What are we typing *)
+            $ fastq_file_arg $ num_reads_arg
+            (* How are we typing *)
+            $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
+              $ do_not_check_rc_flag
+            (* Output *)
             $ print_top_flag
-            $ multi_pos_flag
-            $ stat_flag
-            $ filter_flag
-            $ do_not_normalize_flag
-            $ do_not_bucket_flag
-            $ likelihood_error_arg
+              $ do_not_normalize_flag
+              $ bucket_arg
+              $ error_output_flag
+              $ reduce_resolution_arg
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
