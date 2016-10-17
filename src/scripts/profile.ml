@@ -50,8 +50,8 @@ let position to_prohlatype_fname (key, nmt) =
 
 let prof_dir_example = "profc/type_out_%"
 
-let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir () =
-  let open Oml.Statistics in
+(*let open Oml.Statistics in *) *) *) *)
+let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir ~map () =
   List.fold_left genes ~init:[] ~f:(fun acc gene ->
     let train_samples = to_res gene `Train in
     List.fold_left reads ~init:acc ~f:(fun acc read ->
@@ -59,10 +59,10 @@ let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~
         let to_filename k = sprintf "%s_%d/%s_%d_%s_nuc.txt" prof_dir filter k read gene in
         let rr = List.map train_samples ~f:(position to_filename) in
         let dt = List.map rr ~f:(fun (p,_,_) -> float p) |> Array.of_list in
-        (gene, read, filter, (Descriptive.mean dt)) :: acc)))
+        (gene, read, filter, (map dt)) :: acc)))
 
-let display_analysis lst =
+let display_analysis mp lst =
   printf "gene\tread\tfilter\n";
   List.iter lst ~f:(fun (gene, read, filter, m) ->
-        printf "%s\t%d\t%d\t%f\n%!" gene read filter m)
+        printf "%s\t%d\t%d\t%s\n%!" gene read filter (mp m))
 
