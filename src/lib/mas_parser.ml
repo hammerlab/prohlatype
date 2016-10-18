@@ -18,7 +18,8 @@ let invalid_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s" ^^ fmt) prefix
 (* This refers to the alignment position.  *)
 type position = int
 
-let is_nucleotide = function 'A' | 'C' | 'G' | 'T' -> true | _ -> false
+(* We'll parse N as a nucleotide. *)
+let is_nucleotide = function 'A' | 'C' | 'G' | 'T' | 'N' -> true | _ -> false
 let is_amino_acid =
   function
   | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
