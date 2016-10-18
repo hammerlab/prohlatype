@@ -27,6 +27,22 @@ let encode ?(pos=0) ?len ?(ext=0) s =
   done;
   !r
 
+let int_at_or_N s index =
+  let c = String.get_exn s ~index in
+  if c = 'N' then None else Some (char_to_int c)
+
+let encode_N_tolerant ?(pos=0) ?len ?(exts=[0]) s =
+  let r = ref exts in
+  let len = Option.value len ~default:(String.length s) in
+  let to_map = function
+    | Some i -> List.map ~f:(fun e -> 4 * e + i)
+    | None   -> List.concat_map ~f:(fun e -> List.map [0;1;2;3] ~f:((+) (4 * e)))
+  in
+  for i = pos to pos + len - 1 do
+   r := to_map (int_at_or_N s i) !r
+  done;
+  !r
+
 let decode ~k p =
   let rec loop s kp index =
     if kp = 0 || index < 0 then

@@ -14,16 +14,22 @@ val int_to_char : int -> char
     @raise Invalid_argument if argument is outside of [0,3]. *)
 
 val encode : ?pos:int -> ?len:int -> ?ext:int -> string -> int
-(** [encode text] converts the nucleotides in [text] to a unique integer.
+
+
+(** [encode_N_tolerant text] converts the nucleotides in [text] to a list of integers
+    that encode. The list grows for every 'N' encountered.
 
     @param pos  Which position in [text] to start encoding (defaults to 0).
     @param len  How many positions of [text] to encode (defaults to length of
                  [text]).
-    @param ext  The current starting value (defaults to 0). This allows
-                extending an index. For example [encode "ACGT"] is equivalent
-                to [encode "GT" ~ext:(encode "AC")].
+    @param exts  The current starting value (defaults to [0]). This allows
+                extending an index. For example [encode_N_tolerant "ACGT"] is
+                equivalent to [encode_N_tolerant "GT"
+                ~exts:(encode_N_tolerant "AC")].
 
     @raise Invalid_argument for unsupported character sets of {char_to_int}. *)
+
+val encode_N_tolerant : ?pos:int -> ?len:int -> ?exts:int list -> string -> int list
 
 val decode : k:int -> int -> string
 (** [decode ~k p] converts the integer pattern of [p] which encodes a kmer of
