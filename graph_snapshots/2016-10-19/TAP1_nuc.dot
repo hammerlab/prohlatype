@@ -1,0 +1,151 @@
+digraph G {
+  "B5-1383" [shape=box, ];
+  "1114T" [shape=box, ];
+  "716TGCA...GGG" [shape=box, ];
+  "239T" [shape=box, ];
+  "1115CTGT...AGT" [shape=box, ];
+  "423C" [shape=box, ];
+  "1749GTGG...CAG" [shape=box, ];
+  "1992G" [shape=box, ];
+  "1254ATTT...GCT" [shape=box, ];
+  "1937TGTC...AGC" [shape=box, ];
+  "B9-2050" [shape=box, ];
+  "1000G" [shape=box, ];
+  "1558A" [shape=box, ];
+  "1952A" [shape=box, ];
+  "764C" [shape=box, ];
+  "1113T" [shape=box, ];
+  "1993TGTG...CAG" [shape=box, ];
+  "765CACG...CAG" [shape=box, ];
+  "600G" [shape=box, ];
+  "240TGGC...TAC" [shape=box, ];
+  "1558G" [shape=box, ];
+  "1001TCAC...CAG" [shape=box, ];
+  "1952G" [shape=box, ];
+  "392C" [shape=box, ];
+  "848GTAA...CTG" [shape=box, ];
+  "B0-599" [shape=box, ];
+  "B2-847" [shape=box, ];
+  "1953ACAG...ACC" [shape=box, ];
+  "1920CGAG...CAG" [shape=box, ];
+  "393GCAC...CGT" [shape=box, ];
+  "1114C" [shape=box, ];
+  "1992A" [shape=box, ];
+  "S1-TAP1*01:02N;TAP1*01:01:01:01-05;TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01;TAP1*06:01" [
+  shape=box, ];
+  "B1-715" [shape=box, ];
+  "1377G" [shape=box, ];
+  "601GGAG...CAG" [shape=box, ];
+  "E2258" [shape=box, ];
+  "423T" [shape=box, ];
+  "1000A" [shape=box, ];
+  "1113C" [shape=box, ];
+  "1936C" [shape=box, ];
+  "1377T" [shape=box, ];
+  "392T" [shape=box, ];
+  "B8-1912" [shape=box, ];
+  "1913AGGTAG" [shape=box, ];
+  "1919G" [shape=box, ];
+  "2051GTGG...TGA" [shape=box, ];
+  "1919A" [shape=box, ];
+  "1936T" [shape=box, ];
+  "B4-1253" [shape=box, ];
+  "239G" [shape=box, ];
+  "1559TCTT...CAG" [shape=box, ];
+  "764T" [shape=box, ];
+  "1ATGG...CGG" [shape=box, ];
+  "1574GGGC...CAG" [shape=box, ];
+  "1384GTAC...GAT" [shape=box, ];
+  "1378TGGAG" [shape=box, ];
+  "B6-1573" [shape=box, ];
+  "424GTCA...TTG" [shape=box, ];
+  "1055TTGC...AGG" [shape=box, ];
+  "B7-1748" [shape=box, ];
+  "B3-1054" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "B5-1383" -> "1384GTAC...GAT" [label="Everything", ];
+  "1114T" -> "1115CTGT...AGT" [label="C. of TAP1*05:01", ];
+  "716TGCA...GGG" -> "764C" [label="C. of TAP1*05:01", ];
+  "716TGCA...GGG" -> "764T" [label="TAP1*05:01", ];
+  "239T" -> "240TGGC...TAC" [label="C. of TAP1*06:01", ];
+  "1115CTGT...AGT" -> "B4-1253" [label="Everything", ];
+  "423C" -> "424GTCA...TTG" [label="TAP1*05:01", ];
+  "1749GTGG...CAG" -> "B8-1912" [label="Everything", ];
+  "1992G" -> "1993TGTG...CAG" [label="C. of TAP1*02:01:02;TAP1*05:01", ];
+  "1254ATTT...GCT" -> "1377G" [label="C. of TAP1*04:01", ];
+  "1254ATTT...GCT" -> "1377T" [label="TAP1*04:01", ];
+  "1937TGTC...AGC" -> "1952A" [label="TAP1*04:01", ];
+  "1937TGTC...AGC" -> "1952G" [label="C. of TAP1*04:01", ];
+  "B9-2050" -> "2051GTGG...TGA" [label="Everything", ];
+  "1000G" -> "1001TCAC...CAG" [label="TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01",
+                               ];
+  "1558A" -> "1559TCTT...CAG" [label="TAP1*05:01", ];
+  "1952A" -> "1953ACAG...ACC" [label="TAP1*04:01", ];
+  "764C" -> "765CACG...CAG" [label="C. of TAP1*05:01", ];
+  "1113T" -> "1114C" [label="TAP1*05:01", ];
+  "1993TGTG...CAG" -> "B9-2050" [label="Everything", ];
+  "765CACG...CAG" -> "B2-847" [label="Everything", ];
+  "600G" -> "601GGAG...CAG" [label="C. of TAP1*01:02N", ];
+  "240TGGC...TAC" -> "392C" [label="TAP1*05:01", ];
+  "240TGGC...TAC" -> "392T" [label="C. of TAP1*05:01", ];
+  "1558G" -> "1559TCTT...CAG" [label="C. of TAP1*05:01", ];
+  "1001TCAC...CAG" -> "B3-1054" [label="Everything", ];
+  "1952G" -> "1953ACAG...ACC" [label="C. of TAP1*04:01", ];
+  "392C" -> "393GCAC...CGT" [label="TAP1*05:01", ];
+  "848GTAA...CTG" -> "1000A" [label="C. of TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01",
+                              ];
+  "848GTAA...CTG" -> "1000G" [label="TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01",
+                              ];
+  "B0-599" -> "600G" [label="C. of TAP1*01:02N", ];
+  "B0-599" -> "601GGAG...CAG" [label="TAP1*01:02N", ];
+  "B2-847" -> "848GTAA...CTG" [label="Everything", ];
+  "1953ACAG...ACC" -> "1992A" [label="TAP1*02:01:02;TAP1*05:01", ];
+  "1953ACAG...ACC" -> "1992G" [label="C. of TAP1*02:01:02;TAP1*05:01", ];
+  "1920CGAG...CAG" -> "1936C" [label="C. of TAP1*05:01", ];
+  "1920CGAG...CAG" -> "1936T" [label="TAP1*05:01", ];
+  "393GCAC...CGT" -> "423C" [label="TAP1*05:01", ];
+  "393GCAC...CGT" -> "423T" [label="C. of TAP1*05:01", ];
+  "1114C" -> "1115CTGT...AGT" [label="TAP1*05:01", ];
+  "1992A" -> "1993TGTG...CAG" [label="TAP1*02:01:02;TAP1*05:01", ];
+  "S1-TAP1*01:02N;TAP1*01:01:01:01-05;TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01;TAP1*06:01" -> "1ATGG...CGG" [
+  label="Everything", ];
+  "B1-715" -> "716TGCA...GGG" [label="Everything", ];
+  "1377G" -> "1378TGGAG" [label="C. of TAP1*04:01", ];
+  "601GGAG...CAG" -> "B1-715" [label="Everything", ];
+  "423T" -> "424GTCA...TTG" [label="C. of TAP1*05:01", ];
+  "1000A" -> "1001TCAC...CAG" [label="C. of TAP1*02:01:01-02;TAP1*03:01;TAP1*04:01;TAP1*05:01",
+                               ];
+  "1113C" -> "1114T" [label="C. of TAP1*05:01", ];
+  "1936C" -> "1937TGTC...AGC" [label="C. of TAP1*05:01", ];
+  "1377T" -> "1378TGGAG" [label="TAP1*04:01", ];
+  "392T" -> "393GCAC...CGT" [label="C. of TAP1*05:01", ];
+  "B8-1912" -> "1913AGGTAG" [label="Everything", ];
+  "1913AGGTAG" -> "1919A" [label="C. of TAP1*02:01:01-02;TAP1*04:01;TAP1*05:01",
+                           ];
+  "1913AGGTAG" -> "1919G" [label="TAP1*02:01:01-02;TAP1*04:01;TAP1*05:01", ];
+  "1919G" -> "1920CGAG...CAG" [label="TAP1*02:01:01-02;TAP1*04:01;TAP1*05:01",
+                               ];
+  "2051GTGG...TGA" -> "E2258" [label="Everything", ];
+  "1919A" -> "1920CGAG...CAG" [label="C. of TAP1*02:01:01-02;TAP1*04:01;TAP1*05:01",
+                               ];
+  "1936T" -> "1937TGTC...AGC" [label="TAP1*05:01", ];
+  "B4-1253" -> "1254ATTT...GCT" [label="Everything", ];
+  "239G" -> "240TGGC...TAC" [label="TAP1*06:01", ];
+  "1559TCTT...CAG" -> "B6-1573" [label="Everything", ];
+  "764T" -> "765CACG...CAG" [label="TAP1*05:01", ];
+  "1ATGG...CGG" -> "239G" [label="TAP1*06:01", ];
+  "1ATGG...CGG" -> "239T" [label="C. of TAP1*06:01", ];
+  "1574GGGC...CAG" -> "B7-1748" [label="Everything", ];
+  "1384GTAC...GAT" -> "1558A" [label="TAP1*05:01", ];
+  "1384GTAC...GAT" -> "1558G" [label="C. of TAP1*05:01", ];
+  "1378TGGAG" -> "B5-1383" [label="Everything", ];
+  "B6-1573" -> "1574GGGC...CAG" [label="Everything", ];
+  "424GTCA...TTG" -> "B0-599" [label="Everything", ];
+  "1055TTGC...AGG" -> "1113C" [label="C. of TAP1*05:01", ];
+  "1055TTGC...AGG" -> "1113T" [label="TAP1*05:01", ];
+  "B7-1748" -> "1749GTGG...CAG" [label="Everything", ];
+  "B3-1054" -> "1055TTGC...AGG" [label="Everything", ];
+  
+  }

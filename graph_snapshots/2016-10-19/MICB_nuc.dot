@@ -1,0 +1,296 @@
+digraph G {
+  "865A" [shape=box, ];
+  "510A" [shape=box, ];
+  "204A" [shape=box, ];
+  "224G" [shape=box, ];
+  "328GCTT...GAT" [shape=box, ];
+  "579T" [shape=box, ];
+  "165CCTT...AAA" [shape=box, ];
+  "1152G" [shape=box, ];
+  "1ATGG...CTG" [shape=box, ];
+  "205C" [shape=box, ];
+  "580GATA...CAG" [shape=box, ];
+  "839G" [shape=box, ];
+  "875GCAC...CTG" [shape=box, ];
+  "117A" [shape=box, ];
+  "801G" [shape=box, ];
+  "865G" [shape=box, ];
+  "702A" [shape=box, ];
+  "88TTAC...ATG" [shape=box, ];
+  "87A" [shape=box, ];
+  "1139T" [shape=box, ];
+  "117G" [shape=box, ];
+  "646A" [shape=box, ];
+  "511AGGA...CAG" [shape=box, ];
+  "646G" [shape=box, ];
+  "366CATG...CAG" [shape=box, ];
+  "904GCTG...CCA" [shape=box, ];
+  "839A" [shape=box, ];
+  "240AGAC...AGG" [shape=box, ];
+  "733T" [shape=box, ];
+  "239A" [shape=box, ];
+  "873C" [shape=box, ];
+  "874A" [shape=box, ];
+  "206C" [shape=box, ];
+  "87G" [shape=box, ];
+  "E1030" [shape=box, ];
+  "874G" [shape=box, ];
+  "118ATCT...CAG" [shape=box, ];
+  "304T" [shape=box, ];
+  "207AGGG...GAA" [shape=box, ];
+  "B4-1029" [shape=box, ];
+  "702G" [shape=box, ];
+  "579C" [shape=box, ];
+  "638T" [shape=box, ];
+  "224A" [shape=box, ];
+  "765G" [shape=box, ];
+  "377C" [shape=box, ];
+  "1030AGCT...TGG" [shape=box, ];
+  "315A" [shape=box, ];
+  "365C" [shape=box, ];
+  "765T" [shape=box, ];
+  "408A" [shape=box, ];
+  "304C" [shape=box, ];
+  "829G" [shape=box, ];
+  "305CATATCAAGG" [shape=box, ];
+  "204C" [shape=box, ];
+  "E1028" [shape=box, ];
+  "B1-327" [shape=box, ];
+  "897GGAAGG" [shape=box, ];
+  "1153CCTAG" [shape=box, ];
+  "378AGCA...TAC" [shape=box, ];
+  "315G" [shape=box, ];
+  "903C" [shape=box, ];
+  "638C" [shape=box, ];
+  "S1-MICB*001;MICB*003;MICB*002:01:01-02;MICB*004:01:01-02;MICB*008;MICB*005:02:01-04" [
+  shape=box, ];
+  "1152A" [shape=box, ];
+  "766GATG...GAC" [shape=box, ];
+  "B3-896" [shape=box, ];
+  "192GCAGGGCAAA" [shape=box, ];
+  "264A" [shape=box, ];
+  "265CTTG...GAC" [shape=box, ];
+  "B0-71" [shape=box, ];
+  "164C" [shape=box, ];
+  "1028G" [shape=box, ];
+  "409ATGG...TGG" [shape=box, ];
+  "733G" [shape=box, ];
+  "408G" [shape=box, ];
+  "377A" [shape=box, ];
+  "647AGGT...CCG" [shape=box, ];
+  "830AGGAGCAGA" [shape=box, ];
+  "734TATC...GGG" [shape=box, ];
+  "639CTGCAGC" [shape=box, ];
+  "801C" [shape=box, ];
+  "873T" [shape=box, ];
+  "202G" [shape=box, ];
+  "E897" [shape=box, ];
+  "829A" [shape=box, ];
+  "191C" [shape=box, ];
+  "B2-616" [shape=box, ];
+  "164T" [shape=box, ];
+  "866GGAATCA" [shape=box, ];
+  "203C" [shape=box, ];
+  "264G" [shape=box, ];
+  "225ATGT...GCT" [shape=box, ];
+  "191T" [shape=box, ];
+  "S71-MICB*006;MICB*007;MICB*009N;MICB*010;MICB*011;MICB*012;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;
+MICB*021N;MICB*022;MICB*023;MICB*024;MICB*025;MICB*026;MICB*027;MICB*028;MICB*029;MICB*030;MICB*031;MICB*005:01,03-08" [
+  shape=box, ];
+  "840GTTC...AGC" [shape=box, ];
+  "510G" [shape=box, ];
+  "72AGCC...TTC" [shape=box, ];
+  "802TGGG...GGA" [shape=box, ];
+  "202A" [shape=box, ];
+  "903T" [shape=box, ];
+  "316CCAG...GAG" [shape=box, ];
+  "365G" [shape=box, ];
+  "1139C" [shape=box, ];
+  "E1158" [shape=box, ];
+  "239G" [shape=box, ];
+  "1140TCCA...GGC" [shape=box, ];
+  "703AATA...GGG" [shape=box, ];
+  "617TGCC...TCA" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "865A" -> "866GGAATCA" [label="MICB*027", ];
+  "510A" -> "511AGGA...CAG" [label="C. of MICB*025", ];
+  "204A" -> "205C" [label="MICB*011", ];
+  "224G" -> "225ATGT...GCT" [label="C. of MICB*020;MICB*024;MICB*025;MICB*026;MICB*028;MICB*004:01:01-02",
+                             ];
+  "328GCTT...GAT" -> "365C" [label="C. of MICB*008", ];
+  "328GCTT...GAT" -> "365G" [label="MICB*008", ];
+  "579T" -> "580GATA...CAG" [label="MICB*009N", ];
+  "165CCTT...AAA" -> "191C" [label="C. of MICB*031", ];
+  "165CCTT...AAA" -> "191T" [label="MICB*031", ];
+  "1152G" -> "1153CCTAG" [label="MICB*001;MICB*002:01:01-02;MICB*005:02:01-04;MICB*008;MICB*012;MICB*023;MICB*027;MICB*028;MICB*029;MICB*005:03,06-08",
+                          ];
+  "1ATGG...CTG" -> "B0-71" [label="MICB*001;MICB*003;MICB*002:01:01-02;MICB*004:01:01-02;MICB*008;MICB*005:02:01-04",
+                            ];
+  "205C" -> "206C" [label="C. of MICB*021N", ];
+  "205C" -> "207AGGG...GAA" [label="MICB*021N", ];
+  "580GATA...CAG" -> "B2-616" [label="Everything", ];
+  "839G" -> "840GTTC...AGC" [label="C. of MICB*007", ];
+  "875GCAC...CTG" -> "B3-896" [label="Everything", ];
+  "117A" -> "118ATCT...CAG" [label="MICB*001", ];
+  "801G" -> "802TGGG...GGA" [label="MICB*005:04", ];
+  "865G" -> "866GGAATCA" [label="C. of MICB*027", ];
+  "702A" -> "703AATA...GGG" [label="MICB*013;MICB*016;MICB*005:03", ];
+  "88TTAC...ATG" -> "117A" [label="MICB*001", ];
+  "88TTAC...ATG" -> "117G" [label="C. of MICB*001", ];
+  "87A" -> "88TTAC...ATG" [label="MICB*023", ];
+  "1139T" -> "1140TCCA...GGC" [label="C. of MICB*006;MICB*007;MICB*009N;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;
+MICB*025;MICB*030;MICB*031;MICB*005:01,04-05,08",
+                               ];
+  "117G" -> "118ATCT...CAG" [label="C. of MICB*001", ];
+  "646A" -> "647AGGT...CCG" [label="MICB*006;MICB*015", ];
+  "511AGGA...CAG" -> "579C" [label="C. of MICB*009N", ];
+  "511AGGA...CAG" -> "579T" [label="MICB*009N", ];
+  "646G" -> "647AGGT...CCG" [label="C. of MICB*006;MICB*015", ];
+  "366CATG...CAG" -> "377A" [label="MICB*030", ];
+  "366CATG...CAG" -> "377C" [label="C. of MICB*030", ];
+  "904GCTG...CCA" -> "E1028" [label="MICB*006;MICB*015;MICB*005:01", ];
+  "904GCTG...CCA" -> "1028G" [label="C. of MICB*006;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:01,05",
+                              ];
+  "839A" -> "840GTTC...AGC" [label="MICB*007", ];
+  "240AGAC...AGG" -> "264A" [label="C. of MICB*022", ];
+  "240AGAC...AGG" -> "264G" [label="MICB*022", ];
+  "733T" -> "734TATC...GGG" [label="MICB*029", ];
+  "239A" -> "240AGAC...AGG" [label="C. of MICB*007;MICB*008;MICB*014;MICB*015;MICB*016;MICB*019;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "873C" -> "874A" [label="MICB*013;MICB*014;MICB*015;MICB*016", ];
+  "873C" -> "874G" [label="C. of MICB*013;MICB*014;MICB*015;MICB*016;MICB*005:01",
+                    ];
+  "874A" -> "875GCAC...CTG" [label="MICB*013;MICB*014;MICB*015;MICB*016", ];
+  "206C" -> "207AGGG...GAA" [label="C. of MICB*021N", ];
+  "87G" -> "88TTAC...ATG" [label="C. of MICB*023", ];
+  "874G" -> "875GCAC...CTG" [label="C. of MICB*013;MICB*014;MICB*015;MICB*016",
+                             ];
+  "118ATCT...CAG" -> "164C" [label="C. of MICB*024", ];
+  "118ATCT...CAG" -> "164T" [label="MICB*024", ];
+  "304T" -> "305CATATCAAGG" [label="C. of MICB*005:05", ];
+  "207AGGG...GAA" -> "224A" [label="MICB*020;MICB*024;MICB*025;MICB*026;MICB*028;MICB*004:01:01-02",
+                             ];
+  "207AGGG...GAA" -> "224G" [label="C. of MICB*020;MICB*024;MICB*025;MICB*026;MICB*028;MICB*004:01:01-02",
+                             ];
+  "B4-1029" -> "E1030" [label="MICB*007;MICB*009N;MICB*013;MICB*014;MICB*005:04",
+                        ];
+  "B4-1029" -> "1030AGCT...TGG" [label="C. of MICB*006;MICB*007;MICB*009N;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;
+MICB*025;MICB*030;MICB*031;MICB*005:01,04-05",
+                                 ];
+  "702G" -> "703AATA...GGG" [label="C. of MICB*013;MICB*016;MICB*005:03", ];
+  "579C" -> "580GATA...CAG" [label="C. of MICB*009N", ];
+  "638T" -> "639CTGCAGC" [label="MICB*003;MICB*009N", ];
+  "224A" -> "225ATGT...GCT" [label="MICB*020;MICB*024;MICB*025;MICB*026;MICB*028;MICB*004:01:01-02",
+                             ];
+  "765G" -> "766GATG...GAC" [label="C. of MICB*005:06", ];
+  "377C" -> "378AGCA...TAC" [label="C. of MICB*030", ];
+  "1030AGCT...TGG" -> "1139C" [label="MICB*005:08", ];
+  "1030AGCT...TGG" -> "1139T" [label="C. of MICB*006;MICB*007;MICB*009N;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;
+MICB*025;MICB*030;MICB*031;MICB*005:01,04-05,08",
+                               ];
+  "315A" -> "316CCAG...GAG" [label="C. of MICB*012", ];
+  "365C" -> "366CATG...CAG" [label="C. of MICB*008", ];
+  "765T" -> "766GATG...GAC" [label="MICB*005:06", ];
+  "408A" -> "409ATGG...TGG" [label="MICB*007;MICB*008;MICB*014;MICB*015;MICB*018;MICB*020;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "304C" -> "305CATATCAAGG" [label="MICB*005:05", ];
+  "829G" -> "830AGGAGCAGA" [label="C. of MICB*026", ];
+  "305CATATCAAGG" -> "315A" [label="C. of MICB*012", ];
+  "305CATATCAAGG" -> "315G" [label="MICB*012", ];
+  "204C" -> "205C" [label="C. of MICB*011", ];
+  "B1-327" -> "328GCTT...GAT" [label="Everything", ];
+  "897GGAAGG" -> "903C" [label="C. of MICB*001;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:05",
+                         ];
+  "897GGAAGG" -> "903T" [label="MICB*001", ];
+  "1153CCTAG" -> "E1158" [label="C. of MICB*006;MICB*007;MICB*009N;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;
+MICB*025;MICB*030;MICB*031;MICB*005:01,04-05",
+                          ];
+  "378AGCA...TAC" -> "408A" [label="MICB*007;MICB*008;MICB*014;MICB*015;MICB*018;MICB*020;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "378AGCA...TAC" -> "408G" [label="C. of MICB*007;MICB*008;MICB*014;MICB*015;MICB*018;MICB*020;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "315G" -> "316CCAG...GAG" [label="MICB*012", ];
+  "903C" -> "904GCTG...CCA" [label="C. of MICB*001;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:05",
+                             ];
+  "638C" -> "639CTGCAGC" [label="C. of MICB*003;MICB*009N", ];
+  "S1-MICB*001;MICB*003;MICB*002:01:01-02;MICB*004:01:01-02;MICB*008;MICB*005:02:01-04" -> "1ATGG...CTG" [
+  label="MICB*001;MICB*003;MICB*002:01:01-02;MICB*004:01:01-02;MICB*008;MICB*005:02:01-04",
+  ];
+  "1152A" -> "1153CCTAG" [label="MICB*003;MICB*010;MICB*011;MICB*026;MICB*004:01:01-02",
+                          ];
+  "766GATG...GAC" -> "801C" [label="C. of MICB*005:04", ];
+  "766GATG...GAC" -> "801G" [label="MICB*005:04", ];
+  "B3-896" -> "E897" [label="MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:05",
+                      ];
+  "B3-896" -> "897GGAAGG" [label="C. of MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:05",
+                           ];
+  "192GCAGGGCAAA" -> "202A" [label="MICB*005:07", ];
+  "192GCAGGGCAAA" -> "202G" [label="C. of MICB*005:07", ];
+  "264A" -> "265CTTG...GAC" [label="C. of MICB*022", ];
+  "265CTTG...GAC" -> "304C" [label="MICB*005:05", ];
+  "265CTTG...GAC" -> "304T" [label="C. of MICB*005:05", ];
+  "B0-71" -> "72AGCC...TTC" [label="Everything", ];
+  "164C" -> "165CCTT...AAA" [label="C. of MICB*024", ];
+  "1028G" -> "B4-1029" [label="C. of MICB*006;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;MICB*021N;MICB*022;MICB*024;MICB*025;MICB*030;MICB*031;MICB*005:01,05",
+                        ];
+  "409ATGG...TGG" -> "510A" [label="C. of MICB*025", ];
+  "409ATGG...TGG" -> "510G" [label="MICB*025", ];
+  "733G" -> "734TATC...GGG" [label="C. of MICB*029", ];
+  "408G" -> "409ATGG...TGG" [label="C. of MICB*007;MICB*008;MICB*014;MICB*015;MICB*018;MICB*020;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "377A" -> "378AGCA...TAC" [label="MICB*030", ];
+  "647AGGT...CCG" -> "702A" [label="MICB*013;MICB*016;MICB*005:03", ];
+  "647AGGT...CCG" -> "702G" [label="C. of MICB*013;MICB*016;MICB*005:03", ];
+  "830AGGAGCAGA" -> "839A" [label="MICB*007", ];
+  "830AGGAGCAGA" -> "839G" [label="C. of MICB*007", ];
+  "734TATC...GGG" -> "765G" [label="C. of MICB*005:06", ];
+  "734TATC...GGG" -> "765T" [label="MICB*005:06", ];
+  "639CTGCAGC" -> "646A" [label="MICB*006;MICB*015", ];
+  "639CTGCAGC" -> "646G" [label="C. of MICB*006;MICB*015", ];
+  "801C" -> "802TGGG...GGA" [label="C. of MICB*005:04", ];
+  "873T" -> "874G" [label="MICB*005:01", ];
+  "202G" -> "203C" [label="C. of MICB*005:07", ];
+  "829A" -> "830AGGAGCAGA" [label="MICB*026", ];
+  "191C" -> "192GCAGGGCAAA" [label="C. of MICB*031", ];
+  "B2-616" -> "617TGCC...TCA" [label="Everything", ];
+  "164T" -> "165CCTT...AAA" [label="MICB*024", ];
+  "866GGAATCA" -> "873C" [label="C. of MICB*005:01", ];
+  "866GGAATCA" -> "873T" [label="MICB*005:01", ];
+  "203C" -> "204A" [label="MICB*011", ];
+  "203C" -> "204C" [label="C. of MICB*011", ];
+  "264G" -> "265CTTG...GAC" [label="MICB*022", ];
+  "225ATGT...GCT" -> "239A" [label="C. of MICB*007;MICB*008;MICB*014;MICB*015;MICB*016;MICB*019;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "225ATGT...GCT" -> "239G" [label="MICB*007;MICB*008;MICB*014;MICB*015;MICB*016;MICB*019;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "191T" -> "192GCAGGGCAAA" [label="MICB*031", ];
+  "S71-MICB*006;MICB*007;MICB*009N;MICB*010;MICB*011;MICB*012;MICB*013;MICB*014;MICB*015;MICB*016;MICB*018;MICB*019;MICB*020;
+MICB*021N;MICB*022;MICB*023;MICB*024;MICB*025;MICB*026;MICB*027;MICB*028;MICB*029;MICB*030;MICB*031;MICB*005:01,03-08" -> "B0-71" [
+  label="C. of MICB*001;MICB*003;MICB*002:01:01-02;MICB*004:01:01-02;MICB*008;MICB*005:02:01-04",
+  ];
+  "840GTTC...AGC" -> "865A" [label="MICB*027", ];
+  "840GTTC...AGC" -> "865G" [label="C. of MICB*027", ];
+  "510G" -> "511AGGA...CAG" [label="MICB*025", ];
+  "72AGCC...TTC" -> "87A" [label="MICB*023", ];
+  "72AGCC...TTC" -> "87G" [label="C. of MICB*023", ];
+  "802TGGG...GGA" -> "829A" [label="MICB*026", ];
+  "802TGGG...GGA" -> "829G" [label="C. of MICB*026", ];
+  "202A" -> "203C" [label="MICB*005:07", ];
+  "903T" -> "904GCTG...CCA" [label="MICB*001", ];
+  "316CCAG...GAG" -> "B1-327" [label="Everything", ];
+  "365G" -> "366CATG...CAG" [label="MICB*008", ];
+  "1139C" -> "1140TCCA...GGC" [label="MICB*005:08", ];
+  "239G" -> "240AGAC...AGG" [label="MICB*007;MICB*008;MICB*014;MICB*015;MICB*016;MICB*019;MICB*022;MICB*029;MICB*031;MICB*002:01:01-02",
+                             ];
+  "1140TCCA...GGC" -> "1152A" [label="MICB*003;MICB*010;MICB*011;MICB*026;MICB*004:01:01-02",
+                               ];
+  "1140TCCA...GGC" -> "1152G" [label="MICB*001;MICB*002:01:01-02;MICB*005:02:01-04;MICB*008;MICB*012;MICB*023;MICB*027;MICB*028;MICB*029;MICB*005:03,06-08",
+                               ];
+  "703AATA...GGG" -> "733G" [label="C. of MICB*029", ];
+  "703AATA...GGG" -> "733T" [label="MICB*029", ];
+  "617TGCC...TCA" -> "638C" [label="C. of MICB*003;MICB*009N", ];
+  "617TGCC...TCA" -> "638T" [label="MICB*003;MICB*009N", ];
+  
+  }
