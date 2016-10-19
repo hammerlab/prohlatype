@@ -68,7 +68,7 @@ let test_sequences file =
     let allele = List.nth_exn (String.split ~on:(`Character ' ') header) 1 in
     match Ref_graph.sequence gall allele with
     (* TODO: This should be an Error not an exception! *)
-    | exception Not_found -> Printf.printf "Coudn't find sequence for %s\n" allele;
+    | exception Not_found -> Printf.printf "Couldn't find sequence for %s\n" allele;
                              (allele, (seq, "")) :: acc
     | Error msg           -> Printf.printf "missing sequence for %s because %s!\n" allele msg;
                              (allele, (seq, "")) :: acc
