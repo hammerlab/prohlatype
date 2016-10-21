@@ -54,11 +54,7 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
         let r = load () in
         match up_to_date with
         | None       -> r
-        | Some check ->
-            if check file r then
-              r
-            else
-              save (f arg)
+        | Some check -> if check arg r then r else save (f arg)
       end else begin
         save (f arg)
       end
@@ -98,19 +94,24 @@ let graph_no_cache
 (* TODO: We should add date parsing, so that we can distinguish different
    graphs, and make sure that we can type against the most recent. Or compare
    typing across IMGT release dates. *)
-let recent_check file graph =
+let recent_check arg graph =
+  let file = arg.alignment_file in
   if Sys.file_exists file then begin
     let ic = open_in file in
     match Mas_parser.parse_align_date ic with
     | None    ->
-        eprintf "Did not find a Sequence alignment date for %s" file;
+        eprintf "Did not find a Sequence alignment date for %s, will use current.\n" file;
         close_in ic;
-        true  (* use current. *)
+        true
     | Some ad ->
         close_in ic;
-        ad = graph.Ref_graph.align_date
+        let recent = ad = graph.Ref_graph.align_date in
+        if recent then recent else begin
+          eprintf "Cached sequence alignment graph is not recent, rebuilding.\n";
+          false
+        end
   end else begin
-    eprintf "Alignment file %s is missing, using cached graphs" file;
+    eprintf "Alignment file %s is missing, using cached graph.\n" file;
     true
   end
 
