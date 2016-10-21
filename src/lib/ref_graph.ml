@@ -814,29 +814,30 @@ module JoinSameSequencePaths = struct
         List.fold_left lst ~init ~f:(fun l (_p, s) ->
           min l (String.length s))
       in
-      let arr = [| 0; 0; 0; 0 |] in
-      let clear_arr () = for i = 0 to 3 do arr.(i) <- 0 done in
+      let arr = [| 0; 0; 0; 0; 0 |] in
+      let clear_arr () = for i = 0 to 4 do arr.(i) <- 0 done in
       let fill_arr index =
         List.iter lst ~f:(fun (_p, s) ->
           let c = String.get_exn s ~index in
-          let j = Kmer_to_int.char_to_int c in
+          let j = if c = 'N' then 4 else Kmer_to_int.char_to_int c in
           arr.(j) <- arr.(j) + 1)
       in
       let rec diff_loop index =
         if index >= max_compare_length then
           index
         else begin
-          clear_arr ();   (* clear A,C,G,T counts in the beginning! *)
+          clear_arr ();   (* clear A,C,G,T,N counts in the beginning! *)
           fill_arr index;
           match arr with
-          | [| n; 0; 0; 0 |] when n >= 1 -> diff_loop (index + 1)
-          | [| 0; n; 0; 0 |] when n >= 1 -> diff_loop (index + 1)
-          | [| 0; 0; n; 0 |] when n >= 1 -> diff_loop (index + 1)
-          | [| 0; 0; 0; n |] when n >= 1 -> diff_loop (index + 1)
+          | [| n; 0; 0; 0; 0|] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; n; 0; 0; 0|] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; 0; n; 0; 0|] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; 0; 0; n; 0|] when n >= 1 -> diff_loop (index + 1)
+          | [| 0; 0; 0; 0; n|] when n >= 1 -> diff_loop (index + 1)
           | _                            ->
               if !same_debug then
-                eprintf "found diff %d: [| %d; %d; %d; %d |]\n"
-                  index arr.(0) arr.(1) arr.(2) arr.(3);
+                eprintf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
+                  index arr.(0) arr.(1) arr.(2) arr.(3) arr.(4);
               if index > 0 then index else same_loop index
         end
       and same_loop index =
@@ -848,8 +849,8 @@ module JoinSameSequencePaths = struct
           fill_arr nindex;
           let mx = Array.fold_left ~init:0 ~f:max arr in
           if !same_debug then
-            eprintf "what is mx: %d [| %d; %d; %d; %d; |] \n"
-              index arr.(0) arr.(1) arr.(2) arr.(3);
+            eprintf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
+              index arr.(0) arr.(1) arr.(2) arr.(3) arr.(4);
           if mx = 1 then
             same_loop nindex
           else

@@ -2,7 +2,7 @@
 
 set -e
 
-echo A_gen && ./round_trip.native A_gen "A*01:01:01:01" "A*31:01:24"
+echo A_gen && ./round_trip.native A_gen "A*01:01:01:01" "A*31:01:24" "A*68:01:24" "A*32:01:24"
 echo A_nuc && ./round_trip.native A_nuc "A*01:01:01:01" "A*01:11N"
 echo B_gen && ./round_trip.native B_gen "B*07:02:01"
 echo B_nuc && ./round_trip.native B_nuc "B*07:02:01" "B*44:02:01:02S"
@@ -27,7 +27,7 @@ echo DPB2_nuc &&	./round_trip.native DPB2_nuc	"DPB2*01:01:01"
 echo DQA1_gen &&	./round_trip.native DQA1_gen	"DQA1*01:01:01:01"
 echo DQA1_nuc &&	./round_trip.native DQA1_nuc	"DQA1*01:01:01:01"
 echo DQB1_gen &&	./round_trip.native DQB1_gen	"DQB1*05:01:01:01"
-echo DQB1_nuc &&	./round_trip.native DQB1_nuc	"DQB1*05:01:01:01" "DQB1*06:55"
+echo DQB1_nuc &&	./round_trip.native DQB1_nuc	"DQB1*05:01:01:01" "DQB1*06:55" "DQB1*06:79:01"
 echo DRA_gen &&	./round_trip.native DRA_gen	"DRA*01:01:01:01"
 echo DRA_nuc &&	./round_trip.native DRA_nuc	"DRA*01:01:01:01"
 echo DRB1_gen &&	./round_trip.native DRB1_gen	"DRB1*01:02:01"

@@ -1,0 +1,31 @@
+digraph G {
+  "B0-73" [shape=box, ];
+  "442C" [shape=box, ];
+  "74GCTT...CCG" [shape=box, ];
+  "443CATC...TTC" [shape=box, ];
+  "442A" [shape=box, ];
+  "235GAGG...CCT" [shape=box, ];
+  "214CGGG...CAG" [shape=box, ];
+  "E541" [shape=box, ];
+  "1ATGG...CAG" [shape=box, ];
+  "S1-V*01:01:01:01-03" [shape=box, ];
+  "345GGTC...ATT" [shape=box, ];
+  "B1-344" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "B0-73" -> "74GCTT...CCG" [label="Everything", ];
+  "442C" -> "443CATC...TTC" [label="C. of V*01:01:01:01", ];
+  "74GCTT...CCG" -> "214CGGG...CAG" [label="V*01:01:01:01", ];
+  "74GCTT...CCG" -> "235GAGG...CCT" [label="C. of V*01:01:01:01", ];
+  "443CATC...TTC" -> "E541" [label="Everything", ];
+  "442A" -> "443CATC...TTC" [label="V*01:01:01:01", ];
+  "235GAGG...CCT" -> "B1-344" [label="Everything", ];
+  "214CGGG...CAG" -> "235GAGG...CCT" [label="V*01:01:01:01", ];
+  "1ATGG...CAG" -> "B0-73" [label="Everything", ];
+  "S1-V*01:01:01:01-03" -> "1ATGG...CAG" [label="Everything", ];
+  "345GGTC...ATT" -> "442A" [label="V*01:01:01:01", ];
+  "345GGTC...ATT" -> "442C" [label="C. of V*01:01:01:01", ];
+  "B1-344" -> "345GGTC...ATT" [label="Everything", ];
+  
+  }

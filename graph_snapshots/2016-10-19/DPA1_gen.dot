@@ -1,0 +1,1276 @@
+digraph G {
+  "3943T" [shape=box, ];
+  "5509T" [shape=box, ];
+  "4648C" [shape=box, ];
+  "2596TTTT...GTT" [shape=box, ];
+  "174ATCA...GAC" [shape=box, ];
+  "163C" [shape=box, ];
+  "3840G" [shape=box, ];
+  "2414G" [shape=box, ];
+  "1401T" [shape=box, ];
+  "2165T" [shape=box, ];
+  "1504T" [shape=box, ];
+  "3495T" [shape=box, ];
+  "B6-4784" [shape=box, ];
+  "4736ACCA...ACT" [shape=box, ];
+  "3784GTTC...GGA" [shape=box, ];
+  "1194C" [shape=box, ];
+  "3139GACT...GTC" [shape=box, ];
+  "3138T" [shape=box, ];
+  "2871C" [shape=box, ];
+  "2511G" [shape=box, ];
+  "1511C" [shape=box, ];
+  "2782C" [shape=box, ];
+  "3217A" [shape=box, ];
+  "3406T" [shape=box, ];
+  "5079T" [shape=box, ];
+  "4366GTTC...CAA" [shape=box, ];
+  "1316CTCT...AAT" [shape=box, ];
+  "3737CATA...AGG" [shape=box, ];
+  "2559T" [shape=box, ];
+  "1604G" [shape=box, ];
+  "285G" [shape=box, ];
+  "3175AATTAAGA" [shape=box, ];
+  "3127C" [shape=box, ];
+  "2814A" [shape=box, ];
+  "123G" [shape=box, ];
+  "4387T" [shape=box, ];
+  "3407TTAC...TCA" [shape=box, ];
+  "2435ACTG...GTC" [shape=box, ];
+  "3174G" [shape=box, ];
+  "2066T" [shape=box, ];
+  "1504C" [shape=box, ];
+  "4164C" [shape=box, ];
+  "3782A" [shape=box, ];
+  "4413T" [shape=box, ];
+  "315T" [shape=box, ];
+  "3194T" [shape=box, ];
+  "2500GTGA...GGA" [shape=box, ];
+  "1877C" [shape=box, ];
+  "1605CCTG...TCT" [shape=box, ];
+  "4735C" [shape=box, ];
+  "4098T" [shape=box, ];
+  "4648G" [shape=box, ];
+  "161TG" [shape=box, ];
+  "2511A" [shape=box, ];
+  "7555C" [shape=box, ];
+  "3723T" [shape=box, ];
+  "E5001" [shape=box, ];
+  "2512GTGA...GAG" [shape=box, ];
+  "605G" [shape=box, ];
+  "2414A" [shape=box, ];
+  "5001GGGA...CAA" [shape=box, ];
+  "4394TGGC...CAA" [shape=box, ];
+  "2527C" [shape=box, ];
+  "1826A" [shape=box, ];
+  "5509C" [shape=box, ];
+  "1261A" [shape=box, ];
+  "4511G" [shape=box, ];
+  "1985G" [shape=box, ];
+  "1673A" [shape=box, ];
+  "4861G" [shape=box, ];
+  "1461TGTC...ATC" [shape=box, ];
+  "3227G" [shape=box, ];
+  "515CAGG...TCT" [shape=box, ];
+  "-78GTCT...AAC" [shape=box, ];
+  "3952CCTA...TCC" [shape=box, ];
+  "3406A" [shape=box, ];
+  "3245ATTA...ATA" [shape=box, ];
+  "473TACA...CTA" [shape=box, ];
+  "2531A" [shape=box, ];
+  "4415GTCA...GAC" [shape=box, ];
+  "1592T" [shape=box, ];
+  "1379T" [shape=box, ];
+  "102GTGA...GCA" [shape=box, ];
+  "1855TTG" [shape=box, ];
+  "3138C" [shape=box, ];
+  "6555TGGA...CAC" [shape=box, ];
+  "4393G" [shape=box, ];
+  "3593C" [shape=box, ];
+  "1662C" [shape=box, ];
+  "286TTTC...GAA" [shape=box, ];
+  "3751A" [shape=box, ];
+  "4405T" [shape=box, ];
+  "1663AT" [shape=box, ];
+  "1043TAAT...AGT" [shape=box, ];
+  "3336A" [shape=box, ];
+  "3840A" [shape=box, ];
+  "3128CCCA" [shape=box, ];
+  "1174CTCT...TGT" [shape=box, ];
+  "4414G" [shape=box, ];
+  "2529CC" [shape=box, ];
+  "4177AGCT...CCC" [shape=box, ];
+  "4818C" [shape=box, ];
+  "3310GTTA...TCA" [shape=box, ];
+  "753T" [shape=box, ];
+  "B3-3945" [shape=box, ];
+  "3736C" [shape=box, ];
+  "1735AACT...CCC" [shape=box, ];
+  "1604A" [shape=box, ];
+  "4735A" [shape=box, ];
+  "1854C" [shape=box, ];
+  "2066A" [shape=box, ];
+  "696CTCA...GAT" [shape=box, ];
+  "3078C" [shape=box, ];
+  "3483C" [shape=box, ];
+  "871G" [shape=box, ];
+  "3723C" [shape=box, ];
+  "3841AGCC...GCC" [shape=box, ];
+  "3168A" [shape=box, ];
+  "1770CC" [shape=box, ];
+  "B5-4569" [shape=box, ];
+  "7555T" [shape=box, ];
+  "635CTCT...CTC" [shape=box, ];
+  "3183T" [shape=box, ];
+  "2595A" [shape=box, ];
+  "2528C" [shape=box, ];
+  "1666CACAAAT" [shape=box, ];
+  "1630C" [shape=box, ];
+  "3327G" [shape=box, ];
+  "4303C" [shape=box, ];
+  "2992T" [shape=box, ];
+  "4981A" [shape=box, ];
+  "1915C" [shape=box, ];
+  "4818T" [shape=box, ];
+  "2872GTTG...ACA" [shape=box, ];
+  "4511T" [shape=box, ];
+  "2783GTGA...CCC" [shape=box, ];
+  "1956C" [shape=box, ];
+  "1673G" [shape=box, ];
+  "1641TCCT...CAT" [shape=box, ];
+  "3405T" [shape=box, ];
+  "5080ACCG...GCC" [shape=box, ];
+  "2532TAGT...TTA" [shape=box, ];
+  "4413C" [shape=box, ];
+  "4365G" [shape=box, ];
+  "3133CCCCA" [shape=box, ];
+  "4405C" [shape=box, ];
+  "3671G" [shape=box, ];
+  "1734A" [shape=box, ];
+  "4176G" [shape=box, ];
+  "2992G" [shape=box, ];
+  "2595G" [shape=box, ];
+  "3309G" [shape=box, ];
+  "4059C" [shape=box, ];
+  "S-78-DPA1*02:01:01:01;DPA1*02:01:02;DPA1*02:02:02" [shape=box, ];
+  "3329GA" [shape=box, ];
+  "1221T" [shape=box, ];
+  "2382A" [shape=box, ];
+  "1222CAAC...CCT" [shape=box, ];
+  "4406GGGGAGC" [shape=box, ];
+  "4070TGGG...CAC" [shape=box, ];
+  "1679GTAT...CAG" [shape=box, ];
+  "1986GTAT...AAG" [shape=box, ];
+  "3943C" [shape=box, ];
+  "1772TGAG...TGT" [shape=box, ];
+  "6554T" [shape=box, ];
+  "1854T" [shape=box, ];
+  "1433TAAT...ACC" [shape=box, ];
+  "3328C" [shape=box, ];
+  "4748G" [shape=box, ];
+  "1401C" [shape=box, ];
+  "1194A" [shape=box, ];
+  "2871T" [shape=box, ];
+  "3174A" [shape=box, ];
+  "2528T" [shape=box, ];
+  "754CAGG...TGT" [shape=box, ];
+  "4059A" [shape=box, ];
+  "1556GCAA...TCT" [shape=box, ];
+  "4734T" [shape=box, ];
+  "3802T" [shape=box, ];
+  "2181C" [shape=box, ];
+  "1379C" [shape=box, ];
+  "B1-101" [shape=box, ];
+  "4975C" [shape=box, ];
+  "2816TCAT...AAA" [shape=box, ];
+  "3078T" [shape=box, ];
+  "4649CACTGGC" [shape=box, ];
+  "3370G" [shape=box, ];
+  "1916TGTC...GCA" [shape=box, ];
+  "569ACAG...AGA" [shape=box, ];
+  "1915T" [shape=box, ];
+  "3470A" [shape=box, ];
+  "1315T" [shape=box, ];
+  "1877T" [shape=box, ];
+  "552TCTT...CTT" [shape=box, ];
+  "1827CCCC...CTG" [shape=box, ];
+  "4069G" [shape=box, ];
+  "4259A" [shape=box, ];
+  "1164GGTTCCTTGT" [shape=box, ];
+  "3337TATG...CAA" [shape=box, ];
+  "4941AATA...AAA" [shape=box, ];
+  "4658GGTC...CCA" [shape=box, ];
+  "3483T" [shape=box, ];
+  "753C" [shape=box, ];
+  "4969AGGAGG" [shape=box, ];
+  "3783A" [shape=box, ];
+  "4749CACC...CAG" [shape=box, ];
+  "634T" [shape=box, ];
+  "4414A" [shape=box, ];
+  "1262TCCC...TTG" [shape=box, ];
+  "1734G" [shape=box, ];
+  "3782C" [shape=box, ];
+  "4748A" [shape=box, ];
+  "6554C" [shape=box, ];
+  "4932CCCTGTGA" [shape=box, ];
+  "277CCTGCATA" [shape=box, ];
+  "3950G" [shape=box, ];
+  "3227A" [shape=box, ];
+  "315C" [shape=box, ];
+  "1555A" [shape=box, ];
+  "B7-4940" [shape=box, ];
+  "4283C" [shape=box, ];
+  "1678T" [shape=box, ];
+  "3308G" [shape=box, ];
+  "2215T" [shape=box, ];
+  "4570GTAT...TCC" [shape=box, ];
+  "1708TCTT...AGT" [shape=box, ];
+  "4085ACAG...CTT" [shape=box, ];
+  "1754GTCA...CCC" [shape=box, ];
+  "614AAGA...CTC" [shape=box, ];
+  "472G" [shape=box, ];
+  "4656C" [shape=box, ];
+  "4281C" [shape=box, ];
+  "3939CCAA" [shape=box, ];
+  "3594TTCT...GTC" [shape=box, ];
+  "606GAAGTGC" [shape=box, ];
+  "3309A" [shape=box, ];
+  "3228TATG...AGT" [shape=box, ];
+  "514C" [shape=box, ];
+  "7556TGGC...GTA" [shape=box, ];
+  "3686T" [shape=box, ];
+  "1826T" [shape=box, ];
+  "S-523-DPA1*01:03:01:02-05" [shape=box, ];
+  "4084C" [shape=box, ];
+  "3039A" [shape=box, ];
+  "2379C" [shape=box, ];
+  "3951G" [shape=box, ];
+  "3404C" [shape=box, ];
+  "3195AGAA...TCC" [shape=box, ];
+  "2765AGAA...CTG" [shape=box, ];
+  "1460C" [shape=box, ];
+  "143GGGG...AAT" [shape=box, ];
+  "4069A" [shape=box, ];
+  "1315C" [shape=box, ];
+  "5079C" [shape=box, ];
+  "1631TGGCCTAAA" [shape=box, ];
+  "1678C" [shape=box, ];
+  "2166TAAG...TTT" [shape=box, ];
+  "3736G" [shape=box, ];
+  "2815A" [shape=box, ];
+  "1ATGC...AGG" [shape=box, ];
+  "3496G" [shape=box, ];
+  "2560CATT...ATC" [shape=box, ];
+  "1985A" [shape=box, ];
+  "4387C" [shape=box, ];
+  "4981G" [shape=box, ];
+  "2993TTTC...AGC" [shape=box, ];
+  "2527T" [shape=box, ];
+  "4785AGGC...CAA" [shape=box, ];
+  "3040CTAA...TTT" [shape=box, ];
+  "1195ATTT...AAA" [shape=box, ];
+  "3124T" [shape=box, ];
+  "1630A" [shape=box, ];
+  "4512TCTA...GGG" [shape=box, ];
+  "1859TCGC...ACC" [shape=box, ];
+  "2182CAAT...TAT" [shape=box, ];
+  "1505TTTAAA" [shape=box, ];
+  "1402CTGA...ACT" [shape=box, ];
+  "276G" [shape=box, ];
+  "4862GGCA...GGG" [shape=box, ];
+  "3938A" [shape=box, ];
+  "3803AA" [shape=box, ];
+  "1753A" [shape=box, ];
+  "568C" [shape=box, ];
+  "5510CTCC...TTG" [shape=box, ];
+  "1878ACGT...GTC" [shape=box, ];
+  "634C" [shape=box, ];
+  "124GAGC...GAT" [shape=box, ];
+  "1957AACA...TTG" [shape=box, ];
+  "605C" [shape=box, ];
+  "2815G" [shape=box, ];
+  "1662A" [shape=box, ];
+  "4966G" [shape=box, ];
+  "4099CATC...CCT" [shape=box, ];
+  "3168C" [shape=box, ];
+  "2181T" [shape=box, ];
+  "B4-4286" [shape=box, ];
+  "4976CCTAG" [shape=box, ];
+  "3308A" [shape=box, ];
+  "3672TGTT...ACT" [shape=box, ];
+  "2067AAAA...GTA" [shape=box, ];
+  "1640C" [shape=box, ];
+  "4303G" [shape=box, ];
+  "3471TGAT...TTT" [shape=box, ];
+  "B0-0" [shape=box, ];
+  "1707A" [shape=box, ];
+  "1523TATC...CTC" [shape=box, ];
+  "1512CACCTCTTAA" [shape=box, ];
+  "3805A" [shape=box, ];
+  "613G" [shape=box, ];
+  "1042T" [shape=box, ];
+  "2380AG" [shape=box, ];
+  "4176C" [shape=box, ];
+  "1460G" [shape=box, ];
+  "3184CTTAATGGGA" [shape=box, ];
+  "2499C" [shape=box, ];
+  "4388GTCAC" [shape=box, ];
+  "3699CGGA...GCC" [shape=box, ];
+  "1221C" [shape=box, ];
+  "551A" [shape=box, ];
+  "4098G" [shape=box, ];
+  "3132C" [shape=box, ];
+  "871T" [shape=box, ];
+  "163T" [shape=box, ];
+  "3724GTTT...GAC" [shape=box, ];
+  "3079GTAT...CCA" [shape=box, ];
+  "S0-DPA1*01:03:01:01;DPA1*01:03:05;DPA1*02:01:01:02;DPA1*02:01:08;DPA1*02:06" [
+  shape=box, ];
+  "4222AAGA...GGG" [shape=box, ];
+  "-523GGTG...TCA" [shape=box, ];
+  "4365A" [shape=box, ];
+  "4221C" [shape=box, ];
+  "4164G" [shape=box, ];
+  "3331C" [shape=box, ];
+  "4657A" [shape=box, ];
+  "3218CCAGTAGCC" [shape=box, ];
+  "2379T" [shape=box, ];
+  "123A" [shape=box, ];
+  "3946GTAC" [shape=box, ];
+  "4982ATTT...GAA" [shape=box, ];
+  "4260CCTA...CCT" [shape=box, ];
+  "4656T" [shape=box, ];
+  "2764C" [shape=box, ];
+  "514T" [shape=box, ];
+  "3331G" [shape=box, ];
+  "3127T" [shape=box, ];
+  "4931C" [shape=box, ];
+  "4393A" [shape=box, ];
+  "3722G" [shape=box, ];
+  "2764T" [shape=box, ];
+  "2499T" [shape=box, ];
+  "1640T" [shape=box, ];
+  "695C" [shape=box, ];
+  "4966C" [shape=box, ];
+  "1603T" [shape=box, ];
+  "1665C" [shape=box, ];
+  "3327A" [shape=box, ];
+  "695T" [shape=box, ];
+  "4283T" [shape=box, ];
+  "3183A" [shape=box, ];
+  "316CTTC...GTC" [shape=box, ];
+  "B2-3698" [shape=box, ];
+  "3951C" [shape=box, ];
+  "4281T" [shape=box, ];
+  "3722A" [shape=box, ];
+  "3332TGAA" [shape=box, ];
+  "1432G" [shape=box, ];
+  "E9274" [shape=box, ];
+  "3751G" [shape=box, ];
+  "1858G" [shape=box, ];
+  "1460A" [shape=box, ];
+  "568T" [shape=box, ];
+  "285T" [shape=box, ];
+  "3470G" [shape=box, ];
+  "4282C" [shape=box, ];
+  "2382G" [shape=box, ];
+  "3805G" [shape=box, ];
+  "1555G" [shape=box, ];
+  "4259G" [shape=box, ];
+  "4304GTGT...ACA" [shape=box, ];
+  "1956G" [shape=box, ];
+  "4819GGAG...AGT" [shape=box, ];
+  "3671A" [shape=box, ];
+  "1592C" [shape=box, ];
+  "1522T" [shape=box, ];
+  "2383TCAT...GTG" [shape=box, ];
+  "613A" [shape=box, ];
+  "3328T" [shape=box, ];
+  "2813A" [shape=box, ];
+  "2165A" [shape=box, ];
+  "1674TCTA" [shape=box, ];
+  "3495C" [shape=box, ];
+  "4287ATCC...GAC" [shape=box, ];
+  "173G" [shape=box, ];
+  "872CATG...TTT" [shape=box, ];
+  "1665A" [shape=box, ];
+  "1593ATTTAACCTG" [shape=box, ];
+  "1261G" [shape=box, ];
+  "3194G" [shape=box, ];
+  "E4941" [shape=box, ];
+  "4734G" [shape=box, ];
+  "3497CTCC...TAC" [shape=box, ];
+  "1432A" [shape=box, ];
+  "472A" [shape=box, ];
+  "2215A" [shape=box, ];
+  "3217G" [shape=box, ];
+  "3370C" [shape=box, ];
+  "3169TAGAA" [shape=box, ];
+  "3039C" [shape=box, ];
+  "2464CCCA...ATC" [shape=box, ];
+  "1707G" [shape=box, ];
+  "3244T" [shape=box, ];
+  "3783T" [shape=box, ];
+  "1603C" [shape=box, ];
+  "3124C" [shape=box, ];
+  "3802C" [shape=box, ];
+  "3496A" [shape=box, ];
+  "3593T" [shape=box, ];
+  "3687TCTT...CAG" [shape=box, ];
+  "3484ATTT...CTT" [shape=box, ];
+  "2559C" [shape=box, ];
+  "1511T" [shape=box, ];
+  "4060CTAGTGGCC" [shape=box, ];
+  "3938G" [shape=box, ];
+  "1042C" [shape=box, ];
+  "3371TAAG...TTA" [shape=box, ];
+  "2216TTAC...ACA" [shape=box, ];
+  "4861C" [shape=box, ];
+  "4221T" [shape=box, ];
+  "2531G" [shape=box, ];
+  "2415CAAG...GTC" [shape=box, ];
+  "3404T" [shape=box, ];
+  "2782T" [shape=box, ];
+  "1858A" [shape=box, ];
+  "173A" [shape=box, ];
+  "3125TC" [shape=box, ];
+  "4284AG" [shape=box, ];
+  "4084T" [shape=box, ];
+  "3686G" [shape=box, ];
+  "551G" [shape=box, ];
+  "4657G" [shape=box, ];
+  "3806AAGG...GCC" [shape=box, ];
+  "1380CAGT...GCC" [shape=box, ];
+  "2813G" [shape=box, ];
+  "3244A" [shape=box, ];
+  "3132A" [shape=box, ];
+  "4967CA" [shape=box, ];
+  "1753G" [shape=box, ];
+  "4931A" [shape=box, ];
+  "4975T" [shape=box, ];
+  "3950T" [shape=box, ];
+  "3752GAGT...GAG" [shape=box, ];
+  "3944G" [shape=box, ];
+  "276T" [shape=box, ];
+  "4165TCTG...TCA" [shape=box, ];
+  "1522C" [shape=box, ];
+  "164TGCTTCAGG" [shape=box, ];
+  
+  
+  edge [color="#001267", ];
+  "3943T" -> "3944G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "5509T" -> "5510CTCC...TTG" [label="DPA1*01:03:01:05", ];
+  "4648C" -> "4649CACTGGC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "2596TTTT...GTT" -> "2764C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2596TTTT...GTT" -> "2764T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "174ATCA...GAC" -> "276G" [label="DPA1*02:01:01:01;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "174ATCA...GAC" -> "276T" [label="C. of DPA1*02:01:01:01;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "163C" -> "164TGCTTCAGG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3840G" -> "3841AGCC...GCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2414G" -> "2415CAAG...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1401T" -> "1402CTGA...ACT" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2165T" -> "2166TAAG...TTT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1504T" -> "1505TTTAAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3495T" -> "3496G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "B6-4784" -> "4785AGGC...CAA" [label="Everything", ];
+  "4736ACCA...ACT" -> "4748A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4736ACCA...ACT" -> "4748G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3784GTTC...GGA" -> "3802C" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3784GTTC...GGA" -> "3802T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1194C" -> "1195ATTT...AAA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "3139GACT...GTC" -> "3168A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3139GACT...GTC" -> "3168C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3138T" -> "3139GACT...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2871C" -> "2872GTTG...ACA" [label="DPA1*02:01:01:02", ];
+  "2511G" -> "2512GTGA...GAG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1511C" -> "1512CACCTCTTAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2782C" -> "2783GTGA...CCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3217A" -> "3218CCAGTAGCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                              ];
+  "3406T" -> "3407TTAC...TCA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "5079T" -> "5080ACCG...GCC" [label="DPA1*01:03:01:04", ];
+  "4366GTTC...CAA" -> "4387C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4366GTTC...CAA" -> "4387T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1316CTCT...AAT" -> "1379C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1316CTCT...AAT" -> "1379T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3737CATA...AGG" -> "3751A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3737CATA...AGG" -> "3751G" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2559T" -> "2560CATT...ATC" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1604G" -> "1605CCTG...TCT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "285G" -> "286TTTC...GAA" [label="C. of DPA1*01:03:01:03", ];
+  "3175AATTAAGA" -> "3183A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "3175AATTAAGA" -> "3183T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3127C" -> "3128CCCA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2814A" -> "2815A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2814A" -> "2815G" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "123G" -> "124GAGC...GAT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4387T" -> "4388GTCAC" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3407TTAC...TCA" -> "3470A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3407TTAC...TCA" -> "3470G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2435ACTG...GTC" -> "2464CCCA...ATC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05",
+                                        ];
+  "3174G" -> "3175AATTAAGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "2066T" -> "2067AAAA...GTA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1504C" -> "1505TTTAAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                           ];
+  "4164C" -> "4165TCTG...TCA" [label="C. of DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "3782A" -> "3783T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4413T" -> "4414G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "315T" -> "316CTTC...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3194T" -> "3195AGAA...TCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2500GTGA...GGA" -> "2511A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2500GTGA...GGA" -> "2511G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1877C" -> "1878ACGT...GTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1605CCTG...TCT" -> "1630A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1605CCTG...TCT" -> "1630C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4735C" -> "4736ACCA...ACT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4098T" -> "4099CATC...CCT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4648G" -> "4649CACTGGC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "161TG" -> "163C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "161TG" -> "163T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                     ];
+  "2511A" -> "2512GTGA...GAG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "7555C" -> "7556TGGC...GTA" [label="DPA1*01:03:01:02-04", ];
+  "3723T" -> "3724GTTT...GAC" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2512GTGA...GAG" -> "2527C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2512GTGA...GAG" -> "2527T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "605G" -> "606GAAGTGC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "2414A" -> "2415CAAG...GTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "5001GGGA...CAA" -> "5079C" [label="DPA1*01:03:01:02-03,05", ];
+  "5001GGGA...CAA" -> "5079T" [label="DPA1*01:03:01:04", ];
+  "4394TGGC...CAA" -> "4405C" [label="DPA1*01:03:01:01-05", ];
+  "4394TGGC...CAA" -> "4405T" [label="C. of DPA1*01:03:01:01-05", ];
+  "2527C" -> "2528T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "1826A" -> "1827CCCC...CTG" [label="DPA1*01:03:01:05", ];
+  "5509C" -> "5510CTCC...TTG" [label="DPA1*01:03:01:02-04", ];
+  "1261A" -> "1262TCCC...TTG" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "4511G" -> "4512TCTA...GGG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1985G" -> "1986GTAT...AAG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1673A" -> "1674TCTA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4861G" -> "4862GGCA...GGG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1461TGTC...ATC" -> "1504C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1461TGTC...ATC" -> "1504T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3227G" -> "3228TATG...AGT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "515CAGG...TCT" -> "551A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "515CAGG...TCT" -> "551G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "-78GTCT...AAC" -> "B0-0" [label="C. of DPA1*01:03:01:01;DPA1*01:03:05;DPA1*02:01:01:02;DPA1*02:01:08;DPA1*02:06",
+                             ];
+  "3952CCTA...TCC" -> "4059A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3952CCTA...TCC" -> "4059C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3406A" -> "3407TTAC...TCA" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3245ATTA...ATA" -> "3308A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3245ATTA...ATA" -> "3308G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "473TACA...CTA" -> "514C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "473TACA...CTA" -> "514T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2531A" -> "2532TAGT...TTA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4415GTCA...GAC" -> "4511G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4415GTCA...GAC" -> "4511T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1592T" -> "1593ATTTAACCTG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1379T" -> "1380CAGT...GCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "102GTGA...GCA" -> "123A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "102GTGA...GCA" -> "123G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1855TTG" -> "1858A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                        ];
+  "1855TTG" -> "1858G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3138C" -> "3139GACT...GTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "6555TGGA...CAC" -> "7555C" [label="DPA1*01:03:01:02-04", ];
+  "6555TGGA...CAC" -> "7555T" [label="DPA1*01:03:01:05", ];
+  "4393G" -> "4394TGGC...CAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3593C" -> "3594TTCT...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1662C" -> "1663AT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "286TTTC...GAA" -> "315C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "286TTTC...GAA" -> "315T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3751A" -> "3752GAGT...GAG" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "4405T" -> "4406GGGGAGC" [label="C. of DPA1*01:03:01:01-05", ];
+  "1663AT" -> "1665A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1663AT" -> "1665C" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1043TAAT...AGT" -> "1164GGTTCCTTGT" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1043TAAT...AGT" -> "1174CTCT...TGT" [label="C. of DPA1*02:02:02;DPA1*02:06",
+                                        ];
+  "3336A" -> "3337TATG...CAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3840A" -> "3841AGCC...GCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3128CCCA" -> "3132A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                         ];
+  "3128CCCA" -> "3132C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1174CTCT...TGT" -> "1194A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1174CTCT...TGT" -> "1194C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4414G" -> "4415GTCA...GAC" [label="C. of DPA1*02:01:01:01-02", ];
+  "2529CC" -> "2531A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                       ];
+  "2529CC" -> "2531G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4177AGCT...CCC" -> "4221C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4177AGCT...CCC" -> "4221T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4818C" -> "4819GGAG...AGT" [label="C. of DPA1*02:06", ];
+  "3310GTTA...TCA" -> "3327A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3310GTTA...TCA" -> "3327G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "753T" -> "754CAGG...TGT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "B3-3945" -> "3946GTAC" [label="Everything", ];
+  "3736C" -> "3737CATA...AGG" [label="DPA1*02:01:01:01-02;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1735AACT...CCC" -> "1753A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1735AACT...CCC" -> "1753G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1604A" -> "1605CCTG...TCT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4735A" -> "4736ACCA...ACT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1854C" -> "1855TTG" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2066A" -> "2067AAAA...GTA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "696CTCA...GAT" -> "753C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "696CTCA...GAT" -> "753T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3078C" -> "3079GTAT...CCA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3483C" -> "3484ATTT...CTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "871G" -> "872CATG...TTT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                             ];
+  "3723C" -> "3724GTTT...GAC" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "3841AGCC...GCC" -> "3938A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3841AGCC...GCC" -> "3938G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3168A" -> "3169TAGAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1770CC" -> "1772TGAG...TGT" [label="DPA1*02:01:01:01-02;DPA1*02:02:02;DPA1*02:06",
+                                ];
+  "B5-4569" -> "4570GTAT...TCC" [label="Everything", ];
+  "7555T" -> "7556TGGC...GTA" [label="DPA1*01:03:01:05", ];
+  "635CTCT...CTC" -> "695C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "635CTCT...CTC" -> "695T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                             ];
+  "3183T" -> "3184CTTAATGGGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2595A" -> "2596TTTT...GTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2528C" -> "2529CC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1666CACAAAT" -> "1673A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1666CACAAAT" -> "1673G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "1630C" -> "1631TGGCCTAAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                              ];
+  "3327G" -> "3328C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4303C" -> "4304GTGT...ACA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2992T" -> "2993TTTC...AGC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4981A" -> "4982ATTT...GAA" [label="DPA1*02:01:02", ];
+  "1915C" -> "1916TGTC...GCA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4818T" -> "4819GGAG...AGT" [label="DPA1*02:06", ];
+  "2872GTTG...ACA" -> "2992G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2872GTTG...ACA" -> "2992T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4511T" -> "4512TCTA...GGG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2783GTGA...CCC" -> "2813A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2783GTGA...CCC" -> "2813G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1956C" -> "1957AACA...TTG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1673G" -> "1674TCTA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                         ];
+  "1641TCCT...CAT" -> "1662A" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1641TCCT...CAT" -> "1662C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3405T" -> "3406A" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3405T" -> "3406T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "5080ACCG...GCC" -> "5509C" [label="DPA1*01:03:01:02-04", ];
+  "5080ACCG...GCC" -> "5509T" [label="DPA1*01:03:01:05", ];
+  "2532TAGT...TTA" -> "2559C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2532TAGT...TTA" -> "2559T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "4413C" -> "4414A" [label="DPA1*02:01:01:01-02", ];
+  "4413C" -> "4414G" [label="DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06", ];
+  "4365G" -> "4366GTTC...CAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3133CCCCA" -> "3138C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "3133CCCCA" -> "3138T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4405C" -> "4406GGGGAGC" [label="DPA1*01:03:01:01-05", ];
+  "3671G" -> "3672TGTT...ACT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1734A" -> "1735AACT...CCC" [label="DPA1*01:03:01:02-05", ];
+  "4176G" -> "4177AGCT...CCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2992G" -> "2993TTTC...AGC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2595G" -> "2596TTTT...GTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3309G" -> "3310GTTA...TCA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4059C" -> "4060CTAGTGGCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "S-78-DPA1*02:01:01:01;DPA1*02:01:02;DPA1*02:02:02" -> "-78GTCT...AAC" [
+  label="DPA1*02:01:01:01;DPA1*02:01:02;DPA1*02:02:02", ];
+  "3329GA" -> "3331C" [label="DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "3329GA" -> "3331G" [label="C. of DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "1221T" -> "1222CAAC...CCT" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2382A" -> "2383TCAT...GTG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1222CAAC...CCT" -> "1261A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1222CAAC...CCT" -> "1261G" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4406GGGGAGC" -> "4413C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "4406GGGGAGC" -> "4413T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4070TGGG...CAC" -> "4084C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4070TGGG...CAC" -> "4084T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1679GTAT...CAG" -> "1707A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1679GTAT...CAG" -> "1707G" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1986GTAT...AAG" -> "2066A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1986GTAT...AAG" -> "2066T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3943C" -> "3944G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1772TGAG...TGT" -> "1826A" [label="DPA1*01:03:01:05", ];
+  "1772TGAG...TGT" -> "1826T" [label="C. of DPA1*01:03:01:05", ];
+  "6554T" -> "6555TGGA...CAC" [label="DPA1*01:03:01:05", ];
+  "1854T" -> "1855TTG" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1433TAAT...ACC" -> "1460A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1433TAAT...ACC" -> "1460C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1433TAAT...ACC" -> "1460G" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3328C" -> "3329GA" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "4748G" -> "4749CACC...CAG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1401C" -> "1402CTGA...ACT" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1194A" -> "1195ATTT...AAA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2871T" -> "2872GTTG...ACA" [label="C. of DPA1*02:01:01:02", ];
+  "3174A" -> "3175AATTAAGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2528T" -> "2529CC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                       ];
+  "754CAGG...TGT" -> "871G" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                             ];
+  "754CAGG...TGT" -> "871T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "4059A" -> "4060CTAGTGGCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                              ];
+  "1556GCAA...TCT" -> "1592C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1556GCAA...TCT" -> "1592T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4734T" -> "4735C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3802T" -> "3803AA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2181C" -> "2182CAAT...TAT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1379C" -> "1380CAGT...GCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "B1-101" -> "102GTGA...GCA" [label="Everything", ];
+  "4975C" -> "4976CCTAG" [label="DPA1*01:03:01:02-05", ];
+  "2816TCAT...AAA" -> "2871C" [label="DPA1*02:01:01:02", ];
+  "2816TCAT...AAA" -> "2871T" [label="C. of DPA1*02:01:01:02", ];
+  "3078T" -> "3079GTAT...CCA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4649CACTGGC" -> "4656C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "4649CACTGGC" -> "4656T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3370G" -> "3371TAAG...TTA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1916TGTC...GCA" -> "1956C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1916TGTC...GCA" -> "1956G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "569ACAG...AGA" -> "605C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "569ACAG...AGA" -> "605G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "1915T" -> "1916TGTC...GCA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3470A" -> "3471TGAT...TTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1315T" -> "1316CTCT...AAT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1877T" -> "1878ACGT...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "552TCTT...CTT" -> "568C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "552TCTT...CTT" -> "568T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1827CCCC...CTG" -> "1854C" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1827CCCC...CTG" -> "1854T" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4069G" -> "4070TGGG...CAC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4259A" -> "4260CCTA...CCT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1164GGTTCCTTGT" -> "1174CTCT...TGT" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3337TATG...CAA" -> "3370C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3337TATG...CAA" -> "3370G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4941AATA...AAA" -> "4966C" [label="DPA1*02:01:02", ];
+  "4941AATA...AAA" -> "4966G" [label="DPA1*01:03:01:02-05", ];
+  "4658GGTC...CCA" -> "4734G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4658GGTC...CCA" -> "4734T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3483T" -> "3484ATTT...CTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "753C" -> "754CAGG...TGT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "4969AGGAGG" -> "4975C" [label="DPA1*01:03:01:02-05", ];
+  "4969AGGAGG" -> "4975T" [label="DPA1*02:01:02", ];
+  "3783A" -> "3784GTTC...GGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4749CACC...CAG" -> "B6-4784" [label="Everything", ];
+  "634T" -> "635CTCT...CTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "4414A" -> "4415GTCA...GAC" [label="DPA1*02:01:01:01-02", ];
+  "1262TCCC...TTG" -> "1315C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1262TCCC...TTG" -> "1315T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1734G" -> "1735AACT...CCC" [label="C. of DPA1*01:03:01:02-05", ];
+  "3782C" -> "3783A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "4748A" -> "4749CACC...CAG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "6554C" -> "6555TGGA...CAC" [label="DPA1*01:03:01:02-04", ];
+  "4932CCCTGTGA" -> "B7-4940" [label="Everything", ];
+  "277CCTGCATA" -> "285G" [label="C. of DPA1*01:03:01:03", ];
+  "277CCTGCATA" -> "285T" [label="DPA1*01:03:01:03", ];
+  "3950G" -> "3951C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3227A" -> "3228TATG...AGT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "315C" -> "316CTTC...GTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "1555A" -> "1556GCAA...TCT" [label="DPA1*01:03:01:04;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "B7-4940" -> "E4941" [label="C. of DPA1*01:03:01:02-05;DPA1*02:01:02", ];
+  "B7-4940" -> "4941AATA...AAA" [label="DPA1*01:03:01:02-05;DPA1*02:01:02", ];
+  "4283C" -> "4284AG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1678T" -> "1679GTAT...CAG" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3308G" -> "3309G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2215T" -> "2216TTAC...ACA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4570GTAT...TCC" -> "4648C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4570GTAT...TCC" -> "4648G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1708TCTT...AGT" -> "1734A" [label="DPA1*01:03:01:02-05", ];
+  "1708TCTT...AGT" -> "1734G" [label="C. of DPA1*01:03:01:02-05", ];
+  "4085ACAG...CTT" -> "4098G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4085ACAG...CTT" -> "4098T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1754GTCA...CCC" -> "1770CC" [label="DPA1*02:01:01:01-02;DPA1*02:02:02;DPA1*02:06",
+                                ];
+  "1754GTCA...CCC" -> "1772TGAG...TGT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:02:02;DPA1*02:06",
+                                        ];
+  "614AAGA...CTC" -> "634C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "614AAGA...CTC" -> "634T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "472G" -> "473TACA...CTA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "4656C" -> "4657A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "4281C" -> "4282C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "3939CCAA" -> "3943C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3939CCAA" -> "3943T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                         ];
+  "3594TTCT...GTC" -> "3671A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3594TTCT...GTC" -> "3671G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "606GAAGTGC" -> "613A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "606GAAGTGC" -> "613G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "3309A" -> "3310GTTA...TCA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3228TATG...AGT" -> "3244A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3228TATG...AGT" -> "3244T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "514C" -> "515CAGG...TCT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "7556TGGC...GTA" -> "E9274" [label="DPA1*01:03:01:02-05", ];
+  "3686T" -> "3687TCTT...CAG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1826T" -> "1827CCCC...CTG" [label="C. of DPA1*01:03:01:05", ];
+  "S-523-DPA1*01:03:01:02-05" -> "-523GGTG...TCA" [label="DPA1*01:03:01:02-05",
+                                                   ];
+  "4084C" -> "4085ACAG...CTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3039A" -> "3040CTAA...TTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2379C" -> "2380AG" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3951G" -> "3952CCTA...TCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3404C" -> "3405T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3195AGAA...TCC" -> "3217A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3195AGAA...TCC" -> "3217G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2765AGAA...CTG" -> "2782C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2765AGAA...CTG" -> "2782T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1460C" -> "1461TGTC...ATC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "143GGGG...AAT" -> "161TG" [label="C. of DPA1*01:03:01:05", ];
+  "4069A" -> "4070TGGG...CAC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1315C" -> "1316CTCT...AAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "5079C" -> "5080ACCG...GCC" [label="DPA1*01:03:01:02-03,05", ];
+  "1631TGGCCTAAA" -> "1640C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                              ];
+  "1631TGGCCTAAA" -> "1640T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1678C" -> "1679GTAT...CAG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2166TAAG...TTT" -> "2181C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2166TAAG...TTT" -> "2181T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3736G" -> "3737CATA...AGG" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2815A" -> "2816TCAT...AAA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1ATGC...AGG" -> "B1-101" [label="Everything", ];
+  "3496G" -> "3497CTCC...TAC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2560CATT...ATC" -> "2595A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2560CATT...ATC" -> "2595G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1985A" -> "1986GTAT...AAG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4387C" -> "4388GTCAC" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4981G" -> "4982ATTT...GAA" [label="DPA1*01:03:01:02-05", ];
+  "2993TTTC...AGC" -> "3039A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2993TTTC...AGC" -> "3039C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2527T" -> "2528C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4785AGGC...CAA" -> "4818C" [label="C. of DPA1*02:06", ];
+  "4785AGGC...CAA" -> "4818T" [label="DPA1*02:06", ];
+  "3040CTAA...TTT" -> "3078C" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3040CTAA...TTT" -> "3078T" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1195ATTT...AAA" -> "1221C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1195ATTT...AAA" -> "1221T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3124T" -> "3125TC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1630A" -> "1631TGGCCTAAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4512TCTA...GGG" -> "B5-4569" [label="Everything", ];
+  "1859TCGC...ACC" -> "1877C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1859TCGC...ACC" -> "1877T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2182CAAT...TAT" -> "2215A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2182CAAT...TAT" -> "2215T" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1505TTTAAA" -> "1511C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1505TTTAAA" -> "1511T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                           ];
+  "1402CTGA...ACT" -> "1432A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1402CTGA...ACT" -> "1432G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "276G" -> "277CCTGCATA" [label="DPA1*02:01:01:01;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                           ];
+  "4862GGCA...GGG" -> "4931A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4862GGCA...GGG" -> "4931C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3938A" -> "3939CCAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3803AA" -> "3805A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3803AA" -> "3805G" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1753A" -> "1754GTCA...CCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "568C" -> "569ACAG...AGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "5510CTCC...TTG" -> "6554C" [label="DPA1*01:03:01:02-04", ];
+  "5510CTCC...TTG" -> "6554T" [label="DPA1*01:03:01:05", ];
+  "1878ACGT...GTC" -> "1915C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1878ACGT...GTC" -> "1915T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "634C" -> "635CTCT...CTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "124GAGC...GAT" -> "143GGGG...AAT" [label="C. of DPA1*01:03:01:05", ];
+  "124GAGC...GAT" -> "161TG" [label="DPA1*01:03:01:05", ];
+  "1957AACA...TTG" -> "1985A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1957AACA...TTG" -> "1985G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "605C" -> "606GAAGTGC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2815G" -> "2816TCAT...AAA" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1662A" -> "1663AT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "4966G" -> "4969AGGAGG" [label="DPA1*01:03:01:02-05", ];
+  "4099CATC...CCT" -> "4164C" [label="C. of DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "4099CATC...CCT" -> "4164G" [label="DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "3168C" -> "3169TAGAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "2181T" -> "2182CAAT...TAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "B4-4286" -> "4287ATCC...GAC" [label="Everything", ];
+  "4976CCTAG" -> "4981A" [label="DPA1*02:01:02", ];
+  "4976CCTAG" -> "4981G" [label="DPA1*01:03:01:02-05", ];
+  "3308A" -> "3309A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "3672TGTT...ACT" -> "3686G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3672TGTT...ACT" -> "3686T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2067AAAA...GTA" -> "2165A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2067AAAA...GTA" -> "2165T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1640C" -> "1641TCCT...CAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4303G" -> "4304GTGT...ACA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3471TGAT...TTT" -> "3483C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3471TGAT...TTT" -> "3483T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "B0-0" -> "1ATGC...AGG" [label="Everything", ];
+  "1707A" -> "1708TCTT...AGT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1523TATC...CTC" -> "1555A" [label="DPA1*01:03:01:04;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1523TATC...CTC" -> "1555G" [label="C. of DPA1*01:03:01:04;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1512CACCTCTTAA" -> "1522C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1512CACCTCTTAA" -> "1522T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3805A" -> "3806AAGG...GCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "613G" -> "614AAGA...CTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "1042T" -> "1043TAAT...AGT" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "2380AG" -> "2382A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                       ];
+  "2380AG" -> "2382G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4176C" -> "4177AGCT...CCC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1460G" -> "1461TGTC...ATC" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3184CTTAATGGGA" -> "3194G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3184CTTAATGGGA" -> "3194T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2499C" -> "2500GTGA...GGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4388GTCAC" -> "4393A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "4388GTCAC" -> "4393G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3699CGGA...GCC" -> "3722A" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3699CGGA...GCC" -> "3722G" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1221C" -> "1222CAAC...CCT" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "551A" -> "552TCTT...CTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4098G" -> "4099CATC...CCT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3132C" -> "3133CCCCA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "871T" -> "872CATG...TTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "163T" -> "164TGCTTCAGG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "3724GTTT...GAC" -> "3736C" [label="DPA1*02:01:01:01-02;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3724GTTT...GAC" -> "3736G" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3079GTAT...CCA" -> "3124C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3079GTAT...CCA" -> "3124T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "S0-DPA1*01:03:01:01;DPA1*01:03:05;DPA1*02:01:01:02;DPA1*02:01:08;DPA1*02:06" -> "B0-0" [
+  label="DPA1*01:03:01:01;DPA1*01:03:05;DPA1*02:01:01:02;DPA1*02:01:08;DPA1*02:06",
+  ];
+  "4222AAGA...GGG" -> "4259A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4222AAGA...GGG" -> "4259G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "-523GGTG...TCA" -> "-78GTCT...AAC" [label="DPA1*01:03:01:02-05", ];
+  "4365A" -> "4366GTTC...CAA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4221C" -> "4222AAGA...GGG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4164G" -> "4165TCTG...TCA" [label="DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "3331C" -> "3332TGAA" [label="DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "4657A" -> "4658GGTC...CCA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3218CCAGTAGCC" -> "3227A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3218CCAGTAGCC" -> "3227G" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                              ];
+  "2379T" -> "2380AG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "123A" -> "124GAGC...GAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "3946GTAC" -> "3950G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3946GTAC" -> "3950T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                         ];
+  "4982ATTT...GAA" -> "E5001" [label="DPA1*02:01:02", ];
+  "4982ATTT...GAA" -> "5001GGGA...CAA" [label="DPA1*01:03:01:02-05", ];
+  "4260CCTA...CCT" -> "4281C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4260CCTA...CCT" -> "4281T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4656T" -> "4657G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2764C" -> "2765AGAA...CTG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "514T" -> "515CAGG...TCT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3331G" -> "3332TGAA" [label="C. of DPA1*01:03:01:01;DPA1*01:03:05", ];
+  "3127T" -> "3128CCCA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "4931C" -> "4932CCCTGTGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "4393A" -> "4394TGGC...CAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3722G" -> "3723C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2764T" -> "2765AGAA...CTG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2499T" -> "2500GTGA...GGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1640T" -> "1641TCCT...CAT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "695C" -> "696CTCA...GAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "4966C" -> "4967CA" [label="DPA1*02:01:02", ];
+  "1603T" -> "1604G" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1665C" -> "1666CACAAAT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                            ];
+  "3327A" -> "3328C" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3327A" -> "3328T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "695T" -> "696CTCA...GAT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                             ];
+  "4283T" -> "4284AG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                       ];
+  "3183A" -> "3184CTTAATGGGA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "316CTTC...GTC" -> "472A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "316CTTC...GTC" -> "472G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "B2-3698" -> "3699CGGA...GCC" [label="Everything", ];
+  "3951C" -> "3952CCTA...TCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4281T" -> "4282C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3722A" -> "3723T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3332TGAA" -> "3336A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3332TGAA" -> "3337TATG...CAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                                  ];
+  "1432G" -> "1433TAAT...ACC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3751G" -> "3752GAGT...GAG" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1858G" -> "1859TCGC...ACC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1460A" -> "1461TGTC...ATC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "568T" -> "569ACAG...AGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "285T" -> "286TTTC...GAA" [label="DPA1*01:03:01:03", ];
+  "3470G" -> "3471TGAT...TTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4282C" -> "4283C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4282C" -> "4283T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "2382G" -> "2383TCAT...GTG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3805G" -> "3806AAGG...GCC" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "1555G" -> "1556GCAA...TCT" [label="C. of DPA1*01:03:01:04;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4259G" -> "4260CCTA...CCT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4304GTGT...ACA" -> "4365A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4304GTGT...ACA" -> "4365G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1956G" -> "1957AACA...TTG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4819GGAG...AGT" -> "4861C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4819GGAG...AGT" -> "4861G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3671A" -> "3672TGTT...ACT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1592C" -> "1593ATTTAACCTG" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1522T" -> "1523TATC...CTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2383TCAT...GTG" -> "2414A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2383TCAT...GTG" -> "2414G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "613A" -> "614AAGA...CTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3328T" -> "3329GA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2813A" -> "2814A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2165A" -> "2166TAAG...TTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1674TCTA" -> "1678C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1674TCTA" -> "1678T" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3495C" -> "3496A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "4287ATCC...GAC" -> "4303C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "4287ATCC...GAC" -> "4303G" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "173G" -> "174ATCA...GAC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "872CATG...TTT" -> "1042C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "872CATG...TTT" -> "1042T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1665A" -> "1666CACAAAT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1593ATTTAACCTG" -> "1603C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "1593ATTTAACCTG" -> "1603T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1261G" -> "1262TCCC...TTG" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "3194G" -> "3195AGAA...TCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4734G" -> "4735A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "3497CTCC...TAC" -> "3593C" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3497CTCC...TAC" -> "3593T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1432A" -> "1433TAAT...ACC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "472A" -> "473TACA...CTA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2215A" -> "2216TTAC...ACA" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "3217G" -> "3218CCAGTAGCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3370C" -> "3371TAAG...TTA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3169TAGAA" -> "3174A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3169TAGAA" -> "3174G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "3039C" -> "3040CTAA...TTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2464CCCA...ATC" -> "2499C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "2464CCCA...ATC" -> "2499T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1707G" -> "1708TCTT...AGT" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3244T" -> "3245ATTA...ATA" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3783T" -> "3784GTTC...GGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1603C" -> "1604A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1603C" -> "1604G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3124C" -> "3125TC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                       ];
+  "3802C" -> "3803AA" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3496A" -> "3497CTCC...TAC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3593T" -> "3594TTCT...GTC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3687TCTT...CAG" -> "B2-3698" [label="Everything", ];
+  "3484ATTT...CTT" -> "3495C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3484ATTT...CTT" -> "3495T" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2559C" -> "2560CATT...ATC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "1511T" -> "1512CACCTCTTAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4060CTAGTGGCC" -> "4069A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4060CTAGTGGCC" -> "4069G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                              ];
+  "3938G" -> "3939CCAA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                         ];
+  "1042C" -> "1043TAAT...AGT" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "3371TAAG...TTA" -> "3404C" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "3371TAAG...TTA" -> "3404T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2216TTAC...ACA" -> "2379C" [label="C. of DPA1*02:01:01:01-02;DPA1*02:01:02,08",
+                               ];
+  "2216TTAC...ACA" -> "2379T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "4861C" -> "4862GGCA...GGG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4221T" -> "4222AAGA...GGG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2531G" -> "2532TAGT...TTA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "2415CAAG...GTC" -> "2435ACTG...GTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05",
+                                        ];
+  "2415CAAG...GTC" -> "2464CCCA...ATC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                                        ];
+  "3404T" -> "3405T" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "2782T" -> "2783GTGA...CCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1858A" -> "1859TCGC...ACC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "173A" -> "174ATCA...GAC" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "3125TC" -> "3127C" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "3125TC" -> "3127T" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "4284AG" -> "B4-4286" [label="Everything", ];
+  "4084T" -> "4085ACAG...CTT" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3686G" -> "3687TCTT...CAG" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "551G" -> "552TCTT...CTT" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                             ];
+  "4657G" -> "4658GGTC...CCA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3806AAGG...GCC" -> "3840A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3806AAGG...GCC" -> "3840G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "1380CAGT...GCC" -> "1401C" [label="DPA1*02:02:02;DPA1*02:06", ];
+  "1380CAGT...GCC" -> "1401T" [label="C. of DPA1*02:02:02;DPA1*02:06", ];
+  "2813G" -> "2814A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "3244A" -> "3245ATTA...ATA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08", ];
+  "3132A" -> "3133CCCCA" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                          ];
+  "4967CA" -> "4969AGGAGG" [label="DPA1*02:01:02", ];
+  "1753G" -> "1754GTCA...CCC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4931A" -> "4932CCCTGTGA" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "4975T" -> "4976CCTAG" [label="DPA1*02:01:02", ];
+  "3950T" -> "3951G" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                      ];
+  "3752GAGT...GAG" -> "3782A" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "3752GAGT...GAG" -> "3782C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "3944G" -> "B3-3945" [label="Everything", ];
+  "276T" -> "277CCTGCATA" [label="C. of DPA1*02:01:01:01;DPA1*02:01:08;DPA1*02:02:02;DPA1*02:06",
+                           ];
+  "4165TCTG...TCA" -> "4176C" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                               ];
+  "4165TCTG...TCA" -> "4176G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "1522C" -> "1523TATC...CTC" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  "164TGCTTCAGG" -> "173A" [label="DPA1*02:01:01:01-02;DPA1*02:01:02,08;DPA1*02:02:02;DPA1*02:06",
+                            ];
+  "164TGCTTCAGG" -> "173G" [label="DPA1*01:03:01:01-05;DPA1*01:03:05", ];
+  
+  }
