@@ -210,12 +210,25 @@ type parse_state =
   | Data of line
 
 type result =
-  { reference : string
-  ; ref_elems : string alignment_element list
-  ; alt_elems : (string * string alignment_element list) list
+  { align_date  : string
+  ; reference   : string
+  ; ref_elems   : string alignment_element list
+  ; alt_elems   : (string * string alignment_element list) list
   }
 
 let report = ref false
+
+let parse_align_date ic =
+  try
+    let rec loop () =
+      let line = input_line ic in
+      match String.split ~on:(`String ":") line with
+      | ["Sequences Aligned"; ad ] -> Some ad
+      | _ -> loop ()
+    in
+    loop ()
+  with End_of_file ->
+    None
 
 let from_in_channel ic =
   (*let previous_reference_position = ref min_int in*)
@@ -300,18 +313,27 @@ let from_in_channel ic =
           end
       | Data _ -> loop_header state
   in
-  let reversed = loop_header Header in
-  let ref_elems = normalized_seq reversed.ref_ps in
-  let alt_elems =
-    Hashtbl.fold (fun all ps acc ->
-        if ps.sequence = [] then begin
-          printf "Dropping empty sequence: %s\n" ps.allele;
-          acc
-        end else
-          (all, normalized_seq ps) :: acc)
-      reversed.alg_htbl []
-  in
-  { reference = reversed.ref ; ref_elems ; alt_elems }
+  match parse_align_date ic with
+  | None ->
+      close_in ic;
+      invalid_argf "Couldn't extract sequence align date."
+  | Some align_date ->
+    let reversed = loop_header Header in
+    let ref_elems = normalized_seq reversed.ref_ps in
+    let alt_elems =
+      Hashtbl.fold (fun all ps acc ->
+          if ps.sequence = [] then begin
+            printf "Dropping empty sequence: %s\n" ps.allele;
+            acc
+          end else
+            (all, normalized_seq ps) :: acc)
+        reversed.alg_htbl []
+    in
+    { align_date
+    ; reference = reversed.ref
+    ; ref_elems
+    ; alt_elems
+    }
 
 let from_file f =
   let ic = open_in f in

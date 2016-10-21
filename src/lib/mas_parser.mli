@@ -57,11 +57,18 @@ type 'sr alignment_element =
   | Gap of { start : position; length : int; }
   (** Gap of position and length. *)
 
-
+(** [al_el_to_string] converts a alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
 
+(** [parse_align_date] parses an in channel of an alignment file up to the
+    alignment date, or returns None if it is not found. *)
+val parse_align_date : in_channel -> string option
+
 type result =
-  { reference : string
+  { align_date  : string
+  (** When the sequences were aligned by IMGT. *)
+
+  ; reference : string
   (** The name of the reference allele *)
 
   ; ref_elems : string alignment_element list
