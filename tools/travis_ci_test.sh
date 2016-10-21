@@ -31,5 +31,5 @@ cp src/scripts/round_trip_tests.sh .
 # Full adjacents calculation takes too long
 #cp src/scripts/adjacent_tests.sh .
 #./adjacent_tests.sh
-echo testing adjcent finding for A_gen only
-./adjacents.native A_gen > A_gen_adjacent.log
+#echo testing adjcent finding for A_gen only
+#./adjacents.native A_gen > A_gen_adjacent.log
