@@ -103,11 +103,12 @@ type by_position =
   | Redirect of int * int
 
 type t =
-  { g       : G.t
-  ; aindex  : A.index
-  ; bounds  : sep list A.Map.t
-  ; posarr  : by_position array
-  ; offset  : int
+  { align_date  : string              (* When the alignment was created by IMGT. *)
+  ; g           : G.t                 (* The actual graph. *)
+  ; aindex      : A.index             (* The allele index, for Sets and Maps. *)
+  ; bounds      : sep list A.Map.t    (* Map of where the alleles start and stop. *)
+  ; posarr      : by_position array
+  ; offset      : int
   }
 
 let number_of_alleles g =
@@ -988,7 +989,7 @@ let construct_which_args_to_string = function
 
 let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=false) r =
   let open Mas_parser in
-  let { reference; ref_elems; alt_elems} = r in
+  let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
   let alt_alleles =
     match which with
@@ -1038,7 +1039,8 @@ let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=f
   in
   let offset = fst (range_pr bounds) in
   let posarr = create_by_position g aindex bounds in
-  { g
+  { align_date
+  ; g
   ; aindex
   ; bounds
   ; offset
