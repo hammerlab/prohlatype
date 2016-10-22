@@ -72,6 +72,9 @@ let parse s =
   | _ :: [] -> error "Did not find the '*' separator in %s" s
   | _       -> error "Found too many '*' separators in %s" s
 
+let parse_to_resolution_exn s =
+  parse s |> unwrap_ok |> snd
+
 let resolution_to_string ?gene =
   let gene_str = match gene with | None -> "" | Some g -> g ^ "*" in
   function
@@ -79,3 +82,111 @@ let resolution_to_string ?gene =
   | Two (a, b)        -> sprintf "%s%02d:%02d" gene_str a b
   | Three (a, b, c)   -> sprintf "%s%02d:%02d:%02d" gene_str a b c
   | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" gene_str a b c d
+
+module Trie (*: sig
+  type t
+  val empty : t
+  val add : resolution -> t -> t
+  val nearest : resolution -> t -> resolution
+
+end *) = struct
+
+  let insert_sorted ~cmp ~eq e lst =
+    let rec loop acc = function
+      | []            -> List.rev (e :: acc)
+      | (h :: t) as l -> let r = cmp h in
+                        if r < 0 then
+                          loop (h :: acc) t
+                        else if r = 0 then
+                          (List.rev ((eq h) :: acc)) @ t
+                        else
+                          (List.rev (e :: acc)) @ l
+    in
+    loop [] lst
+
+  let find_closest ~distance = function
+    | []      -> invalid_argf "Empty!"
+    | h :: t  ->
+        let rec loop a = function
+          | []     -> a
+          | h :: t -> if distance a < distance h then a else loop h t
+        in
+        loop h t
+
+  (*
+  find_closest ~distance:(fun x -> abs (x - 3)) [1;2;3;4] = 3
+  find_closest (fun x -> abs (x - 3)) [1;2;3;4;5] = 3
+  find_closest (fun x -> abs (x - 3)) [1;2;4;5] = 4
+  find_closest (fun x -> abs (x - 3)) [1;4;5] = 4
+  find_closest (fun x -> abs (x - 3)) [1;2;5] = 2
+  *)
+
+  let empty = []
+
+  type node =
+    | Leaf
+    | Level of (int * node) list
+
+  let cmp_fst_against a = fun (f,_) -> f - a
+  let insert_by_fst a = insert_sorted ~cmp:(cmp_fst_against a)
+
+  let add n l =
+    let insert_final_level s v l =
+      let eq _ = invalid_argf "Duplicate %s digit: %d" s v in
+      (insert_by_fst v) ~eq (v, Leaf) l
+    in
+    let insert_above_final s v w l =
+      let eq = function
+        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_final_level s w tl)
+      in
+      (insert_by_fst v) ~eq (eq (v, Level [])) l
+    in
+    let insert_two_above_final s v w x l =
+      let eq = function
+        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_above_final s w x tl)
+      in
+      (insert_by_fst v) ~eq (eq (v, Level [])) l
+    in
+    let insert_three_above_final s v w x y l =
+      let eq = function
+        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_two_above_final s w x y tl)
+      in
+      (insert_by_fst v) ~eq (eq (v, Level [])) l
+    in
+    match n with
+    | One a             -> insert_final_level "2nd" a l
+    | Two (a, b)        -> insert_above_final "4th" a b l
+    | Three (a, b, c)   -> insert_two_above_final "6th" a b c l
+    | Four (a, b, c, d) -> insert_three_above_final "8th"  a b c d l
+
+  let nearest n l =
+    let dst x (y, _) = abs (x - y) in
+    let find_or_head = function
+      | None   -> List.hd_exn
+      | Some v -> find_closest ~distance:(dst v)
+    in
+    let lookup a b c d =
+      match find_or_head a l with
+      | (a, Leaf)     -> One a
+      | (a, Level l2) ->
+          match find_or_head b l2 with
+          | (b, Leaf)     -> Two (a, b)
+          | (b, Level l3) ->
+            match find_or_head c l3 with
+            | (c, Leaf)     -> Three (a, b, c)
+            | (c, Level l4) ->
+              match find_or_head d l4 with
+              | (d, Leaf)     -> Four (a, b, c, d)
+              | (d, Level _)  -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
+                                  a b c d
+    in
+    match n with
+    | One a             -> lookup (Some a)  None     None     None
+    | Two (a, b)        -> lookup (Some a) (Some b)  None     None
+    | Three (a, b, c)   -> lookup (Some a) (Some b) (Some c)  None
+    | Four (a, b, c, d) -> lookup (Some a) (Some b) (Some c) (Some d)
+
+end
