@@ -84,6 +84,7 @@ let resolution_to_string ?gene =
   | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" gene_str a b c d
 
 module Trie (*: sig
+
   type t
   val empty : t
   val add : resolution -> t -> t
