@@ -36,7 +36,7 @@ let merge_arg =
     else if not (Sys.file_exists g) then
       `Error ("Genetic alignment file doesn't exist: " ^ n)
     else
-      `Ok s   (* Return s, and do appending later, the prefix is more useful. *)
+      `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser, (fun frmt -> Format.fprintf frmt "%s") in
   let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
