@@ -75,7 +75,7 @@ type result =
   (** The sequence elements of the reference. *)
 
   ; alt_elems : (string * string alignment_element list) list
-  (** Seqeucen elements of alternative alleles in an associated list.*)
+  (** Sequence elements of alternative alleles in an associated list.*)
   }
 
 (* Report invariant parsing violations to stdout. *)
