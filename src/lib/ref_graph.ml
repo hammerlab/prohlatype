@@ -1047,8 +1047,23 @@ let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=f
   ; posarr
   }
 
-let construct_from_file ~join_same_sequence ~remove_reference ?which file =
-  construct_from_parsed ~join_same_sequence ~remove_reference ?which (Mas_parser.from_file file)
+type input =
+  | AlignmentFile of string      (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
+  | MergeFromPrefix of string     (* Ex. A, B, full path to prefix *)
+
+let input_to_string = function
+  | AlignmentFile path  -> Filename.basename path
+  | MergeFromPrefix prefix_path -> Filename.basename prefix_path ^ "_mgd"
+
+let construct_from_file ~join_same_sequence ~remove_reference ?which = function
+  | AlignmentFile file ->
+      Ok (construct_from_parsed
+            ~join_same_sequence ~remove_reference ?which
+            (Mas_parser.from_file file))
+  | MergeFromPrefix prefix ->
+      Merge_mas.and_check prefix >>= fun alignment ->
+        Ok (construct_from_parsed
+            ~join_same_sequence ~remove_reference ?which alignment)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =

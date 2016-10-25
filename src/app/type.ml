@@ -129,6 +129,7 @@ let report_likelihood ?reduce_resolution ?bucket ~print_top contents g amap =
 let type_
   (* Graph construction args. *)
   alignment_file
+  merge_file
     num_alt_to_add allele_list allele_regex_list not_join_same_seq remove_reference
   (* Index *)
     k
@@ -140,48 +141,57 @@ let type_
     filter multi_pos as_stat likelihood_error dont_check_rc
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
-  let open Cache in
-  let open Ref_graph in
-  let _option_based_fname, graph_args =
+  let join_same_sequence = not not_join_same_seq in
+  let fname_cargs_result =
     Common_options.to_filename_and_graph_args
-      ~alignment_file num_alt_to_add
+      ?alignment_file ?merge_file num_alt_to_add
       ~allele_list ~allele_regex_list
-        ~join_same_sequence:(not not_join_same_seq)
+        ~join_same_sequence
         ~remove_reference
   in
-  let g, idx = Cache.graph_and_two_index ~skip_disk_cache { k ; graph_args } in
-  let new_as =
-    match as_stat with
-    | `MismatchesList   -> `MismatchesList
-    | `Mismatches       -> `Mismatches
-    | `Likelihood       -> `Likelihood likelihood_error
-    | `LogLikelihood    -> `LogLikelihood likelihood_error
-    | `PhredLikelihood  -> `PhredLikelihood
-  in
-  let res =
-    match fastq_file_lst with
-    | []              -> invalid_argf "Cmdliner lied!"
-    | [fastq_file]    ->
-        let check_rc = not dont_check_rc in
-        Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
-     | [read1; read2] ->
-        Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-  in
-  match res with
-  | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_mismatches ~print_top g amap
-  | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
-                                           report_mismatches_list ~print_top g amap
-  | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                           report_likelihood ?reduce_resolution
-                                             ?bucket ~print_top "likelihood" g amap
-  | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                           report_likelihood ?reduce_resolution
-                                             ?bucket ~print_top "loglikelihood" g amap
-  | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                           report_likelihood ?reduce_resolution
-                                             ?bucket ~print_top "phredlihood" g amap
+  match fname_cargs_result with
+  | Error msg ->
+      eprintf "%s" msg;
+      1
+  | Ok (_option_based_fname, cargs) ->
+      let open Cache in
+      let open Ref_graph in
+      let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
+      let new_as =
+        match as_stat with
+        | `MismatchesList   -> `MismatchesList
+        | `Mismatches       -> `Mismatches
+        | `Likelihood       -> `Likelihood likelihood_error
+        | `LogLikelihood    -> `LogLikelihood likelihood_error
+        | `PhredLikelihood  -> `PhredLikelihood
+      in
+      let res =
+        match fastq_file_lst with
+        | []              -> invalid_argf "Cmdliner lied!"
+        | [fastq_file]    ->
+            let check_rc = not dont_check_rc in
+            Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
+        | [read1; read2] ->
+            Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
+        | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+      in
+      let () =
+        match res with
+        | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
+                                                report_mismatches ~print_top g amap
+        | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
+                                                report_mismatches_list ~print_top g amap
+        | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
+                                                report_likelihood ?reduce_resolution
+                                                  ?bucket ~print_top "likelihood" g amap
+        | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
+                                                report_likelihood ?reduce_resolution
+                                                  ?bucket ~print_top "loglikelihood" g amap
+        | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
+                                                report_likelihood ?reduce_resolution
+                                                  ?bucket ~print_top "phredlihood" g amap
+      in
+      0
 
 
        (*    let amap =
@@ -323,7 +333,8 @@ let () =
     in
     Term.(const type_
             (* Graph construction args *)
-            $ file_arg $ num_alt_arg $ allele_arg $ allele_regex_arg
+            $ file_arg $ merge_arg
+            $ num_alt_arg $ allele_arg $ allele_regex_arg
               $ do_not_join_same_sequence_paths_flag
               $ remove_reference_flag
             (* Index *)
@@ -344,6 +355,6 @@ let () =
         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
-  | `Ok ()           -> exit 0
+  | `Ok n            -> exit n
   | `Error _         -> failwith "cmdliner error"
   | `Version | `Help -> exit 0

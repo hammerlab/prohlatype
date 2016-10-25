@@ -2,28 +2,40 @@
 open Util
 open Common_options
 
-let construct ofile alignment_file num_alt_to_add allele_list allele_regex_list
+let construct
+  (* input *)
+  alignment_file merge_file
+  (* output *)
+  ofile
+
+  num_alt_to_add allele_list allele_regex_list
       remove_reference notshort no_pdf no_open skip_disk_cache max_edge_char_length
       not_human_edges not_join_same_seq not_compress_edges not_compress_start
       not_insert_newlines =
   let open Ref_graph in
   let open Cache in
-  let option_based_fname, cargs =
-    to_filename_and_graph_args alignment_file num_alt_to_add allele_list
-      allele_regex_list (not not_join_same_seq) remove_reference
+  let join_same_sequence = (not not_join_same_seq) in
+  let fname_cargs_result =
+    to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
+      ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference
   in
-  let ofile = Option.value ofile ~default:option_based_fname in
-  let short = not notshort in
-  let pdf   = not no_pdf in
-  let open_ = not no_open in
-  let max_length = max_edge_char_length in
-  let human_edges = not not_human_edges in
-  let compress_edges = not not_compress_edges in
-  let compress_start = not not_compress_start in
-  let insert_newlines = not not_insert_newlines in
-  Cache.graph ~skip_disk_cache cargs
-  |> Ref_graph.output ~compress_edges ~compress_start ~insert_newlines
-                        ~human_edges ?max_length ~short ~pdf ~open_ ofile
+  match fname_cargs_result with
+  | Error msg ->
+      eprintf "%s" msg;
+      1
+  | Ok (option_based_fname, cargs) ->
+      let ofile = Option.value ofile ~default:option_based_fname in
+      let short = not notshort in
+      let pdf   = not no_pdf in
+      let open_ = not no_open in
+      let max_length = max_edge_char_length in
+      let human_edges = not not_human_edges in
+      let compress_edges = not not_compress_edges in
+      let compress_start = not not_compress_start in
+      let insert_newlines = not not_insert_newlines in
+      Cache.graph ~skip_disk_cache cargs
+      |> Ref_graph.output ~compress_edges ~compress_start ~insert_newlines
+                            ~human_edges ?max_length ~short ~pdf ~open_ ofile
 
 let app_name = "mhc2gpdf"
 
@@ -97,7 +109,10 @@ let () =
       ]
     in
     Term.(const construct
-            $ output_fname_arg $ file_arg
+            (* input files *)
+            $ file_arg $ merge_arg
+            (* output file *)
+            $ output_fname_arg
             $ num_alt_arg
             $ allele_arg
             $ allele_regex_arg
