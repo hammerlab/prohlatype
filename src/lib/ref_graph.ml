@@ -279,7 +279,7 @@ let add_reference_elems g aindex allele ref_elems =
       | `Ended _ :: _ , Boundary _                    -> state        (* ignore *)
       | []            , al_el
       | `Ended _ :: _ , al_el                         ->
-          inv_argf "Unexpected %s before start for %s"
+          inv_argf "Unexpected %s after end for %s"
             (al_el_to_string al_el) allele
       | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
       | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
