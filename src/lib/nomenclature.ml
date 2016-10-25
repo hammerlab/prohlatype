@@ -162,26 +162,26 @@ end *) = struct
     | Three (a, b, c)   -> insert_two_above_final "6th" a b c l
     | Four (a, b, c, d) -> insert_three_above_final "8th"  a b c d l
 
-  let nearest n l =
-    let dst x (y, _) = abs (x - y) in
-    let find_or_head = function
+  let nearest ?(distance=fun x y -> abs (x - y)) n l =
+    let dst x (y, _) = distance x y in
+    let find_or_first = function
       | None   -> List.hd_exn
       | Some v -> find_closest ~distance:(dst v)
     in
     let lookup a b c d =
-      match find_or_head a l with
+      match find_or_first a l with
       | (a, Leaf)     -> One a
       | (a, Level l2) ->
-          match find_or_head b l2 with
-          | (b, Leaf)     -> Two (a, b)
-          | (b, Level l3) ->
-            match find_or_head c l3 with
-            | (c, Leaf)     -> Three (a, b, c)
-            | (c, Level l4) ->
-              match find_or_head d l4 with
-              | (d, Leaf)     -> Four (a, b, c, d)
-              | (d, Level _)  -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
-                                  a b c d
+        match find_or_first b l2 with
+        | (b, Leaf)     -> Two (a, b)
+        | (b, Level l3) ->
+          match find_or_first c l3 with
+          | (c, Leaf)     -> Three (a, b, c)
+          | (c, Level l4) ->
+            match find_or_first d l4 with
+            | (d, Leaf)     -> Four (a, b, c, d)
+            | (d, Level _)  -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
+                                a b c d
     in
     match n with
     | One a             -> lookup (Some a)  None     None     None
