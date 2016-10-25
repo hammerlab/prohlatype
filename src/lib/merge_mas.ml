@@ -129,6 +129,15 @@ let start_state pos =
   ; acc         = []
   }
 
+let list_remove_first p lst =
+  let rec loop acc = function
+    | []     -> List.rev acc
+    | h :: t -> if p h then List.rev acc @ t else loop (h :: acc) t
+  in
+  loop [] lst
+
+let is_end = function | Mas_parser.End _ -> true | _ -> false
+
 let update s =
   let open Mas_parser in function
   | Boundary b -> { s with acc = Boundary { b with pos = s.next_pos} :: s.acc
@@ -136,9 +145,10 @@ let update s =
   | Start _    -> if s.seen_start then s else
                     { s with acc = Start s.next_pos :: s.acc
                            ; seen_start = true}
-  | End e      -> if s.seen_end then s else
-                    { s with acc = End s.next_pos :: s.acc
-                           ; seen_end = true }
+
+  | End e      -> let without_end = if s.seen_end then list_remove_first is_end s.acc else s.acc in
+                  { s with acc = End s.next_pos :: without_end
+                         ; seen_end = true }
   | Gap g      -> { s with acc = Gap { g with start = s.next_pos } :: s.acc
                          ; next_pos = s.next_pos + g.length }
   | Sequence t -> { s with acc = Sequence { t with start = s.next_pos} :: s.acc
