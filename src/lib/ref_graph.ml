@@ -419,8 +419,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           inv_argf "Next Boundary %d %d after desired boundary %d %d"
             p c pos idx
       | N (p, _) ->
-          inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d)"
-            p pos idx
+          inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
+            p pos idx allele
     in
     loop prev next
   in
