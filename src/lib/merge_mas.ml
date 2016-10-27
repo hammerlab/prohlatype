@@ -318,6 +318,11 @@ let init_trie_and_map elems =
           Ok ( Trie.add allele_resolution trie
              , RMap.add allele_resolution seq mp))
 
+(* TODO: Figure out a way around this special case. Maybe when we do our
+   own alignment? *)
+let c0409N_exon_extension =
+  "GACAGCTGCCTGTGTGGGACTGAGATGCAGGATTTCTTCACACCTCTCCTTTGTGACTTCAAGAGCCTCTGGCATCTCTTTCTGCAAAGGCATCTGA"
+
 let new_alts ~gen ~nuc instr trie rmp =
   let open Nomenclature in
   list_fold_ok nuc ~init:[] ~f:(fun acc (alt_name, nuc) ->
@@ -327,6 +332,11 @@ let new_alts ~gen ~nuc instr trie rmp =
       let gen = RMap.find closest_allele_res rmp in
       (*let closest_allele_str = resolution_to_string ~gene closest_allele_res in
         Printf.printf "%s (nuc) -> %s (gen)" alt_name closest_allele_str; *)
+      let nuc = if alt_name <> "C*04:09N" then nuc else
+        List.filter nuc ~f:(function
+          | Mas_parser.Sequence { s; _ } when s = c0409N_exon_extension -> false
+          | _ -> true)
+      in
       apply_align_instr ~gen ~nuc instr >>= fun new_alts ->
         Ok ((alt_name, new_alts) :: acc))
 
