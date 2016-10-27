@@ -144,16 +144,15 @@ let start_state =
 
 let latest_position =
   let open Mas_parser in function
-    | Start s     -> Ok s
-    | End e       -> Ok e
-    | Gap g       -> Ok (g.start + g.length)
-    | Sequence s  -> Ok (s.start + String.length s.s)
-    | Boundary b  -> error "Can't ask for the latest position of boundary! %d, %d"
-                      b.idx b.pos
+    | Start s     -> s
+    | End e       -> e
+    | Gap g       -> (g.start + g.length)
+    | Sequence s  -> (s.start + String.length s.s)
+    | Boundary b  -> b.pos
 
 let latest_position_al_elems = function
   | []     -> error "No latest alignment element."
-  | h :: _ -> latest_position h
+  | h :: _ -> Ok (latest_position h)
 
 let sequence_start_check ~bm st lst k =
   match bm with
@@ -187,7 +186,13 @@ let update offset s =
                   { s with acc = End (e + offset) :: without_end
                          ; seen_end = true }
   | Gap g      -> { s with acc = Gap { g with start = g.start + offset } :: s.acc }
-  | Sequence t -> { s with acc = Sequence { t with start = t.start + offset} :: s.acc }
+  | Sequence t -> if s.seen_start && s.seen_end then  (* Not quiet right, TODO! *)
+                    let without_end = list_remove_first is_end s.acc in
+                    { s with seen_end = false
+                           ; acc = Sequence { t with start = t.start + offset}
+                                  :: without_end }
+                  else
+                    { s with acc = Sequence { t with start = t.start + offset} :: s.acc }
 
 let accumulate_up_to_next_boundary_rev ~bm offset s lst =
   let open Mas_parser in
@@ -220,7 +225,7 @@ let alignment_elements_to_string lst =
   - What about if the underlying merging sequences do not have the sequences
     across the boundaries assumed by the instructions generated against the
     reference? *)
-let apply_align_instr ?(fail_on_empty=true)  ~gen ~nuc alg =
+let apply_align_instr ?(fail_on_empty=true) ~gen ~nuc alg =
   let rec start gen nuc = function
     (* Assume that the instructions start with a fill command from genetic sequences *)
     | FillFromGenetic f :: tl when before_start f.genetic ->
@@ -242,7 +247,8 @@ let apply_align_instr ?(fail_on_empty=true)  ~gen ~nuc alg =
         in
         accumulate_up_to_next_boundary_rev m.nuclear_offset state nuc ~bm >>=
           fun (nstate, ntl) ->
-            (* Modulo new gaps due to different sequences, these should be the same.
+            (* Modulo new gaps due to different sequences, and if gen and nuc
+               come from the same allele, these should be the same.
                Instead of dropping we should check that they are! *)
             drop_until_boundary ~bm:(`CheckAnd (m.genetic, (fun _ a -> a))) gen >>=
               fun gen -> loop nstate ~gen ~nuc:ntl tl
@@ -257,8 +263,11 @@ let apply_align_instr ?(fail_on_empty=true)  ~gen ~nuc alg =
         else if fail_on_empty && nuc <> [] then
           error "After all instructions nuclear sequence not empty: %s."
             (alignment_elements_to_string nuc)
+        else if state.seen_end then
+            Ok (List.rev state.acc)
         else
-          Ok (List.rev state.acc)
+          latest_position_al_elems state.acc >>= fun p ->
+            Ok (List.rev (Mas_parser.End p :: state.acc))
   in
   start gen nuc alg
 
@@ -315,8 +324,8 @@ let new_alts ~gen ~nuc instr trie rmp =
     parse alt_name >>= fun (gene, allele_resolution) ->
       let closest_allele_res = Trie.nearest allele_resolution trie in
       let gen = RMap.find closest_allele_res rmp in
-      let closest_allele_str = resolution_to_string ~gene closest_allele_res in
-      (*Printf.printf "%s (nuc) -> %s (gen)" alt_name closest_allele_str; *)
+      (*let closest_allele_str = resolution_to_string ~gene closest_allele_res in
+        Printf.printf "%s (nuc) -> %s (gen)" alt_name closest_allele_str; *)
       apply_align_instr ~gen ~nuc instr >>= fun new_alts ->
         Ok ((alt_name, new_alts) :: acc))
 
