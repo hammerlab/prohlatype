@@ -178,18 +178,18 @@ let type_
       let () =
         match res with
         | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
-                                                report_mismatches ~print_top g amap
+                                                 report_mismatches ~print_top g amap
         | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
-                                                report_mismatches_list ~print_top g amap
+                                                 report_mismatches_list ~print_top g amap
         | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                                report_likelihood ?reduce_resolution
-                                                  ?bucket ~print_top "likelihood" g amap
+                                                 report_likelihood ?reduce_resolution
+                                                   ?bucket ~print_top "likelihood" g amap
         | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                                report_likelihood ?reduce_resolution
-                                                  ?bucket ~print_top "loglikelihood" g amap
+                                                 report_likelihood ?reduce_resolution
+                                                   ?bucket ~print_top "loglikelihood" g amap
         | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                                report_likelihood ?reduce_resolution
-                                                  ?bucket ~print_top "phredlihood" g amap
+                                                 report_likelihood ?reduce_resolution
+                                                   ?bucket ~print_top "phredlihood" g amap
       in
       0
 
