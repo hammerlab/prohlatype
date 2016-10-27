@@ -15,7 +15,8 @@ let list_map_consecutives f lst =
 type boundary_marker =
   { index     : int     (* Which segment? *)
   ; position  : int     (* Position of the boundary marker. *)
-  ; length    : int     (* Length to next boundary, 1 + following segment. *)
+  ; length    : int     (* Length to next boundary
+                        , or 1 + the total length of the following segment. *)
   }
 
 let bm ~index ~position = { index; position; length = 0 }
@@ -345,7 +346,7 @@ let and_check prefix =
         reference_positions_align ~seq:("reference:" ^ gen_mp.reference) new_ref_elems >>= fun _ref_position_check ->
           let seq_assoc = (gen_mp.reference, gen_mp.ref_elems) :: gen_mp.alt_elems in
           init_trie_and_map seq_assoc >>= fun (gtrie, rmap) ->
-                new_alts gen_mp.alt_elems nuc_mp.alt_elems instr gtrie rmap >>= fun alt_lst ->
+            new_alts gen_mp.alt_elems nuc_mp.alt_elems instr gtrie rmap >>= fun alt_lst ->
               Ok  { align_date = gen_mp.align_date
                   ; reference  = gen_mp.reference
                   ; ref_elems  = new_ref_elems
