@@ -4,7 +4,8 @@ open Common
 open Util
 
 let graph ~file ?n () =
-  let g = Cache.(graph (graph_args ?n ~file ())) in
+  let input = Ref_graph.AlignmentFile file in
+  let g = Cache.(graph (graph_args ?n ~input ())) in
   n, g
 
 let more_than_one_sb g =

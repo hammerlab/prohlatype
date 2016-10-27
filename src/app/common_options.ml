@@ -111,7 +111,7 @@ let do_not_join_same_sequence_paths_flag =
 let to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
   ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference =
   let open Ref_graph in
-  let to_ofname_and_cache_args base alignment_file =
+  let to_ofname_and_cache_args base input =
     let option_based_fname, which =
       match allele_list, allele_regex_list with
       | [], [] ->
@@ -131,7 +131,7 @@ let to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
                           , (Some (Alleles { specific; regex }))
     in
     option_based_fname
-    , { Cache.alignment_file
+    , { Cache.input
       ; Cache.which
       ; Cache.join_same_sequence
       ; Cache.remove_reference

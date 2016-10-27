@@ -60,14 +60,14 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
       end
 
 type graph_args =
-  { alignment_file      : Ref_graph.input
+  { input               : Ref_graph.input
   ; which               : Ref_graph.construct_which_args option
   ; join_same_sequence  : bool
   ; remove_reference    : bool
   }
 
-let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~file () =
-  { alignment_file = Ref_graph.AlignmentFile file
+let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~input () =
+  { input
   ; which = n
   ; join_same_sequence
   ; remove_reference
@@ -75,7 +75,7 @@ let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~file () 
 
 let graph_args_to_string ga =
   sprintf "%s_%s_%b_%b"
-    (Ref_graph.input_to_string ga.alignment_file)
+    (Ref_graph.input_to_string ga.input)
     (match ga.which with
       | None -> "All"
       | Some w -> Ref_graph.construct_which_args_to_string w)
@@ -87,16 +87,16 @@ let dir = ".cache"
 let graph_cache_dir = Filename.concat dir "graphs"
 
 let graph_no_cache
-  { alignment_file; which; join_same_sequence; remove_reference; _ } =
+  { input; which; join_same_sequence; remove_reference; _ } =
   Ref_graph.construct_from_file ~join_same_sequence ~remove_reference ?which
-    alignment_file
+    input
 
 (* TODO: We should add date parsing, so that we can distinguish different
    graphs, and make sure that we can type against the most recent. Or compare
    typing across IMGT release dates. *)
 let recent_check arg graph =
   let file =
-    match arg.alignment_file with
+    match arg.input with
     | Ref_graph.AlignmentFile f -> f
     | Ref_graph.MergeFromPrefix p -> p ^ " _nuc.txt"
   in

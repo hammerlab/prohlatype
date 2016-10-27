@@ -298,18 +298,25 @@ module Multiple (C : Multiple_config) = struct
       ~f:(fun acc fqi -> (f fqi) :: acc)
     |> List.rev
 
-  let fold_over_paired ?number_of_reads file1 file2 ?early_stop g idx =
+  let fold_over_paired ?(verbose=false) ?number_of_reads file1 file2 ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi1 fqi2 =
+      if verbose then Printf.printf "typing %s"
+        fqi1.Biocaml_unix.Fastq.name;
       match C.to_thread fqi1 with
-      | Error e     -> ((ToThread e, fqi1) :: errors), amap
+      | Error e     -> if verbose then Printf.printf " \t no thread1\n%!";
+                       ((ToThread e, fqi1) :: errors), amap
       | Ok seq1     ->
           match C.to_thread fqi2 with
-          | Error e -> ((ToThread e, fqi2) :: errors), amap
+          | Error e -> if verbose then Printf.printf " \t no thread2\n%!";
+                       ((ToThread e, fqi2) :: errors), amap
           | Ok seq2 ->
+            if verbose then Printf.printf " \t mapping";
             match C.map_paired ?early_stop g idx seq1 seq2 with
-            | Error e -> ((e, fqi1) :: errors), amap      (* TODO: return both fqi1 and fqi2 ? *)
-            | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
+            | Error e -> if verbose then Printf.printf " \t errored \n%!";
+                          ((e, fqi1) :: errors), amap      (* TODO: return both fqi1 and fqi2 ? *)
+            | Ok a    -> if verbose then Printf.printf " \t ok \n%!";
+                         Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                          errors, amap
     in
     let res =
