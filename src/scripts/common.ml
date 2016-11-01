@@ -10,6 +10,8 @@ let to_alignment_file f = imgthla_dir // "alignments" // (f ^ ".txt")
 let to_fasta_file f = imgthla_dir // "fasta" // (f ^ ".fasta")
 let default_file = to_alignment_file "A_nuc"
 
+let to_merge_prefix p = imgthla_dir // "alignment" // p
+
 let common_alignment_files =
   [ "A_nuc"
   ; "B_nuc"
