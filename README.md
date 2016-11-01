@@ -9,15 +9,18 @@ The goal of this project is to achieve HLA typing by inferring the posterior dis
 
 #### Status
 
-  1. Alignment file parsing -> **works!**
+  1. Alignment file parsing -> **works!** We'll move away from this data source
+     at some point as it is meant for human consumption.
 
   2. Graph representation of HLA alignment -> pretty _good_ but open for
      improvement. In particular the following issues remain:
 
      a. Indexing the graph is presently inefficient and awkward. We're using a
-        k-mer index to represent positions. Compressed text indices would
-        probably work better and give us nicer properties such as being able to
-        uniquely determine positions.
+        k-mer index to represent positions. In particular, they encode the full
+        combinatorial variation in the alleles, but not the biologically
+        relevant ones. Compressed text indices would probably work better and
+        give us nicer properties such as being able to uniquely determine
+        positions.
 
      b. At present there are accessory structures that don't fit neatly into
         the data structure (such as the [boundary array](src/lib/ref_graph.ml#L108))
@@ -67,6 +70,8 @@ $ ./mhc2gpdf.native -f /path/to/IMGT/alignments/dir/A_nuc.txt -o demo --allele "
 ```
 
 creates [demo.pdf](demo/demo.pdf).
+This tool is described in [this](http://www.hammerlab.org/2016/11/01/graph-visualizations-of-mhc-alleles/)
+blog post.
 
 
 #### Building and Development started
