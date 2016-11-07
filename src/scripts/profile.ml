@@ -52,18 +52,18 @@ let prof_dir_example = "profc/type_out_%"
 
 (*let open Oml.Statistics in *)
 let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir ~map
-  ?(suffix="nuc.txt") () =
+  ?(suffix="_nuc.txt") () =
   List.fold_left genes ~init:[] ~f:(fun acc gene ->
     let train_samples = to_res gene `Train in
     List.fold_left reads ~init:acc ~f:(fun acc read ->
       List.fold_left filters ~init:acc ~f:(fun acc filter ->
-        let to_filename k = sprintf "%s_%d/%s_%d_%s_%s" prof_dir filter k read gene suffix in
+        let to_filename k = sprintf "%s_%d/%s_%d_%s%s" prof_dir filter k read gene suffix in
         let rr = List.map train_samples ~f:(position to_filename) in
         let dt = List.map rr ~f:(fun (p,_,_) -> float p) |> Array.of_list in
         (gene, read, filter, (map dt)) :: acc)))
 
 let display_analysis mp lst =
-  printf "gene\tread\tfilter\n";
-  List.iter lst ~f:(fun (gene, read, filter, m) ->
-        printf "%s\t%d\t%d\t%s\n%!" gene read filter (mp m))
+  printf "gene\tfilter\n";
+  List.iter lst ~f:(fun (gene, _read, filter, m) ->
+        printf "%s\t%d\t%s\n%!" gene filter (mp m))
 

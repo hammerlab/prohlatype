@@ -9,10 +9,11 @@ The goal of this project is to achieve HLA typing by inferring the posterior dis
 
 #### Status
 
-  1. Alignment file parsing -> **works!** We'll move away from this data source
-     at some point as it is meant for human consumption.
+  1. Alignment file parsing -> **works!**
 
-  2. Graph representation of HLA alignment -> pretty _good_ but open for
+     We'll move away from this data source at some point as it is meant for human consumption.
+
+  2. Graph representation of HLA alignment -> works pretty _well_ but open for
      improvement. In particular the following issues remain:
 
      a. Indexing the graph is presently inefficient and awkward. We're using a
