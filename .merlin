@@ -1,4 +1,5 @@
 PKG ppx_deriving ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml
 S ./src/lib/**
+S ./src/scripts/**
 S ./src/app/**
 B _build/**
