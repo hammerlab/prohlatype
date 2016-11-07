@@ -1,6 +1,5 @@
 
 open Util
-(*open Common *)
 
 let supported_genes = [ "A"; "B"; "C"]
 
@@ -325,20 +324,21 @@ let c0409N_exon_extension =
 
 let new_alts ~gen ~nuc instr trie rmp =
   let open Nomenclature in
-  list_fold_ok nuc ~init:[] ~f:(fun acc (alt_name, nuc) ->
+  list_fold_ok nuc ~init:([], []) ~f:(fun (alt_acc, map_acc) (alt_name, nuc) ->
     (* Check that the gene is always the same? *)
     parse alt_name >>= fun (gene, allele_resolution) ->
       let closest_allele_res = Trie.nearest allele_resolution trie in
       let gen = RMap.find closest_allele_res rmp in
-      (*let closest_allele_str = resolution_to_string ~gene closest_allele_res in
-        Printf.printf "%s (nuc) -> %s (gen)" alt_name closest_allele_str; *)
+      let closest_allele_str = resolution_to_string ~gene closest_allele_res in
+      (*Printf.printf "%s (nuc) -> %s (gen)" alt_name closest_allele_str; *)
       let nuc = if alt_name <> "C*04:09N" then nuc else
         List.filter nuc ~f:(function
           | Mas_parser.Sequence { s; _ } when s = c0409N_exon_extension -> false
           | _ -> true)
       in
       apply_align_instr ~gen ~nuc instr >>= fun new_alts ->
-        Ok ((alt_name, new_alts) :: acc))
+        Ok ( (alt_name, new_alts) :: alt_acc
+           , (alt_name, closest_allele_str) :: map_acc))
 
 (* TODO. We need to make a decision about suffixed (ex. with 'N') alleles
    since they may be the closest. *)
@@ -356,9 +356,10 @@ let and_check prefix =
         reference_positions_align ~seq:("reference:" ^ gen_mp.reference) new_ref_elems >>= fun _ref_position_check ->
           let seq_assoc = (gen_mp.reference, gen_mp.ref_elems) :: gen_mp.alt_elems in
           init_trie_and_map seq_assoc >>= fun (gtrie, rmap) ->
-            new_alts gen_mp.alt_elems nuc_mp.alt_elems instr gtrie rmap >>= fun alt_lst ->
-              Ok  { align_date = gen_mp.align_date
+            new_alts gen_mp.alt_elems nuc_mp.alt_elems instr gtrie rmap >>= fun (alt_lst, map_lst) ->
+              Ok ({ align_date = gen_mp.align_date
                   ; reference  = gen_mp.reference
                   ; ref_elems  = new_ref_elems
                   ; alt_elems  = alt_lst
-                  }
+                  } ,
+                  map_lst)

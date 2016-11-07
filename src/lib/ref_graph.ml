@@ -103,12 +103,13 @@ type by_position =
   | Redirect of int * int
 
 type t =
-  { align_date  : string              (* When the alignment was created by IMGT. *)
-  ; g           : G.t                 (* The actual graph. *)
-  ; aindex      : A.index             (* The allele index, for Sets and Maps. *)
-  ; bounds      : sep list A.Map.t    (* Map of where the alleles start and stop. *)
+  { align_date  : string                  (* When the alignment was created by IMGT. *)
+  ; g           : G.t                     (* The actual graph. *)
+  ; aindex      : A.index                 (* The allele index, for Sets and Maps. *)
+  ; bounds      : sep list A.Map.t        (* Map of where the alleles start and stop. *)
   ; posarr      : by_position array
   ; offset      : int
+  ; merge_map   : (string * string) list  (* Left empty if not a merged graph *)
   }
 
 let number_of_alleles g =
@@ -987,7 +988,8 @@ let construct_which_args_to_string = function
                                         |> Digest.to_hex
                                         |> sprintf "R%s"
 
-let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=false) r =
+let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
+  ?(remove_reference=false) r =
   let open Mas_parser in
   let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
@@ -1045,6 +1047,7 @@ let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=f
   ; bounds
   ; offset
   ; posarr
+  ; merge_map
   }
 
 type input =
@@ -1061,8 +1064,8 @@ let construct_from_file ~join_same_sequence ~remove_reference ?which = function
             ~join_same_sequence ~remove_reference ?which
             (Mas_parser.from_file file))
   | MergeFromPrefix prefix ->
-      Merge_mas.and_check prefix >>= fun alignment ->
-        Ok (construct_from_parsed
+      Merge_mas.and_check prefix >>= fun (alignment, merge_map) ->
+        Ok (construct_from_parsed ~merge_map
             ~join_same_sequence ~remove_reference ?which alignment)
 
 (* More powerful accessors *)
