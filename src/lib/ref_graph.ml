@@ -1186,8 +1186,8 @@ let parse_start_arg g allele =
       begin match A.Map.get g.aindex g.bounds allele with
       | exception Not_found -> error "Allele %s not found in graph!" allele
       | []                  -> error "Allele %s not found in graph!" allele
-      | spl -> Ok (List.map spl ~f:(fun sep ->
-                        Nodes.S (fst sep.start, allele)), id, 0)
+      | spl                 -> Ok (List.map spl ~f:(fun sep ->
+                                 Nodes.S (fst sep.start, allele)), id, 0)
       end
 
 let parse_stop_arg ?(count=0) =
