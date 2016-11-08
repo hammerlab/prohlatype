@@ -1217,17 +1217,18 @@ let parse_stop_arg ?(count=0) =
                               String.take ~index:n s)
 
 (** Accessors. *)
-let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
+let sequence ?(boundaries=false) ?start ?stop gt allele =
   let open Nodes in
   parse_start_arg gt allele start
     >>= fun (start, pre, count) ->
       let stop, post = parse_stop_arg ~count stop in
       List.fold_left start ~init:[] ~f:(fun acc start ->
-        fold_along_allele g aindex allele ~start ~init:acc
+        fold_along_allele gt.g gt.aindex allele ~start ~init:acc
           ~f:(fun clst node ->
                 match node with
-                | N (_, s)          -> (s :: clst, stop node)
-                | S _ | E _ | B _   -> (clst, stop node)))
+                | N (_, s)             -> (s :: clst, stop node)
+                | B _  when boundaries -> ("|" :: clst, stop node)
+                | S _ | E _ | B _      -> (clst, stop node)))
       |> List.rev
       |> String.concat
       |> pre
