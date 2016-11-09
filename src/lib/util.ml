@@ -77,3 +77,9 @@ let reverse_complement s =
   String.fold s ~init:[] ~f:(fun l c -> complement c :: l)
   |> String.of_character_list
 
+let list_fold_ok lst ~f ~init =
+  let rec loop acc = function
+    | []      -> Ok acc
+    | h :: t  -> f acc h >>= fun a -> loop a t
+  in
+  loop init lst

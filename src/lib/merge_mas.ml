@@ -291,13 +291,6 @@ let reference_positions_align ?seq lst =
   in
   start lst
 
-let list_fold_ok lst ~f ~init =
-  let rec loop acc = function
-    | []      -> Ok acc
-    | h :: t  -> f acc h >>= fun a -> loop a t
-  in
-  loop init lst
-
 let init_trie elems =
   let open Nomenclature in
   list_fold_ok elems ~init:Trie.empty ~f:(fun trie s ->
