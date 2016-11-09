@@ -44,9 +44,10 @@ let index_string s index =
 let manual_comp_display s1 s2 =
   let msm = ref 0 in
   let cs = String.mapi s1 ~f:(fun index c1 ->
-    let c2 = String.get_exn s2 ~index in
-    if c1 = c2 then ' ' else
-      begin incr msm; '|' end)
+    match String.get s2 ~index with
+    | None                 -> incr msm; 'X'
+    | Some c2 when c1 = c2 -> ' '
+    | Some _               -> incr msm; '|')
   in
   let ms = string_of_int !msm in
   let n  = String.length ms + 1 in
