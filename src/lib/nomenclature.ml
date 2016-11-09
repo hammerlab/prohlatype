@@ -19,6 +19,14 @@ let suffix_opt_of_char = function
   | 'Q' -> Some Q
   | x   -> None
 
+let suffix_to_string = function
+  | N -> "N"
+  | L -> "L"
+  | S -> "S"
+  | C -> "C"
+  | A -> "A"
+  | Q -> "Q"
+
 let int_of_string ?msg s =
   let msg = Option.value msg ~default:(sprintf "int_of_string parsing: %s" s) in
   match Int.of_string s with
@@ -60,10 +68,10 @@ let parse_resolution s =
       String.split ~on:(`Character ':') without_suffix
       |> parse_ints  >>= function
           | []            -> Error (sprintf "Empty allele name: %s" without_suffix)
-          | [ a ]         -> Ok (One a)
-          | [ a; b ]      -> Ok (Two (a, b))
-          | [ a; b; c]    -> Ok (Three (a, b, c))
-          | [ a; b; c; d] -> Ok (Four (a, b, c, d))
+          | [ a ]         -> Ok (One a, suffix_opt)
+          | [ a; b ]      -> Ok (Two (a, b), suffix_opt)
+          | [ a; b; c]    -> Ok (Three (a, b, c), suffix_opt)
+          | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
 let parse s =
@@ -82,6 +90,10 @@ let resolution_to_string ?gene =
   | Two (a, b)        -> sprintf "%s%02d:%02d" gene_str a b
   | Three (a, b, c)   -> sprintf "%s%02d:%02d:%02d" gene_str a b c
   | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" gene_str a b c d
+
+let resolution_and_suffix_opt_to_string ?gene (r,so) =
+  sprintf "%s%s" (resolution_to_string ?gene r)
+    (Option.value_map so ~default:"" ~f:suffix_to_string) 
 
 module Trie (*: sig
 
@@ -125,43 +137,43 @@ end *) = struct
   let empty = []
 
   type node =
-    | Leaf
+    | Leaf of suffix option
     | Level of (int * node) list
 
   let cmp_fst_against a = fun (f,_) -> f - a
   let insert_by_fst a = insert_sorted ~cmp:(cmp_fst_against a)
 
-  let add n l =
-    let insert_final_level s v l =
+  let add n so l =
+    let insert_final_level s v so l =
       let eq _ = invalid_argf "Duplicate %s digit: %d" s v in
-      (insert_by_fst v) ~eq (v, Leaf) l
+      (insert_by_fst v) ~eq (v, Leaf so) l
     in
-    let insert_above_final s v w l =
+    let insert_above_final s v w so l =
       let eq = function
-        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
-        | (v, Level tl) -> v, Level (insert_final_level s w tl)
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_final_level s w so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
-    let insert_two_above_final s v w x l =
+    let insert_two_above_final s v w x so l =
       let eq = function
-        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
-        | (v, Level tl) -> v, Level (insert_above_final s w x tl)
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_above_final s w x so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
-    let insert_three_above_final s v w x y l =
+    let insert_three_above_final s v w x y so l =
       let eq = function
-        | (v, Leaf)    -> invalid_argf "Nil already specified: %d" v
-        | (v, Level tl) -> v, Level (insert_two_above_final s w x y tl)
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Level tl) -> v, Level (insert_two_above_final s w x y so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     match n with
-    | One a             -> insert_final_level "2nd" a l
-    | Two (a, b)        -> insert_above_final "4th" a b l
-    | Three (a, b, c)   -> insert_two_above_final "6th" a b c l
-    | Four (a, b, c, d) -> insert_three_above_final "8th"  a b c d l
+    | One a             -> insert_final_level "2nd" a so l
+    | Two (a, b)        -> insert_above_final "4th" a b so l
+    | Three (a, b, c)   -> insert_two_above_final "6th" a b c so l
+    | Four (a, b, c, d) -> insert_three_above_final "8th"  a b c d so l
 
   let nearest ?(distance=fun x y -> abs (x - y)) n l =
     let dst x (y, _) = distance x y in
@@ -171,18 +183,18 @@ end *) = struct
     in
     let lookup a b c d =
       match find_or_first a l with
-      | (a, Leaf)     -> One a
-      | (a, Level l2) ->
+      | (a, Leaf so)          -> One a, so
+      | (a, Level l2)         ->
         match find_or_first b l2 with
-        | (b, Leaf)     -> Two (a, b)
-        | (b, Level l3) ->
+        | (b, Leaf so)        -> Two (a, b), so
+        | (b, Level l3)       ->
           match find_or_first c l3 with
-          | (c, Leaf)     -> Three (a, b, c)
-          | (c, Level l4) ->
+          | (c, Leaf so)      -> Three (a, b, c), so
+          | (c, Level l4)     ->
             match find_or_first d l4 with
-            | (d, Leaf)     -> Four (a, b, c, d)
-            | (d, Level _)  -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
-                                a b c d
+            | (d, Leaf so)    -> Four (a, b, c, d), so
+            | (d, Level _)    -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
+                                    a b c d
     in
     match n with
     | One a             -> lookup (Some a)  None     None     None
