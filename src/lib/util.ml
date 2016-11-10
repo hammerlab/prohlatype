@@ -4,6 +4,8 @@ module String = Sosa.Native_string
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
+let id x = x
+
 let error_bind ~f oe =
   match oe with
   | Error e -> Error e
