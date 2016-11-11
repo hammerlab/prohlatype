@@ -222,6 +222,7 @@ let list_remove_first p lst =
   in
   loop [] lst
 
+let is_sequence = function | Mas_parser.Sequence _ -> true | _ -> false
 let is_end = function | Mas_parser.End _ -> true | _ -> false
 let is_start = function | Mas_parser.Start _ -> true | _ -> false
 
@@ -332,20 +333,25 @@ let a_01_11N r =
   end else
     r
 
-let drop_splice_failure_from_fourth_exon name r =
-  if r.bm.index = 2 (* && r.bm.position = 745 *) then begin
-    printf "Adjusting %s's 4th exon" name;
+let drop_splice_failure_from_exon ~index ~end_pos name r =
+  if r.bm.index = index then begin
+    printf "Adjusting %s's %d exon" name (index + 1);
     { r with sequence =
-        List.filter r.sequence ~f:(fun e -> position e < 2048)
+        List.filter r.sequence ~f:(fun e -> position e < end_pos)
     }
   end else
     r
 
 let known_splice_adjustments = function
   | "A*01:11N"            -> a_01_11N
+  (* r.bm.position = 745 *)
   | "A*29:01:01:02N"
   | "A*26:01:01:03N"
-  | "A*03:01:01:02N" as n -> drop_splice_failure_from_fourth_exon n
+  | "A*03:01:01:02N" as n -> drop_splice_failure_from_exon ~index:2 ~end_pos:2048 n
+  (* r.bm.position = 0 *)
+  | "B*15:01:01:02N" as n -> drop_splice_failure_from_exon ~index:(-1) ~end_pos:75 n
+  (* r.bm.position = 1176 *)
+  | "C*04:09N"       as n -> drop_splice_failure_from_exon ~index:6 ~end_pos:2999 n
   | _                     -> fun r -> r
 
 let map_instr_to_alignments ?(fail_on_empty=true) nuclear_allele ~gen ~nuc alg =
@@ -374,7 +380,6 @@ let map_instr_to_alignments ?(fail_on_empty=true) nuclear_allele ~gen ~nuc alg =
     let nacc = FillFromGenetic (replace_sequence f before) :: acc in
     loop nacc ~gen:after ~nuc tl
   and merge_from_n acc genetic nuclear tl ~gen ~nuc =
-    (*let nuclear = splice_adj nuclear in *)
     let gen_pos = genetic.bm.position + genetic.bm.length in
     let gen_els, gen_after = split_at_boundary_offset_before_and_drop_it
       ~pos:gen_pos ~offset:genetic.offset gen
@@ -418,28 +423,33 @@ let align_reference instr =
 let align_same ?(verbose=false) name instr =
   let open Mas_parser in
   let empty_or_only_gaps = List.for_all ~f:(function | Gap _ -> true | _ -> false) in
-  let check_for_ends start nuclear_sequence next_boundary_pos acc =
-    match split_at_end nuclear_sequence with
-    | before, []         -> (start before) :: acc, true, false
-    | before, e :: after ->
-        if position e = next_boundary_pos then
-          if after <> [] then
-            invalid_argf "In %s malformed nuclear sequence: %s after end but before next boundary."
-              name (alignment_elements_to_string after)
-          else begin
+  let check_for_ends genetic_end start nuclear_sequence next_boundary_pos acc =
+    if genetic_end then begin (* Trust that the ends are aligned. *)
+      if verbose then
+        printf "In %s not dropping end!" name;
+      (start nuclear_sequence) :: acc, false, true
+    end else
+      match split_at_end nuclear_sequence with
+      | before, []         -> (start before) :: acc, true, false
+      | before, e :: after ->
+          if position e = next_boundary_pos then
+            if after <> [] then
+              invalid_argf "In %s malformed nuclear sequence: %s after end but before next boundary."
+                name (alignment_elements_to_string after)
+            else begin
+              if verbose then
+                printf "In %s dropping end at %d before next_boundary_pos %d\n"
+                  name (position e) next_boundary_pos;
+              (start before) :: acc, false, false
+            end
+          else if empty_or_only_gaps after then begin
             if verbose then
-              printf "In %s dropping end at %d before next_boundary_pos %d\n"
+              printf "In %s found only gaps for an early end at %d before next_boundary_pos %d\n"
                 name (position e) next_boundary_pos;
-            (start before) :: acc, false, false
-          end
-        else if empty_or_only_gaps after then begin
-          if verbose then
-            printf "In %s found only gaps for an early end at %d before next_boundary_pos %d\n"
-              name (position e) next_boundary_pos;
-          (start nuclear_sequence) :: acc, false, true  (* Keep the gap to signal missing *)
-        end else
-          invalid_argf "In %s Did not find just gaps after end: %s"
-            name (alignment_elements_to_string after)
+            (start nuclear_sequence) :: acc, false, true  (* Keep the gap to signal missing *)
+          end else
+            invalid_argf "In %s Did not find just gaps after end: %s"
+              name (alignment_elements_to_string after)
   in
   let latest_position_or_invalid = function
     | []      -> invalid_argf "In %s empty acc, merging right away?" name
@@ -461,15 +471,17 @@ let align_same ?(verbose=false) name instr =
             f.sequence :: acc, have_n_seq, false
           else
             let sbm = to_boundary ~offset:f.offset f.bm in
-            if need_start then
+            let region_has_sequence = List.exists f.sequence ~f:is_sequence in
+            if need_start && region_has_sequence then
               (Start f.bm.position :: sbm :: f.sequence) :: acc, have_n_seq, false
             else
               (sbm :: f.sequence) :: acc, have_n_seq, false
       | MergeFromNuclear { genetic; nuclear } ->
           let next_boundary_pos = nuclear.bm.position + nuclear.offset + nuclear.bm.length in
           let start_boundary = to_boundary ~offset:genetic.offset genetic.bm in
+          let genetic_end = List.exists genetic.sequence ~f:is_end in
           if have_n_seq then  (* Within nuclear data *)
-            check_for_ends (fun l -> start_boundary :: l) nuclear.sequence next_boundary_pos acc
+            check_for_ends genetic_end (fun l -> start_boundary :: l) nuclear.sequence next_boundary_pos acc
           else
             begin match split_at_start nuclear.sequence with
             | before, [] ->
@@ -489,12 +501,12 @@ let align_same ?(verbose=false) name instr =
                     name (alignment_elements_to_string before)
                 else
                   if position s = nuclear.bm.position + nuclear.offset + 1 then
-                    check_for_ends (fun l -> start_boundary :: l) after next_boundary_pos acc
+                    check_for_ends genetic_end (fun l -> start_boundary :: l) after next_boundary_pos acc
                   else begin
                     let lp = latest_position_or_invalid acc in
                     if verbose then
                       printf "In %s about to start insert an end at %d \n" name lp;
-                    check_for_ends (fun l -> End lp :: s :: start_boundary :: l)
+                    check_for_ends genetic_end (fun l -> End lp :: s :: start_boundary :: l)
                       after next_boundary_pos acc
                   end
             end)
