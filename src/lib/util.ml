@@ -42,8 +42,9 @@ let index_string s index =
   let (b, a) = String.split_at s ~index in
   b ^ "." ^ a
 
-(** Compare two strings and display bars for vertical mismatches. *)
-let manual_comp_display s1 s2 =
+let _pair_of_empty_strings = String.empty, String.empty
+(** Compare two strings and display vertical bars for mismatches. *)
+let manual_comp_display ?(labels=_pair_of_empty_strings)s1 s2 =
   let msm = ref 0 in
   let cs = String.mapi s1 ~f:(fun index c1 ->
     match String.get s2 ~index with
@@ -53,9 +54,12 @@ let manual_comp_display s1 s2 =
   in
   let ms = string_of_int !msm in
   let n  = String.length ms + 1 in
-  let pd = String.make n ' ' in
-  sprintf "%s%s\n%s %s\n%s%s"
-    pd s1 ms cs pd s2
+  let t,b = labels in
+  let label_length = max (max (String.length t) (String.length b)) n in
+  let tp = sprintf "%-*s" label_length t in
+  let bp = sprintf "%-*s" label_length b in
+  sprintf "%s%s\n%*s %s\n%s%s"
+    tp s1 label_length ms cs bp s2
 
 let insert_chars ?(every=120) ?(token=';') ics s =
   String.to_character_list s
