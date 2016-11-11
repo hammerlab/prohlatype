@@ -13,14 +13,27 @@ let load prefix t =
 let split_into_xons = String.split ~on:(`Character '|')
 
 let comp ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen) =
+  let labels = sprintf "nuc %s: " nuc , sprintf "gen %s: " gen in
   if nuc = gen then begin
-    Printf.printf "equal!\n";
     if merged_seq <> genetic_seq then begin
-      printf "while testing %s vs %s\n%s\n" nuc gen
-        (manual_comp_display merged_seq genetic_seq);
-      error "%s vs %s don't match!" nuc gen
-    end else
+      let mxs = split_into_xons merged_seq in
+      let gxs = split_into_xons genetic_seq in
+      let mxs_n = List.length mxs in
+      let gxs_n = List.length gxs in
+      if mxs_n <> gxs_n then
+        error "Merged list for %s doesn't have the same number %d of xon elements as genetic %d %s"
+          nuc mxs_n gxs_n gen
+      else begin
+        List.iter2 mxs gxs ~f:(fun m g ->
+          if m <> g then
+            printf "while testing %s vs %s\n%s\n" nuc gen
+                (manual_comp_display ~labels m g));
+        error "%s vs %s don't match!" nuc gen
+      end
+    end else begin
+      Printf.printf "equal!\n";
       Ok ()
+    end
   end else
     let mxs = split_into_xons merged_seq in
     let gxs = split_into_xons genetic_seq in
@@ -30,20 +43,21 @@ let comp ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen) =
     if mxs_n <> gxs_n then
       error "Merged list for %s doesn't have the same number %d of xon elements as genetic %d %s"
         nuc mxs_n gxs_n gen
-    else 
+    else
     (*let nxs_n = List.length nxs in
       Not necessarily a valid test since some sequences (ex 'N') may be missing exons.
     if mxs_n / 2 <> nxs_n then
       error "Merged list for %s doesn't have %d 2x+1 of xon elements as nuclear %d"
-        nuc mxs_n nxs_n 
+        nuc mxs_n nxs_n
     else *)
       let to_type i = if i mod 2 = 0 then "intron" else "exon" in
       List.map2 mxs gxs ~f:(fun m g -> (m, g))
       |> list_fold_ok ~init:0 ~f:(fun i (m, g) ->
           if i mod 2 = 0 then (* Intron, compare m to g *)
             if m = g then Ok (i + 1) else begin
-              printf "while testing %s vs %s\n%s\n" nuc gen
-                (manual_comp_display m g);
+              printf "while testing %s vs %s at %d %s\n%s\n" nuc gen
+                i (to_type i)
+                (manual_comp_display ~labels m g);
               error "%d element (%s) not equal between %s and %s"
                 i (to_type i) nuc gen
             end
@@ -53,8 +67,9 @@ let comp ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen) =
             | Some ex ->
                 if ex = String.empty then
                   if m = g then Ok (i + 1) else begin
-                    printf "while testing %s vs %s\n%s\n" nuc gen
-                      (manual_comp_display m g);
+                    printf "while testing %s vs %s at %d %s\n%s\n" nuc gen
+                      i (to_type i)
+                      (manual_comp_display ~labels m g);
                     error "%d element (%s) not equal between %s and %s"
                       i (to_type i) nuc gen
                   end
@@ -62,7 +77,7 @@ let comp ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen) =
                   Ok (i + 1)
                 else
                   error "%dth %d exon for %s, doesn't match nuc:\n%s\n" (i / 2) i nuc
-                    (manual_comp_display ex m))
+                    (manual_comp_display ~labels ex m))
       >>= fun _n -> Ok ()
 
 let () =
@@ -73,7 +88,7 @@ let () =
     let genetic_graph = load prefix `Genetic in
     let nuclear_graph = load prefix `Nuclear in
     List.iter merged_graph.Ref_graph.merge_map ~f:(fun ((nuc, gen) as p) ->
-      printf "comparing %s vs %s\n%!" nuc gen;        
+      printf "comparing %s vs %s %!" nuc gen;
       Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
         Ref_graph.sequence ~boundaries:true genetic_graph gen >>= fun genetic_seq ->
           Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
