@@ -177,24 +177,6 @@ let align_from_prefix prefix_path =
   let nuc = bounded nuc_mp.ref_elems in
   zip_align ~gen ~nuc >>= fun i -> Ok (gen_mp, nuc_mp, i)
 
-  (*
-type state =
-  { seen_start  : bool
-  ; seen_end    : bool
-  ; seen_nuclear_start : bool
-  ; seen_nuclear_end   : bool
-  ; acc         : string alignment_element list
-  }
-
-let start_state =
-  { seen_start  = false
-  ; seen_end    = false
-  ; seen_nuclear_start = false
-  ; seen_nuclear_end   = false
-  ; acc         = []
-  }
-  *)
-
 let position = function
   | Start s     -> s
   | End e       -> e
@@ -213,28 +195,6 @@ let latest_position_al_elems = function
   | []     -> error "No latest alignment element."
   | h :: _ -> Ok (latest_position h)
 
-  (*
-let sequence_start_check ~bm st lst k =
-  match bm with
-  | `Nothing                                -> k st lst
-  | `DontCheckBut kb                        -> k (kb st) lst
-  | `CheckAnd (sbm, kb) ->
-      match lst with
-      | b :: t when matches_boundary sbm b  -> k (kb b st) t
-      | []      -> error "Did not start with Boundary %s but empty."
-                        (bm_to_boundary_string sbm)
-      | v :: _t -> error "Did not start with Boundary %s but with %s."
-                        (bm_to_boundary_string sbm)
-                        (al_el_to_string v)
-
-let list_remove_first p lst =
-  let rec loop acc = function
-    | []     -> List.rev acc
-    | h :: t -> if p h then List.rev acc @ t else loop (h :: acc) t
-  in
-  loop [] lst
-                        *)
-
 let is_sequence = function | Sequence _ -> true | _ -> false
 let is_gap      = function | Gap _      -> true | _ -> false
 let is_end      = function | End _      -> true | _ -> false
@@ -246,57 +206,6 @@ let shift_al_el offset = function
   | End e      -> End (e + offset)
   | Gap g      -> Gap { g with start = g.start + offset }
   | Sequence s -> Sequence { s with start = s.start + offset}
-
-(*
-let update offset s =
-  let open Mas_parser in function
-  | Boundary b -> { s with acc = Boundary { b with pos = b.pos + offset} :: s.acc }
-  | Start t    -> if s.seen_start then s else
-                    { s with acc = Start (t + offset) :: s.acc
-                           ; seen_start = true}
-  | End e      -> let without_end = if s.seen_end then list_remove_first is_end s.acc else s.acc in
-                  { s with acc = End (e + offset) :: without_end
-                         ; seen_end = true }
-  | Gap g      -> { s with acc = Gap { g with start = g.start + offset } :: s.acc }
-  | Sequence t -> if s.seen_start && s.seen_end then  (* Not quiet right, TODO! *)
-                    let without_end = list_remove_first is_end s.acc in
-                    { s with seen_end = false
-                           ; acc = Sequence { t with start = t.start + offset}
-                                  :: without_end }
-                  else
-                    { s with acc = Sequence { t with start = t.start + offset} :: s.acc }
-
-let accumulate_up_to_next_boundary_rev ~bm offset nuclear s lst =
-let set_seen_nuclear_start s =
-  { s with seen_nuclear_start = true }
-
-let set_seen_nuclear_end s =
-  { s with seen_nuclear_end = true }
-
-  let open Mas_parser in
-  let rec loop s = function
-    | []
-    | (Boundary _ :: _) as l            -> Ok (s, l)
-  (*| (Start _ as e) :: tl when nuclear -> loop (update offset (set_seen_nuclear_start s) e) tl
-    | (End _ as e) :: tl when nuclear   -> loop (update offset (set_seen_nuclear_end s) e) tl *)
-    | (Start _ as e) :: tl
-    | (End _ as e) :: tl
-    | (Sequence _ as e) :: tl
-    | (Gap _ as e) :: tl                -> loop (update offset s e) tl
-  in
-  sequence_start_check ~bm s lst loop
-
-let drop_until_boundary ~bm lst =
-  let rec loop () = function
-    | []                      -> Ok []
-    | (Start _) :: t
-    | (End _ ) :: t
-    | (Sequence _) :: t
-    | (Gap _) :: t            -> loop () t
-    | (Boundary _ :: t) as l  -> Ok l
-  in
-  sequence_start_check ~bm () lst loop
-  *)
 
 (*alignment_elements_to_string *)
 let al_els_to_string lst =
@@ -724,7 +633,6 @@ let c0409N_exon_extension =
 (* TODO. We need to make a decision about suffixed (ex. with 'N') alleles
    since they may be the closest. *)
 
-
 let same_and_diff ~gen_assoc ~nuc_assoc =
   let gen_sort = List.sort ~cmp:compare gen_assoc in
   let nuc_sort = List.sort ~cmp:compare nuc_assoc in
@@ -781,4 +689,3 @@ let and_check prefix =
                         ; alt_elems  = alt_als @ diff_alt_lst
                         } ,
                         map_lst @ diff_map_lst)
-
