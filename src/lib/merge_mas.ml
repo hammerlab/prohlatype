@@ -117,13 +117,13 @@ let bounded_results_to_string lst =
 (* Create a framework of instructions based off of, probably the alignment
    in the reference sequence. *)
 let zip_align ~gen ~nuc =
-  let rec loop next_bnd_pos acc g n =
+  let rec loop next_boundary_pos acc g n =
     match n with
     | []        ->
         let _p, rest =
-          List.fold_left g ~init:(next_bnd_pos, acc)
-            ~f:(fun (next_bnd_pos, acc) (genetic, sequence) ->
-                  let offset = next_bnd_pos - genetic.position in
+          List.fold_left g ~init:(next_boundary_pos, acc)
+            ~f:(fun (next_boundary_pos, acc) (genetic, sequence) ->
+                  let offset = next_boundary_pos - genetic.position in
                   let next_end_pos = genetic.position + genetic.length in
                   let instr = FillFromGenetic { bm = genetic; sequence; offset } in
                   (next_end_pos, instr :: acc))
@@ -138,32 +138,32 @@ let zip_align ~gen ~nuc =
               if sequence = nuc_sequence then
                 let genetic  =
                   { bm       = genetic
-                  ; offset   = next_bnd_pos - genetic.position
+                  ; offset   = next_boundary_pos - genetic.position
                   ; sequence = sequence
                   }
                 in
                 let nuclear  =
                   { bm       = nuclear
-                  ; offset   = next_bnd_pos (*+ genetic.position*) - nuclear.position
+                  ; offset   = next_boundary_pos (*+ genetic.position*) - nuclear.position
                   ; sequence = nuc_sequence
                   }
                 in
                 let instr = MergeFromNuclear { genetic ; nuclear } in
-                loop (next_bnd_pos + nuclear.bm.length) (instr :: acc) gt nt
+                loop (next_boundary_pos + nuclear.bm.length) (instr :: acc) gt nt
               else
                 let instr = FillFromGenetic
                   { bm = genetic
                   ; sequence
-                  ; offset = next_bnd_pos - genetic.position
+                  ; offset = next_boundary_pos - genetic.position
                   }
                 in
-                loop (next_bnd_pos + genetic.length) (instr :: acc) gt n
+                loop (next_boundary_pos + genetic.length) (instr :: acc) gt n
         end
   in
   match gen with
   | []           -> error "Empty genetic sequence!"
-  | (bm, _) :: _ -> let next_bnd_pos = bm.position in
-                    loop next_bnd_pos [] gen nuc
+  | (bm, _) :: _ -> let next_boundary_pos = bm.position in
+                    loop next_boundary_pos [] gen nuc
 
 let prefix_from_f s =
   match String.split s ~on:(`Character '_') with
@@ -209,7 +209,8 @@ let shift_al_el offset = function
 
 (*alignment_elements_to_string *)
 let al_els_to_string lst =
-  String.concat ~sep:";\n" (List.map ~f:al_el_to_string lst)
+  if lst = [] then "[]" else
+    String.concat ~sep:";\n" (List.map ~f:al_el_to_string lst)
 
 let not_boundary_with_pos pos = function
   | Boundary b when b.pos = pos -> false
@@ -388,35 +389,68 @@ let align_reference instr =
           without_starts_or_ends nuclear.sequence)
   |> List.concat
 
+let empty_or_only_gaps = List.for_all ~f:is_gap
+
+let handle_split_end ?(verbose=false) name seq next_boundary_pos
+  ~no_split ~split_end_at_end ~split_end_middle =
+  match split_at_end seq with
+  | before, []         ->
+      if verbose then printf "In %s split needed because no end.\n" name;
+      no_split before
+  | before, e :: after ->
+    let ep = position e in
+    if ep = next_boundary_pos then
+      if after <> [] then
+        invalid_argf "In %s malformed sequence: %s after end but before next boundary."
+          name (al_els_to_string after)
+      else begin
+        if verbose then
+          printf "In %s dropping end at %d before next_boundary_pos %d.\n"
+            name ep next_boundary_pos;
+        split_end_at_end before
+      end
+    else if empty_or_only_gaps after then begin
+      if verbose then
+        printf "In %s found only gaps for an early end at %d before next_boundary_pos %d.\n"
+          name ep next_boundary_pos;
+      split_end_middle ep   (* Return just the position so that the caller
+                               handles what state is returned. *)
+    end else
+      invalid_argf "In %s Did not find just gaps after end: %s."
+        name (al_els_to_string after)
+
+type align_state =
+  { acc         : string alignment_element list list
+  ; in_nucleic  : bool      (* are inside the nucleic acid sequence?
+                                         we have data for it! *)
+  ; need_start  : bool      (* need to add a start. *)
+  }
+
+let init_align_state =
+  { acc        = []
+  ; in_nucleic = false
+  ; need_start = false
+  }
+
+let append s ?in_nucleic ?need_start t =
+  { acc        = t :: s.acc
+  ; in_nucleic = Option.value in_nucleic ~default:s.in_nucleic
+  ; need_start = Option.value need_start ~default:s.need_start
+  }
+
 let align_same ?(verbose=false) name instr =
-  let empty_or_only_gaps = List.for_all ~f:is_gap in
-  let check_for_ends genetic_end start nuclear_sequence next_bndr_pos acc =
+  let check_for_ends genetic_end start nuc_seq next_boundary_pos s =
     if genetic_end then begin (* Trust that the ends are aligned. *)
       if verbose then
         printf "In %s not dropping end!" name;
-      (start nuclear_sequence) :: acc, false, true
+      append s (start nuc_seq) ~in_nucleic:false ~need_start:true
     end else
-      match split_at_end nuclear_sequence with
-      | before, []         -> (start before) :: acc, true, false
-      | before, e :: after ->
-          if position e = next_bndr_pos then
-            if after <> [] then
-              invalid_argf "In %s malformed nuclear sequence: %s after end but before next boundary."
-                name (al_els_to_string after)
-            else begin
-              if verbose then
-                printf "In %s dropping end at %d before next_boundary_pos %d\n"
-                  name (position e) next_bndr_pos;
-              (start before) :: acc, false, false
-            end
-          else if empty_or_only_gaps after then begin
-            if verbose then
-              printf "In %s found only gaps for an early end at %d before next_boundary_pos %d\n"
-                name (position e) next_bndr_pos;
-            (start nuclear_sequence) :: acc, false, true  (* Keep the gap to signal missing *)
-          end else
-            invalid_argf "In %s Did not find just gaps after end: %s"
-              name (al_els_to_string after)
+      handle_split_end ~verbose name nuc_seq next_boundary_pos
+        ~no_split:        (fun b -> append s (start b) ~in_nucleic:true)
+        ~split_end_at_end:(fun b -> append s (start b) ~in_nucleic:false)
+        (* Keep the actual end (and possible gap's) to signal missing *)
+        ~split_end_middle:(fun _p -> append s (start nuc_seq)
+                                      ~in_nucleic:false ~need_start:true)
   in
   let latest_position_or_invalid = function
     | []      -> invalid_argf "In %s empty acc, merging right away?" name
@@ -425,30 +459,27 @@ let align_same ?(verbose=false) name instr =
                  |> Option.value_exn ~msg:"We checked for non empty list!"
                  |> latest_position
   in
-  let init =
-    []      (* acummulator of (list of) alignment elements list.  *)
-    , false (* are inside the nucleic acid sequence, we have data for it! *)
-    , false (* need to add a start. *)
-  in
-  let acc, _, _ =
-    List.fold_left instr ~init ~f:(fun (acc, have_n_seq, need_start) instr ->
+  let { acc; _} =
+    List.fold_left instr ~init:init_align_state ~f:(fun state instr ->
       match instr with
       | FillFromGenetic f ->
           if before_start f.bm then
-            f.sequence :: acc, have_n_seq, false
+            let need_start = not (List.exists ~f:is_start f.sequence) in
+            append state f.sequence ~need_start
           else
             let sbm = to_boundary ~offset:f.offset f.bm in
             let region_has_sequence = List.exists f.sequence ~f:is_sequence in
-            if need_start && region_has_sequence then
-              (Start f.bm.position :: sbm :: f.sequence) :: acc, have_n_seq, false
+            if state.need_start && region_has_sequence then
+              append state (Start f.bm.position :: sbm :: f.sequence) ~need_start:false
             else
-              (sbm :: f.sequence) :: acc, have_n_seq, false
+              append state (sbm :: f.sequence)
       | MergeFromNuclear { genetic; nuclear } ->
-          let next_bndr_pos = nuclear.bm.position + nuclear.offset + nuclear.bm.length in
+          let next_boundary_pos = nuclear.bm.position + nuclear.offset + nuclear.bm.length in
           let start_bndr = to_boundary ~offset:genetic.offset genetic.bm in
           let genetic_end = List.exists genetic.sequence ~f:is_end in
-          if have_n_seq then  (* Within nuclear data *)
-            check_for_ends genetic_end (fun l -> start_bndr :: l) nuclear.sequence next_bndr_pos acc
+          if state.in_nucleic then  (* Within nuclear data *)
+            check_for_ends genetic_end (fun l -> start_bndr :: l) nuclear.sequence
+              next_boundary_pos state
           else
             begin match split_at_start nuclear.sequence with
             | before, [] ->
@@ -457,10 +488,10 @@ let align_same ?(verbose=false) name instr =
                   invalid_argf "In %s did not find just gaps before start: %s"
                     name (al_els_to_string before)
                 else begin
-                  let lp = latest_position_or_invalid acc in
+                  let lp = latest_position_or_invalid state.acc in
                   if verbose then
                     printf "In %s haven't started insert an end at %d \n" name lp;
-                  [End lp] :: acc, false, true
+                  append state [End lp] ~in_nucleic:false ~need_start:true
                 end
             | before, s :: after ->
                 if not (empty_or_only_gaps before) then
@@ -468,70 +499,77 @@ let align_same ?(verbose=false) name instr =
                     name (al_els_to_string before)
                 else
                   if position s = nuclear.bm.position + nuclear.offset + 1 then
-                    check_for_ends genetic_end (fun l -> start_bndr :: l) after next_bndr_pos acc
+                    check_for_ends genetic_end (fun l -> start_bndr :: l) after
+                      next_boundary_pos state
                   else begin
-                    let lp = latest_position_or_invalid acc in
+                    let lp = latest_position_or_invalid state.acc in
                     if verbose then
                       printf "In %s about to start insert an end at %d \n" name lp;
                     check_for_ends genetic_end (fun l -> End lp :: s :: start_bndr :: l)
-                      after next_bndr_pos acc
+                      after next_boundary_pos state
                   end
             end)
   in
   List.concat (List.rev acc)
 
 let align_different ?(verbose=false) name instr =
-  let empty_or_only_gaps = List.for_all ~f:is_gap in
-  let check_for_ends start ~genx ~nucx next_boundary_pos acc =
-    match split_at_end nucx with
-    | before, []         -> (start before) :: acc, true, false
-    | before, e :: after ->
-        let ep = position e in
-        if ep = next_boundary_pos && after <> [] then
-          invalid_argf "In %s malformed nuclear sequence: %s after end but \
-            before next boundary."
-            name (al_els_to_string after)
-        else if empty_or_only_gaps after then begin
-          if verbose then
-            printf "In %s dropping end at %d before next_boundary_pos %d \
-                and inserting genetic part.\n"
-              name ep next_boundary_pos;
-          let after_end = List.filter genx ~f:(fun a -> position a > ep) in
-          (* NOTE: The genetic instructions SHOULD have the correct logic for
-            dealing with Start/End's in their sequence, so we don't have to
-            check here. *)
-          (start (before @ after_end)) :: acc, false, false
-        end else
-          invalid_argf "In %s did not find just gaps after end: %s"
-            name (al_els_to_string after)
+  let check_for_ends start ~genx ~nucx next_boundary_pos s =
+    handle_split_end ~verbose (name ^ "_nuc") nucx next_boundary_pos
+      ~no_split:        (fun b -> append s (start b) ~in_nucleic:true)
+      ~split_end_at_end:(fun b -> append s (start b) ~in_nucleic:false)
+      ~split_end_middle:(fun ep ->
+        (* Have to consider possible ends in the genetic sequence! *)
+        let nuc_before = List.filter nucx ~f:(fun a -> position a < ep) in
+        let gafter_end = List.filter genx ~f:(fun a -> position a >= ep) in
+        let everything_ends gen =
+          append s (start (nuc_before @ gen)) ~in_nucleic:false ~need_start:false
+        in
+        handle_split_end ~verbose (name ^ "_gen") gafter_end next_boundary_pos
+          ~no_split:(everything_ends)
+          ~split_end_at_end:(everything_ends)
+          (* Keep the actual end of genetic seq (and possible gap's) to signal missing *)
+          ~split_end_middle:(fun _gp -> everything_ends gafter_end))
   in
-  let init =
-    []      (* acummulator of (list of) alignment elements list.  *)
-    , false (* are inside the nucleic acid sequence, we have data for it! *)
-    , false (* need to add a start. *)
+  let check_for_ends_gen genetic_end start ~genx next_boundary_pos s =
+    if genetic_end then begin (* Trust that the ends are aligned. *)
+      if verbose then
+        printf "In %s not dropping end because it aligns with gen-gen.!" name;
+      append s (start genx) ~in_nucleic:false ~need_start:true
+    end else
+      handle_split_end ~verbose (name ^ "_gen_gen") genx next_boundary_pos
+        ~no_split:        (fun b -> append s (start b))
+        ~split_end_at_end:(fun b -> append s (start b))
+        (* Keep the actual end (and possible gap's) to signal missing *)
+        ~split_end_middle:(fun _p -> append s (start genx) ~need_start:true)
   in
-  let acc, _, _ =
-    List.fold_left instr ~init ~f:(fun (acc, have_n_seq, need_start) instr ->
+  let { acc; _ } =
+    List.fold_left instr ~init:init_align_state ~f:(fun state instr ->
       match instr with
       | FillFromGenetic f ->
           if before_start f.bm then
-            f.sequence :: acc, have_n_seq, false
+            let need_start = not (List.exists ~f:is_start f.sequence) in
+            append state f.sequence ~need_start
           else
             let sbm = to_boundary ~offset:f.offset f.bm in
             let region_has_sequence = List.exists f.sequence ~f:is_sequence in
-            if need_start && region_has_sequence then
-              (Start f.bm.position :: sbm :: f.sequence) :: acc, have_n_seq, false
+            if state.need_start && region_has_sequence then
+              append state (Start f.bm.position :: sbm :: f.sequence)
+                ~need_start:false
             else
-              (sbm :: f.sequence) :: acc, have_n_seq, false
+              append state (sbm :: f.sequence)
       | MergeFromNuclear { genetic; nuclear } ->
-          let next_bndr_pos = nuclear.bm.position + nuclear.offset + nuclear.bm.length in
+          let next_boundary_pos =
+            nuclear.bm.position + nuclear.offset + nuclear.bm.length
+          in
           let start_bndr = to_boundary ~offset:genetic.offset genetic.bm in
           let genx = nuclear.sequence.genetic in
           let nucx = nuclear.sequence.nuclear in
-          if have_n_seq then  (* Within nuclear data *)
-            check_for_ends (fun l -> start_bndr :: l) ~genx ~nucx next_bndr_pos acc
+          if state.in_nucleic then  (* Within nuclear data *)
+            check_for_ends (fun l -> start_bndr :: l) ~genx ~nucx
+              next_boundary_pos state
           else
-            begin match split_at_start nuclear.sequence.nuclear with
+            let genx = List.filter ~f:(fun e -> not (is_start e)) genx in
+            begin match split_at_start nucx with
             | before, [] ->
                 (* Did NOT find a start when we haven't started we have missing data! *)
                 if not (empty_or_only_gaps before) then
@@ -539,8 +577,11 @@ let align_different ?(verbose=false) name instr =
                     name (al_els_to_string before)
                 else begin
                   if verbose then
-                    printf "In %s haven't started inserting genetic sequence instead!\n" name;
-                  nuclear.sequence.genetic :: acc, false, true
+                    printf "In %s haven't started inserting genetic sequence \
+                      instead!\n" name;
+                  let genetic_end = List.exists genetic.sequence ~f:is_end in
+                  check_for_ends_gen genetic_end (fun l -> start_bndr :: l) ~genx
+                    next_boundary_pos state
                 end
             | before, s :: after ->
                 if not (empty_or_only_gaps before) then
@@ -548,17 +589,18 @@ let align_different ?(verbose=false) name instr =
                     name (al_els_to_string before)
                 else
                   if position s = nuclear.bm.position + nuclear.offset + 1 then
-                    check_for_ends (fun l -> start_bndr :: l) ~genx ~nucx:after next_bndr_pos acc
+                    check_for_ends (fun l -> start_bndr :: l) ~genx ~nucx:after
+                      next_boundary_pos state
                   else begin
                     (* TODO: what if before_gen is empty? insert Start/End ?*)
-                    let before_gen = List.filter nuclear.sequence.genetic
-                      ~f:(fun a -> position a <= position s)
+                    let before_gen =
+                      List.filter genx ~f:(fun a -> position a < position s)
                     in
                     if verbose then
-                      printf "In %s merging genetic exon data %s.\n" name
-                        (al_els_to_string before_gen);
+                      printf "In %s before start at %d merging genetic exon data %s.\n" name
+                        (position s) (al_els_to_string before_gen);
                     check_for_ends (fun l -> start_bndr :: (before_gen @ l))
-                      ~genx ~nucx:after next_bndr_pos acc
+                      ~genx ~nucx:after next_boundary_pos state
                   end
             end)
   in
@@ -618,7 +660,7 @@ let diff_alts ?(verbose=false) ~trie ~rmap ~na =
       let alg = RMap.find closest_allele_res rmap in
       let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
       let name = sprintf "%s (nuc) -> %s (gen)" nallele closest_allele_str in
-      if verbose then printf "%s\n" name;
+      if verbose then printf "Merging %s.\n" name;
       merge_different_nuc_into_alignment nallele nuc alg >>= fun instr ->
         let new_alts = align_different ~verbose name instr in
         Ok ( (nallele, new_alts) :: alt_acc
@@ -653,6 +695,17 @@ let same_and_diff ~gen_assoc ~nuc_assoc =
   in
   loop [] [] [] nuc_sort gen_sort
 
+let reference_as_diff lst =
+  let no_sequences = List.filter ~f:(fun a -> not (is_sequence a)) in
+  List.map lst ~f:(function
+    | FillFromGenetic f ->
+        FillFromGenetic { f with sequence = no_sequences f.sequence }
+    | MergeFromNuclear { nuclear; genetic } ->
+        MergeFromNuclear
+          { nuclear = { nuclear with sequence = no_sequences nuclear.sequence }
+          ; genetic = { genetic with sequence = no_sequences genetic.sequence }
+          })
+
 let and_check prefix =
   align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
     if gen_mp.reference <> nuc_mp.reference then
@@ -676,13 +729,15 @@ let and_check prefix =
             in
             (* Add the same, alleles with both genetic and nucleic data.*)
             same_alts instr same >>= fun (alt_inst, alt_als) ->
+              let rdiff = reference_as_diff ref_instr in
+              let instr_assoc = (gen_mp.reference, rdiff) :: alt_inst in
               (* Create a trie and map for lookups *)
-              let instr_assoc = (gen_mp.reference, ref_instr) :: alt_inst in
               init_trie_and_map instr_assoc >>= fun (trie, rmap) ->
                 (* Add the alleles with just nucleic data. *)
                 diff_alts ~verbose:true ~trie ~rmap ~na:just_nuc >>=
                   fun (diff_alt_lst, diff_map_lst) ->
                     let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
+                    printf "Finished merging!\n%!";
                     Ok ({ align_date = gen_mp.align_date
                         ; reference  = gen_mp.reference
                         ; ref_elems  = new_ref_elems
