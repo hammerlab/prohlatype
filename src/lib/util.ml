@@ -53,12 +53,12 @@ let manual_comp_display ?(labels=_pair_of_empty_strings)s1 s2 =
     | Some _               -> incr msm; '|')
   in
   let ms = string_of_int !msm in
-  let n  = String.length ms + 1 in
+  let n  = String.length ms in
   let t,b = labels in
   let label_length = max (max (String.length t) (String.length b)) n in
   let tp = sprintf "%-*s" label_length t in
   let bp = sprintf "%-*s" label_length b in
-  sprintf "%s%s\n%*s %s\n%s%s"
+  sprintf "%s%s\n%*s%s\n%s%s"
     tp s1 label_length ms cs bp s2
 
 let insert_chars ?(every=120) ?(token=';') ics s =
