@@ -24,7 +24,7 @@ let to_res g t =
     let k = List.nth_exn lst 4 in
     if List.mem k ~set:els then
       match Nomenclature.parse (List.nth_exn lst 1) with
-      | Ok (s, nc) when s = g -> Some (k, nc)
+      | Ok (s, (nc, _)) when s = g -> Some (k, nc)
       | Error e    -> invalid_arg e
       | _          -> None
     else
@@ -42,7 +42,7 @@ let position to_prohlatype_fname (key, nmt) =
       in
       List.findi as_tv ~f:(fun _i l ->
         match l with
-        | Ok (_, nmt2) when nmt2 = nmt -> true
+        | Ok (_, (nmt2, _)) when nmt2 = nmt -> true
         | _ -> false)
       |> Option.map ~f:(fun (i, _) -> (i, key, nmt))
       |> Option.value ~default:(3000, key, nmt)
