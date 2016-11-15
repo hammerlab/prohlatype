@@ -7,11 +7,11 @@ let construct
   alignment_file merge_file
   (* output *)
   ofile
-
+  (* graph construction. *) 
   num_alt_to_add allele_list allele_regex_list
-      remove_reference notshort no_pdf no_open skip_disk_cache max_edge_char_length
-      not_human_edges not_join_same_seq not_compress_edges not_compress_start
-      not_insert_newlines =
+  remove_reference notshort no_pdf no_open skip_disk_cache max_edge_char_length
+  not_human_edges not_join_same_seq not_compress_edges not_compress_start
+  not_insert_newlines =
   let open Ref_graph in
   let open Cache in
   let join_same_sequence = (not not_join_same_seq) in
