@@ -438,14 +438,14 @@ let append s ?in_nucleic ?need_start t =
   ; need_start = Option.value need_start ~default:s.need_start
   }
 
-let align_same ?(verbose=false) name instr =
+let align_same ?verbose name instr =
   let check_for_ends genetic_end start nuc_seq next_boundary_pos s =
     if genetic_end then begin (* Trust that the ends are aligned. *)
-      if verbose then
+      if opt_is_true verbose then
         printf "In %s not dropping end!" name;
       append s (start nuc_seq) ~in_nucleic:false ~need_start:true
     end else
-      handle_split_end ~verbose name nuc_seq next_boundary_pos
+      handle_split_end ?verbose name nuc_seq next_boundary_pos
         ~no_split:        (fun b -> append s (start b) ~in_nucleic:true)
         ~split_end_at_end:(fun b -> append s (start b) ~in_nucleic:false)
         (* Keep the actual end (and possible gap's) to signal missing *)
@@ -489,7 +489,7 @@ let align_same ?(verbose=false) name instr =
                     name (al_els_to_string before)
                 else begin
                   let lp = latest_position_or_invalid state.acc in
-                  if verbose then
+                  if opt_is_true verbose then
                     printf "In %s haven't started insert an end at %d \n" name lp;
                   append state [End lp] ~in_nucleic:false ~need_start:true
                 end
@@ -503,7 +503,7 @@ let align_same ?(verbose=false) name instr =
                       next_boundary_pos state
                   else begin
                     let lp = latest_position_or_invalid state.acc in
-                    if verbose then
+                    if opt_is_true verbose then
                       printf "In %s about to start insert an end at %d \n" name lp;
                     check_for_ends genetic_end (fun l -> End lp :: s :: start_bndr :: l)
                       after next_boundary_pos state
@@ -538,9 +538,9 @@ let instructions_before p =
                                             let sub_s = String.sub_exn s.s ~index:0 ~length in
                                             Some (Sequence {s with s = sub_s}))
 
-let align_different ?(verbose=false) name instr =
+let align_different ?verbose name instr =
   let check_for_ends start ~genx ~nucx next_boundary_pos s =
-    handle_split_end ~verbose (name ^ "_nuc") nucx next_boundary_pos
+    handle_split_end ?verbose (name ^ "_nuc") nucx next_boundary_pos
       ~no_split:        (fun b -> append s (start b) ~in_nucleic:true)
       ~split_end_at_end:(fun b -> append s (start b) ~in_nucleic:false)
       ~split_end_middle:(fun ep ->
@@ -550,7 +550,7 @@ let align_different ?(verbose=false) name instr =
         let everything_ends gen =
           append s (start (nuc_before @ gen)) ~in_nucleic:false ~need_start:false
         in
-        handle_split_end ~verbose (name ^ "_gen") gafter_end next_boundary_pos
+        handle_split_end ?verbose (name ^ "_gen") gafter_end next_boundary_pos
           ~no_split:(everything_ends)
           ~split_end_at_end:(everything_ends)
           (* Keep the actual end of genetic seq (and possible gap's) to signal missing *)
@@ -558,11 +558,11 @@ let align_different ?(verbose=false) name instr =
   in
   let check_for_ends_gen genetic_end start ~genx next_boundary_pos s =
     if genetic_end then begin (* Trust that the ends are aligned. *)
-      if verbose then
+      if opt_is_true verbose then
         printf "In %s not dropping end because it aligns with gen-gen.!" name;
       append s (start genx) ~in_nucleic:false ~need_start:true
     end else
-      handle_split_end ~verbose (name ^ "_gen_gen") genx next_boundary_pos
+      handle_split_end ?verbose (name ^ "_gen_gen") genx next_boundary_pos
         ~no_split:        (fun b -> append s (start b))
         ~split_end_at_end:(fun b -> append s (start b))
         (* Keep the actual end (and possible gap's) to signal missing *)
@@ -602,7 +602,7 @@ let align_different ?(verbose=false) name instr =
                   invalid_argf "In %s did not find just gaps before start: %s"
                     name (al_els_to_string before)
                 else begin
-                  if verbose then
+                  if opt_is_true verbose then
                     printf "In %s haven't started inserting genetic sequence \
                       instead!\n" name;
                   let genetic_end = List.exists genetic.sequence ~f:is_end in
@@ -620,7 +620,7 @@ let align_different ?(verbose=false) name instr =
                   else begin
                     (* TODO: what if before_gen is empty? insert Start/End ?*)
                     let before_gen = instructions_before (position s) genx in
-                    if verbose then
+                    if opt_is_true verbose then
                       printf "In %s before start at %d merging genetic exon data %s.\n" name
                         (position s) (al_els_to_string before_gen);
                     check_for_ends (fun l -> start_bndr :: (before_gen @ l))
@@ -649,10 +649,10 @@ let reference_positions_align ?seq lst =
   in
   start lst
 
-let same_alts instr =
+let same_alts ?verbose instr =
   list_fold_ok ~init:([], []) ~f:(fun (instr_acc, alt_acc) (allele, gen, nuc) ->
     map_instr_to_alignments allele ~gen ~nuc instr >>= fun ainstr ->
-    let all_elems = align_same ~verbose:true ("same: " ^ allele) ainstr in
+    let all_elems = align_same ?verbose ("same: " ^ allele) ainstr in
       Ok ( (allele, ainstr) :: instr_acc
          , (allele, all_elems) :: alt_acc))
 
@@ -675,7 +675,7 @@ let init_trie_and_map elems =
           Ok ( Trie.add allele_resolution suffix_opt trie
              , RMap.add (allele_resolution, suffix_opt) seq mp))
 
-let diff_alts ?(verbose=false) ~trie ~rmap ~na =
+let diff_alts ?verbose ~trie ~rmap ~na =
   let open Nomenclature in
   list_fold_ok na ~init:([],[]) ~f:(fun (alt_acc, map_acc) (nallele, nuc) ->
     (* Check that the gene is always the same? *)
@@ -684,9 +684,9 @@ let diff_alts ?(verbose=false) ~trie ~rmap ~na =
       let alg = RMap.find closest_allele_res rmap in
       let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
       let name = sprintf "%s (nuc) -> %s (gen)" nallele closest_allele_str in
-      if verbose then printf "Merging %s.\n" name;
+      if opt_is_true verbose then printf "Merging %s.\n" name;
       merge_different_nuc_into_alignment nallele nuc alg >>= fun instr ->
-        let new_alts = align_different ~verbose name instr in
+        let new_alts = align_different ?verbose name instr in
         Ok ( (nallele, new_alts) :: alt_acc
            , (nallele, closest_allele_str) :: map_acc))
 
@@ -730,7 +730,7 @@ let reference_as_diff lst =
           ; genetic = { genetic with sequence = no_sequences genetic.sequence }
           })
 
-let and_check prefix =
+let and_check ?verbose prefix =
   align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
     if gen_mp.reference <> nuc_mp.reference then
       error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
@@ -752,13 +752,13 @@ let and_check prefix =
                   (String.concat ~sep:"; " (List.map just_gen ~f:fst))
             in
             (* Add the same, alleles with both genetic and nucleic data.*)
-            same_alts instr same >>= fun (alt_inst, alt_als) ->
+            same_alts ?verbose instr same >>= fun (alt_inst, alt_als) ->
               let rdiff = reference_as_diff ref_instr in
               let instr_assoc = (gen_mp.reference, rdiff) :: alt_inst in
               (* Create a trie and map for lookups *)
               init_trie_and_map instr_assoc >>= fun (trie, rmap) ->
                 (* Add the alleles with just nucleic data. *)
-                diff_alts ~verbose:true ~trie ~rmap ~na:just_nuc >>=
+                diff_alts ?verbose ~trie ~rmap ~na:just_nuc >>=
                   fun (diff_alt_lst, diff_map_lst) ->
                     let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
                     printf "Finished merging!\n%!";

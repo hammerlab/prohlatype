@@ -89,3 +89,7 @@ let list_fold_ok lst ~f ~init =
     | h :: t  -> f acc h >>= fun a -> loop a t
   in
   loop init lst
+
+let opt_is_true = function
+  | Some true -> true
+  | None      -> false
