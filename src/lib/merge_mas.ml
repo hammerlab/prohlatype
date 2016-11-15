@@ -512,6 +512,32 @@ let align_same ?(verbose=false) name instr =
   in
   List.concat (List.rev acc)
 
+let instructions_before p =
+  List.filter_map ~f:(fun alel ->
+    match alel with
+    (* Single or zero width.*)
+    | Start s when s < p                 -> Some alel
+    | Start _                            -> None
+    | End e when e < p                   -> Some alel
+    | End _                              -> None
+    | Boundary b when b.pos < p          -> Some alel
+    | Boundary _                         -> None
+
+  (** Mutating these instructions is a bit dangerous, since we're not
+      explicitly checking that the aligned sequence into which we're
+      merging has the _same_ sequences. *)
+    | Gap g when g.start >= p            -> None
+    | Gap g when g.start + g.length <= p -> Some alel
+    | Gap g                              -> let length = p - g.start in
+                                            Some (Gap {g with length })
+
+    | Sequence s when s.start >= p       -> None
+    | Sequence s when s.start + String.length s.s <= p
+                                         -> Some alel
+    | Sequence s                         -> let length = p - s.start in
+                                            let sub_s = String.sub_exn s.s ~index:0 ~length in
+                                            Some (Sequence {s with s = sub_s}))
+
 let align_different ?(verbose=false) name instr =
   let check_for_ends start ~genx ~nucx next_boundary_pos s =
     handle_split_end ~verbose (name ^ "_nuc") nucx next_boundary_pos
@@ -593,9 +619,7 @@ let align_different ?(verbose=false) name instr =
                       next_boundary_pos state
                   else begin
                     (* TODO: what if before_gen is empty? insert Start/End ?*)
-                    let before_gen =
-                      List.filter genx ~f:(fun a -> position a < position s)
-                    in
+                    let before_gen = instructions_before (position s) genx in
                     if verbose then
                       printf "In %s before start at %d merging genetic exon data %s.\n" name
                         (position s) (al_els_to_string before_gen);
