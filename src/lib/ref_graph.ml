@@ -907,7 +907,9 @@ module JoinSameSequencePaths = struct
         let nq, amp = at_min_position q in
         let next_pos = peak_min_position nq in
         if !same_debug2 then
-          eprintf "popping %d peaking at %d\n" (List.hd_exn amp |> fst)
+          eprintf "popping [%s] peaking at %d\n"
+            (List.map ~f:(fun (p, s) -> sprintf "(%d,%s)" p s) amp
+             |> String.concat ~sep:";")
             (Option.value next_pos ~default:(-1));
         let nq = flatten ~next_pos nq amp in
         loop nq
