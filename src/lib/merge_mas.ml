@@ -19,6 +19,56 @@ The algorithm proceeds in several steps. At a high level for a given gene
 
 At a lower level:
 
+  1. Use the reference allele to construct a set of instructions for how to
+     zip the exons into the introns. This will calculate a list of
+     instructions that will alternate between an intron and exon: zip_align.
+     A lot of downstream code is special cased to start with an intron
+     (aka FillFromGenetic). This step also calculates all of the necessary
+     offsetting logic so that alignment elements that are contained in these
+     instructions can be moved to the appropriate position for a consistent
+     merged alignment.
+
+  2. Merging the reference is fairly straightforward. First we map the
+     simple instructions by grabbing the appropriate alignment elements
+     from their nucleic and genetic sequences [map_instr_to_alignments]
+     and then we "execute" the previous instructions taking into account
+     offsets [align_reference]. There is a check, [reference_positions_align]
+     to make sure that there are no gaps in subsequent alignment instructions.
+
+  3. Before merging the other alleles we separate them into 3 cases using
+      [same_and_diff]:
+      - Alleles where we have both nucleic and genetic data.
+      - Alleles where we have only genetic data.
+      - Alleles where we have only nucleic data.
+
+  4. Merging the alleles where we have both genetic and nucleic data
+     [same_alts]. We take the instructions formed from the reference and
+     replace sequence elements with those of from the genetic and nucleic data
+     ([map_instr_to_alignments]). And similarly to the reference, we also
+     execute them  with [align_same]. [align_same] is much more complicated
+     than [align_reference] because it has:
+      - Actually deal with different merging sequences.
+      - Maintain graph invariants such as start and end differences.
+      - Deal with potential splice variants.
+
+  5. It would be surprising if we had alleles where we have only genetic data,
+     (since one could presumably infer the nucleic components), so an error
+     message is written, but no action is taken!
+
+  6. Finally, for alleles where we only have nucleic data we follow a slight
+    variant of step 4 [diff_alts]. We first construct a trie of the alleles
+    that have both (those from #4 and the reference, which gets mutated into
+    a "diff" form [reference_as_diff]). For a given allele with only nucleic
+    data We use the trie to figure out the closest allele to use for imputation.
+    Once we choose the imputation allele, we take the instructions that we used
+    for that allele (the result of [map_instr_to_alignments]) and now add
+    the nucleic allele's exons into the [MergeFromNuclear] instructions of
+    the genetic/imputation allele [merge_different_nuc_into_alignment].
+    Afterwards we use [align_different] to execute those instructions. The
+    main difficulty with this method, besides those present in [align_same], is
+    knowing when to merge from the nucleic (exon) part of imputation allele
+    because the original nucleic-only allele is missing data. We also have to
+    deal with Start's and End's of 3 sequences!
 
 TODO: This nuclear vs genetic distinction is stupid it may be redundant
 but sometimes we mean exon vs intron we should label the parts accordingly.
@@ -748,7 +798,7 @@ let and_check ?verbose prefix =
             let same, just_gen, just_nuc = same_and_diff ~gen_assoc ~nuc_assoc in
             let () =
               if just_gen <> [] then
-                printf "Found these alleles with only genetic data: %s\n"
+                eprintf "Found these alleles with only genetic data: %s\n"
                   (String.concat ~sep:"; " (List.map just_gen ~f:fst))
             in
             (* Add the same, alleles with both genetic and nucleic data.*)
