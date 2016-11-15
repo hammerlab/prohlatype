@@ -75,6 +75,7 @@ let compress_three lst =
         N.One a, v)
 
 let compress ?expected_gene ~level lst =
+  (* TODO: Change the expected_gene check into a result. *)
   let gene, expected_check =
     match expected_gene with
     | None    ->
@@ -91,11 +92,14 @@ let compress ?expected_gene ~level lst =
               invalid_argf "Found different gene %s than expected: %s" gene e
           end
   in
+  (* TODO: How to handle the suffix in this case generally?
+     The current usage of Compress is for outputing and comparison against
+     other results, so this might not be necessary. *)
   let as_nomenclatures =
     List.map lst ~f:(fun (allele_str, value) ->
       match N.parse allele_str with
-      | Error e       -> invalid_argf "parsing error for %s: %s" allele_str e
-      | Ok (gene, nm) -> expected_check gene; (nm, value))
+      | Error e              -> invalid_argf "parsing error for %s: %s" allele_str e
+      | Ok (gene, (nm, _so)) -> expected_check gene; (nm, value))
   in
   let compressed =
     match level with

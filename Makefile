@@ -1,7 +1,7 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner extlib biocaml
 TOOLS=mhc2gpdf type
-TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k
+TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test
 
 .PHONY: default setup clean build tools tests
 
@@ -39,6 +39,8 @@ adjacents:
 benchmark_k:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts benchmark_k.native
 
+merged_tests:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts merged_sensible_test.native
 tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
 

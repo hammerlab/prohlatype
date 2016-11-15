@@ -6,7 +6,6 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 
 eval `opam config env`
 export OPAMYES="true"
-opam pin add -k git biocaml https://github.com/biocaml/biocaml/
 
 make setup
 make build
@@ -33,3 +32,8 @@ cp src/scripts/round_trip_tests.sh .
 #./adjacent_tests.sh
 #echo testing adjcent finding for A_gen only
 #./adjacents.native A_gen > A_gen_adjacent.log
+
+# Test merging
+./merged_sensible_test.native A
+./merged_sensible_test.native B
+./merged_sensible_test.native C

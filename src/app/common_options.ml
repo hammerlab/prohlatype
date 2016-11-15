@@ -21,11 +21,33 @@ let positive_int =
 
 let file_arg =
   let docv = "FILE" in
-  let def  = "./A_gen.txt" in
-  let doc  =
-    sprintf "File to lookup IMGT allele alignments. Defaults to %s." def
+  let doc  = sprintf "File to lookup IMGT allele alignments." in
+  Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
+
+let merge_arg =
+  let parser path =
+    let s = Filename.basename path in
+    let n = path ^ "_nuc.txt" in
+    let g = path ^ "_gen.txt" in
+    if not (List.mem ~set:Merge_mas.supported_genes s) then
+      `Error ("gene not supported: " ^ s)
+    else if not (Sys.file_exists n) then
+      `Error ("Nuclear alignment file doesn't exist: " ^ n)
+    else if not (Sys.file_exists g) then
+      `Error ("Genetic alignment file doesn't exist: " ^ n)
+    else
+      `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
-  Arg.(value & opt file "A_gen.txt" & info ~doc ~docv ["f"; "file"])
+  let convrtr = parser, (fun frmt -> Format.fprintf frmt "%s") in
+  let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
+  let doc  =
+    sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
+             prefix path. Currently only supports %s genes. The argument must \
+             be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
+             Overrides file arguments."
+      (String.concat ~sep:", " Merge_mas.supported_genes)
+  in
+  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
 
 let num_alt_arg =
   let docv = "POSITIVE INTEGER" in
@@ -86,34 +108,44 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_filename_and_graph_args ~alignment_file num_alt_to_add ~allele_list
-  ~allele_regex_list ~join_same_sequence ~remove_reference =
+let to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
+  ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference =
   let open Ref_graph in
-  let base = Filename.basename alignment_file |> Filename.chop_extension in
-  let option_based_fname, which =
-    match allele_list, allele_regex_list with
-    | [], [] ->
-        begin
-          match num_alt_to_add with
-          | None      -> sprintf "%s_%b_%b_all" base join_same_sequence remove_reference
-                         , None
-          | Some n    -> sprintf "%s_%b_%b_%d" base join_same_sequence remove_reference n
-                         , (Some (NumberOfAlts n))
-        end
-    | specific, regex -> let sr_dig =
-                            String.concat (specific @ regex)
-                            |> Digest.string
-                            |> Digest.to_hex
-                         in
-                         sprintf "%s_spec_%s_%b" base sr_dig remove_reference
-                         , (Some (Alleles { specific; regex }))
+  let to_ofname_and_cache_args base input =
+    let option_based_fname, which =
+      match allele_list, allele_regex_list with
+      | [], [] ->
+          begin
+            match num_alt_to_add with
+            | None      -> sprintf "%s_%b_%b_all" base join_same_sequence remove_reference
+                          , None
+            | Some n    -> sprintf "%s_%b_%b_%d" base join_same_sequence remove_reference n
+                          , (Some (NumberOfAlts n))
+          end
+      | specific, regex -> let sr_dig =
+                              String.concat (specific @ regex)
+                              |> Digest.string
+                              |> Digest.to_hex
+                          in
+                          sprintf "%s_spec_%s_%b" base sr_dig remove_reference
+                          , (Some (Alleles { specific; regex }))
+    in
+    option_based_fname
+    , { Cache.input
+      ; Cache.which
+      ; Cache.join_same_sequence
+      ; Cache.remove_reference
+      }
   in
-  option_based_fname
-  , { Cache.alignment_file
-    ; Cache.which
-    ; Cache.join_same_sequence
-    ; Cache.remove_reference
-    }
+  match alignment_file, merge_file with
+  | _, (Some prefix)          ->
+      let base = Filename.basename prefix ^ "_mgd" in
+      Ok (to_ofname_and_cache_args base (MergeFromPrefix prefix))
+  | (Some alignment_file), _  ->
+      let base = Filename.basename alignment_file |> Filename.chop_extension in
+      Ok (to_ofname_and_cache_args base (AlignmentFile alignment_file))
+  | None, None                ->
+      Error "Either a file or merge argument must be specified"
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in

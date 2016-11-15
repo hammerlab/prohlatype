@@ -47,11 +47,13 @@ open Util
 open Common
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
+  let input = Ref_graph.AlignmentFile file in
   let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
   if cache then
-    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~file ?n () })
+    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ?n () })
   else
-    Cache.(graph_and_two_index_no_cache { k = k; graph_args = graph_args ~file ?n () })
+    Cache.((invalid_arg_on_error "construct graph and index"
+            graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ?n () })
 
 let unwrap_sf = function | `Stopped r | `Finished r -> r
 

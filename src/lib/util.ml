@@ -4,6 +4,8 @@ module String = Sosa.Native_string
 
 let invalid_argf fmt = ksprintf invalid_arg fmt
 
+let id x = x
+
 let error_bind ~f oe =
   match oe with
   | Error e -> Error e
@@ -40,19 +42,24 @@ let index_string s index =
   let (b, a) = String.split_at s ~index in
   b ^ "." ^ a
 
-(** Compare two strings and display bars for vertical mismatches. *)
-let manual_comp_display s1 s2 =
+let _pair_of_empty_strings = String.empty, String.empty
+(** Compare two strings and display vertical bars for mismatches. *)
+let manual_comp_display ?(labels=_pair_of_empty_strings)s1 s2 =
   let msm = ref 0 in
   let cs = String.mapi s1 ~f:(fun index c1 ->
-    let c2 = String.get_exn s2 ~index in
-    if c1 = c2 then ' ' else
-      begin incr msm; '|' end)
+    match String.get s2 ~index with
+    | None                 -> incr msm; 'X'
+    | Some c2 when c1 = c2 -> ' '
+    | Some _               -> incr msm; '|')
   in
   let ms = string_of_int !msm in
-  let n  = String.length ms + 1 in
-  let pd = String.make n ' ' in
-  sprintf "%s%s\n%s %s\n%s%s"
-    pd s1 ms cs pd s2
+  let n  = String.length ms in
+  let t,b = labels in
+  let label_length = max (max (String.length t) (String.length b)) n in
+  let tp = sprintf "%-*s" label_length t in
+  let bp = sprintf "%-*s" label_length b in
+  sprintf "%s%s\n%*s%s\n%s%s"
+    tp s1 label_length ms cs bp s2
 
 let insert_chars ?(every=120) ?(token=';') ics s =
   String.to_character_list s
@@ -76,3 +83,13 @@ let reverse_complement s =
   String.fold s ~init:[] ~f:(fun l c -> complement c :: l)
   |> String.of_character_list
 
+let list_fold_ok lst ~f ~init =
+  let rec loop acc = function
+    | []      -> Ok acc
+    | h :: t  -> f acc h >>= fun a -> loop a t
+  in
+  loop init lst
+
+let opt_is_true = function
+  | Some true -> true
+  | None      -> false

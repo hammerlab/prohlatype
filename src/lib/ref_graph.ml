@@ -103,12 +103,13 @@ type by_position =
   | Redirect of int * int
 
 type t =
-  { align_date  : string              (* When the alignment was created by IMGT. *)
-  ; g           : G.t                 (* The actual graph. *)
-  ; aindex      : A.index             (* The allele index, for Sets and Maps. *)
-  ; bounds      : sep list A.Map.t    (* Map of where the alleles start and stop. *)
+  { align_date  : string                  (* When the alignment was created by IMGT. *)
+  ; g           : G.t                     (* The actual graph. *)
+  ; aindex      : A.index                 (* The allele index, for Sets and Maps. *)
+  ; bounds      : sep list A.Map.t        (* Map of where the alleles start and stop. *)
   ; posarr      : by_position array
   ; offset      : int
+  ; merge_map   : (string * string) list  (* Left empty if not a merged graph *)
   }
 
 let number_of_alleles g =
@@ -279,7 +280,7 @@ let add_reference_elems g aindex allele ref_elems =
       | `Ended _ :: _ , Boundary _                    -> state        (* ignore *)
       | []            , al_el
       | `Ended _ :: _ , al_el                         ->
-          inv_argf "Unexpected %s before start for %s"
+          inv_argf "Unexpected %s after end for %s"
             (al_el_to_string al_el) allele
       | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
       | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
@@ -419,8 +420,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           inv_argf "Next Boundary %d %d after desired boundary %d %d"
             p c pos idx
       | N (p, _) ->
-          inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d)"
-            p pos idx
+          inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
+            p pos idx allele
     in
     loop prev next
   in
@@ -906,7 +907,9 @@ module JoinSameSequencePaths = struct
         let nq, amp = at_min_position q in
         let next_pos = peak_min_position nq in
         if !same_debug2 then
-          eprintf "popping %d peaking at %d\n" (List.hd_exn amp |> fst)
+          eprintf "popping [%s] peaking at %d\n"
+            (List.map ~f:(fun (p, s) -> sprintf "(%d,%s)" p s) amp
+             |> String.concat ~sep:";")
             (Option.value next_pos ~default:(-1));
         let nq = flatten ~next_pos nq amp in
         loop nq
@@ -987,7 +990,8 @@ let construct_which_args_to_string = function
                                         |> Digest.to_hex
                                         |> sprintf "R%s"
 
-let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=false) r =
+let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
+  ?(remove_reference=false) r =
   let open Mas_parser in
   let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
@@ -1045,10 +1049,26 @@ let construct_from_parsed ?which ?(join_same_sequence=true) ?(remove_reference=f
   ; bounds
   ; offset
   ; posarr
+  ; merge_map
   }
 
-let construct_from_file ~join_same_sequence ~remove_reference ?which file =
-  construct_from_parsed ~join_same_sequence ~remove_reference ?which (Mas_parser.from_file file)
+type input =
+  | AlignmentFile of string      (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
+  | MergeFromPrefix of string     (* Ex. A, B, full path to prefix *)
+
+let input_to_string = function
+  | AlignmentFile path  -> Filename.basename path
+  | MergeFromPrefix prefix_path -> Filename.basename prefix_path ^ "_mgd"
+
+let construct_from_file ~join_same_sequence ~remove_reference ?which = function
+  | AlignmentFile file ->
+      Ok (construct_from_parsed
+            ~join_same_sequence ~remove_reference ?which
+            (Mas_parser.from_file file))
+  | MergeFromPrefix prefix ->
+      Merge_mas.and_check prefix >>= fun (alignment, merge_map) ->
+        Ok (construct_from_parsed ~merge_map
+            ~join_same_sequence ~remove_reference ?which alignment)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =
@@ -1166,9 +1186,10 @@ let parse_start_arg g allele =
           Ok ([v], String.drop ~index, -index)
   | None                  ->
       begin match A.Map.get g.aindex g.bounds allele with
-      | []  -> error "Allele %s not found in graph!" allele
-      | spl -> Ok (List.map spl ~f:(fun sep ->
-                        Nodes.S (fst sep.start, allele)), id, 0)
+      | exception Not_found -> error "Allele %s not found in graph!" allele
+      | []                  -> error "Allele %s not found in graph!" allele
+      | spl                 -> Ok (List.map spl ~f:(fun sep ->
+                                 Nodes.S (fst sep.start, allele)), id, 0)
       end
 
 let parse_stop_arg ?(count=0) =
@@ -1199,17 +1220,18 @@ let parse_stop_arg ?(count=0) =
                               String.take ~index:n s)
 
 (** Accessors. *)
-let sequence ?start ?stop ({g; aindex; bounds } as gt) allele =
+let sequence ?(boundaries=false) ?start ?stop gt allele =
   let open Nodes in
   parse_start_arg gt allele start
     >>= fun (start, pre, count) ->
       let stop, post = parse_stop_arg ~count stop in
       List.fold_left start ~init:[] ~f:(fun acc start ->
-        fold_along_allele g aindex allele ~start ~init:acc
+        fold_along_allele gt.g gt.aindex allele ~start ~init:acc
           ~f:(fun clst node ->
                 match node with
-                | N (_, s)          -> (s :: clst, stop node)
-                | S _ | E _ | B _   -> (clst, stop node)))
+                | N (_, s)             -> (s :: clst, stop node)
+                | B _  when boundaries -> ("|" :: clst, stop node)
+                | S _ | E _ | B _      -> (clst, stop node)))
       |> List.rev
       |> String.concat
       |> pre

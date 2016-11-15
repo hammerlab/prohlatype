@@ -24,7 +24,7 @@ let to_res g t =
     let k = List.nth_exn lst 4 in
     if List.mem k ~set:els then
       match Nomenclature.parse (List.nth_exn lst 1) with
-      | Ok (s, nc) when s = g -> Some (k, nc)
+      | Ok (s, (nc, _)) when s = g -> Some (k, nc)
       | Error e    -> invalid_arg e
       | _          -> None
     else
@@ -42,7 +42,7 @@ let position to_prohlatype_fname (key, nmt) =
       in
       List.findi as_tv ~f:(fun _i l ->
         match l with
-        | Ok (_, nmt2) when nmt2 = nmt -> true
+        | Ok (_, (nmt2, _)) when nmt2 = nmt -> true
         | _ -> false)
       |> Option.map ~f:(fun (i, _) -> (i, key, nmt))
       |> Option.value ~default:(3000, key, nmt)
@@ -51,8 +51,8 @@ let position to_prohlatype_fname (key, nmt) =
 let prof_dir_example = "profc/type_out_%"
 
 (*let open Oml.Statistics in *)
-let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir
-  ~map ?(suffix="nuc.txt") () =
+let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir ~map
+  ?(suffix="_nuc.txt") () =
   List.fold_left genes ~init:[] ~f:(fun acc gene ->
     let train_samples = to_res gene `Train in
     List.fold_left reads ~init:acc ~f:(fun acc read ->

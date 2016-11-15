@@ -54,6 +54,7 @@ module CompressNames = struct
 
   end (* CompressIntSequencess *)
 
+  (* TODO: Unify this with the Nomenclature suffix logic. *)
   let parse_last s =
     try Some (int_of_string s)
     with Failure _ -> None     (* for the ":5N" cases *)
