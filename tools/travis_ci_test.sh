@@ -8,9 +8,13 @@ eval `opam config env`
 export OPAMYES="true"
 
 make setup
+
+# for test coverage
+opam install bisect_ppx ocveralls
+
 make build
 make tools
-make tests
+make covered_tests
 
 export IMGTHLA_DIR="IMGTHLA"
 
@@ -37,3 +41,5 @@ cp src/scripts/round_trip_tests.sh .
 ./merged_sensible_test.native A
 ./merged_sensible_test.native B
 ./merged_sensible_test.native C
+
+ocveralls --repo_token $COVERALLSTOKEN --git --send bisect0001.out

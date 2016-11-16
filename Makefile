@@ -3,7 +3,7 @@ SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmd
 TOOLS=mhc2gpdf type
 TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test
 
-.PHONY: default setup clean build tools tests
+.PHONY: default setup clean build tools tests covered_tests
 
 default: build
 
@@ -41,8 +41,12 @@ benchmark_k:
 
 merged_tests:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts merged_sensible_test.native
+
 tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
+
+covered_tests:
+	ocamlbuild -use-ocamlfind -package bisect_ppx $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
 
 ## Tools:
 
@@ -58,8 +62,18 @@ explore:
 tools:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)
 
+## Coverage
+
+report_dir:
+	mkdir report_dir
+
+report: report_dir
+	cd $(COVERED_TEST_BUILD_DIR) && \
+	bisect-ppx-report -html ../report_dir ../$(shell ls -t bisect*.out | head -1) && \
+	cd -
+
+clean_reports:
+	rm -rf report_dir bisect*.out
+
 ## Throw Away Scripts
-
-
 # ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package future.unix -package biocaml -package biocaml.unix -I src/lib/ -I src/app type.native
-
