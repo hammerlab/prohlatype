@@ -91,5 +91,6 @@ let list_fold_ok lst ~f ~init =
   loop init lst
 
 let opt_is_true = function
-  | Some true -> true
-  | None      -> false
+  | Some true  -> true
+  | Some false -> false
+  | None       -> false
