@@ -31,6 +31,24 @@ case "$TEST" in
     cp src/scripts/round_trip_tests.sh .
     ./round_trip_tests.sh
     ;;
+  mergeA)
+    echo testing merging of A
+    ./merged_sensible_test.native A
+    ;;
+  mergeB)
+    echo testing merging of B
+    ./merged_sensible_test.native B
+    ;;
+  mergeC)
+    echo testing merging of C
+    ./merged_sensible_test.native C
+    ;;
+  adjA)
+    echo testing adjcent finding for A_gen only
+    ./adjacents.native A_gen
+    ;;
+  *)
+    ;;
 esac
 
 #echo testing same alignment
@@ -39,12 +57,5 @@ esac
 # Full adjacents calculation takes too long
 #cp src/scripts/adjacent_tests.sh .
 #./adjacent_tests.sh
-#echo testing adjcent finding for A_gen only
-#./adjacents.native A_gen > A_gen_adjacent.log
-
-# Test merging
-#./merged_sensible_test.native A
-#./merged_sensible_test.native B
-#./merged_sensible_test.native C
 
 #ocveralls --repo_token $COVERALLSTOKEN --git --send bisect0001.out
