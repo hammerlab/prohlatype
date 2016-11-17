@@ -22,16 +22,16 @@ echo current dir:
 ls
 
 case "$TEST" in
-    parsing)
-      echo testing parsing
-      ./test_parsing.native
-      ;;
-    round)
-      echo testing round trip graph construction
-      cp src/scripts/round_trip_tests.sh .
-      ./round_trip_tests.sh
-      ;;
-  esac
+  parsing)
+    echo testing parsing
+    ./test_parsing.native
+    ;;
+  round)
+    echo testing round trip graph construction
+    cp src/scripts/round_trip_tests.sh .
+    ./round_trip_tests.sh
+    ;;
+esac
 
 #echo testing same alignment
 #./same_alignments_test.native
