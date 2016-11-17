@@ -21,12 +21,17 @@ export IMGTHLA_DIR="IMGTHLA"
 echo current dir:
 ls
 
-echo testing parsing
-./test_parsing.native
-
-echo testing round trip graph construction
-cp src/scripts/round_trip_tests.sh .
-./round_trip_tests.sh
+case "$TEST" in
+    parsing)
+      echo testing parsing
+      ./test_parsing.native
+      ;;
+    round)
+      echo testing round trip graph construction
+      cp src/scripts/round_trip_tests.sh .
+      ./round_trip_tests.sh
+      ;;
+  esac
 
 #echo testing same alignment
 #./same_alignments_test.native
@@ -38,8 +43,8 @@ cp src/scripts/round_trip_tests.sh .
 #./adjacents.native A_gen > A_gen_adjacent.log
 
 # Test merging
-./merged_sensible_test.native A
-./merged_sensible_test.native B
-./merged_sensible_test.native C
+#./merged_sensible_test.native A
+#./merged_sensible_test.native B
+#./merged_sensible_test.native C
 
-ocveralls --repo_token $COVERALLSTOKEN --git --send bisect0001.out
+#ocveralls --repo_token $COVERALLSTOKEN --git --send bisect0001.out

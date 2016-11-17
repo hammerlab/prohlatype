@@ -68,9 +68,7 @@ report_dir:
 	mkdir report_dir
 
 report: report_dir
-	cd $(COVERED_TEST_BUILD_DIR) && \
-	bisect-ppx-report -html ../report_dir ../$(shell ls -t bisect*.out | head -1) && \
-	cd -
+	bisect-ppx-report -html report_dir $(shell ls -t bisect*.out | head -1)
 
 clean_reports:
 	rm -rf report_dir bisect*.out
