@@ -57,6 +57,8 @@ type 'sr alignment_element =
   | Gap of { start : position; length : int; }
   (** Gap of position and length. *)
 
+val start_position : 'a alignment_element -> position
+
 (** [al_el_to_string] converts a alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
 
@@ -86,3 +88,6 @@ val from_in_channel : in_channel -> result
 
 (** Parse an alignment file. *)
 val from_file : string -> result
+
+val apply : reference:string alignment_element list ->
+    allele:string alignment_element list -> bytes

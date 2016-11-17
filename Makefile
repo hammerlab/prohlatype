@@ -1,7 +1,8 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner extlib biocaml
 TOOLS=mhc2gpdf type
-TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test
+TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test
+
 
 .PHONY: default setup clean build tools tests covered_tests
 
@@ -42,6 +43,9 @@ benchmark_k:
 merged_tests:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts merged_sensible_test.native
 
+mas_align_test:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts mas_align_test.native
+
 tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
 
@@ -58,6 +62,9 @@ type:
 
 explore:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -I src/lib/ -I src/app explore_alignment.native
+
+align2fasta:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app align2fasta.native
 
 tools:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)

@@ -43,8 +43,8 @@ let () =
   let open Cmdliner in
   let output_fname_arg =
     let docv = "FILE" in
-    let doc  = "Output file name, defaults to a file (input file)_(number of \
-                non reference alleles). [pdf|dot]."
+    let doc  = "Output file name, defaults to a file \"(input file)_(number of \
+                non reference alleles).[pdf|dot]\" ."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
   in

@@ -2,7 +2,8 @@
 include Nonstd
 module String = Sosa.Native_string
 
-let invalid_argf fmt = ksprintf invalid_arg fmt
+let invalid_argf ?(prefix="") fmt =
+  ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
 let id x = x
 
