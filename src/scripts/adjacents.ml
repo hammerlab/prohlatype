@@ -11,6 +11,14 @@ let test_graph file g pos =
   | Ok (ens, es, stack) ->
       print_endline (edge_node_set_to_table g.aindex ens)
 
+let test_graph_fail file g pos =
+  let open Ref_graph in
+  match adjacents_at g ~pos with
+  | Error e ->
+      invalid_argf "Couldn't find adjacents at %d for %s because of %s" pos file e
+  | Ok (ens, es, stack) ->
+      ()
+
 let test_file file =
   let open Ref_graph in
   let input = AlignmentFile (to_alignment_file file)  in
@@ -18,8 +26,9 @@ let test_file file =
   let g = Cache.graph all_args in
   let st, en = Ref_graph.range g in
   for i = st to en - 1 do
-    printf "------------testing %d -------------\n" i;
-    test_graph file g i
+    if i mod 10 = 0 then
+      printf "------------testing %d -------------\n" i;
+    test_graph_fail file g i
   done
 
 (* Optionally take as input the without-extension name of an alignment
