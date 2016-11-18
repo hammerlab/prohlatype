@@ -90,4 +90,6 @@ val from_in_channel : in_channel -> result
 val from_file : string -> result
 
 val apply : reference:string alignment_element list ->
-    allele:string alignment_element list -> bytes
+    allele:string alignment_element list -> string
+
+val reference_sequence : result -> string

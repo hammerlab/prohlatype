@@ -1,15 +1,30 @@
+(* Test that the alignment parsing and then applying gives the same sequences
+   as the fasta's
 
+   There are known (2016-11-18) differences:
+
+    B_nuc:    B*44:02:01:02S
+    C_nuc:    C*04:09N
+    DRB_nuc:  DRB4*01:03:01:02N
+
+*)
 open Util
 open Common
 open MoreLabels
 
+let apply_allele a r =
+  let open Mas_parser in
+  apply ~reference:r.ref_elems ~allele:(List.assoc a r.alt_elems)
+
 let test f =
   let r = Mas_parser.from_file f in
   let reference = r.Mas_parser.ref_elems in
-  List.map r.Mas_parser.alt_elems
-    ~f:(fun (a, allele) ->
-        printf "testing %s\n" a;
-        a, Mas_parser.apply ~reference ~allele)
+  (r.Mas_parser.reference, Mas_parser.reference_sequence r)
+  :: List.map r.Mas_parser.alt_elems
+      ~f:(fun (a, allele) ->
+          printf "testing %s\n" a;
+          a, Mas_parser.apply ~reference ~allele)
+
 
 let load_fasta f =
   List.map (Fasta.all f) ~f:(fun (hdr, s) ->
@@ -18,7 +33,7 @@ let load_fasta f =
 
 module Sm = Map.Make (struct type t = string let compare = compare end)
 
-let merge mp fa = 
+let merge mp fa =
   let to_map =
     List.fold_left ~init:Sm.empty ~f:(fun m (key,data) -> Sm.add ~key ~data m)
   in
@@ -33,7 +48,7 @@ let merge mp fa =
       | Some a, Some f  -> Some (if a = f then `Same a else `Diff (a, f)))
     |> Sm.bindings
   in
-  let just_fasta, rest = List.partition_map mgd 
+  let just_fasta, rest = List.partition_map mgd
     ~f:(function | (a, `JustFasta s) -> `Fst (a,s) | r -> `Snd r)
   in
   let return = ref 0 in
@@ -56,12 +71,13 @@ let merge mp fa =
   if just_diff <> [] then begin
     printf "Different\n";
     List.iter just_diff ~f:(fun (allele, (a, f)) ->
-      printf "%s:\n %s\n" allele (manual_comp_display a f));
+      printf "%s:\n %s\n" allele
+        (manual_comp_display ~labels:("align: ","fasta: ") a f));
     return := 1
   end;
   !return
 
-let () = 
+let () =
   if !Sys.interactive then
     ()
   else
@@ -71,6 +87,10 @@ let () =
       else if n = 2 then Sys.argv.(1)
       else failwith "At most 1 arg"
     in
-    exit (merge (test (to_alignment_file file)) 
-                (load_fasta (to_fasta_file file)))
-
+    let r = merge (test (to_alignment_file file))
+                (load_fasta (to_fasta_file file))
+    in
+    if r = 0 then
+      printf "all tests passed!\n"
+    else
+      exit r
