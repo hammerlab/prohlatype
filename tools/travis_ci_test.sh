@@ -58,4 +58,6 @@ esac
 #cp src/scripts/adjacent_tests.sh .
 #./adjacent_tests.sh
 
-ocveralls --repo_token $COVERALLSTOKEN --git --send bisect*.out
+if [ -n "$TEST" ] ; then
+  ocveralls --repo_token $COVERALLSTOKEN --git --send bisect*.out
+fi
