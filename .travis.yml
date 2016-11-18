@@ -8,6 +8,8 @@ matrix:
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=parsing
     - os: linux
+      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=masA
+    - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=round
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeA
@@ -15,6 +17,7 @@ matrix:
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeB
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeC
+
 
     # At the moment bootstrapping OCaml on OSX takes too long, for the sake of
     # simplicity just test compilation

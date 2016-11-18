@@ -33,7 +33,7 @@ let load_fasta f =
 
 module Sm = Map.Make (struct type t = string let compare = compare end)
 
-let merge mp fa =
+let merge ?(known=[||]) mp fa =
   let to_map =
     List.fold_left ~init:Sm.empty ~f:(fun m (key,data) -> Sm.add ~key ~data m)
   in
@@ -70,10 +70,14 @@ let merge mp fa =
   in
   if just_diff <> [] then begin
     printf "Different\n";
-    List.iter just_diff ~f:(fun (allele, (a, f)) ->
-      printf "%s:\n %s\n" allele
-        (manual_comp_display ~labels:("align: ","fasta: ") a f));
-    return := 1
+    let all_known =
+      List.fold_left just_diff ~init:true ~f:(fun all_ok (allele, (a, f)) ->
+        let k = Array.exists ~f:((=) allele) known in
+        printf "known: %b %s:\n %s\n" k allele
+          (manual_comp_display ~labels:("align: ","fasta: ") a f);
+        k)
+    in
+    if all_known then return := 0 else return := 1
   end;
   !return
 
@@ -82,13 +86,15 @@ let () =
     ()
   else
     let n = Array.length Sys.argv in
-    let file =
-      if n <= 1 then "A_gen"
-      else if n = 2 then Sys.argv.(1)
-      else failwith "At most 1 arg"
+    let file, known =
+      if n <= 1 then "A_gen", [||]
+      else if n = 2 then Sys.argv.(1), [||]
+      else Sys.argv.(1), Array.sub Sys.argv ~pos:2 ~len:(n - 2)
     in
-    let r = merge (test (to_alignment_file file))
-                (load_fasta (to_fasta_file file))
+    let r =
+      merge ~known
+        (test (to_alignment_file file))
+        (load_fasta (to_fasta_file file))
     in
     if r = 0 then
       printf "all tests passed!\n"
