@@ -1,4 +1,5 @@
 [![Build Status](https://travis-ci.org/hammerlab/prohlatype.svg?branch=master)](https://travis-ci.org/hammerlab/prohlatype)
+[![Coverage Status](https://coveralls.io/repos/hammerlab/prohlatype/badge.svg?branch=HEAD&service=github)](https://coveralls.io/github/hammerlab/prohlatype?branch=HEAD)
 
 Probabilistic HLA Typing
 ------------------------
