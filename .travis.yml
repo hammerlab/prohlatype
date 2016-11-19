@@ -8,7 +8,7 @@ matrix:
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=parsing
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=masA
+      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mas
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=round
     - os: linux
