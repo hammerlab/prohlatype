@@ -89,7 +89,10 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
+(** [apply reference allele] will convert the reference and allele alignment
+    elements into a string representing the allele sequence. *)
 val apply : reference:string alignment_element list ->
     allele:string alignment_element list -> string
 
+(** Will return the sequence of the reference. *)
 val reference_sequence : result -> string
