@@ -295,10 +295,11 @@ let replace_sequence r s = { r with sequence = s }
 
 (* Special splicing adjustments. *)
 (* TODO: Figure out how to impute these from genetic. *)
-let a_01_11N r =
+let a_01_11N ?(verbose=false) r =
   let open Mas_parser in
   if r.bm.index = 1 (*&& r.bm.position = 396 *) then begin
-    printf "Adjusting A*01:11N's third exon!\n";
+    if verbose then
+      printf "Adjusting A*01:11N's third exon!\n";
     { r with sequence =
         List.filter r.sequence
           ~f:(function | Gap { start = 1084 } -> false | _ -> true)
@@ -310,25 +311,26 @@ let a_01_11N r =
   end else
     r
 
-let drop_splice_failure_from_exon name ~index ~end_pos r =
+let drop_splice_failure_from_exon ?(verbose=false) name ~index ~end_pos r =
   if r.bm.index = index then begin
-    printf "Adjusting %s's %d exon" name (index + 1);
+    if verbose then
+      printf "Adjusting %s's %d exon\n" name (index + 1);
     { r with sequence =
         List.filter r.sequence ~f:(fun e -> position e < end_pos)
     }
   end else
     r
 
-let known_splice_adjustments = function
-  | "A*01:11N"            -> a_01_11N
+let known_splice_adjustments ?verbose = function
+  | "A*01:11N"            -> a_01_11N ?verbose
   (* r.bm.position = 745 *)
   | "A*29:01:01:02N"
   | "A*26:01:01:03N"
-  | "A*03:01:01:02N" as n -> drop_splice_failure_from_exon n ~index:2 ~end_pos:2048
+  | "A*03:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:2 ~end_pos:2048
   (* r.bm.position = 0 *)
-  | "B*15:01:01:02N" as n -> drop_splice_failure_from_exon n ~index:(-1) ~end_pos:75
+  | "B*15:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:(-1) ~end_pos:75
   (* r.bm.position = 1176 *)
-  | "C*04:09N"       as n -> drop_splice_failure_from_exon n ~index:6 ~end_pos:2999
+  | "C*04:09N"       as n -> drop_splice_failure_from_exon ?verbose n ~index:6 ~end_pos:2999
   | _                     -> id
 
 let map_instr_to_alignments ?(fail_on_empty=true) nallele ~gen ~nuc alg =
