@@ -26,6 +26,11 @@ case "$TEST" in
     echo testing parsing
     ./test_parsing.native
     ;;
+  mas)
+    echo mas alignment
+    cp src/scripts/mas_align_script.sh .
+    ./mas_align_script.sh
+    ;;
   round)
     echo testing round trip graph construction
     cp src/scripts/round_trip_tests.sh .
