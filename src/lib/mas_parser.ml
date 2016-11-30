@@ -41,33 +41,43 @@ let init_ps allele position =
   ; position
   ; boundary = 0
   ; sequence = []
-  ; in_data = false
+  ; in_data  = false
   }
 
 let where ps =
   sprintf "allele: %s, position: %d, sequence length: %d"
     ps.allele ps.position (List.length ps.sequence)
 
-type 'sr alignment_element =
+type 'sr sequence = { start : position; s : 'sr }
+and gap = { gstart : position; length : int }
+and boundary = { idx : int; pos : position }
+and 'sr alignment_element =
   | Start of position
   | End of position
-  | Boundary of { idx : int; pos : position }
-  | Sequence of { start : position; s : 'sr }
-  | Gap of { start : position; length : int }
+  | Boundary of boundary
+  | Sequence of 'sr sequence
+  | Gap of gap
 
 let start_position = function
   | Start p               -> p
   | End p                 -> p
   | Boundary { pos; _ }   -> pos
   | Sequence { start; _ } -> start
-  | Gap { start; _ }      -> start
+  | Gap { gstart; _ }     -> gstart
+
+let end_position sr_length = function
+  | Start s     -> s
+  | End e       -> e
+  | Gap g       -> (g.gstart + g.length)
+  | Sequence s  -> (s.start + sr_length s.s)
+  | Boundary b  -> b.pos
 
 let al_el_to_string = function
-  | Start p               -> sprintf "Start at %d" p
-  | End p                 -> sprintf "End at %d" p
-  | Boundary { idx; pos } -> sprintf "Boundary %d at %d" idx pos
-  | Sequence { start; s } -> sprintf "Sequence %s at %d" s start
-  | Gap { start; length } -> sprintf "Gap of %d from %d" length start
+  | Start p                 -> sprintf "Start at %d" p
+  | End p                   -> sprintf "End at %d" p
+  | Boundary { idx; pos }   -> sprintf "Boundary %d at %d" idx pos
+  | Sequence { start; s }   -> sprintf "Sequence %s at %d" s start
+  | Gap { gstart; length }  -> sprintf "Gap of %d from %d" length gstart
 
 type data_switch =
   | Data
@@ -100,14 +110,14 @@ let insert_boundary ps =
 
 let insert_gap ps =
   next ps NoEffect (fun position -> function
-    | Gap { start; length } :: t when start + length = position
-                            -> Gap { start; length = length + 1 } :: t
+    | Gap { gstart; length } :: t when gstart + length = position
+                            -> Gap { gstart; length = length + 1 } :: t
     | []
     | End _ :: _
     | Start _ :: _
     | Boundary _ :: _
     | Gap _ :: _
-    | Sequence _ :: _ as l  -> Gap { start = position; length = 1 } :: l)
+    | Sequence _ :: _ as l  -> Gap { gstart = position; length = 1 } :: l)
 
 let insert_nuc_error fmt =
   invalid_argf ~prefix:"Trying to insert sequence element " fmt
@@ -355,165 +365,228 @@ let from_file f =
     raise e
 
 (* Applying the alignment elements. *)
-let gap_char = '.'
+module type Reference_data_projection = sig
 
-module B = Sosa.Native_bytes
-let no_gaps s = B.filter ~f:(fun c -> c <> gap_char) s
+  type t
 
-type zip_state =
-  { start_pos : int
-  ; end_pos   : int
-  ; buffer    : B.t
-  ; started   : bool
-  }
+  val to_string : t -> string
 
-let zip_state_to_string zs =
-  sprintf "{ start_pos = %d; \
-           ; end_pos = %d; \
-           ; buffer = %s; \
-           ; started = %b }"
-  zs.start_pos zs.end_pos (B.to_native_string zs.buffer) zs.started
+  (* Initialize the projection. *)
+  val of_seq : string sequence -> t
 
-let add_seq st (t2, s2) =
-  let off = t2 - st.start_pos in
-  for index = 0 to String.length s2 - 1 do
-    B.mutate_exn st.buffer ~index:(index + off) (String.get_exn s2 ~index)
-  done;
-  st
+  val of_gap : gap -> t
 
-let add_gaps st (t2, n) =
-  let off = t2 - st.start_pos in
-  for i = 0 to n - 1 do
-    B.mutate_exn st.buffer ~index:(i + off) gap_char
-  done;
-  st
+  (* Mutate the projection. *)
+  val add_seq : position -> t -> string sequence -> t
 
-let left st p =
-  { st with buffer = B.take st.buffer ~index:(p - st.start_pos)}
+  val add_gap : position -> t -> gap -> t
 
-let right st p =
-  let index = p - st.start_pos in
-  { st with buffer = B.drop st.buffer ~index
-          ; started = true
-          ; start_pos = st.start_pos + index
-  }
+  (* Use [int] instead of [position] because we're keeping passing where in
+     the current buffer the alle starts/stops. *)
+  val start : t -> int -> t
 
-let new_cur started ~n ~b ~s = function
-  | Start _
-  | End _       -> n ()
-  | Boundary p  -> b ()
-  | Gap g       -> s { start_pos = g.start
-                     ; end_pos = g.start + g.length
-                     ; buffer = B.make g.length gap_char
-                     ; started
-                     }
-  | Sequence ss -> let len = String.length ss.s in
-                    match B.of_native_string ss.s with
-                    | `Error (`wrong_char_at d) ->
-                        invalid_argf "wrong char at %d in %s" d ss.s
-                    | `Ok b ->
-                        s { start_pos = ss.start
-                          ; end_pos = ss.start + len
-                          ; buffer = b
-                          ; started
-                          }
+  val stop : t -> int -> t
 
-let apply ?boundary_char ~reference ~allele () =
-  let boundary_str = Option.map ~f:String.of_character boundary_char in
-  let rec append acc s =
-    if s.started then (no_gaps s.buffer) :: acc else acc
-  and new_buffer started acc r a =
-    match r with
-    | []     ->
-        let _final_started, nacc =
-          List.fold_left a ~init:(started, acc) ~f:(fun (st, a) e ->
-            match e with
-            | Sequence s when st -> (st, s.s :: a)
-            | End _              -> false, a
-            | Start _            -> true, a
-            | Boundary p         -> begin match boundary_str with
-                                    | None -> (st, a)
-                                    | Some bs -> (st, bs :: a)
-                                    end
-            | Gap _
-            | Sequence _         -> (st, a))
-        in
-        if !report then printf "Ending after no more reference: %d!\n" (List.length nacc);
-        B.to_native_string (B.concat (List.rev nacc))
-    | h :: t ->
-        new_cur started h
-          ~n:(fun () -> new_buffer started acc t a)
-          ~b:(fun () -> match boundary_str with
-                        | None   -> new_buffer started acc t a
-                        | Some s -> new_buffer started (s :: acc) t a)
-          ~s:(fun cur -> loop cur acc t a)
-  and end_alt cur acc r =
-    if !report then printf "Ending after no more allele! %d\n" (List.length acc);
-    let acc =
-      match boundary_str with
-      | None    -> append acc cur
-      | Some bs ->
-          let as_bs =
-            List.filter_map ~f:(function | Boundary _ -> Some bs | _ -> None) r
+  (* TODO: This 2 step projection needs a better name. *)
+  type t2
+
+  val to_t2 : t -> t2
+
+end
+
+module MakeZip (R : Reference_data_projection) = struct
+
+  type state =
+    { start_pos : int
+    ; end_pos   : int
+    ; project   : R.t
+    ; started   : bool
+    }
+
+  let state_to_string s =
+    sprintf "{ start_pos = %d; \
+             ; end_pos = %d; \
+             ; project = %s; \
+             ; started = %b }"
+    s.start_pos s.end_pos (R.to_string s.project) s.started
+
+  let add_gap cur g =
+    { cur with project = R.add_gap cur.start_pos cur.project g }
+
+  let add_seq cur s =
+    { cur with project = R.add_seq cur.start_pos cur.project s }
+
+  let left st p =
+    { st with project = R.start st.project (p - st.start_pos) }
+
+  let right st p =
+    let index = p - st.start_pos in
+    { st with project = R.stop st.project index
+            ; started = true
+            ; start_pos = st.start_pos + index
+    }
+
+  let new_cur started ~n ~b ~s = function
+    | Start _
+    | End _       -> n ()
+    | Boundary bb -> b bb
+    | Gap g       -> s { start_pos = g.gstart
+                       ; end_pos = g.gstart + g.length
+                       ; project = R.of_gap g
+                       ; started
+                       }
+    | Sequence ss -> let len = String.length ss.s in
+                     s { start_pos = ss.start
+                       ; end_pos = ss.start + len
+                       ; project = R.of_seq ss
+                       ; started
+                       }
+
+  let apply ~reference ~allele =
+    let rec append acc started project =
+      if started then (`P (R.to_t2 project)) :: acc else acc
+    and new_buffer started acc r a =
+      match r with
+      | []     ->
+          let _final_started, nacc =
+            List.fold_left a ~init:(started, acc) ~f:(fun (st, a) e ->
+              match e with
+              | End _       -> false, a
+              | Start _     -> true, a
+              | Boundary bb -> st, `B bb :: a
+              | Gap g       -> st, append a st (R.of_gap g)
+              | Sequence s  -> st, append a st (R.of_seq s))
           in
-          as_bs @ (append acc cur)
+          if !report then printf "Ending after no more reference: %d!\n" (List.length nacc);
+          List.rev nacc (* Fin. *)
+      | h :: t ->
+          new_cur started h
+            ~n:(fun () -> new_buffer started acc t a)
+            ~b:(fun bb -> new_buffer started (`B bb :: acc) t a)
+            ~s:(fun cur -> loop cur acc t a)
+    and end_alt cur acc r =
+      if !report then printf "Ending after no more allele! %d\n" (List.length acc);
+      let acc =
+        List.filter_map ~f:(function | Boundary b -> Some (`B b) | _ -> None) r
+          @ (append acc cur.started cur.project)
+      in
+      List.rev acc (* Fin *)
+    and mutate cur acc r at = function
+      | Start p                         -> loop (right cur p) acc r at
+      | End p                           -> let nst = left cur p in
+                                           (* What if we restart in the same buffer? *)
+                                           new_buffer false (append acc nst.started nst.project) r at
+      | Boundary _ as e                 -> invalid_argf "Found %s in sequence at %d"
+                                            (al_el_to_string e) (cur.start_pos)
+      | Sequence ss                      ->
+          let slen = String.length ss.s in
+          if ss.start + slen > cur.end_pos then
+            let length = cur.end_pos - ss.start in
+            let na =
+              Sequence { start = ss.start + length
+                       ; s = String.sub_exn ss.s ~index:length ~length:(slen - length)
+                       }
+            in
+            let ncur = add_seq cur { ss with s = String.sub_exn ss.s ~index:0 ~length} in
+            loop ncur acc r (na :: at)
+          else
+            let ncur = add_seq cur ss in
+            loop ncur acc r at
+      | Gap g                           ->
+          if g.gstart + g.length > cur.end_pos then
+            let length = cur.end_pos - g.gstart in
+            let na =
+              Gap { gstart = g.gstart + length
+                  ; length = g.length - length
+                  }
+            in
+            let ncur = add_gap cur { g with length } in
+            loop ncur acc r (na :: at)
+          else
+            let ncur = add_gap cur g in
+            loop ncur acc r at
+    and at_end cur acc r at = function
+      | Boundary _ -> loop cur acc r at   (* Add bs based on reference. *)
+      | Start _    -> new_buffer true (append acc cur.started cur.project) r at
+      | End _      -> new_buffer false (append acc cur.started cur.project) r at
+      | g_or_s     -> new_buffer cur.started (append acc cur.started cur.project) r (g_or_s :: at)
+    and loop cur acc r a =
+      match a with
+      | []        -> end_alt cur acc r
+      | ah :: at  ->
+          let sa = start_position ah in
+          if !report then
+            printf "at %s %d when cur is %s.\n"
+              (al_el_to_string ah) sa (state_to_string cur);
+          if sa < cur.start_pos then
+            loop cur acc r at
+          else if sa > cur.end_pos then
+            new_buffer cur.started (append acc cur.started cur.project) r a
+          else if sa = cur.end_pos then
+            at_end cur acc r at ah
+          else
+            mutate cur acc r at ah
     in
-    B.to_native_string (B.concat (List.rev acc))
-  and mutate cur acc r at = function
-    | Start p                         -> loop (right cur p) acc r at
-    | End p                           -> new_buffer false (append acc (left cur p)) r at
-    | Boundary _ as e                 -> invalid_argf "Found %s in sequence at %d"
-                                          (al_el_to_string e) (cur.start_pos)
-    | Sequence s                      ->
-        let slen = String.length s.s in
-        if s.start + slen > cur.end_pos then
-          let length = cur.end_pos - s.start in
-          let na =
-            Sequence { start =  s.start + length
-                     ; s = String.sub_exn s.s ~index:length ~length:(slen - length)
-                     }
-          in
-          let ncur = add_seq cur (s.start, String.sub_exn s.s ~index:0 ~length) in
-          loop ncur acc r (na :: at)
-        else
-          let ncur = add_seq cur (s.start, s.s) in
-          loop ncur acc r at
-    | Gap g                           ->
-        if g.start + g.length > cur.end_pos then
-          let length = cur.end_pos - g.start in
-          let na =
-            Gap { start = g.start + length
-                ; length = g.length - length
-                }
-          in
-          let ncur = add_gaps cur (g.start, length) in
-          loop ncur acc r (na :: at)
-        else
-          let ncur = add_gaps cur (g.start, g.length) in
-          loop ncur acc r at
-  and at_end cur acc r at = function
-    | Boundary _ -> loop cur acc r at   (* Add bs based on reference. *)
-    | Start _    -> new_buffer true (append acc cur) r at
-    | End _      -> new_buffer false (append acc cur) r at
-    | g_or_s     -> new_buffer cur.started (append acc cur) r (g_or_s :: at)
-  and loop cur acc r a =
-    match a with
-    | []        -> end_alt cur acc r
-    | ah :: at  ->
-        let sa = start_position ah in
-        if !report then
-          printf "at %s %d when cur is %s.\n"
-            (al_el_to_string ah) sa (zip_state_to_string cur);
-        if sa < cur.start_pos then
-          loop cur acc r at
-        else if sa > cur.end_pos then
-          new_buffer cur.started (append acc cur) r a
-        else if sa = cur.end_pos then
-          at_end cur acc r at ah
-        else
-          mutate cur acc r at ah
+    new_buffer false [] reference allele
+
+end (* Zip *)
+
+module AlleleSequences = MakeZip (struct
+
+  module B = Sosa.Native_bytes
+
+  type t = B.t
+  let to_string = B.to_native_string
+
+  let of_seq s =
+    match B.of_native_string s.s with
+    | `Error (`wrong_char_at d) ->
+        invalid_argf "wrong char at %d in %s" d s.s
+    | `Ok b -> b
+
+  let gap_char = '.'
+
+  let of_gap g = B.make g.length gap_char
+
+  let add_seq start_pos buffer {start; s} =
+    let off = start - start_pos in
+    for index = 0 to String.length s - 1 do
+      B.mutate_exn buffer ~index:(index + off) (String.get_exn s ~index)
+    done;
+    buffer
+
+  let add_gap start_pos buffer {gstart; length} =
+    let off = gstart - start_pos in
+    for i = 0 to length - 1 do
+      B.mutate_exn buffer ~index:(i + off) gap_char
+    done;
+    buffer
+
+  let start buffer index =
+    B.take buffer ~index
+
+  let stop buffer index =
+    B.drop buffer ~index
+
+  type t2 = B.t
+
+  let to_t2 s =
+    B.filter ~f:(fun c -> c <> gap_char) s
+
+end)
+
+(* TODO: rename *)
+let allele_sequence ?boundary_char ~reference ~allele () =
+  let ss = AlleleSequences.apply ~reference ~allele in
+  let nacc =
+    match boundary_char with
+    | None   ->
+        List.filter_map ss ~f:(function | `P t -> Some t | `B _ -> None)
+    | Some c ->
+        let bs = String.of_character c in
+        List.filter_map ss ~f:(function | `P t -> Some t | `B _ -> Some bs)
   in
-  new_buffer false [] reference allele
+  Sosa.Native_bytes.(to_native_string (concat nacc))
 
 let reference_sequence_from_ref_alignment_elements ?boundary_char l =
   begin match boundary_char with

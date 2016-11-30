@@ -227,23 +227,11 @@ let align_from_prefix prefix_path =
   let nuc = bounded nuc_mp.ref_elems in
   zip_align ~gen ~nuc >>= fun i -> Ok (gen_mp, nuc_mp, i)
 
-let position = function
-  | Start s     -> s
-  | End e       -> e
-  | Gap g       -> g.start
-  | Sequence s  -> s.start
-  | Boundary b  -> b.pos
-
-let latest_position = function
-  | Start s     -> s
-  | End e       -> e
-  | Gap g       -> (g.start + g.length)
-  | Sequence s  -> (s.start + String.length s.s)
-  | Boundary b  -> b.pos
+let end_position = end_position String.length
 
 let latest_position_al_elems = function
   | []     -> error "No latest alignment element."
-  | h :: _ -> Ok (latest_position h)
+  | h :: _ -> Ok (end_position h)
 
 let is_sequence = function | Sequence _ -> true | _ -> false
 let is_gap      = function | Gap _      -> true | _ -> false
@@ -254,7 +242,7 @@ let shift_al_el offset = function
   | Boundary b -> Boundary { b with pos = b.pos + offset}
   | Start s    -> Start (s + offset)
   | End e      -> End (e + offset)
-  | Gap g      -> Gap { g with start = g.start + offset }
+  | Gap g      -> Gap { g with gstart = g.gstart + offset }
   | Sequence s -> Sequence { s with start = s.start + offset}
 
 (*alignment_elements_to_string *)
@@ -296,16 +284,15 @@ let replace_sequence r s = { r with sequence = s }
 (* Special splicing adjustments. *)
 (* TODO: Figure out how to impute these from genetic. *)
 let a_01_11N ?(verbose=false) r =
-  let open Mas_parser in
   if r.bm.index = 1 (*&& r.bm.position = 396 *) then begin
     if verbose then
       printf "Adjusting A*01:11N's third exon!\n";
     { r with sequence =
         List.filter r.sequence
-          ~f:(function | Gap { start = 1084 } -> false | _ -> true)
+          ~f:(function | Gap { gstart = 1084 } -> false | _ -> true)
         @ [ Sequence { start = 1085; s = "T" }
-          ; Gap { start = 1102; length = 17 }
-          ; Gap { start = 1122; length = 14 }
+          ; Gap { gstart = 1102; length = 17 }
+          ; Gap { gstart = 1122; length = 14 }
           ]
     }
   end else
@@ -316,7 +303,7 @@ let drop_splice_failure_from_exon ?(verbose=false) name ~index ~end_pos r =
     if verbose then
       printf "Adjusting %s's %d exon\n" name (index + 1);
     { r with sequence =
-        List.filter r.sequence ~f:(fun e -> position e < end_pos)
+        List.filter r.sequence ~f:(fun e -> start_position e < end_pos)
     }
   end else
     r
@@ -450,7 +437,7 @@ let handle_split_end ?(verbose=false) name seq next_boundary_pos
       if verbose then printf "In %s split needed because no end.\n" name;
       no_split before
   | before, e :: after ->
-    let ep = position e in
+    let ep = start_position e in
     if ep = next_boundary_pos then
       if after <> [] then
         invalid_argf "In %s malformed sequence: %s after end but before next boundary."
@@ -509,7 +496,7 @@ let align_same ?verbose name instr =
     | [] :: _ -> invalid_argf "In %s empty element on acc" name
     | ls :: _ -> List.last ls
                  |> Option.value_exn ~msg:"We checked for non empty list!"
-                 |> latest_position
+                 |> end_position
   in
   let { acc; _} =
     List.fold_left instr ~init:init_align_state ~f:(fun state instr ->
@@ -550,7 +537,7 @@ let align_same ?verbose name instr =
                   invalid_argf "In %s did not find just gaps before start: %s"
                     name (al_els_to_string before)
                 else
-                  if position s = nuclear.bm.position + nuclear.offset + 1 then
+                  if start_position s = nuclear.bm.position + nuclear.offset + 1 then
                     check_for_ends genetic_end (fun l -> start_bndr :: l) after
                       next_boundary_pos state
                   else begin
@@ -568,27 +555,27 @@ let instructions_before p =
   List.filter_map ~f:(fun alel ->
     match alel with
     (* Single or zero width.*)
-    | Start s when s < p                 -> Some alel
-    | Start _                            -> None
-    | End e when e < p                   -> Some alel
-    | End _                              -> None
-    | Boundary b when b.pos < p          -> Some alel
-    | Boundary _                         -> None
+    | Start s when s < p                  -> Some alel
+    | Start _                             -> None
+    | End e when e < p                    -> Some alel
+    | End _                               -> None
+    | Boundary b when b.pos < p           -> Some alel
+    | Boundary _                          -> None
 
   (** Mutating these instructions is a bit dangerous, since we're not
       explicitly checking that the aligned sequence into which we're
       merging has the _same_ sequences. *)
-    | Gap g when g.start >= p            -> None
-    | Gap g when g.start + g.length <= p -> Some alel
-    | Gap g                              -> let length = p - g.start in
-                                            Some (Gap {g with length })
+    | Gap g when g.gstart >= p            -> None
+    | Gap g when g.gstart + g.length <= p -> Some alel
+    | Gap g                               -> let length = p - g.gstart in
+                                             Some (Gap {g with length })
 
-    | Sequence s when s.start >= p       -> None
+    | Sequence s when s.start >= p        -> None
     | Sequence s when s.start + String.length s.s <= p
-                                         -> Some alel
-    | Sequence s                         -> let length = p - s.start in
-                                            let sub_s = String.sub_exn s.s ~index:0 ~length in
-                                            Some (Sequence {s with s = sub_s}))
+                                          -> Some alel
+    | Sequence s                          -> let length = p - s.start in
+                                             let sub_s = String.sub_exn s.s ~index:0 ~length in
+                                             Some (Sequence {s with s = sub_s}))
 
 let align_different ?verbose name instr =
   let check_for_ends start ~genx ~nucx next_boundary_pos s =
@@ -597,8 +584,8 @@ let align_different ?verbose name instr =
       ~split_end_at_end:(fun b -> append s (start b) ~in_nucleic:false)
       ~split_end_middle:(fun ep ->
         (* Have to consider possible ends in the genetic sequence! *)
-        let nuc_before = List.filter nucx ~f:(fun a -> position a < ep) in
-        let gafter_end = List.filter genx ~f:(fun a -> position a >= ep) in
+        let nuc_before = List.filter nucx ~f:(fun a -> start_position a < ep) in
+        let gafter_end = List.filter genx ~f:(fun a -> start_position a >= ep) in
         let everything_ends gen =
           append s (start (nuc_before @ gen)) ~in_nucleic:false ~need_start:false
         in
@@ -666,15 +653,15 @@ let align_different ?verbose name instr =
                   invalid_argf "In %s did not find just gaps before start: %s"
                     name (al_els_to_string before)
                 else
-                  if position s = nuclear.bm.position + nuclear.offset + 1 then
+                  if start_position s = nuclear.bm.position + nuclear.offset + 1 then
                     check_for_ends (fun l -> start_bndr :: l) ~genx ~nucx:after
                       next_boundary_pos state
                   else begin
                     (* TODO: what if before_gen is empty? insert Start/End ?*)
-                    let before_gen = instructions_before (position s) genx in
+                    let before_gen = instructions_before (start_position s) genx in
                     if opt_is_true verbose then
                       printf "In %s before start at %d merging genetic exon data %s.\n" name
-                        (position s) (al_els_to_string before_gen);
+                        (start_position s) (al_els_to_string before_gen);
                     check_for_ends (fun l -> start_bndr :: (before_gen @ l))
                       ~genx ~nucx:after next_boundary_pos state
                   end
@@ -690,12 +677,12 @@ let reference_positions_align ?seq lst =
     | (Boundary b as v) :: t  -> if b.pos = p then loop (p + 1) t else nerror v p
     | (Start s as v) :: t     -> if s = p then loop p t else nerror v p
     | (End e as v) :: t       -> if e = p then loop p t else nerror v p
-    | (Gap g as v) :: t       -> if g.start = p then loop (p + g.length) t else nerror v p
+    | (Gap g as v) :: t       -> if g.gstart = p then loop (p + g.length) t else nerror v p
     | (Sequence s as v) :: t  -> if s.start = p then loop (p + (String.length s.s)) t else nerror v p
   and start = function
     | (Boundary b) :: t  -> loop b.pos t
     | (Start s) :: t     -> loop s t
-    | (Gap g) :: t       -> loop g.start t
+    | (Gap g) :: t       -> loop g.gstart t
     | x :: _             -> error "Can't start with %s." (al_el_to_string x)
     | []                 -> error "Empty"
   in

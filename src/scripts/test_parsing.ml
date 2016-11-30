@@ -102,7 +102,7 @@ let sequence_have_diff_elemns =
           in
           match p, n with
           | Sequence s1, Sequence s2 when s1.start = s2.start -> false_ ()
-          | Gap g1, Gap g2 when g1.start = g2.start           -> false_ ()
+          | Gap g1, Gap g2 when g1.gstart = g2.gstart         -> false_ ()
           | _                                                 -> (true && s, n))
           ~init:(true, h) t
         |> fst

@@ -10,7 +10,7 @@ let against_mp ?merge_assoc mp out =
   let reference = mp.ref_elems in
   let a =
     List.map mp.alt_elems ~f:(fun (a, allele) ->
-      a, apply ~reference ~allele)
+      a, allele_sequence ~reference ~allele ())
   in
   let all = (mp.reference, r) :: a in
   let oc = open_out out in

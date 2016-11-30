@@ -37,27 +37,32 @@ type position = int
 (** Elements that describe alignment sequence.
 
     All positions are given reletive to reference. *)
-type 'sr alignment_element =
+type 'sr sequence = { start : position; s : 'sr }
+and gap = { gstart : position; length : int }
+and boundary = { idx : int; pos : position }
+and 'sr alignment_element =
   | Start of position
   (** Start of sequence, contains position and name *)
 
   | End of position
   (** End of a sequence.*)
 
-  | Boundary of { idx : int; pos : position; }
+  | Boundary of boundary
   (** Boundary of count and position.
 
       Exon boundaries are represented in the alignment files with '|', we
       preserve them for downstream tools to strip out. The boundary count
       starts at 0. *)
 
-  | Sequence of { start : position; s : 'sr; }
+  | Sequence of 'sr sequence
   (** Nucleotide sequence of position and sequence. *)
 
-  | Gap of { start : position; length : int; }
+  | Gap of gap
   (** Gap of position and length. *)
 
 val start_position : 'a alignment_element -> position
+
+val end_position : ('a -> int) -> 'a alignment_element -> position
 
 (** [al_el_to_string] converts a alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
@@ -89,13 +94,13 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
-(** [apply boundary_character reference allele ()] will convert the reference
-    and allele alignment elements into a string representing the allele
-    sequence.
+(** [allele_sequence boundary_character reference allele ()] will convert the
+    reference and allele alignment elements into a string representing the
+    allele sequence.
 
     @param boundary_char if specified will be inserted into the resulting
     sequence.*)
-val apply : ?boundary_char:char -> reference:string alignment_element list ->
+val allele_sequence : ?boundary_char:char -> reference:string alignment_element list ->
     allele:string alignment_element list -> unit -> string
 
 val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
