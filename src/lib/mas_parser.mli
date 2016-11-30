@@ -30,7 +30,7 @@ Please see http://hla.alleles.org/terms.html for terms of use.
 
 *)
 
-(** We keep track of all {alignment_elements} with regard to their position,
+(** We keep track of all {alignment_element}'s with regard to their position,
     character by character, in the alignment. *)
 type position = int
 
@@ -89,10 +89,20 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
-(** [apply reference allele] will convert the reference and allele alignment
-    elements into a string representing the allele sequence. *)
-val apply : reference:string alignment_element list ->
-    allele:string alignment_element list -> string
+(** [apply boundary_character reference allele ()] will convert the reference
+    and allele alignment elements into a string representing the allele
+    sequence.
+
+    @param boundary_char if specified will be inserted into the resulting
+    sequence.*)
+val apply : ?boundary_char:char -> reference:string alignment_element list ->
+    allele:string alignment_element list -> unit -> string
+
+val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
+  string alignment_element list -> string
 
 (** Will return the sequence of the reference. *)
-val reference_sequence : result -> string
+val reference_sequence : ?boundary_char:char -> result -> string
+
+val split_by_boundaries_rev : ' a alignment_element list ->
+  'a alignment_element list list

@@ -398,10 +398,10 @@ let right st p =
           ; start_pos = st.start_pos + index
   }
 
-let new_cur started ~n ~s = function
+let new_cur started ~n ~b ~s = function
   | Start _
-  | End _
-  | Boundary _  -> n ()
+  | End _       -> n ()
+  | Boundary p  -> b ()
   | Gap g       -> s { start_pos = g.start
                      ; end_pos = g.start + g.length
                      ; buffer = B.make g.length gap_char
@@ -418,7 +418,8 @@ let new_cur started ~n ~s = function
                           ; started
                           }
 
-let apply ~reference ~allele =
+let apply ?boundary_char ~reference ~allele () =
+  let boundary_str = Option.map ~f:String.of_character boundary_char in
   let rec append acc s =
     if s.started then (no_gaps s.buffer) :: acc else acc
   and new_buffer started acc r a =
@@ -430,7 +431,10 @@ let apply ~reference ~allele =
             | Sequence s when st -> (st, s.s :: a)
             | End _              -> false, a
             | Start _            -> true, a
-            | Boundary _
+            | Boundary p         -> begin match boundary_str with
+                                    | None -> (st, a)
+                                    | Some bs -> (st, bs :: a)
+                                    end
             | Gap _
             | Sequence _         -> (st, a))
         in
@@ -439,10 +443,22 @@ let apply ~reference ~allele =
     | h :: t ->
         new_cur started h
           ~n:(fun () -> new_buffer started acc t a)
+          ~b:(fun () -> match boundary_str with
+                        | None   -> new_buffer started acc t a
+                        | Some s -> new_buffer started (s :: acc) t a)
           ~s:(fun cur -> loop cur acc t a)
-  and end_alt cur acc =
+  and end_alt cur acc r =
     if !report then printf "Ending after no more allele! %d\n" (List.length acc);
-    B.to_native_string (B.concat (List.rev (append acc cur)))
+    let acc =
+      match boundary_str with
+      | None    -> append acc cur
+      | Some bs ->
+          let as_bs =
+            List.filter_map ~f:(function | Boundary _ -> Some bs | _ -> None) r
+          in
+          as_bs @ (append acc cur)
+    in
+    B.to_native_string (B.concat (List.rev acc))
   and mutate cur acc r at = function
     | Start p                         -> loop (right cur p) acc r at
     | End p                           -> new_buffer false (append acc (left cur p)) r at
@@ -476,13 +492,13 @@ let apply ~reference ~allele =
           let ncur = add_gaps cur (g.start, g.length) in
           loop ncur acc r at
   and at_end cur acc r at = function
-    | Boundary _ -> loop cur acc r at
+    | Boundary _ -> loop cur acc r at   (* Add bs based on reference. *)
     | Start _    -> new_buffer true (append acc cur) r at
     | End _      -> new_buffer false (append acc cur) r at
     | g_or_s     -> new_buffer cur.started (append acc cur) r (g_or_s :: at)
   and loop cur acc r a =
     match a with
-    | []        -> end_alt cur acc
+    | []        -> end_alt cur acc r
     | ah :: at  ->
         let sa = start_position ah in
         if !report then
@@ -499,6 +515,25 @@ let apply ~reference ~allele =
   in
   new_buffer false [] reference allele
 
-let reference_sequence mp =
-  List.filter_map mp.ref_elems ~f:(function | Sequence s -> Some s.s | _ -> None)
+let reference_sequence_from_ref_alignment_elements ?boundary_char l =
+  begin match boundary_char with
+  | None    ->
+    List.filter_map l ~f:(function | Sequence s -> Some s.s | _ -> None)
+  | Some bc ->
+    let bs = String.of_character bc in
+    List.filter_map l ~f:(function | Sequence s -> Some s.s | Boundary _ -> Some bs | _ -> None)
+  end
   |> String.concat ~sep:""
+
+let reference_sequence ?boundary_char mp =
+  reference_sequence_from_ref_alignment_elements ?boundary_char mp.ref_elems
+
+let split_by_boundaries_rev lst =
+  let rec loop acc gacc = function
+    | [] -> (List.rev acc) :: gacc
+    | Boundary _ :: t ->
+        loop [] ((List.rev acc) :: gacc) t
+    | e :: t ->
+        loop (e :: acc) gacc t
+  in
+  loop [] [] lst
