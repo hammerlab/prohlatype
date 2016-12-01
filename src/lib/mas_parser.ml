@@ -382,7 +382,7 @@ module type Reference_data_projection = sig
   val add_gap : position -> t -> gap -> t
 
   (* Use [int] instead of [position] because we're keeping passing where in
-     the current buffer the alle starts/stops. *)
+     the current buffer the allele starts/stops. *)
   val start : t -> int -> t
 
   val stop : t -> int -> t
@@ -390,7 +390,7 @@ module type Reference_data_projection = sig
   (* TODO: This 2 step projection needs a better name. *)
   type t2
 
-  val to_t2 : t -> t2
+  val to_t2 : bool -> t -> t2 option
 
 end
 
@@ -444,7 +444,9 @@ module MakeZip (R : Reference_data_projection) = struct
 
   let apply ~reference ~allele =
     let rec append acc started project =
-      if started then (`P (R.to_t2 project)) :: acc else acc
+      match R.to_t2 started project with
+      | None    -> acc
+      | Some v  -> (`P v) :: acc
     and new_buffer started acc r a =
       match r with
       | []     ->
@@ -464,11 +466,17 @@ module MakeZip (R : Reference_data_projection) = struct
             ~n:(fun () -> new_buffer started acc t a)
             ~b:(fun bb -> new_buffer started (`B bb :: acc) t a)
             ~s:(fun cur -> loop cur acc t a)
-    and end_alt cur acc r =
+    and alt_ended cur acc r =
       if !report then printf "Ending after no more allele! %d\n" (List.length acc);
+      let init = append acc cur.started cur.project in
       let acc =
-        List.filter_map ~f:(function | Boundary b -> Some (`B b) | _ -> None) r
-          @ (append acc cur.started cur.project)
+        List.fold_left r ~init ~f:(fun a e ->
+          match e with
+          | End _      -> a
+          | Start _    -> a
+          | Boundary b -> `B b :: a
+          | Gap g      -> append a cur.started (R.of_gap g)
+          | Sequence s -> append a cur.started (R.of_seq s))
       in
       List.rev acc (* Fin *)
     and mutate cur acc r at = function
@@ -512,7 +520,7 @@ module MakeZip (R : Reference_data_projection) = struct
       | g_or_s     -> new_buffer cur.started (append acc cur.started cur.project) r (g_or_s :: at)
     and loop cur acc r a =
       match a with
-      | []        -> end_alt cur acc r
+      | []        -> alt_ended cur acc r
       | ah :: at  ->
           let sa = start_position ah in
           if !report then
@@ -570,12 +578,13 @@ module AlleleSequences = MakeZip (struct
 
   type t2 = B.t
 
-  let to_t2 s =
-    B.filter ~f:(fun c -> c <> gap_char) s
-
+  let to_t2 started s =
+    if started then
+      Some (B.filter ~f:(fun c -> c <> gap_char) s)
+    else
+      None
 end)
 
-(* TODO: rename *)
 let allele_sequence ?boundary_char ~reference ~allele () =
   let ss = AlleleSequences.apply ~reference ~allele in
   let nacc =
@@ -610,3 +619,56 @@ let split_by_boundaries_rev lst =
         loop (e :: acc) gacc t
   in
   loop [] [] lst
+
+module AlleleDistances = MakeZip (struct
+
+  (* what is in this part and # of mismatches *)
+  type t =
+    | G of gap * int
+    | S of string sequence * int
+
+  let to_string = function
+    | G (_, n) -> sprintf "G %d" n
+    | S (_, n) -> sprintf "S %d" n
+
+  let incr m = function
+    | S (s, n) -> S (s, n + m)
+    | G (g, n) -> G (g, n + m)
+
+  let of_seq s = S (s, 0)
+
+  let of_gap g = G (g, 0)
+
+  (* zipping logic makes sure position is inside s *)
+  let add_seq _ t {s; _} =
+    incr (String.length s) t
+
+  (* any sequences in a seq are diffs! *)
+  let add_gap _ t {length; _} =
+    match t with
+    | S (s, n) -> S (s, n + length) (* filling a gap *)
+    | G _      -> t                 (* matches current gap, no diff. *)
+
+  let start t msm =
+    incr msm t
+
+  let stop t len =
+    match t with
+    | S (ss, n) -> S (ss, n + (String.length ss.s - len))
+    | G (g, n)  -> G (g, n + (g.length - len))
+
+  type t2 = int
+
+  let to_t2 started = function
+    | G (g, n) -> Some (if started then n else 0)
+    | S (s, n) -> Some (if started then n else String.length s.s)
+
+end)
+
+let allele_distances ~reference ~allele =
+  let rec loop sum acc = function
+    | []        -> List.rev (sum :: acc)
+    | `B _ :: t -> loop 0 (sum :: acc) t
+    | `P s :: t -> loop (sum + s) acc t
+  in
+  loop 0 [] (AlleleDistances.apply ~reference ~allele)

@@ -111,3 +111,6 @@ val reference_sequence : ?boundary_char:char -> result -> string
 
 val split_by_boundaries_rev : ' a alignment_element list ->
   'a alignment_element list list
+
+val allele_distances : reference:string alignment_element list ->
+    allele:string alignment_element list -> int list

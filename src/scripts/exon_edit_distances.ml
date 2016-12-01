@@ -29,7 +29,7 @@ let all_seq_by_boundaries ?(verbose=false) mp =
     List.map mp.alt_elems ~f:(fun (al, allele) ->
       if verbose then printf "at %s%!\n" al;
       al,
-      apply ~boundary_char ~reference:mp.ref_elems ~allele ()
+      allele_sequence ~boundary_char ~reference:mp.ref_elems ~allele ()
       |> split_on_boundaries)
   in
   (mp.reference, rseq) :: amp
