@@ -381,7 +381,7 @@ module type Reference_data_projection = sig
 
   val add_gap : position -> t -> gap -> t
 
-  (* Use [int] instead of [position] because we're keeping passing where in
+  (* Use [int] instead of [position] because we're passing where in
      the current buffer the allele starts/stops. *)
   val start : t -> int -> t
 
@@ -417,11 +417,11 @@ module MakeZip (R : Reference_data_projection) = struct
     { cur with project = R.add_seq cur.start_pos cur.project s }
 
   let left st p =
-    { st with project = R.start st.project (p - st.start_pos) }
+    { st with project = R.stop st.project (p - st.start_pos) }
 
   let right st p =
     let index = p - st.start_pos in
-    { st with project = R.stop st.project index
+    { st with project = R.start st.project index
             ; started = true
             ; start_pos = st.start_pos + index
     }
@@ -571,10 +571,10 @@ module AlleleSequences = MakeZip (struct
     buffer
 
   let start buffer index =
-    B.take buffer ~index
+    B.drop buffer ~index
 
   let stop buffer index =
-    B.drop buffer ~index
+    B.take buffer ~index
 
   type t2 = B.t
 
