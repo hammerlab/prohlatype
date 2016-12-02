@@ -79,14 +79,6 @@ open Mas_parser
 
 let supported_genes = [ "A"; "B"; "C"]
 
-let list_map_consecutives f lst =
-  let rec loop acc = function
-    | []
-    | _ :: []     -> List.rev acc
-    | a :: b :: t -> loop (f a b :: acc) (b :: t)
-  in
-  loop [] lst
-
 type boundary_marker =
   { index     : int     (* Which segment? *)
   ; position  : int     (* Position of the boundary marker. *)

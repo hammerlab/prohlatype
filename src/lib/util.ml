@@ -107,3 +107,11 @@ let opt_is_true = function
   | Some true  -> true
   | Some false -> false
   | None       -> false
+
+let list_map_consecutives f lst =
+  let rec loop acc = function
+    | []
+    | _ :: []     -> List.rev acc
+    | a :: b :: t -> loop (f a b :: acc) (b :: t)
+  in
+  loop [] lst
