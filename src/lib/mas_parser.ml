@@ -365,7 +365,7 @@ let from_file f =
     raise e
 
 (* Applying the alignment elements. *)
-module type Reference_data_projection = sig
+module type Data_projection = sig
 
   type t
 
@@ -394,7 +394,7 @@ module type Reference_data_projection = sig
 
 end
 
-module MakeZip (R : Reference_data_projection) = struct
+module MakeZip (R : Data_projection) = struct
 
   type state =
     { start_pos : int
@@ -447,7 +447,7 @@ module MakeZip (R : Reference_data_projection) = struct
       match R.to_t2 started project with
       | None    -> acc
       | Some v  -> (`P v) :: acc
-    and new_buffer started acc r a =
+    and new_ref_segment started acc r a =
       match r with
       | []     ->
           let _final_started, nacc =
@@ -463,10 +463,10 @@ module MakeZip (R : Reference_data_projection) = struct
           List.rev nacc (* Fin. *)
       | h :: t ->
           new_cur started h
-            ~n:(fun () -> new_buffer started acc t a)
-            ~b:(fun bb -> new_buffer started (`B bb :: acc) t a)
+            ~n:(fun () -> new_ref_segment started acc t a)
+            ~b:(fun bb -> new_ref_segment started (`B bb :: acc) t a)
             ~s:(fun cur -> loop cur acc t a)
-    and alt_ended cur acc r =
+    and allele_ended cur acc r =
       if !report then printf "Ending after no more allele! %d\n" (List.length acc);
       let init = append acc cur.started cur.project in
       let acc =
@@ -479,14 +479,14 @@ module MakeZip (R : Reference_data_projection) = struct
           | Sequence s -> append a cur.started (R.of_seq s))
       in
       List.rev acc (* Fin *)
-    and mutate cur acc r at = function
+    and mutate_segment cur acc r at = function
       | Start p                         -> loop (right cur p) acc r at
       | End p                           -> let nst = left cur p in
                                            (* What if we restart in the same buffer? *)
-                                           new_buffer false (append acc nst.started nst.project) r at
+                                           new_ref_segment false (append acc nst.started nst.project) r at
       | Boundary _ as e                 -> invalid_argf "Found %s in sequence at %d"
                                             (al_el_to_string e) (cur.start_pos)
-      | Sequence ss                      ->
+      | Sequence ss                     ->
           let slen = String.length ss.s in
           if ss.start + slen > cur.end_pos then
             let length = cur.end_pos - ss.start in
@@ -513,14 +513,14 @@ module MakeZip (R : Reference_data_projection) = struct
           else
             let ncur = add_gap cur g in
             loop ncur acc r at
-    and at_end cur acc r at = function
+    and at_end_of_segment cur acc r at = function
       | Boundary _ -> loop cur acc r at   (* Add bs based on reference. *)
-      | Start _    -> new_buffer true (append acc cur.started cur.project) r at
-      | End _      -> new_buffer false (append acc cur.started cur.project) r at
-      | g_or_s     -> new_buffer cur.started (append acc cur.started cur.project) r (g_or_s :: at)
+      | Start _    -> new_ref_segment true (append acc cur.started cur.project) r at
+      | End _      -> new_ref_segment false (append acc cur.started cur.project) r at
+      | g_or_s     -> new_ref_segment cur.started (append acc cur.started cur.project) r (g_or_s :: at)
     and loop cur acc r a =
       match a with
-      | []        -> alt_ended cur acc r
+      | []        -> allele_ended cur acc r
       | ah :: at  ->
           let sa = start_position ah in
           if !report then
@@ -529,15 +529,15 @@ module MakeZip (R : Reference_data_projection) = struct
           if sa < cur.start_pos then
             loop cur acc r at
           else if sa > cur.end_pos then
-            new_buffer cur.started (append acc cur.started cur.project) r a
+            new_ref_segment cur.started (append acc cur.started cur.project) r a
           else if sa = cur.end_pos then
-            at_end cur acc r at ah
+            at_end_of_segment cur acc r at ah
           else
-            mutate cur acc r at ah
+            mutate_segment cur acc r at ah
     in
-    new_buffer false [] reference allele
+    new_ref_segment false [] reference allele
 
-end (* Zip *)
+end (* MakeZip *)
 
 module AlleleSequences = MakeZip (struct
 
@@ -647,7 +647,7 @@ module AlleleDistances = MakeZip (struct
   let add_gap _ t {length; _} =
     match t with
     | S (s, n) -> S (s, n + length) (* filling a gap *)
-    | G _      -> t                 (* matches current gap, no diff. *)
+    | G _      -> t                 (* matches current gap, no difference. *)
 
   let start t msm =
     incr msm t
