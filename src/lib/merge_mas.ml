@@ -103,19 +103,25 @@ let bm_to_string { index; position; length } =
 let bm_to_boundary_string { index; position; _ } =
   sprintf "{idx: %d; pos: %d}" index position
 
-let bounded lst =
+let generally_bounded ~init ~f lst =
   let il bm i = { bm with length = bm.length + i } in
   let rec loop curb curs acc = function
-    | []               -> List.rev ((il curb 1, curs) :: acc)
-    | Boundary bp :: t -> let newb = bm ~index:bp.idx ~position:bp.pos in
-                          loop newb                           ""            ((il curb 1, curs) :: acc)  t
-    | Start s :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
-                          loop newb                           curs          acc                         t
-    | End _ :: t       -> loop curb                           curs          acc                         t
-    | Gap g :: t       -> loop (il curb g.length)             curs          acc                         t
-    | Sequence s :: t  -> loop (il curb (String.length s.s))  (curs ^ s.s)  acc                         t
+    | []                      -> List.rev ((il curb 1, curs) :: acc)
+    | Boundary bp :: t        -> let newb = bm ~index:bp.idx ~position:bp.pos in
+                                 loop newb                           init       ((il curb 1, curs) :: acc)  t
+    | (Start s as e) :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
+                                 loop newb                           (f curs e) acc                         t
+    | (End _ as e) :: t       -> loop curb                           (f curs e) acc                         t
+    | (Gap g as e) :: t       -> loop (il curb g.length)             (f curs e) acc                         t
+    | (Sequence s as e) :: t  -> loop (il curb (String.length s.s))  (f curs e) acc                         t
   in
-  loop before_start_boundary "" [] lst
+  loop before_start_boundary init [] lst
+
+let bounded lst =
+  generally_bounded lst ~init:"" ~f:(fun s e ->
+    match e with
+    | Boundary _ | Start _ | End _ | Gap _ -> s
+    | Sequence ss -> s ^ ss.s)
 
 type 'a region =
   { bm        : boundary_marker
