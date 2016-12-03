@@ -94,6 +94,24 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
+module Boundaries : sig
+
+  type marker =
+    { index     : int     (* Which segment? *)
+    ; position  : int     (* Position of the boundary marker. *)
+    ; length    : int     (* Length to next boundary
+                          , or 1 + the total length of the following segment. *)
+    }
+
+  val marker_to_string : marker -> string
+
+  val before_start : marker -> bool
+
+  val to_boundary : offset:int -> marker -> 'a alignment_element
+
+  val bounded : string alignment_element list -> (marker * string) list
+
+end
 (** [allele_sequence boundary_character reference allele ()] will convert the
     reference and allele alignment elements into a string representing the
     allele sequence.

@@ -79,59 +79,15 @@ open Mas_parser
 
 let supported_genes = [ "A"; "B"; "C"]
 
-type boundary_marker =
-  { index     : int     (* Which segment? *)
-  ; position  : int     (* Position of the boundary marker. *)
-  ; length    : int     (* Length to next boundary
-                        , or 1 + the total length of the following segment. *)
-  }
-
-let bm ~index ~position = { index; position; length = 0 }
-let before_start_boundary = bm ~index:(-1) ~position:(-1)
-let before_start bm = bm.index = -1
-
-let to_boundary ~offset { index; position; _ } =
-  Boundary { idx = index; pos = position + offset }
-
-let matches_boundary { index; position; _ } = function
-  | Boundary b when b.idx = index &&  b.pos = position -> true
-  | _ -> false
-
-let bm_to_string { index; position; length } =
-  sprintf "{index: %d; position: %d; length %d }" index position length
-
-let bm_to_boundary_string { index; position; _ } =
-  sprintf "{idx: %d; pos: %d}" index position
-
-let generally_bounded ~init ~f lst =
-  let il bm i = { bm with length = bm.length + i } in
-  let rec loop curb curs acc = function
-    | []                      -> List.rev ((il curb 1, curs) :: acc)
-    | Boundary bp :: t        -> let newb = bm ~index:bp.idx ~position:bp.pos in
-                                 loop newb                           init       ((il curb 1, curs) :: acc)  t
-    | (Start s as e) :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
-                                 loop newb                           (f curs e) acc                         t
-    | (End _ as e) :: t       -> loop curb                           (f curs e) acc                         t
-    | (Gap g as e) :: t       -> loop (il curb g.length)             (f curs e) acc                         t
-    | (Sequence s as e) :: t  -> loop (il curb (String.length s.s))  (f curs e) acc                         t
-  in
-  loop before_start_boundary init [] lst
-
-let bounded lst =
-  generally_bounded lst ~init:"" ~f:(fun s e ->
-    match e with
-    | Boundary _ | Start _ | End _ | Gap _ -> s
-    | Sequence ss -> s ^ ss.s)
-
 type 'a region =
-  { bm        : boundary_marker
+  { bm        : Boundaries.marker
   ; offset    : int
   ; sequence  : 'a
   }
 
 let region_to_string sequence_to_string { bm; offset; sequence } =
   sprintf "{ bm: %s; offset: %d; sequence: %s}"
-    (bm_to_string bm) offset (sequence_to_string sequence)
+    (Boundaries.marker_to_string bm) offset (sequence_to_string sequence)
 
 (* When we want to have nuclear and genetic labels...
    we're going to recurse this record!!!!! *)
@@ -160,11 +116,12 @@ let instruction_to_string genetic_seq_to_string nuclear_seq_to_string = function
 let bounded_results_to_string lst =
   String.concat ~sep:";"
     (List.map lst ~f:(fun (bm, seq) ->
-      sprintf "(%s, %s)" (bm_to_string bm) (short_seq seq)))
+      sprintf "(%s, %s)" (Boundaries.marker_to_string bm) (short_seq seq)))
 
 (* Create a framework of instructions based off of, probably the alignment
    in the reference sequence. *)
 let zip_align ~gen ~nuc =
+  let open Boundaries in
   let rec loop next_boundary_pos acc g n =
     match n with
     | []        ->
@@ -221,8 +178,8 @@ let prefix_from_f s =
 let align_from_prefix prefix_path =
   let gen_mp = from_file (prefix_path ^ "_gen.txt") in
   let nuc_mp = from_file (prefix_path ^ "_nuc.txt") in
-  let gen = bounded gen_mp.ref_elems in
-  let nuc = bounded nuc_mp.ref_elems in
+  let gen = Boundaries.bounded gen_mp.ref_elems in
+  let nuc = Boundaries.bounded nuc_mp.ref_elems in
   zip_align ~gen ~nuc >>= fun i -> Ok (gen_mp, nuc_mp, i)
 
 let end_position = end_position String.length
@@ -282,6 +239,7 @@ let replace_sequence r s = { r with sequence = s }
 (* Special splicing adjustments. *)
 (* TODO: Figure out how to impute these from genetic. *)
 let a_01_11N ?(verbose=false) r =
+  let open Boundaries in
   if r.bm.index = 1 (*&& r.bm.position = 396 *) then begin
     if verbose then
       printf "Adjusting A*01:11N's third exon!\n";
@@ -297,6 +255,7 @@ let a_01_11N ?(verbose=false) r =
     r
 
 let drop_splice_failure_from_exon ?(verbose=false) name ~index ~end_pos r =
+  let open Boundaries in
   if r.bm.index = index then begin
     if verbose then
       printf "Adjusting %s's %d exon\n" name (index + 1);
@@ -319,6 +278,7 @@ let known_splice_adjustments ?verbose = function
   | _                     -> id
 
 let map_instr_to_alignments ?(fail_on_empty=true) nallele ~gen ~nuc alg =
+  let open Boundaries in
   let splice_adj = known_splice_adjustments nallele in
   let rec start = function
     | FillFromGenetic f :: tl when before_start f.bm ->
@@ -369,6 +329,7 @@ let map_instr_to_alignments ?(fail_on_empty=true) nallele ~gen ~nuc alg =
 (* When we have a nuc:a1, gen:a2 (ie. a1 <> a2):
    take a2's instructions and pair the nuc element! *)
 let merge_different_nuc_into_alignment ?(fail_on_empty=true) nallele nuc alg =
+  let open Boundaries in
   let rec start = function
     | (FillFromGenetic f as fi) :: tl when before_start f.bm ->
         loop [fi] nuc tl
@@ -413,6 +374,7 @@ let without_starts_or_ends =
     | Sequence _  -> true)
 
 let align_reference instr =
+  let open Boundaries in
   List.map instr ~f:(function
     | FillFromGenetic f ->
         if before_start f.bm then
@@ -476,6 +438,7 @@ let append s ?in_nucleic ?need_start t =
   }
 
 let align_same ?verbose name instr =
+  let open Boundaries in
   let check_for_ends genetic_end start nuc_seq next_boundary_pos s =
     if genetic_end then begin (* Trust that the ends are aligned. *)
       if opt_is_true verbose then
@@ -576,6 +539,7 @@ let instructions_before p =
                                              Some (Sequence {s with s = sub_s}))
 
 let align_different ?verbose name instr =
+  let open Boundaries in
   let check_for_ends start ~genx ~nucx next_boundary_pos s =
     handle_split_end ?verbose (name ^ "_nuc") nucx next_boundary_pos
       ~no_split:        (fun b -> append s (start b) ~in_nucleic:true)

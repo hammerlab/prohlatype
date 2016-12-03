@@ -364,6 +364,54 @@ let from_file f =
     close_in ic;
     raise e
 
+module Boundaries = struct
+
+  type marker =
+    { index     : int     (* Which segment? *)
+    ; position  : int     (* Position of the boundary marker. *)
+    ; length    : int     (* Length to next boundary
+                          , or 1 + the total length of the following segment. *)
+    }
+
+  let marker ~index ~position = { index; position; length = 0 }
+  let before_start_boundary = marker ~index:(-1) ~position:(-1)
+  let before_start m = m.index = -1
+
+  let to_boundary ~offset { index; position; _ } =
+    Boundary { idx = index; pos = position + offset }
+
+  let matches_boundary { index; position; _ } = function
+    | Boundary b when b.idx = index &&  b.pos = position -> true
+    | _ -> false
+
+  let marker_to_string { index; position; length } =
+    sprintf "{index: %d; position: %d; length %d }" index position length
+
+  let marker_to_boundary_string { index; position; _ } =
+    sprintf "{idx: %d; pos: %d}" index position
+
+  let generally_bounded ~init ~f lst =
+    let il m i = { m with length = m.length + i } in
+    let rec loop curb curs acc = function
+      | []                      -> List.rev ((il curb 1, curs) :: acc)
+      | Boundary bp :: t        -> let newb = marker ~index:bp.idx ~position:bp.pos in
+                                  loop newb                           init       ((il curb 1, curs) :: acc)  t
+      | (Start s as e) :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
+                                  loop newb                           (f curs e) acc                         t
+      | (End _ as e) :: t       -> loop curb                           (f curs e) acc                         t
+      | (Gap g as e) :: t       -> loop (il curb g.length)             (f curs e) acc                         t
+      | (Sequence s as e) :: t  -> loop (il curb (String.length s.s))  (f curs e) acc                         t
+    in
+    loop before_start_boundary init [] lst
+
+  let bounded lst =
+    generally_bounded lst ~init:"" ~f:(fun s e ->
+      match e with
+      | Boundary _ | Start _ | End _ | Gap _ -> s
+      | Sequence ss -> s ^ ss.s)
+
+end (* Boundaries *)
+
 (* Applying the alignment elements. *)
 module type Data_projection = sig
 
