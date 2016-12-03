@@ -395,9 +395,9 @@ module Boundaries = struct
     let rec loop curb curs acc = function
       | []                      -> List.rev ((il curb 1, curs) :: acc)
       | Boundary bp :: t        -> let newb = marker ~index:bp.idx ~position:bp.pos in
-                                  loop newb                           init       ((il curb 1, curs) :: acc)  t
+                                   loop newb                           init       ((il curb 1, curs) :: acc)  t
       | (Start s as e) :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
-                                  loop newb                           (f curs e) acc                         t
+                                   loop newb                           (f curs e) acc                         t
       | (End _ as e) :: t       -> loop curb                           (f curs e) acc                         t
       | (Gap g as e) :: t       -> loop (il curb g.length)             (f curs e) acc                         t
       | (Sequence s as e) :: t  -> loop (il curb (String.length s.s))  (f curs e) acc                         t
