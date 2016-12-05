@@ -367,13 +367,14 @@ let from_file f =
 module Boundaries = struct
 
   type marker =
-    { index     : int     (* Which segment? *)
-    ; position  : int     (* Position of the boundary marker. *)
-    ; length    : int     (* Length to next boundary
-                          , or 1 + the total length of the following segment. *)
+    { index       : int   (* Which segment? *)
+    ; position    : int   (* Position of the boundary marker. *)
+    ; length      : int   (* Length to next boundary, or 1 plus the total length
+                             of the following segment.*)
+    ; seq_length  : int   (* Length of sequences contained in this boundary.*)
     }
 
-  let marker ~index ~position = { index; position; length = 0 }
+  let marker ~index ~position = { index; position; length = 0 ; seq_length = 0}
   let before_start_boundary = marker ~index:(-1) ~position:(-1)
   let before_start m = m.index = -1
 
@@ -384,31 +385,44 @@ module Boundaries = struct
     | Boundary b when b.idx = index &&  b.pos = position -> true
     | _ -> false
 
-  let marker_to_string { index; position; length } =
-    sprintf "{index: %d; position: %d; length %d }" index position length
+  let marker_to_string { index; position; length; seq_length } =
+    sprintf "{index: %d; position: %d; length %d; seq_length: %d }"
+      index position length seq_length
 
   let marker_to_boundary_string { index; position; _ } =
     sprintf "{idx: %d; pos: %d}" index position
 
-  let generally ~init ~f lst =
-    let il m i = { m with length = m.length + i } in
-    let rec loop curb curs acc = function
-      | []                      -> List.rev ((il curb 1, curs) :: acc)
-      | Boundary bp :: t        -> let newb = marker ~index:bp.idx ~position:bp.pos in
-                                   loop newb                           init       ((il curb 1, curs) :: acc)  t
-      | (Start s as e) :: t     -> let newb = if before_start curb then { curb with position = s - 1 } else curb in
-                                   loop newb                           (f curs e) acc                         t
-      | (End _ as e) :: t       -> loop curb                           (f curs e) acc                         t
-      | (Gap g as e) :: t       -> loop (il curb g.length)             (f curs e) acc                         t
-      | (Sequence s as e) :: t  -> loop (il curb (String.length s.s))  (f curs e) acc                         t
+  let fold ~boundary ~start ~end_ ~gap ~seq lst =
+    let il s m i =
+      if s then { m with length = m.length + i; seq_length = m.seq_length + i }
+           else { m with length = m.length + i}
     in
-    loop before_start_boundary init [] lst
+    let rec loop curb curs acc = function
+      | []                ->
+          List.rev ((il false curb 1, curs) :: acc)
+      | Boundary bp :: t  ->
+          let newb = marker ~index:bp.idx ~position:bp.pos in
+          let nacc = ((il false curb 1, curs) :: acc) in
+          loop newb                                (boundary newb)       nacc  t
+      | Start s :: t      ->
+          let newb = if before_start curb then { curb with position = s - 1 } else curb in
+          loop newb                                (start curs s) acc   t
+      | End e :: t        ->
+          loop curb                                (end_ curs e) acc   t
+      | Gap g :: t        ->
+          loop (il false curb g.length)            (gap curs g) acc   t
+      | Sequence s :: t   ->
+          loop (il true curb (String.length s.s))  (seq curs s) acc   t
+    in
+    loop before_start_boundary (boundary before_start_boundary) [] lst
 
   let bounded lst =
-    generally lst ~init:"" ~f:(fun s e ->
-      match e with
-      | Boundary _ | Start _ | End _ | Gap _ -> s
-      | Sequence ss -> s ^ ss.s)
+    let boundary _ = "" in
+    let start s _ = s in
+    let end_ s _ = s in
+    let gap s _ = s in
+    let seq s ss = s ^ ss.s in
+    fold lst ~boundary ~start ~end_ ~gap ~seq
 
 end (* Boundaries *)
 
