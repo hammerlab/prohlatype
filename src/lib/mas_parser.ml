@@ -534,13 +534,13 @@ module MakeZip (R : Data_projection) = struct
       | Sequence ss                     ->
           let slen = String.length ss.s in
           if ss.start + slen > cur.end_pos then
-            let length = cur.end_pos - ss.start in
+            let index = cur.end_pos - ss.start in
             let na =
-              Sequence { start = ss.start + length
-                       ; s = String.sub_exn ss.s ~index:length ~length:(slen - length)
+              Sequence { start = ss.start + index
+                       ; s = String.drop ss.s ~index
                        }
             in
-            let ncur = add_seq cur { ss with s = String.sub_exn ss.s ~index:0 ~length} in
+            let ncur = add_seq cur { ss with s = String.take ss.s ~index } in
             loop ncur acc r (na :: at)
           else
             let ncur = add_seq cur ss in
@@ -726,14 +726,6 @@ module AlleleToRefDistance = MakeZip (struct
 
   let add_end t len =
     incr (DistanceProjection.length t - len) t
-
-    (*
-  type t2 = int
-
-  let to_t2 started = function
-    | G (g, n) -> Some (if started then n else 0)
-    | S (s, n) -> Some (if started then n else String.length s.s)
-*)
 
 end)
 
