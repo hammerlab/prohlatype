@@ -429,6 +429,19 @@ module Boundaries = struct
 
 end (* Boundaries *)
 
+(* Label these arguments to differentiate that we want a "length/index" into
+   contained element, not a position. *)
+let split_sequence seq ~pos =
+  let index = pos - seq.start in
+  let before, after = String.split_at seq.s ~index in
+  { start = seq.start;          s = before },
+  { start = seq.start + index;  s = after }
+
+let split_gap gap ~pos =
+  let length = pos - gap.gstart in
+  { gstart = gap.gstart;          length = length },
+  { gstart = gap.gstart + length; length = gap.length - length }
+
 (* Applying the alignment elements. *)
 module type Data_projection = sig
 
@@ -448,11 +461,8 @@ module type Data_projection = sig
 
   val add_gap : position -> t -> gap -> t
 
-  (* Use [int] instead of [position] because we're passing where in
-     the current segment the allele starts/stops. *)
-  val add_start : t -> int -> t
-
-  val add_end : t -> int -> t
+  (* Pass a "length" into the curreng segment/projection. *)
+  val split_due_to_start_stop : int -> bool -> t -> t option * t
 
 end
 
@@ -478,146 +488,24 @@ module MakeZip (R : Data_projection) = struct
   let add_seq cur s =
     { cur with project = R.add_seq cur.start_pos cur.project s }
 
-  let left st pos =
-    { st with project = R.add_end st.project (pos - st.start_pos)
-            ; started = false
-            ; end_pos = pos
-    }
-
-  let right st pos =
+  let split st pos new_start =
     let index = pos - st.start_pos in
-    { st with project = R.add_start st.project index
-            ; started = true
-            ; start_pos = st.start_pos + index
+    let before_opt, after = R.split_due_to_start_stop index new_start st.project in
+    Option.map before_opt ~f:(fun before -> { st with project = before ; end_pos = pos }),
+    { start_pos = pos
+    ; end_pos   = st.end_pos
+    ; project   = after
+    ; started   = new_start
     }
-
-  let new_cur started ~n ~s = function
-    | Start _
-    | End _       -> n ()
-    | Boundary b  -> s { start_pos = b.pos
-                       ; end_pos = b.pos + 1
-                       ; project = R.of_boundary ~in_ref:true started b
-                       ; started
-                       }
-    | Gap g       -> s { start_pos = g.gstart
-                       ; end_pos = g.gstart + g.length
-                       ; project = R.of_gap ~in_ref:true started g
-                       ; started
-                       }
-    | Sequence ss -> let len = String.length ss.s in
-                     s { start_pos = ss.start
-                       ; end_pos = ss.start + len
-                       ; project = R.of_seq ~in_ref:true started ss
-                       ; started
-                       }
 
   let apply ~reference ~allele =
     let append acc project =
       if !report then printf "Appending %s \n" (R.to_string project);
       project :: acc
     in
-    let rec new_ref_segment started acc r a =
-      match r with
-      | []     ->
-          let _final_started, nacc =
-            List.fold_left a ~init:(started, acc) ~f:(fun (st, a) e ->
-              match e with
-              | End _      -> false, a
-              | Start _    -> true, a
-              | Boundary b -> st, append a (R.of_boundary ~in_ref:false st b)
-              | Gap g      -> st, append a (R.of_gap ~in_ref:false st g)
-              | Sequence s -> st, append a (R.of_seq ~in_ref:false st s))
-          in
-          if !report then printf "Ending after no more reference: %d!\n" (List.length nacc);
-          List.rev nacc (* Fin. *)
-      | h :: t ->
-          new_cur started h
-            ~n:(fun () -> new_ref_segment started acc t a)
-            (*~b:(fun bb -> new_ref_segment started (`B bb :: acc) t a) *)
-            ~s:(fun cur -> loop cur acc t a)
-    and allele_ended cur acc r =
-      if !report then printf "Ending after no more allele! %d\n" (List.length acc);
-      let init = append acc cur.project in
-      let acc =
-        List.fold_left r ~init ~f:(fun a e ->
-          match e with
-          | End _      -> a
-          | Start _    -> a
-          | Boundary b -> append a (R.of_boundary ~in_ref:true cur.started b)
-          | Gap g      -> append a (R.of_gap ~in_ref:true cur.started g)
-          | Sequence s -> append a (R.of_seq ~in_ref:true cur.started s))
-      in
-      List.rev acc (* Fin *)
-    and mutate_segment cur acc r at = function
-      | Start p                         -> loop (right cur p) acc r at
-      | End p                           -> let nst = left cur p in
-                                           (* What if we restart in the same segment? *)
-                                           new_ref_segment false (append acc nst.project) r at
-      | Boundary b as e                 -> if cur.start_pos <> b.pos &&
-                                              cur.end_pos <> cur.start_pos + 1 then
-                                              invalid_argf "Found %s in sequence at %d!"
-                                                (al_el_to_string e) (cur.start_pos)
-                                           else
-                                             loop cur acc r at
-      | Sequence ss                     ->
-          let slen = String.length ss.s in
-          if ss.start + slen > cur.end_pos then
-            let index = cur.end_pos - ss.start in
-            let na =
-              Sequence { start = ss.start + index
-                       ; s = String.drop ss.s ~index
-                       }
-            in
-            let ncur = add_seq cur { ss with s = String.take ss.s ~index } in
-            loop ncur acc r (na :: at)
-          else
-            let ncur = add_seq cur ss in
-            loop ncur acc r at
-      | Gap g                           ->
-          if g.gstart + g.length > cur.end_pos then
-            let length = cur.end_pos - g.gstart in
-            let na =
-              Gap { gstart = g.gstart + length
-                  ; length = g.length - length
-                  }
-            in
-            let ncur = add_gap cur { g with length } in
-            loop ncur acc r (na :: at)
-          else
-            let ncur = add_gap cur g in
-            loop ncur acc r at
-    and at_end_of_segment cur acc r at = function
-      | Boundary _ -> loop cur acc r at   (* Add bs based on reference. *)
-      | Start _    -> new_ref_segment true (append acc cur.project) r at
-      | End _      -> new_ref_segment false (append acc cur.project) r at
-      | g_or_s     -> new_ref_segment cur.started (append acc cur.project) r (g_or_s :: at)
-    and loop cur acc r a =
-      match a with
-      | []        -> allele_ended cur acc r
-      | ah :: at  ->
-          let sa = start_position ah in
-          if !report then
-            printf "at %s %d when cur is %s.\n"
-              (al_el_to_string ah) sa (state_to_string cur);
-          if sa < cur.start_pos then
-            loop cur acc r at
-          else if sa > cur.end_pos then
-            new_ref_segment cur.started (append acc cur.project) r a
-          else if sa = cur.end_pos then
-            at_end_of_segment cur acc r at ah
-          else
-            mutate_segment cur acc r at ah
-    in
-    new_ref_segment false [] reference allele
-
-  let apply2 ~reference ~allele =
-    let append acc project =
-      if !report then printf "Appending %s \n" (R.to_string project);
-      project :: acc
-    in
     let rec advance_allele cur acc a =
       match a with
-      | []      -> cur.started, acc, []
+      | []      -> cur.started, (append acc cur.project), []
       | h :: t  ->
           let sa = start_position h in
           if !report then
@@ -630,10 +518,16 @@ module MakeZip (R : Data_projection) = struct
           else (* sa >= cur.end_pos *)
             cur.started, append acc cur.project, a
     and mutate_segment cur acc at = function
-      | Start p         -> advance_allele (right cur p) acc at
-      | End p           -> let nst = left cur p in
-                           (* What if we restart in the same segment? *)
-                           false, (append acc nst.project), at
+      | Start pos       -> let b_opt, a = split cur pos true in
+                           let nacc = Option.value_map ~default:acc b_opt
+                               ~f:(fun b -> append acc b.project)
+                           in
+                           advance_allele a nacc at
+      | End pos         -> let b_opt, a = split cur pos false in
+                           let nacc = Option.value_map ~default:acc b_opt
+                               ~f:(fun b -> append acc b.project)
+                           in
+                           advance_allele a nacc at
       | Boundary b as e -> if cur.start_pos <> b.pos &&
                               cur.end_pos <> cur.start_pos + 1 then
                               invalid_argf "Found %s in sequence at %d!"
@@ -643,27 +537,15 @@ module MakeZip (R : Data_projection) = struct
       | Sequence ss     ->
           let slen = String.length ss.s in
           if ss.start + slen > cur.end_pos then
-            let index = cur.end_pos - ss.start in
-            let na =
-              Sequence { start = ss.start + index
-                       ; s = String.drop ss.s ~index
-                       }
-            in
-            let ncur = add_seq cur { ss with s = String.take ss.s ~index } in
-            advance_allele ncur acc (na :: at)
+            let nc, na = split_sequence ss ~pos:cur.end_pos in
+            advance_allele (add_seq cur nc) acc (Sequence na :: at)
           else
             let ncur = add_seq cur ss in
             advance_allele ncur acc at
       | Gap g           ->
           if g.gstart + g.length > cur.end_pos then
-            let length = cur.end_pos - g.gstart in
-            let na =
-              Gap { gstart = g.gstart + length
-                  ; length = g.length - length
-                  }
-            in
-            let ncur = add_gap cur { g with length } in
-            advance_allele ncur acc (na :: at)
+            let gc, ga = split_gap g ~pos:cur.end_pos in
+            advance_allele (add_gap cur gc) acc (Gap ga :: at)
           else
             let ncur = add_gap cur g in
             advance_allele ncur acc at
@@ -760,19 +642,17 @@ module AlleleSequences = MakeZip (struct
     done;
     (stared, buffer)
 
-  let add_start (_, buffer) index =
-    true, B.drop buffer ~index
-
-  (* return true because we're keeping the 'in allele' part
-    TODO: the start / end logic is once again awkward. It seems like add_end
-    should return a pair of in/out sequence segments. *)
-  let add_end (_, buffer) index =
-    true, B.take buffer ~index
+  let split_due_to_start_stop index new_start (st, buffer) =
+    if index = 0 then
+      None,         (new_start, buffer)
+    else
+      let b, a = B.split_at buffer ~index in
+      Some (st, b), (new_start, a)
 
 end)
 
 let allele_sequences ~reference ~allele =
-  let ss = AlleleSequences.apply2 ~reference ~allele in
+  let ss = AlleleSequences.apply ~reference ~allele in
   List.map ss ~f:(fun (bm, plst) ->
     bm,
     B.(to_native_string (concat
@@ -781,7 +661,7 @@ let allele_sequences ~reference ~allele =
         | (true, t)  -> Some (filter t ~f:(fun c -> c <> default_gap_char)))))))
 
 let allele_sequence ?boundary_char ~reference ~allele () =
-  let sep = Option.value_map ~default:B.empty ~f:B.to_native_string boundary_char in
+  let sep = Option.value_map ~default:B.empty ~f:B.of_character boundary_char in
   allele_sequences ~reference ~allele
   |> List.map ~f:snd
   |> B.concat ~sep
@@ -811,48 +691,55 @@ let split_by_boundaries_rev lst =
 
 module DistanceProjection = struct
 
+  type r =
+    { started     : bool
+    ; start_pos   : position
+    ; length      : int
+    ; mismatches  : int
+    }
+
+  let r_to_string r =
+    sprintf "{%b; %d; %d; %d}"
+      r.started r.start_pos r.length r.mismatches
+
+  let split_r length new_start r =
+    { r with length },
+    { started     = new_start
+    ; start_pos   = r.start_pos + length
+    ; length      = r.length - length
+    ; mismatches  = 0
+    }
+
   type t =
-    | G of { started : bool; gap : gap; mismatches : int }
-    | S of { started : bool; seq : string sequence; mismatches : int }
+    | G of r
+    | S of r
     | B
 
-  let length = function
-    | G r -> r.gap.length
-    | S r -> String.length r.seq.s
-    | B   -> 1
-
-  let mismatches = function
-    | G r -> r.mismatches
-    | S r -> r.mismatches
-    | B   -> 0
-
   let to_string = function
-    | G {started; mismatches; _} -> sprintf "G %b %d" started mismatches
-    | S {started; mismatches; _} -> sprintf "S %b %d" started mismatches
-    | B                          -> "B"
+    | G r -> sprintf "G %s" (r_to_string r)
+    | S r -> sprintf "S %s" (r_to_string r)
+    | B   -> "B"
 
   let incr m = function
     | S r -> S { r with mismatches = r.mismatches + m }
     | G r -> G { r with mismatches = r.mismatches + m }
     | B   -> invalid_argf "Asked to increase Boundary by %d" m
 
-end
-
-module AlleleToRefDistance = MakeZip (struct
-
-  open DistanceProjection
-
-  type t = DistanceProjection.t
-
-  let to_string = DistanceProjection.to_string
-
   let of_seq ~in_ref started seq =
-    if in_ref then S { started; seq; mismatches = 0 }
-    else S { started; seq; mismatches = String.length seq.s }
+    let start_pos = seq.start in
+    let length = String.length seq.s in
+    if in_ref then
+      S { started; start_pos; length; mismatches = 0 }
+    else
+      S { started; start_pos; length; mismatches = length }
 
-  let of_gap ~in_ref started gap =
-    if in_ref then G { started; gap; mismatches = 0 }
-    else G { started; gap; mismatches = gap.length }
+  let of_gap ~in_ref started (gap : gap) =
+    let start_pos = gap.gstart in
+    let length = gap.length in
+    if in_ref then
+      G { started; start_pos; length; mismatches = 0 }
+    else
+      G { started; start_pos; length; mismatches = gap.length }
 
   let of_boundary ~in_ref started boundary =
     B
@@ -862,34 +749,62 @@ module AlleleToRefDistance = MakeZip (struct
     incr (String.length s) t
 
   (* seqs in seqs are diffs! *)
-  let add_gap _ t {length; _} =
+  let add_gap _ t ({length; _} : gap) =
     match t with
     | S r -> S { r with mismatches = r.mismatches + length } (* filling a gap *)
     | G _ -> t                                  (* gap in gap, no difference. *)
     | B   -> invalid_argf "Asked to add_gap of %d to Boundary." length
 
-  let add_start t msm =
-    match t with
-    | S r -> S { r with mismatches = r.mismatches + msm }
-    | G r -> G { r with mismatches = r.mismatches + msm }
-    | B   -> if msm = 0 then t else
-              invalid_argf "Asked to increase Boundary by %d by start." msm
+  let split_due_to_start_stop index new_start = function
+    | S r when index = 0 -> None, S { r with started = new_start }
+    | S r                -> let b, a = split_r index new_start r in
+                            Some (S b) , S a
+    | G r when index = 0 -> None , G { r with started = new_start }
+    | G r                -> let b, a = split_r index new_start r in
+                            Some (G b) , G a
+    | B                 -> if index = 0 then None, B else
+                            invalid_argf "Asked to increase Boundary by %d." index
 
-  let add_end t len =
-    incr (DistanceProjection.length t - len) t
+end
 
+module AlleleToRefDistance = MakeZip (struct
+  include DistanceProjection
 end)
 
-let allele_distances_old ~reference ~allele =
-  let rec loop sum acc = function
-    | []      -> List.rev (sum :: acc)
-    | dp :: t -> loop (sum + DistanceProjection.mismatches dp) acc t
-  in
-  loop 0 [] (AlleleToRefDistance.apply ~reference ~allele)
+type per_segment =
+  | MissingFromAllele of int        (* segment_length *)
+  | Partial of { segment_length     : int
+               ; allele_seq_length  : int
+               ; mismatches         : int
+               }
+  | Full of { segment_length  : int
+            ; mismatches  : int
+            }
 
-(*
 let allele_distances ~reference ~allele =
-  AlleleToRefDistance.apply2 ~reference ~allele
+  let open DistanceProjection in
+  AlleleToRefDistance.apply ~reference ~allele
   |> List.map ~f:(fun (bm, lst) ->
-      bm, List.fold_right lst ~init:(0,0) ~f:(fun (sts, nst) b ->
-  *)
+      let final_state = List.fold_left lst ~init:`Missing ~f:(fun state p ->
+        match p with
+        | B         -> state
+        | G r | S r ->
+            begin match state, r.started with
+            | `Missing,        true  -> `Start (r.mismatches, r.length)
+            | `Missing,        false -> `NoStart
+            | `NoStart,        true  -> `Partial (r.mismatches, r.length)
+            | `NoStart,        false -> `NoStart
+            | `Start (m, l),   true  -> `Start (m + r.mismatches, l + r.length)
+            | `Start (m, l),   false -> `Partial (m, l)
+            | `Partial (m, l), true  -> `Partial (m + r.mismatches, l + r.length)
+            | `Partial (m, l), false -> `Partial (m, l)
+            end)
+      in
+      match final_state with
+      | `Missing
+      | `NoStart        -> MissingFromAllele bm.Boundaries.seq_length
+      | `Start (m, l)   -> Full { segment_length = bm.Boundaries.seq_length
+                                ; mismatches = m }
+      | `Partial (m, l) -> Partial { segment_length = bm.Boundaries.seq_length
+                                   ; mismatches = m
+                                   ; allele_seq_length = l })
