@@ -97,10 +97,11 @@ val from_file : string -> result
 module Boundaries : sig
 
   type marker =
-    { index     : int     (* Which segment? *)
-    ; position  : int     (* Position of the boundary marker. *)
-    ; length    : int     (* Length to next boundary
-                          , or 1 + the total length of the following segment. *)
+    { index       : int     (* Which segment? *)
+    ; position    : int     (* Position of the boundary marker. *)
+    ; length      : int     (* Length to next boundary, or 1 + the total
+                               length of the following segment. *)
+    ; seq_length  : int
     }
 
   val marker_to_string : marker -> string
@@ -112,6 +113,10 @@ module Boundaries : sig
   val bounded : string alignment_element list -> (marker * string) list
 
 end
+
+val allele_sequences : reference:string alignment_element list ->
+  allele:string alignment_element list -> (Boundaries.marker * string) list
+
 (** [allele_sequence boundary_character reference allele ()] will convert the
     reference and allele alignment elements into a string representing the
     allele sequence.
@@ -130,5 +135,15 @@ val reference_sequence : ?boundary_char:char -> result -> string
 val split_by_boundaries_rev : ' a alignment_element list ->
   'a alignment_element list list
 
+type per_segment =
+  | MissingFromAllele of int
+  | Partial of { segment_length : int
+               ; allele_seq_length : int
+               ; mismatches : int
+               }
+  | Full of { segment_length : int
+            ; mismatches : int
+            }
+
 val allele_distances : reference:string alignment_element list ->
-    allele:string alignment_element list -> int list
+  allele:string alignment_element list -> per_segment list
