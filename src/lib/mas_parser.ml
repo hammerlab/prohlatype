@@ -59,8 +59,8 @@ and 'sr alignment_element =
   | Gap of gap
 
 let start_position = function
-  | Start p               -> p
-  | End p                 -> p
+  | Start s               -> s
+  | End e                 -> e
   | Boundary { pos; _ }   -> pos
   | Sequence { start; _ } -> start
   | Gap { gstart; _ }     -> gstart
@@ -70,7 +70,7 @@ let end_position sr_length = function
   | End e       -> e
   | Gap g       -> (g.gstart + g.length)
   | Sequence s  -> (s.start + sr_length s.s)
-  | Boundary b  -> b.pos
+  | Boundary b  -> b.pos + 1
 
 let al_el_to_string = function
   | Start p                 -> sprintf "Start at %d" p
@@ -78,6 +78,11 @@ let al_el_to_string = function
   | Boundary { idx; pos }   -> sprintf "Boundary %d at %d" idx pos
   | Sequence { start; s }   -> sprintf "Sequence %s at %d" s start
   | Gap { gstart; length }  -> sprintf "Gap of %d from %d" length gstart
+
+let is_sequence = function | Sequence _ -> true | _ -> false
+let is_gap      = function | Gap _      -> true | _ -> false
+let is_end      = function | End _      -> true | _ -> false
+let is_start    = function | Start _    -> true | _ -> false
 
 type data_switch =
   | Data
@@ -499,13 +504,13 @@ module MakeZip (R : Data_projection) = struct
     }
 
   let apply ~reference ~allele =
-    let append acc project =
-      if !report then printf "Appending %s \n" (R.to_string project);
-      project :: acc
+    let append acc cur =
+      if !report then printf "Appending %s \n" (R.to_string cur.project);
+      cur.project :: acc
     in
     let rec advance_allele cur acc a =
       match a with
-      | []      -> cur.started, (append acc cur.project), []
+      | []      -> cur.started, (append acc cur), []
       | h :: t  ->
           let sa = start_position h in
           if !report then
@@ -516,17 +521,13 @@ module MakeZip (R : Data_projection) = struct
           else if sa < cur.end_pos then
             mutate_segment cur acc t h
           else (* sa >= cur.end_pos *)
-            cur.started, append acc cur.project, a
+            cur.started, append acc cur, a
     and mutate_segment cur acc at = function
       | Start pos       -> let b_opt, a = split cur pos true in
-                           let nacc = Option.value_map ~default:acc b_opt
-                               ~f:(fun b -> append acc b.project)
-                           in
+                           let nacc = Option.value_map b_opt ~default:acc ~f:(append acc) in
                            advance_allele a nacc at
       | End pos         -> let b_opt, a = split cur pos false in
-                           let nacc = Option.value_map ~default:acc b_opt
-                               ~f:(fun b -> append acc b.project)
-                           in
+                           let nacc = Option.value_map b_opt ~default:acc ~f:(append acc) in
                            advance_allele a nacc at
       | Boundary b as e -> if cur.start_pos <> b.pos &&
                               cur.end_pos <> cur.start_pos + 1 then
@@ -593,9 +594,9 @@ module MakeZip (R : Data_projection) = struct
           match e with
           | End _      -> false, a
           | Start _    -> true, a
-          | Boundary b -> st, append a (R.of_boundary ~in_ref:false st b)
-          | Gap g      -> st, append a (R.of_gap ~in_ref:false st g)
-          | Sequence s -> st, append a (R.of_seq ~in_ref:false st s))
+          | Boundary b -> st, (R.of_boundary ~in_ref:false st b) :: a
+          | Gap g      -> st, (R.of_gap ~in_ref:false st g) :: a
+          | Sequence s -> st, (R.of_seq ~in_ref:false st s) :: a)
       in
       just_bm_and_proj ((bm, (final_st, nacc, [])) :: tl)
 
@@ -771,6 +772,12 @@ module AlleleToRefDistance = MakeZip (struct
   include DistanceProjection
 end)
 
+type segment_distance =
+  { segment_length : int                             (* total segment length *)
+  ; allele_length  : int      (* how much sequence data is present in allele *)
+  ; mismatches     : int
+  }
+
 type per_segment =
   | MissingFromAllele of int        (* segment_length *)
   | Partial of { segment_length     : int
@@ -808,3 +815,345 @@ let allele_distances ~reference ~allele =
       | `Partial (m, l) -> Partial { segment_length = bm.Boundaries.seq_length
                                    ; mismatches = m
                                    ; allele_seq_length = l })
+
+let split_long_al_els pos = function
+  | Start _
+  | End _
+  | Boundary _ as e -> invalid_argf "Asked to split %s at %d" (al_el_to_string e) pos
+  | Sequence seq    -> let b, a = split_sequence seq ~pos in
+                       Sequence b, Sequence a
+  | Gap gap         -> let b, a = split_gap gap ~pos in
+                       Gap b, Gap a
+
+type 'a at_same_pos =
+  | Fin
+  | Fst of 'a alignment_element * 'a alignment_element list * 'a alignment_element list
+  | Snd of 'a alignment_element * 'a alignment_element list * 'a alignment_element list
+  | Both of 'a alignment_element * 'a alignment_element list * 'a alignment_element * 'a alignment_element list
+
+let same_pos_and_length_step s1 s2 =
+  match s1,   s2 with
+  | [],       []       -> Fin
+  | h :: t,   []       -> Fst (h, t, [])
+  | [],       h :: t   -> Snd (h, [], t)
+  | h1 :: t1, h2 :: t2 ->
+      let sp1 = start_position h1 in
+      let sp2 = start_position h2 in
+      let ep1 = end_position String.length h1 in
+      let ep2 = end_position String.length h2 in
+      if sp1 < sp2 then
+        if ep1 <= sp2 then        (* h1 is completely first! *)
+          Fst  (h1, t1, s2)
+        else                      (* intersect *)
+          let b, a = split_long_al_els sp2 h1 in
+          Fst  (b, a :: t1, s2)
+      else if sp1 = sp2 then
+        if ep1 < ep2 then
+          if is_start h1 || is_end h1 then      (* prevent splitting because of 0-length starts.*)
+            Fst (h1, t1, s2)
+          else
+            let b, a = split_long_al_els ep1 h2 in
+            Both (h1, t1, b, a :: t2)
+        else if ep1 = ep2 then
+          Both (h1, t1, h2, t2)
+        else (* ep1 > ep2 *)
+          if is_start h2 || is_end h2 then
+            Snd (h2, s1, t2)
+          else
+            let b, a = split_long_al_els ep2 h1 in
+            Both (b, a :: t1, h2, t2)
+      else (* sp1 > sp2 *)
+        if ep2 <= sp1 then        (* h2 is completely first! *)
+          Snd  (h2, s1, t2)
+        else
+          let b, a = split_long_al_els sp1 h2 in
+          Snd (b, s1, a :: t2)
+
+let same_position_fold ~init ~f s1 s2 =
+  let rec loop acc r =
+    match r with
+    | Fin                 -> acc
+    | Fst (e, s1, s2)     -> loop (f acc (`Fst e))       (same_pos_and_length_step s1 s2)
+    | Snd (e, s1, s2)     -> loop (f acc (`Snd e))       (same_pos_and_length_step s1 s2)
+    | Both (g, s1, h, s2) -> loop (f acc (`Both (g, h))) (same_pos_and_length_step s1 s2)
+  in
+  loop init (same_pos_and_length_step s1 s2)
+
+let same_position_print =
+  same_position_fold ~init:() ~f:(fun _ -> function
+    | `Fst e       -> printf "Fst %s \n" (al_el_to_string e)
+    | `Snd e       -> printf "Snd %s \n" (al_el_to_string e)
+    | `Both (g, h) -> printf "Both %s %s \n" (al_el_to_string g) (al_el_to_string h))
+
+(* an end position so compare for equality. *)
+let same_pos_and_length_step_upto end_pos s1 s2 =
+  let relationship = function
+    | Start s     -> if s >= end_pos then `After else `Inside false
+    | End e       -> if e >= end_pos then `After else `Inside false
+    | Boundary b  -> if b.pos >= end_pos then `After else `Inside false
+    | Gap g       -> if g.gstart >= end_pos then `After else
+                      `Inside (g.gstart < end_pos && end_pos < g.gstart + g.length)
+    | Sequence s  -> if s.start >= end_pos then `After else
+                      `Inside (s.start < end_pos && end_pos < s.start + (String.length s.s))
+  in
+  let r = same_pos_and_length_step s1 s2 in
+  match r with
+  | Fin                   -> Some r
+  | Fst (e, s1, s2)       -> begin match relationship e with
+                             | `After        -> None
+                             | `Inside false -> Some r
+                             | `Inside true  -> let b, a = split_long_al_els end_pos e in
+                                                Some (Fst (b, a :: s1, s2))
+                             end
+  | Snd (e, s1, s2)       -> begin match relationship e with
+                             | `After        -> None
+                             | `Inside false -> Some r
+                             | `Inside true  -> let b, a = split_long_al_els end_pos e in
+                                                Some (Snd (b, s1, a :: s2))
+                             end
+  | Both (e1, s1, e2, s2) -> begin match relationship e1 with
+                             | `After        -> None
+                             | `Inside false -> Some r
+                             | `Inside true  -> let b1, a1 = split_long_al_els end_pos e1 in
+                                                let b2, a2 = split_long_al_els end_pos e2 in
+                                                Some (Both (b1, a1 :: s1, b2, a2 :: s2))
+                             end
+
+module Zip2 = struct
+
+  type state =
+    { started1    : bool
+    ; started2    : bool
+    ; is_seq      : bool          (* to keep track of an allele's seq length. *)
+    ; start_pos   : position
+    ; end_pos     : position
+    ; mismatches  : int           (* to each other *)
+    }
+
+  let state_of_boundary ~started1 ~started2 b =
+    { started1 ; started2 ; mismatches = 0; is_seq = false
+    ; start_pos = b.pos ; end_pos = b.pos + 1
+    }
+
+  let state_of_gap ?(in_ref=true) ~started1 ~started2 gap =
+    let mismatches = if in_ref then 0 else gap.length in
+    { started1 ; started2 ; mismatches; is_seq = false
+    ; start_pos = gap.gstart
+    ; end_pos = gap.gstart + gap.length
+    }
+
+  let state_of_sequence ?(in_ref=true) ~started1 ~started2 seq =
+    let n = String.length seq.s in
+    let mismatches = if in_ref then 0 else n in
+    { started1 ; started2 ; mismatches; is_seq = true
+    ; start_pos = seq.start
+    ; end_pos = seq.start + String.length seq.s
+    }
+
+  let state_to_string s =
+    sprintf "{%b; %b; %b; %d; %d; %d}"
+      s.started1 s.started2 s.is_seq s.start_pos s.end_pos s.mismatches
+
+  let split ?new_start1 ?new_start2 cur pos =
+    let new_start1 = Option.value ~default:cur.started1 new_start1 in
+    let new_start2 = Option.value ~default:cur.started2 new_start2 in
+    if pos = cur.start_pos then
+      None, ( { cur with started1 = new_start1 ; started2 = new_start2 })
+    else
+      Some ( { cur with end_pos = pos }),
+      ( { cur with started1 = new_start1
+                 ; started2 = new_start2
+                 ; start_pos = pos
+                 ; mismatches = 0})
+
+  let add_mismatches cur n =
+    { cur with mismatches = cur.mismatches + n }
+
+  let add_seq cur seq =
+    add_mismatches cur (String.length seq.s)
+
+  let add_gap cur gap =
+    add_mismatches cur gap.length
+
+  let zip2 ~reference ~allele1 ~allele2 =
+    let append acc state =
+      if !report then printf "Appending %s \n" (state_to_string state);
+      state :: acc
+    in
+    let rec split_wrap cur pos ?new_start1 ?new_start2 acc s1 s2 =
+      let b_opt, a = split cur pos ?new_start1 ?new_start2 in
+      let nacc = Option.value_map b_opt ~default:acc ~f:(append acc) in
+      advance_allele a nacc s1 s2
+
+    and split_wrap_only_one cur pos acc s1 s2 new_start = function
+      | `Fst -> split_wrap cur pos ~new_start1:new_start acc s1 s2
+      | `Snd -> split_wrap cur pos ~new_start2:new_start acc s1 s2
+
+    and advance_allele cur acc a1 a2 =
+      match same_pos_and_length_step_upto cur.end_pos a1 a2 with
+      | None                  -> cur.started1, cur.started2, append acc cur, a1, a2
+      | Some st               ->
+          begin match st with
+          | Fin                   -> cur.started1, cur.started2, append acc cur, a1, a2
+          | Fst (e, s1, s2)       -> one_side cur acc s1 s2 `Fst e
+          | Snd (e, s1, s2)       -> one_side cur acc s1 s2 `Snd e
+          | Both (e1, s1, e2, s2) -> two_side cur acc s1 s2 e1 e2
+          end
+
+    and one_side cur acc s1 s2 which e =
+      if !report then
+        printf "one side at %s when cur is %s.\n"
+          (al_el_to_string e) (state_to_string cur);
+      if start_position e < cur.start_pos then
+        advance_allele cur acc s1 s2 (* skip element *)
+      (* The same_pos_and_length_step_upto logic prevents us form seeing
+         elements after the current position. *)
+      else
+        match e with
+        | Start pos       -> split_wrap_only_one cur pos acc s1 s2 true which
+        | End pos         -> split_wrap_only_one cur pos acc s1 s2 false which
+        | Boundary b as e ->
+            if cur.start_pos <> b.pos && cur.end_pos <> cur.start_pos + 1 then
+              invalid_argf "Found %s in sequence at %d!"
+                (al_el_to_string e) (cur.start_pos)
+            else (* ignore *)
+              advance_allele cur acc s1 s2
+        | Sequence seq    -> advance_allele (add_seq cur seq) acc s1 s2
+        | Gap gap         -> advance_allele (add_gap cur gap) acc s1 s2
+
+    and two_side cur acc s1 s2 e1 e2 =
+      if !report then
+        printf "two side at %s %s when cur is %s.\n"
+          (al_el_to_string e1) (al_el_to_string e2) (state_to_string cur);
+      if start_position e1 < cur.start_pos then
+        advance_allele cur acc s1 s2
+      else
+        match e1, e2 with
+        | Start s, Start _ -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:true
+        | Start s, End _   -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:false
+        | End e,   Start _ -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:true
+        | End e,   End _   -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:false
+        | Start _, _
+        | End _,   _
+        | _,       Start _
+        | _,       End _   -> invalid_argf "%s paired with non-zero-length al-el %s"
+                                  (al_el_to_string e1) (al_el_to_string e2)
+
+        | Boundary b, Boundary _ -> (* make sure we're at a boundary in the ref *)
+            if cur.start_pos <> b.pos && cur.end_pos <> cur.start_pos + 1 then
+              invalid_argf "Boundaries don't align %s %s in sequence at %d!"
+                (al_el_to_string e1) (al_el_to_string e2) (cur.start_pos)
+            else (* ignore *)
+              advance_allele cur acc s1 s2
+        | Boundary _, _
+        | _,          Boundary _ -> invalid_argf "Boundaries not aligned %s %s in sequence at %d!"
+                                      (al_el_to_string e1) (al_el_to_string e2) (cur.start_pos)
+
+        (* Same *)
+        | Gap _,       Gap _                        -> advance_allele cur acc s1 s2
+        | Sequence q1, Sequence q2 when q1.s = q2.s -> advance_allele cur acc s1 s2
+
+        (* Diff *)
+        | Sequence s,  Sequence _  (*q1.s <> q2.s*) -> advance_allele (add_seq cur s) acc s1 s2
+        | Sequence _,  Gap g                        -> advance_allele (add_gap cur g) acc s1 s2
+        | Gap g,       Sequence _                   -> advance_allele (add_gap cur g) acc s1 s2
+    in
+    let reference_pass =
+      Boundaries.fold reference
+        ~start:(fun state _ -> state)          (* Nothing to do for reference Start's *)
+        ~end_:(fun state _ -> state)             (* Nothing to do for reference End's *)
+        ~boundary:(function
+          | None                                             ->
+              (false, false, [], allele1, allele2)
+          | Some ((started1, started2, acc, a1, a2), b, _bm) ->
+              (* reset acc to [] *)
+              let new_state = state_of_boundary ~started1 ~started2 b in
+              advance_allele new_state [] a1 a2)
+        ~gap:(fun (started1, started2, acc, a1, a2) gap ->
+              let new_state = state_of_gap ~started1 ~started2 gap in
+              advance_allele new_state acc a1 a2)
+        ~seq:(fun (started1, started2, acc, a1, a2) seq ->
+              let new_state = state_of_sequence ~started1 ~started2 seq in
+              advance_allele new_state acc a1 a2)
+  in
+  let just_bm_and_state = List.rev_map ~f:(fun (bm, (_, _, p, _, _)) -> (bm, p)) in
+  match reference_pass with
+  | [] -> invalid_argf "Didn't even have a start boundary for zip2?"
+  | (bm, (fs1, fs2, acc, a1, a2)) :: tl ->
+      let final1, final2, nacc =
+        same_position_fold a1 a2 ~init:(fs1, fs2, acc)
+          ~f:(fun (started1, started2, acc) ns ->
+              match ns with
+              | `Fst e ->
+                begin match e with
+                | Start _    -> (true, started2, acc)
+                | End _      -> (false, started2, acc)
+                | Boundary b -> let ns = state_of_boundary ~started1 ~started2 b in
+                                (started1, started2, ns :: acc)
+                | Gap g      -> let ns = state_of_gap ~started1 ~started2 ~in_ref:false g in
+                                (started1, started2, ns :: acc)
+                | Sequence s -> let ns = state_of_sequence ~started1 ~started2 ~in_ref:false s in
+                                (started1, started2, ns :: acc)
+                end
+              | `Snd e ->
+                begin match e with
+                | Start _    -> (started1, true, acc)
+                | End _      -> (started1, false, acc)
+                | Boundary b -> let ns = state_of_boundary ~started1 ~started2 b in
+                                (started1, started2, ns :: acc)
+                | Gap g      -> let ns = state_of_gap ~started1 ~started2 ~in_ref:false g in
+                                (started1, started2, ns :: acc)
+                | Sequence s -> let ns = state_of_sequence ~started1 ~started2 ~in_ref:false s in
+                                (started1, started2, ns :: acc)
+                end
+              | `Both (e1, e2) ->
+                begin match e1, e2 with
+                | Start _, Start _ -> (true,  true,  acc)
+                | Start _, End _   -> (true,  false, acc)
+                | End _,   Start _ -> (false, true,  acc)
+                | End _,   End _   -> (false, false, acc)
+                | Start _, _
+                | End _,   _
+                | _,       Start _
+                | _,       End _   ->
+                    invalid_argf "%s paired with non-zero-length al-el %s, past reference"
+                      (al_el_to_string e1) (al_el_to_string e2)
+
+                | Boundary b, Boundary _  ->
+                      let ns = state_of_boundary ~started1 ~started2 b in
+                      (started1, started2, ns :: acc)
+                | Boundary _, _
+                | _,          Boundary _  ->
+                    invalid_argf "Boundaries not aligned %s %s in sequence, past reference!"
+                      (al_el_to_string e1) (al_el_to_string e2)
+
+                (* Same *)
+                | Gap _,       Gap _                        -> (started1, started2, acc)
+                | Sequence q1, Sequence q2 when q1.s = q2.s -> (started1, started2, acc)
+
+                (* Diff *)
+                | Sequence s,  Sequence _ ->
+                    let ns = state_of_sequence ~started1 ~started2 ~in_ref:false s in
+                    (started1, started2, ns :: acc)
+                | Sequence _,  Gap g      ->
+                    let ns = state_of_gap ~started1 ~started2 ~in_ref:false g in
+                    (started1, started2, ns :: acc)
+                | Gap g,       Sequence _ ->
+                    let ns = state_of_gap ~started1 ~started2 ~in_ref:false g in
+                    (started1, started2, ns :: acc)
+                end)
+      in
+      just_bm_and_state ((bm, (final1, final2, nacc, [], [])) :: tl)
+
+end (* Zip2 *)
+
+let allele_distances_between ~reference ~allele1 ~allele2 =
+  Zip2.zip2 ~reference ~allele1 ~allele2
+  |> List.map ~f:(fun (bm, slst) ->
+      bm, List.fold_left slst ~init:0 ~f:(fun s st -> s + st.Zip2.mismatches))
+
+type distance_state =
+  { allele1_length  : int
+  ; allele2_length  : int      (* how much sequence data is present in allele *)
+  ; mismatches      : int
+  }

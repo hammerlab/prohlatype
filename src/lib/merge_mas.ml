@@ -188,11 +188,6 @@ let latest_position_al_elems = function
   | []     -> error "No latest alignment element."
   | h :: _ -> Ok (end_position h)
 
-let is_sequence = function | Sequence _ -> true | _ -> false
-let is_gap      = function | Gap _      -> true | _ -> false
-let is_end      = function | End _      -> true | _ -> false
-let is_start    = function | Start _    -> true | _ -> false
-
 let shift_al_el offset = function
   | Boundary b -> Boundary { b with pos = b.pos + offset}
   | Start s    -> Start (s + offset)
