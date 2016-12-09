@@ -52,6 +52,10 @@ case "$TEST" in
     echo testing adjcent finding for A_gen only
     ./adjacents.native A_gen
     ;;
+  alleleDiffA)
+    echo testing allele differences between A_gen
+    ./test_allele_distances.native A_gen
+    ;;
   *)
     ;;
 esac
