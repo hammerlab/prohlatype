@@ -785,6 +785,16 @@ type 'a segment =
 
 let allele_distances ~reference ~allele =
   let open DistanceProjection in
+  let update_state mismatches seq_length = function
+    | `Missing,        true  -> `Start (mismatches, seq_length)
+    | `Missing,        false -> `NoStart
+    | `NoStart,        true  -> `Partial (mismatches, seq_length)
+    | `NoStart,        false -> `NoStart
+    | `Start (m, l),   true  -> `Start (m + mismatches, l + seq_length)
+    | `Start (m, l),   false -> `Partial (m, l)
+    | `Partial (m, l), true  -> `Partial (m + mismatches, l + seq_length)
+    | `Partial (m, l), false -> `Partial (m, l)
+  in
   AlleleToRefDistance.apply ~reference ~allele
   |> List.map ~f:(fun (bm, lst) ->
       (* `Missing : the default state when we have observed 0 projections
@@ -793,18 +803,9 @@ let allele_distances ~reference ~allele =
          `Partial : we have observed both. *)
       let final_state = List.fold_left lst ~init:`Missing ~f:(fun state p ->
         match p with
-        | B         -> state
-        | G r | S r ->
-            begin match state, r.started with
-            | `Missing,        true  -> `Start (r.mismatches, r.length)
-            | `Missing,        false -> `NoStart
-            | `NoStart,        true  -> `Partial (r.mismatches, r.length)
-            | `NoStart,        false -> `NoStart
-            | `Start (m, l),   true  -> `Start (m + r.mismatches, l + r.length)
-            | `Start (m, l),   false -> `Partial (m, l)
-            | `Partial (m, l), true  -> `Partial (m + r.mismatches, l + r.length)
-            | `Partial (m, l), false -> `Partial (m, l)
-            end)
+        | B   -> state
+        | G r -> update_state r.mismatches 0 (state, r.started)
+        | S r -> update_state r.mismatches r.length (state, r.started))
       in
       match final_state with
       | `Missing
