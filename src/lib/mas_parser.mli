@@ -67,6 +67,11 @@ val end_position : ('a -> int) -> 'a alignment_element -> position
 (** [al_el_to_string] converts a alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
 
+val is_sequence : 'a alignment_element -> bool
+val is_gap : 'a alignment_element -> bool
+val is_end : 'a alignment_element -> bool
+val is_start : 'a alignment_element -> bool
+
 (** [parse_align_date] parses an in channel of an alignment file up to the
     alignment date, or returns None if it is not found. *)
 val parse_align_date : in_channel -> string option
@@ -147,3 +152,9 @@ type per_segment =
 
 val allele_distances : reference:string alignment_element list ->
   allele:string alignment_element list -> per_segment list
+
+val allele_distances_between :
+  reference:string alignment_element list ->
+  allele1:string alignment_element list ->
+  allele2:string alignment_element list ->
+    (Boundaries.marker * int) list
