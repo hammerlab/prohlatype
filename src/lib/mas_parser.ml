@@ -929,20 +929,23 @@ module Zip2 = struct
   type state =
     { started1    : bool
     ; started2    : bool
-    ; is_seq      : bool          (* to keep track of an allele's seq length. *)
+    ; is_seq1     : bool          (* to keep track of an allele's seq length. *)
+    ; is_seq2     : bool          (* to keep track of an allele's seq length. *)
     ; start_pos   : position
     ; end_pos     : position
     ; mismatches  : int           (* to each other *)
     }
 
   let state_of_boundary ~started1 ~started2 b =
-    { started1 ; started2 ; mismatches = 0; is_seq = false
+    { started1 ; started2 ; mismatches = 0
+    ; is_seq1 = false; is_seq2 = false
     ; start_pos = b.pos ; end_pos = b.pos + 1
     }
 
   let state_of_gap ?(in_ref=true) ~started1 ~started2 gap =
     let mismatches = if in_ref then 0 else gap.length in
-    { started1 ; started2 ; mismatches; is_seq = false
+    { started1 ; started2 ; mismatches
+    ; is_seq1 = false; is_seq2 = false
     ; start_pos = gap.gstart
     ; end_pos = gap.gstart + gap.length
     }
@@ -950,14 +953,15 @@ module Zip2 = struct
   let state_of_sequence ?(in_ref=true) ~started1 ~started2 seq =
     let n = String.length seq.s in
     let mismatches = if in_ref then 0 else n in
-    { started1 ; started2 ; mismatches; is_seq = true
+    { started1 ; started2 ; mismatches
+    ; is_seq1 = true; is_seq2 = true
     ; start_pos = seq.start
     ; end_pos = seq.start + String.length seq.s
     }
 
   let state_to_string s =
-    sprintf "{%b; %b; %b; %d; %d; %d}"
-      s.started1 s.started2 s.is_seq s.start_pos s.end_pos s.mismatches
+    sprintf "{%b; %b; %b; %b; %d; %d; %d}"
+      s.started1 s.started2 s.is_seq1 s.is_seq2 s.start_pos s.end_pos s.mismatches
 
   let split ?new_start1 ?new_start2 cur pos =
     let new_start1 = Option.value ~default:cur.started1 new_start1 in
@@ -971,14 +975,27 @@ module Zip2 = struct
                  ; start_pos = pos
                  ; mismatches = 0})
 
-  let add_mismatches cur n =
-    { cur with mismatches = cur.mismatches + n }
+  let add_mismatches ?is_seq1 ?is_seq2 cur n =
+    let is_seq1 = Option.value ~default:cur.is_seq1 is_seq1 in
+    let is_seq2 = Option.value ~default:cur.is_seq2 is_seq2 in
+    { cur with mismatches = cur.mismatches + n ; is_seq1 ; is_seq2 }
 
-  let add_seq cur seq =
-    add_mismatches cur (String.length seq.s)
+  let add_seq ?is_seq1 ?is_seq2 cur seq =
+    add_mismatches ?is_seq1 ?is_seq2 cur (String.length seq.s)
 
-  let add_gap cur gap =
-    add_mismatches cur gap.length
+  let add_seq_wrap_one cur seq = function
+    | `Fst  -> add_mismatches ~is_seq1:true cur (String.length seq.s)
+    | `Snd  -> add_mismatches ~is_seq2:true cur (String.length seq.s)
+
+  let set_seq ~is_seq1 ~is_seq2 cur =
+    { cur with is_seq1; is_seq2 }
+
+  let add_gap ?is_seq1 ?is_seq2 cur gap =
+    add_mismatches ?is_seq1 ?is_seq2 cur gap.length
+
+  let add_gap_wrap_one cur gap = function
+    | `Fst  -> add_mismatches ~is_seq1:false cur gap.length
+    | `Snd  -> add_mismatches ~is_seq2:false cur gap.length
 
   let zip2 ~reference ~allele1 ~allele2 =
     let append acc state =
@@ -1023,8 +1040,8 @@ module Zip2 = struct
                 (al_el_to_string e) (cur.start_pos)
             else (* ignore *)
               advance_allele cur acc s1 s2
-        | Sequence seq    -> advance_allele (add_seq cur seq) acc s1 s2
-        | Gap gap         -> advance_allele (add_gap cur gap) acc s1 s2
+        | Sequence seq    -> advance_allele (add_seq_wrap_one cur seq which) acc s1 s2
+        | Gap gap         -> advance_allele (add_gap_wrap_one cur gap which) acc s1 s2
 
     and two_side cur acc s1 s2 e1 e2 =
       if !report then
@@ -1055,13 +1072,13 @@ module Zip2 = struct
                                       (al_el_to_string e1) (al_el_to_string e2) (cur.start_pos)
 
         (* Same *)
-        | Gap _,       Gap _                        -> advance_allele cur acc s1 s2
-        | Sequence q1, Sequence q2 when q1.s = q2.s -> advance_allele cur acc s1 s2
+        | Gap _,       Gap _                        -> advance_allele (set_seq cur ~is_seq1:false ~is_seq2:false) acc s1 s2
+        | Sequence q1, Sequence q2 when q1.s = q2.s -> advance_allele (set_seq cur ~is_seq1:true ~is_seq2:true) acc s1 s2
 
         (* Diff *)
-        | Sequence s,  Sequence _  (*q1.s <> q2.s*) -> advance_allele (add_seq cur s) acc s1 s2
-        | Sequence _,  Gap g                        -> advance_allele (add_gap cur g) acc s1 s2
-        | Gap g,       Sequence _                   -> advance_allele (add_gap cur g) acc s1 s2
+        | Sequence s,  Sequence _  (*q1.s <> q2.s*) -> advance_allele (add_seq cur s ~is_seq1:true ~is_seq2:true) acc s1 s2
+        | Sequence _,  Gap g                        -> advance_allele (add_gap cur g ~is_seq1:true ~is_seq2:false) acc s1 s2
+        | Gap g,       Sequence _                   -> advance_allele (add_gap cur g ~is_seq1:false ~is_seq2:true) acc s1 s2
     in
     let reference_pass =
       Boundaries.fold reference
@@ -1154,14 +1171,14 @@ end (* Zip2 *)
 
 let allele_distances_between ~reference ~allele1 ~allele2 =
   let open Zip2 in
-  let update_state_of_one zs = function
-    | `Missing,  true   -> `Start (if zs.is_seq then zs.end_pos - zs.start_pos else 0)
+  let update_state_of_one is_seq end_pos start_pos = function
+    | `Missing,  true   -> `Start (if is_seq then end_pos - start_pos else 0)
     | `Missing,  false  -> `NoStart
-    | `Start sl, true   -> `Start (if zs.is_seq then sl + zs.end_pos - zs.start_pos else sl)
-    | `Start sl, false  -> `Partial sl (* check that zs.end = zs.start_pos or len 1? *)
-    | `NoStart, true    -> `Partial (if zs.is_seq then zs.end_pos - zs.start_pos else 0)
+    | `Start sl, true   -> `Start (if is_seq then sl + end_pos - start_pos else sl)
+    | `Start sl, false  -> `Partial sl (* check that end = start_pos or len 1? *)
+    | `NoStart, true    -> `Partial (if is_seq then end_pos - start_pos else 0)
     | `NoStart, false   -> `NoStart
-    | `Partial p, true  -> `Partial (if zs.is_seq then p + zs.end_pos - zs.start_pos else p)
+    | `Partial p, true  -> `Partial (if is_seq then p + end_pos - start_pos else p)
     | `Partial p, false -> `Partial p
   in
   Zip2.zip2 ~reference ~allele1 ~allele2
@@ -1169,8 +1186,8 @@ let allele_distances_between ~reference ~allele1 ~allele2 =
       let (fs1, fs2, mismatches) =
         List.fold_left slst ~init:(`Missing, `Missing, 0)
           ~f:(fun (st1, st2, m) zs ->
-                let nst1 = update_state_of_one zs (st1, zs.started1) in
-                let nst2 = update_state_of_one zs (st2, zs.started2) in
+                let nst1 = update_state_of_one zs.is_seq1 zs.end_pos zs.start_pos (st1, zs.started1) in
+                let nst2 = update_state_of_one zs.is_seq2 zs.end_pos zs.start_pos (st2, zs.started2) in
                 nst1, nst2, m + zs.mismatches)
       in
       { reference_seq_length  = bm.Boundaries.seq_length
