@@ -1161,7 +1161,8 @@ let allele_distances_between ~reference ~allele1 ~allele2 =
     | `Start sl, false  -> `Partial sl (* check that zs.end = zs.start_pos or len 1? *)
     | `NoStart, true    -> `Partial (if zs.is_seq then zs.end_pos - zs.start_pos else 0)
     | `NoStart, false   -> `NoStart
-    | `Partial p, _     -> `Partial p
+    | `Partial p, true  -> `Partial (if zs.is_seq then p + zs.end_pos - zs.start_pos else p)
+    | `Partial p, false -> `Partial p
   in
   Zip2.zip2 ~reference ~allele1 ~allele2
   |> List.map ~f:(fun (bm, slst) ->
