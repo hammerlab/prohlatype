@@ -4,7 +4,7 @@ open Common
 
 let () =
   let open Mas_parser in
-  let file = if Array.length Sys.argv < 2 then "A_gen" else Sys.argv.(0) in
+  let file = if Array.length Sys.argv < 2 then "A_gen" else Sys.argv.(1) in
   let mp = from_file (Common.to_alignment_file file) in
   List.iter mp.alt_elems ~f:(fun (al1, allele) ->
     let ds = allele_distances ~reference:mp.ref_elems ~allele
