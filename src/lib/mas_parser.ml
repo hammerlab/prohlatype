@@ -772,26 +772,25 @@ module AlleleToRefDistance = MakeZip (struct
   include DistanceProjection
 end)
 
-type segment_distance =
-  { segment_length : int                             (* total segment length *)
-  ; allele_length  : int      (* how much sequence data is present in allele *)
-  ; mismatches     : int
-  }
+type allele_segment_relationship =
+  | Missing
+  | Partial of int    (* sequence length *)
+  | Full of int       (* sequence length might be > reference length *)
 
-type per_segment =
-  | MissingFromAllele of int        (* segment_length *)
-  | Partial of { segment_length     : int
-               ; allele_seq_length  : int
-               ; mismatches         : int
-               }
-  | Full of { segment_length  : int
-            ; mismatches  : int
-            }
+type 'a segment =
+  { reference_seq_length  : int
+  ; mismatches            : int
+  ; allele_relationships  : 'a
+  }
 
 let allele_distances ~reference ~allele =
   let open DistanceProjection in
   AlleleToRefDistance.apply ~reference ~allele
   |> List.map ~f:(fun (bm, lst) ->
+      (* `Missing : the default state when we have observed 0 projections
+         `Start   : we have observed at least 1 started projection and no not-started
+         `NoStart : we have observed at least 1 not-started projection and no started
+         `Partial : we have observed both. *)
       let final_state = List.fold_left lst ~init:`Missing ~f:(fun state p ->
         match p with
         | B         -> state
@@ -809,12 +808,18 @@ let allele_distances ~reference ~allele =
       in
       match final_state with
       | `Missing
-      | `NoStart        -> MissingFromAllele bm.Boundaries.seq_length
-      | `Start (m, l)   -> Full { segment_length = bm.Boundaries.seq_length
-                                ; mismatches = m }
-      | `Partial (m, l) -> Partial { segment_length = bm.Boundaries.seq_length
-                                   ; mismatches = m
-                                   ; allele_seq_length = l })
+      | `NoStart        -> { reference_seq_length = bm.Boundaries.seq_length
+                           ; mismatches           = 0
+                           ; allele_relationships = Missing
+                           }
+      | `Start (m, l)   -> { reference_seq_length = bm.Boundaries.seq_length
+                           ; mismatches           = m
+                           ; allele_relationships = Full l
+                           }
+      | `Partial (m, l) -> { reference_seq_length = bm.Boundaries.seq_length
+                           ; mismatches           = m
+                           ; allele_relationships = Partial l
+                           })
 
 let split_long_al_els pos = function
   | Start _
@@ -1148,12 +1153,46 @@ module Zip2 = struct
 end (* Zip2 *)
 
 let allele_distances_between ~reference ~allele1 ~allele2 =
+  let open Zip2 in
+  let update_state_of_one zs = function
+    | `Missing,  true   -> `Start (if zs.is_seq then zs.end_pos - zs.start_pos else 0)
+    | `Missing,  false  -> `NoStart
+    | `Start sl, true   -> `Start (if zs.is_seq then sl + zs.end_pos - zs.start_pos else sl)
+    | `Start sl, false  -> `Partial sl (* check that zs.end = zs.start_pos or len 1? *)
+    | `NoStart, true    -> `Partial (if zs.is_seq then zs.end_pos - zs.start_pos else 0)
+    | `NoStart, false   -> `NoStart
+    | `Partial p, _     -> `Partial p
+  in
   Zip2.zip2 ~reference ~allele1 ~allele2
   |> List.map ~f:(fun (bm, slst) ->
-      bm, List.fold_left slst ~init:0 ~f:(fun s st -> s + st.Zip2.mismatches))
+      let (fs1, fs2, mismatches) =
+        List.fold_left slst ~init:(`Missing, `Missing, 0)
+          ~f:(fun (st1, st2, m) zs ->
+                let nst1 = update_state_of_one zs (st1, zs.started1) in
+                let nst2 = update_state_of_one zs (st2, zs.started2) in
+                nst1, nst2, m + zs.mismatches)
+      in
+      { reference_seq_length  = bm.Boundaries.seq_length
+      ; mismatches
+      ; allele_relationships =
+        match (fs1, fs2) with
+        | (`Missing, `Missing)
+        | (`Missing, `NoStart)
+        | (`NoStart, `Missing)
+        | (`NoStart, `NoStart)      -> Missing, Missing
 
-type distance_state =
-  { allele1_length  : int
-  ; allele2_length  : int      (* how much sequence data is present in allele *)
-  ; mismatches      : int
-  }
+        | (`Missing, `Start l)      -> Missing, Full l
+        | (`Missing, `Partial l)    -> Missing, Partial l
+        | (`NoStart, `Start l)      -> Missing, Full l
+        | (`NoStart, `Partial l)    -> Missing, Partial l
+
+        | (`Start l, `Missing)      -> Full l, Missing
+        | (`Start l, `NoStart)      -> Full l, Missing
+        | (`Start l, `Start s)      -> Full l, Full s
+        | (`Start l, `Partial p)    -> Full l, Partial p
+
+        | (`Partial l, `Missing)    -> Partial l, Missing
+        | (`Partial l, `NoStart)    -> Partial l, Missing
+        | (`Partial l, `Start s)    -> Partial l, Full s
+        | (`Partial l, `Partial p)  -> Partial l, Partial p
+      })

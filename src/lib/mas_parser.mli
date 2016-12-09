@@ -140,21 +140,23 @@ val reference_sequence : ?boundary_char:char -> result -> string
 val split_by_boundaries_rev : ' a alignment_element list ->
   'a alignment_element list list
 
-type per_segment =
-  | MissingFromAllele of int
-  | Partial of { segment_length : int
-               ; allele_seq_length : int
-               ; mismatches : int
-               }
-  | Full of { segment_length : int
-            ; mismatches : int
-            }
+type allele_segment_relationship =
+  | Missing
+  | Partial of int    (* sequence length *)
+  | Full of int       (* sequence length, might be > reference length *)
+
+type 'a segment =
+  { reference_seq_length  : int
+  ; mismatches            : int
+  ; allele_relationships  : 'a
+  }
 
 val allele_distances : reference:string alignment_element list ->
-  allele:string alignment_element list -> per_segment list
+  allele:string alignment_element list ->
+    allele_segment_relationship segment list
 
 val allele_distances_between :
   reference:string alignment_element list ->
   allele1:string alignment_element list ->
   allele2:string alignment_element list ->
-    (Boundaries.marker * int) list
+    (allele_segment_relationship * allele_segment_relationship) segment list
