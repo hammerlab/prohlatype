@@ -932,6 +932,7 @@ module Zip2 = struct
     ; started2    : bool
     ; is_seq1     : bool          (* to keep track of an allele's seq length. *)
     ; is_seq2     : bool          (* to keep track of an allele's seq length. *)
+    ; is_boundary : bool
     ; start_pos   : position
     ; end_pos     : position
     ; mismatches  : int           (* to each other *)
@@ -940,6 +941,7 @@ module Zip2 = struct
   let state_of_boundary ~started1 ~started2 b =
     { started1 ; started2 ; mismatches = 0
     ; is_seq1 = false; is_seq2 = false
+    ; is_boundary = true
     ; start_pos = b.pos ; end_pos = b.pos + 1
     }
 
@@ -947,6 +949,7 @@ module Zip2 = struct
     let mismatches = if in_ref then 0 else gap.length in
     { started1 ; started2 ; mismatches
     ; is_seq1 = false; is_seq2 = false
+    ; is_boundary = false
     ; start_pos = gap.gstart
     ; end_pos = gap.gstart + gap.length
     }
@@ -956,6 +959,7 @@ module Zip2 = struct
     let mismatches = if in_ref then 0 else n in
     { started1 ; started2 ; mismatches
     ; is_seq1 = true; is_seq2 = true
+    ; is_boundary = false
     ; start_pos = seq.start
     ; end_pos = seq.start + String.length seq.s
     }
@@ -1172,23 +1176,27 @@ end (* Zip2 *)
 
 let allele_distances_between ~reference ~allele1 ~allele2 =
   let open Zip2 in
-  let update_state_of_one is_seq end_pos start_pos = function
-    | `Missing,  true   -> `Start (if is_seq then end_pos - start_pos else 0)
-    | `Missing,  false  -> `NoStart
-    | `Start sl, true   -> `Start (if is_seq then sl + end_pos - start_pos else sl)
-    | `Start sl, false  -> `Partial sl (* check that end = start_pos or len 1? *)
-    | `NoStart, true    -> `Partial (if is_seq then end_pos - start_pos else 0)
-    | `NoStart, false   -> `NoStart
-    | `Partial p, true  -> `Partial (if is_seq then p + end_pos - start_pos else p)
-    | `Partial p, false -> `Partial p
+  let update_state_of_one { is_boundary; end_pos; start_pos; _} is_seq p =
+    if is_boundary then (* ignore boundaries. *)
+      fst p
+    else
+      match p with
+      | `Missing,  true   -> `Start (if is_seq then end_pos - start_pos else 0)
+      | `Missing,  false  -> `NoStart
+      | `Start sl, true   -> `Start (if is_seq then sl + end_pos - start_pos else sl)
+      | `Start sl, false  -> `Partial sl (* check that end = start_pos or len 1? *)
+      | `NoStart, true    -> `Partial (if is_seq then end_pos - start_pos else 0)
+      | `NoStart, false   -> `NoStart
+      | `Partial p, true  -> `Partial (if is_seq then p + end_pos - start_pos else p)
+      | `Partial p, false -> `Partial p
   in
   Zip2.zip2 ~reference ~allele1 ~allele2
   |> List.map ~f:(fun (bm, slst) ->
       let (fs1, fs2, mismatches) =
         List.fold_left slst ~init:(`Missing, `Missing, 0)
           ~f:(fun (st1, st2, m) zs ->
-                let nst1 = update_state_of_one zs.is_seq1 zs.end_pos zs.start_pos (st1, zs.started1) in
-                let nst2 = update_state_of_one zs.is_seq2 zs.end_pos zs.start_pos (st2, zs.started2) in
+                let nst1 = update_state_of_one zs zs.is_seq1 (st1, zs.started1) in
+                let nst2 = update_state_of_one zs zs.is_seq2 (st2, zs.started2) in
                 nst1, nst2, m + zs.mismatches)
       in
       { reference_seq_length  = bm.Boundaries.seq_length
