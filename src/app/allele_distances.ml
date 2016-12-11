@@ -41,24 +41,25 @@ let options_to_targets_and_candidates alignment_file_opt merge_opt =
                 else
                   cm)
       in
-      Ok (targets, candidates)
+      Ok (nuc.reference, nuc.ref_elems, targets, candidates)
   | Some af, None ->
       let mp = from_file af in
       let targets =
         List.fold_left mp.alt_elems ~init:Amap.empty
           ~f:(fun m (allele, alst) -> Amap.add ~key:allele ~data:alst m)
       in
-      Ok (targets, targets)
+      Ok (mp.reference, mp.ref_elems, targets, targets)
   | None, None  ->
       Error "Either a file or merge argument must be specified"
 
 let allele_distances alignment_file_opt merge_opt mapping =
   options_to_targets_and_candidates alignment_file_opt merge_opt >>=
-    begin fun (t,c) ->
-      Distances.compute t c mapping >>= fun dmap ->
+    begin fun (re,rs,t,c) ->
+      Distances.compute re rs t c mapping >>= fun dmap ->
         printf "allele, closests alleles \n";
         Ok (Distances.Amap.iter dmap ~f:(fun ~key ~data ->
-              printf "%s,%s\n" key (String.concat ~sep:"," data)))
+            let allst = List.map data ~f:(fun (s,d) -> sprintf "%s,%f" s d) in
+            printf "%s,%s\n" key (String.concat ~sep:"," allst)))
   end
   |> function
       | Error e -> eprintf "%s" e; 1
@@ -70,7 +71,8 @@ let () =
   let mapping_flag =
     let d = "How to compute the distance between alleles: " in
     Arg.(value & vflag `Trie
-      [ `Trie,   info ~doc:(d ^ "trie based off of allele names.") ["trie"]
+      [ `Trie,        info ~doc:(d ^ "trie based off of allele names.") ["trie"]
+      ; `AverageExon, info ~doc:(d ^ "smallest shared exon distance.") ["ave-exon"]
       ])
   in
   let allele_distances =
