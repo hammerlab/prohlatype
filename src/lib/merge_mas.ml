@@ -56,10 +56,10 @@ At a lower level:
      message is written, but no action is taken!
 
   6. Finally, for alleles where we only have nucleic data we follow a slight
-    variant of step 4 [diff_alts]. We first construct a trie of the alleles
-    that have both (those from #4 and the reference, which gets mutated into
-    a "diff" form [reference_as_diff]). For a given allele with only nucleic
-    data We use the trie to figure out the closest allele to use for imputation.
+    variant of step 4 [diff_alts]. We first use Distances.compute to find a
+    map of allele to closest substitute (allele where we have genetic data)
+    and what we'll use for imputation.
+
     Once we choose the imputation allele, we take the instructions that we used
     for that allele (the result of [map_instr_to_alignments]) and now add
     the nucleic allele's exons into the [MergeFromNuclear] instructions of
@@ -658,33 +658,22 @@ let init_trie elems =
     parse s >>= fun (_gene, (allele_resolution, suffix_opt)) ->
       Ok (Trie.add allele_resolution suffix_opt trie))
 
-module RMap = Map.Make (struct
-    type t = Nomenclature.resolution * Nomenclature.suffix option
-    let compare = compare
-    end)
-
-let init_trie_and_map elems =
-  let open Nomenclature in
-  list_fold_ok elems ~init:(Trie.empty, RMap.empty)
-    ~f:(fun (trie, mp) (s, seq) ->
-        parse s >>= fun (_gene, (allele_resolution, suffix_opt)) ->
-          Ok ( Trie.add allele_resolution suffix_opt trie
-             , RMap.add (allele_resolution, suffix_opt) seq mp))
-
-let diff_alts ?verbose ~trie ~rmap ~na =
-  let open Nomenclature in
-  list_fold_ok na ~init:([],[]) ~f:(fun (alt_acc, map_acc) (nallele, nuc) ->
-    (* Check that the gene is always the same? *)
-    parse nallele >>= fun (gene, (allele_resolution, _so)) ->
-      let closest_allele_res = Trie.nearest allele_resolution trie in
-      let alg = RMap.find closest_allele_res rmap in
-      let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
-      let name = sprintf "%s (nuc) -> %s (gen)" nallele closest_allele_str in
-      if opt_is_true verbose then printf "Merging %s.\n" name;
-      merge_different_nuc_into_alignment nallele nuc alg >>= fun instr ->
-        let new_alts = align_different ?verbose name instr in
-        Ok ( (nallele, new_alts) :: alt_acc
-           , (nallele, closest_allele_str) :: map_acc))
+let diff_alts ?verbose ~na dmap gmap =
+  let open Distances in
+  list_fold_ok na ~init:([], []) ~f:(fun (alt_acc, map_acc) (nallele, nuc) ->
+    match StringMap.find nallele dmap with
+    | exception Not_found -> error "Couldn't closest allele for %s" nallele
+    | []                  -> error "Empty distance list for %s" nallele
+    | (closest_allele, dist) :: _  ->
+        let name = sprintf "%s (nuc) -> %s (gen) distance: %f" nallele closest_allele dist in
+        if opt_is_true verbose then printf "Merging %s.\n" name;
+        match StringMap.find closest_allele gmap with
+        | exception Not_found -> error "Couldn't find target for merge: %s" name
+        | alg ->
+          merge_different_nuc_into_alignment nallele nuc alg >>= fun instr ->
+          let new_alts = align_different ?verbose name instr in
+          Ok ((nallele, new_alts) :: alt_acc
+            , (nallele, closest_allele) :: map_acc))
 
 (* TODO: Figure out a way around this special case. Maybe when we do our
    own alignment? *)
@@ -726,7 +715,26 @@ let reference_as_diff lst =
           ; genetic = { genetic with sequence = no_sequences genetic.sequence }
           })
 
-let and_check ?verbose prefix =
+module Aset = Set.Make (struct
+  type t = string [@@deriving ord]
+end)
+
+let merge_mp_to_dc_inputs ~gen ~nuc =
+  let candidate_s =
+    List.fold_left gen.alt_elems ~init:Aset.empty
+      ~f:(fun s (allele, alst) -> Aset.add allele s)
+  in
+  (* we want the sequences from _nuc *)
+  List.fold_left nuc.alt_elems
+    ~init:(StringMap.empty, StringMap.singleton nuc.reference nuc.ref_elems)
+    ~f:(fun (tm, cm) (allele, alst) ->
+          StringMap.add ~key:allele ~data:alst tm,
+          if Aset.mem allele candidate_s then
+            StringMap.add ~key:allele ~data:alst cm
+          else
+            cm)
+
+let do_it ?verbose prefix dl =
   align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
     if gen_mp.reference <> nuc_mp.reference then
       error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
@@ -750,17 +758,23 @@ let and_check ?verbose prefix =
             (* Add the same, alleles with both genetic and nucleic data.*)
             same_alts ?verbose instr same >>= fun (alt_inst, alt_als) ->
               let rdiff = reference_as_diff ref_instr in
-              let instr_assoc = (gen_mp.reference, rdiff) :: alt_inst in
-              (* Create a trie and map for lookups *)
-              init_trie_and_map instr_assoc >>= fun (trie, rmap) ->
-                (* Add the alleles with just nucleic data. *)
-                diff_alts ?verbose ~trie ~rmap ~na:just_nuc >>=
-                  fun (diff_alt_lst, diff_map_lst) ->
-                    let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
-                    printf "Finished merging!\n%!";
-                    Ok ({ align_date = gen_mp.align_date
-                        ; reference  = gen_mp.reference
-                        ; ref_elems  = new_ref_elems
-                        ; alt_elems  = alt_als @ diff_alt_lst
-                        } ,
-                        map_lst @ diff_map_lst)
+              let rmap = List.fold_left ((gen_mp.reference, rdiff) :: alt_inst) 
+                ~init:StringMap.empty ~f:(fun m (al,inst) -> StringMap.add al inst m)
+              in
+              (* TODO: Clear up this logic since we're computing distances for
+                 a larger set than necessary. *)
+              let targets, candidates =
+                merge_mp_to_dc_inputs ~gen:gen_mp ~nuc:nuc_mp
+              in
+              Distances.compute nuc_mp.reference nuc_mp.ref_elems
+                  ~targets ~candidates dl >>= fun dmap ->
+                diff_alts ?verbose ~na:just_nuc dmap rmap >>=
+                    fun (diff_alt_lst, diff_map_lst) ->
+                      let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
+                      printf "Finished merging!\n%!";
+                      Ok ({ align_date = gen_mp.align_date
+                          ; reference  = gen_mp.reference
+                          ; ref_elems  = new_ref_elems
+                          ; alt_elems  = alt_als @ diff_alt_lst
+                          } ,
+                          map_lst @ diff_map_lst)

@@ -3,7 +3,7 @@ open Common
 open Util
 
 let to_input prefix = function
-  | `Merge    -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix)
+  | `Merge    -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
   | `Genetic  -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_gen"))
   | `Nuclear  -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
 

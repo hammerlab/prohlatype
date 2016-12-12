@@ -1,4 +1,5 @@
 
+open MoreLabels
 include Nonstd
 module String = Sosa.Native_string
 
@@ -115,3 +116,7 @@ let list_map_consecutives f lst =
     | a :: b :: t -> loop (f a b :: acc) (b :: t)
   in
   loop [] lst
+
+module StringMap = Map.Make (struct
+  type t = string [@@deriving ord]
+end)

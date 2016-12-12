@@ -30,7 +30,7 @@ let against_mp ?merge_assoc mp out =
   end;
   close_out oc
 
-let convert ofile ifile merge_file =
+let convert ofile ifile merge_file distance =
   let open Mas_parser in
   begin match merge_file, ifile with
     | None, None   -> None
@@ -40,7 +40,7 @@ let convert ofile ifile merge_file =
         let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
         Some (against_mp mp out)
     | Some p, _    ->
-        match Merge_mas.and_check p with
+        match Merge_mas.do_it p distance with
         | Error e             -> failwith (sprintf "%s\n" e)
         | Ok (mp, merge_assoc) ->
           let ofiledefault = Filename.(basename p) in
@@ -71,7 +71,7 @@ let () =
       ; `P bug
       ]
     in
-    Term.(const convert $ output_fname_arg $ file_arg $ merge_arg
+    Term.(const convert $ output_fname_arg $ file_arg $ merge_arg $ distance_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval convert with

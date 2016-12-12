@@ -1053,20 +1053,24 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
   }
 
 type input =
-  | AlignmentFile of string      (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
-  | MergeFromPrefix of string     (* Ex. A, B, full path to prefix *)
+  (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
+  | AlignmentFile of string
+  (* Ex. A, B, full path to prefix *)
+  | MergeFromPrefix of (string * Distances.logic)
 
 let input_to_string = function
-  | AlignmentFile path  -> Filename.basename path
-  | MergeFromPrefix prefix_path -> Filename.basename prefix_path ^ "_mgd"
+  | AlignmentFile path        -> Filename.basename path
+  | MergeFromPrefix (pp, dl)  -> sprintf "%s-%s_mgd"
+                                  (Distances.show_logic dl)
+                                  (Filename.basename pp)
 
 let construct_from_file ~join_same_sequence ~remove_reference ?which = function
   | AlignmentFile file ->
       Ok (construct_from_parsed
             ~join_same_sequence ~remove_reference ?which
             (Mas_parser.from_file file))
-  | MergeFromPrefix prefix ->
-      Merge_mas.and_check prefix >>= fun (alignment, merge_map) ->
+  | MergeFromPrefix (prefix, dl) ->
+      Merge_mas.do_it prefix dl >>= fun (alignment, merge_map) ->
         Ok (construct_from_parsed ~merge_map
             ~join_same_sequence ~remove_reference ?which alignment)
 

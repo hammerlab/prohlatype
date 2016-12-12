@@ -4,11 +4,6 @@
 open Util
 open MoreLabels
 
-module Amap = Map.Make (struct
-  type t = string
-  let compare = compare
-end)
-
 module TrieDistances = struct
 
   let init_trie elems =
@@ -17,15 +12,15 @@ module TrieDistances = struct
       parse s >>= fun (_gene, (allele_resolution, suffix_opt)) ->
         Ok (Trie.add allele_resolution suffix_opt trie))
 
-  let f targets candidates =
+  let f ~targets ~candidates =
     let open Nomenclature in
-    let just_candidates = Amap.bindings candidates |> List.map ~f:fst in
+    let just_candidates = StringMap.bindings candidates |> List.map ~f:fst in
     init_trie just_candidates >>= fun trie ->
-      Amap.bindings targets |> list_fold_ok ~init:Amap.empty ~f:(fun m (ta, _) ->
+      StringMap.bindings targets |> list_fold_ok ~init:StringMap.empty ~f:(fun m (ta, _) ->
         parse ta >>= fun (gene, (allele_resolution, suffix_opt)) ->
           let closest_allele_res = Trie.nearest allele_resolution trie in
           let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
-          Ok (Amap.add ~key:ta ~data:[(closest_allele_str, 1.)] m))
+          Ok (StringMap.add ~key:ta ~data:[(closest_allele_str, 1.)] m))
 
 end
 
@@ -56,9 +51,9 @@ module AverageExon = struct
       else
         a +. mismatches)
 
-  let f ref_allele reference targets candidates =
+  let f ref_allele reference ~targets ~candidates =
     let open Mas_parser in
-    Amap.mapi targets ~f:(fun al1 allele1 ->
+    StringMap.mapi targets ~f:(fun al1 allele1 ->
       let dist_to_ref = allele_distances ~reference ~allele:allele1 in
       let ref_mask =
         List.map dist_to_ref ~f:(fun s ->
@@ -72,7 +67,7 @@ module AverageExon = struct
       let dist_init, dist_f = dist ~normalize:true tlen in
       let ref_diff = against_mask ~init:dist_init ~f:dist_f ref_mask in
       let all_distances =
-        Amap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
+        StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
           let dlst =
             Mas_parser.allele_distances_between
               ~reference ~allele1 ~allele2
@@ -92,6 +87,11 @@ module AverageExon = struct
 
 end
 
-let compute ref_allele reference targets candidates = function
-  | `Trie         -> TrieDistances.f targets candidates
-  | `AverageExon  -> Ok (AverageExon.f ref_allele reference targets candidates)
+type logic =
+  | Trie
+  | AverageExon
+  [@@deriving show]
+
+let compute ref_allele reference ~targets ~candidates = function
+  | Trie        -> TrieDistances.f ~targets ~candidates
+  | AverageExon -> Ok (AverageExon.f ref_allele reference ~targets ~candidates)

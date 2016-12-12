@@ -98,7 +98,7 @@ let recent_check arg graph =
   let file =
     match arg.input with
     | Ref_graph.AlignmentFile f -> f
-    | Ref_graph.MergeFromPrefix p -> p ^ "_nuc.txt"
+    | Ref_graph.MergeFromPrefix (p,_) -> p ^ "_nuc.txt"
   in
   if Sys.file_exists file then begin
     let ic = open_in file in
