@@ -139,7 +139,9 @@ let to_filename_and_graph_args ?alignment_file ?merge_file ~distance num_alt_to_
   in
   match alignment_file, merge_file with
   | _, (Some prefix)          ->
-      let base = Filename.basename prefix ^ "_mgd" in
+      let base =
+        sprintf "%s_%s_mgd" (Distances.show_logic distance) (Filename.basename prefix)
+      in
       Ok (to_ofname_and_cache_args base (MergeFromPrefix (prefix, distance)))
   | (Some alignment_file), _  ->
       let base = Filename.basename alignment_file |> Filename.chop_extension in
