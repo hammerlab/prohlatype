@@ -7,6 +7,7 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 eval `opam config env`
 export OPAMYES="true"
 
+opam pin add solvuu-buld https://github.com/solvuu/solvuu-build
 opam pin add biocaml https://github.com/biocaml/biocaml/
 make setup
 
