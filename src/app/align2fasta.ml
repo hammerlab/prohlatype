@@ -43,7 +43,9 @@ let convert ofile ifile merge_file distance =
         match Merge_mas.do_it p distance with
         | Error e             -> failwith (sprintf "%s\n" e)
         | Ok (mp, merge_assoc) ->
-          let ofiledefault = Filename.(basename p) in
+          let ofiledefault =
+            sprintf "%s_%s" Filename.(basename p) (Distances.show_logic distance)
+          in
           let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
           Some (against_mp ~merge_assoc mp out)
   end
