@@ -25,7 +25,7 @@ end) = struct
 
 end
 
-module M1 = Map.Make(struct type t = int let compare = compare end)
+module M1 = Map.Make(struct type t = int [@@deriving ord] end)
 module MOne = MC(struct
   include M1
   let to_key = function
@@ -36,7 +36,7 @@ let compress_one lst =
   MOne.compress lst
   |> List.map ~f:(fun (a, v) -> N.One a, v)
 
-module M2 = Map.Make(struct type t = int * int let compare = compare end)
+module M2 = Map.Make(struct type t = int * int [@@deriving ord] end)
 module MTwo = MC(struct
   include M2
   let to_key = function
@@ -54,7 +54,7 @@ let compress_two lst =
       else
         N.Two (a, b), v)
 
-module M3 = Map.Make(struct type t = int * int * int let compare = compare end)
+module M3 = Map.Make(struct type t = int * int * int [@@deriving ord] end)
 module MThree = MC(struct
   include M3
   let to_key = function
