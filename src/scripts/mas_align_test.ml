@@ -14,7 +14,7 @@ open MoreLabels
 
 let apply_allele a r =
   let open Mas_parser in
-  apply ~reference:r.ref_elems ~allele:(List.assoc a r.alt_elems)
+  allele_sequence ~reference:r.ref_elems ~allele:(List.assoc a r.alt_elems) ()
 
 let test f =
   let r = Mas_parser.from_file f in
@@ -23,8 +23,7 @@ let test f =
   :: List.map r.Mas_parser.alt_elems
       ~f:(fun (a, allele) ->
           printf "testing %s\n" a;
-          a, Mas_parser.apply ~reference ~allele)
-
+          a, Mas_parser.allele_sequence ~reference ~allele ())
 
 let load_fasta f =
   List.map (Fasta.all f) ~f:(fun (hdr, s) ->

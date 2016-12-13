@@ -4,7 +4,7 @@ open Common_options
 
 let construct
   (* input *)
-  alignment_file merge_file
+  alignment_file merge_file distance
   (* output *)
   ofile
   (* graph construction. *) 
@@ -16,8 +16,9 @@ let construct
   let open Cache in
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
-    to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
-      ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference
+    to_filename_and_graph_args ?alignment_file ?merge_file ~distance
+      num_alt_to_add ~allele_list ~allele_regex_list
+      ~join_same_sequence ~remove_reference
   in
   match fname_cargs_result with
   | Error msg ->
@@ -110,7 +111,7 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg
+            $ file_arg $ merge_arg $ distance_flag
             (* output file *)
             $ output_fname_arg
             $ num_alt_arg

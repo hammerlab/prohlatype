@@ -1,7 +1,7 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner extlib biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner extlib biocaml
-TOOLS=mhc2gpdf type align2fasta
-TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test
+TOOLS=mhc2gpdf type align2fasta allele_distances
+TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances
 
 
 .PHONY: default setup clean build tools tests covered_tests
@@ -46,6 +46,12 @@ merged_tests:
 mas_align_test:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts mas_align_test.native
 
+exon_edit_distances:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -package edist -I src/lib/ -I src/scripts exon_edit_distances.native
+
+test_allele_distances:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts test_allele_distances.native
+
 tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)
 
@@ -65,6 +71,9 @@ explore:
 
 align2fasta:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app align2fasta.native
+
+allele_distances:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app allele_distances.native
 
 tools:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)

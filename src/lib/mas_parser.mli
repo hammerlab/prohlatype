@@ -30,37 +30,47 @@ Please see http://hla.alleles.org/terms.html for terms of use.
 
 *)
 
-(** We keep track of all {alignment_elements} with regard to their position,
+(** We keep track of all {alignment_element}'s with regard to their position,
     character by character, in the alignment. *)
 type position = int
 
 (** Elements that describe alignment sequence.
 
     All positions are given reletive to reference. *)
-type 'sr alignment_element =
+type 'sr sequence = { start : position; s : 'sr }
+and gap = { gstart : position; length : int }
+and boundary = { idx : int; pos : position }
+and 'sr alignment_element =
   | Start of position
   (** Start of sequence, contains position and name *)
 
   | End of position
   (** End of a sequence.*)
 
-  | Boundary of { idx : int; pos : position; }
+  | Boundary of boundary
   (** Boundary of count and position.
 
       Exon boundaries are represented in the alignment files with '|', we
       preserve them for downstream tools to strip out. The boundary count
       starts at 0. *)
 
-  | Sequence of { start : position; s : 'sr; }
+  | Sequence of 'sr sequence
   (** Nucleotide sequence of position and sequence. *)
 
-  | Gap of { start : position; length : int; }
+  | Gap of gap
   (** Gap of position and length. *)
 
 val start_position : 'a alignment_element -> position
 
+val end_position : ('a -> int) -> 'a alignment_element -> position
+
 (** [al_el_to_string] converts a alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
+
+val is_sequence : 'a alignment_element -> bool
+val is_gap : 'a alignment_element -> bool
+val is_end : 'a alignment_element -> bool
+val is_start : 'a alignment_element -> bool
 
 (** [parse_align_date] parses an in channel of an alignment file up to the
     alignment date, or returns None if it is not found. *)
@@ -89,10 +99,64 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
-(** [apply reference allele] will convert the reference and allele alignment
-    elements into a string representing the allele sequence. *)
-val apply : reference:string alignment_element list ->
-    allele:string alignment_element list -> string
+module Boundaries : sig
+
+  type marker =
+    { index       : int     (* Which segment? *)
+    ; position    : int     (* Position of the boundary marker. *)
+    ; length      : int     (* Length to next boundary, or 1 + the total
+                               length of the following segment. *)
+    ; seq_length  : int
+    }
+
+  val marker_to_string : marker -> string
+
+  val before_start : marker -> bool
+
+  val to_boundary : offset:int -> marker -> 'a alignment_element
+
+  val bounded : string alignment_element list -> (marker * string) list
+
+end
+
+val allele_sequences : reference:string alignment_element list ->
+  allele:string alignment_element list -> (Boundaries.marker * string) list
+
+(** [allele_sequence boundary_character reference allele ()] will convert the
+    reference and allele alignment elements into a string representing the
+    allele sequence.
+
+    @param boundary_char if specified will be inserted into the resulting
+    sequence.*)
+val allele_sequence : ?boundary_char:char -> reference:string alignment_element list ->
+    allele:string alignment_element list -> unit -> string
+
+val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
+  string alignment_element list -> string
 
 (** Will return the sequence of the reference. *)
-val reference_sequence : result -> string
+val reference_sequence : ?boundary_char:char -> result -> string
+
+val split_by_boundaries_rev : ' a alignment_element list ->
+  'a alignment_element list list
+
+type allele_segment_relationship =
+  | Missing
+  | Partial of int    (* sequence length *)
+  | Full of int       (* sequence length, might be > reference length *)
+
+type 'a segment =
+  { reference_seq_length  : int
+  ; mismatches            : int
+  ; allele_relationships  : 'a
+  }
+
+val allele_distances : reference:string alignment_element list ->
+  allele:string alignment_element list ->
+    allele_segment_relationship segment list
+
+val allele_distances_between :
+  reference:string alignment_element list ->
+  allele1:string alignment_element list ->
+  allele2:string alignment_element list ->
+    (allele_segment_relationship * allele_segment_relationship) segment list

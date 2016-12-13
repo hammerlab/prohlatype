@@ -130,6 +130,7 @@ let type_
   (* Graph construction args. *)
   alignment_file
   merge_file
+  distance
     num_alt_to_add allele_list allele_regex_list not_join_same_seq remove_reference
   (* Index *)
     k
@@ -142,98 +143,54 @@ let type_
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
   let join_same_sequence = not not_join_same_seq in
-  let fname_cargs_result =
-    Common_options.to_filename_and_graph_args
-      ?alignment_file ?merge_file num_alt_to_add
-      ~allele_list ~allele_regex_list
-        ~join_same_sequence
-        ~remove_reference
-  in
-  match fname_cargs_result with
-  | Error msg ->
-      eprintf "%s" msg;
-      1
-  | Ok (_option_based_fname, cargs) ->
-      let open Cache in
-      let open Ref_graph in
-      let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
-      let new_as =
-        match as_stat with
-        | `MismatchesList   -> `MismatchesList
-        | `Mismatches       -> `Mismatches
-        | `Likelihood       -> `Likelihood likelihood_error
-        | `LogLikelihood    -> `LogLikelihood likelihood_error
-        | `PhredLikelihood  -> `PhredLikelihood
-      in
-      let res =
-        match fastq_file_lst with
-        | []              -> invalid_argf "Cmdliner lied!"
-        | [fastq_file]    ->
-            let check_rc = not dont_check_rc in
-            Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
-        | [read1; read2] ->
-            Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
-        | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-      in
-      let () =
-        match res with
-        | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
-                                                 report_mismatches ~print_top g amap
-        | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
-                                                 report_mismatches_list ~print_top g amap
-        | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                                 report_likelihood ?reduce_resolution
-                                                   ?bucket ~print_top "likelihood" g amap
-        | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                                 report_likelihood ?reduce_resolution
-                                                   ?bucket ~print_top "loglikelihood" g amap
-        | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                                 report_likelihood ?reduce_resolution
-                                                   ?bucket ~print_top "phredlihood" g amap
-      in
-      0
-
-
-       (*    let amap =
-              if do_not_normalize then amap else
-                let sum = Alleles.Map.fold_wa ~f:(+.) ~init:0. amap in
-                Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
-            in
-            report_likelihood g amap do_not_bucket print_top
-        | `LogLikelihood  ->
-            let emap =
-              if do_not_normalize then
-                amap
-              else
-                let sum = Alleles.Map.fold_wa ~init:0. ~f:(fun s v -> v +. s) amap in
-                Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
-            in
-            report_likelihood g emap do_not_bucket print_top
-      end
-  | `PhredLikelihood ->
-      begin
-        let open Core_kernel.Std in
-        let init, f = Path_inference.multiple_phred ~verbose ~multi_pos ?early_stop g idx in
-        let amap =
-          Fastq.fold ?number_of_reads fastq_file ~init ~f:(fun amap i ->
-            let q = i.Biocaml_unix.Fastq.qualities in
-            match Fastq.phred_probabilities q with
-            | Error e -> if verbose then printf "error\t%s: %s" q (Error.to_string_hum e); amap
-            | Ok pro  ->
-                let seq = i.Biocaml_unix.Fastq.sequence in
-                match f amap (seq, pro) with
-                | Error e -> if verbose then printf "error\t%s: %s\n" seq e; amap
-                | Ok a    -> if verbose then printf "matched\t%s \n" seq; a)
+  Common_options.to_filename_and_graph_args
+    ?alignment_file ?merge_file ~distance num_alt_to_add
+    ~allele_list ~allele_regex_list
+    ~join_same_sequence ~remove_reference
+    >>= begin fun (_option_based_fname, cargs) ->
+        let open Cache in
+        let open Ref_graph in
+        let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
+        let new_as =
+          match as_stat with
+          | `MismatchesList   -> `MismatchesList
+          | `Mismatches       -> `Mismatches
+          | `Likelihood       -> `Likelihood likelihood_error
+          | `LogLikelihood    -> `LogLikelihood likelihood_error
+          | `PhredLikelihood  -> `PhredLikelihood
         in
-        let amap =
-          if do_not_normalize then amap else
-            let sum = Alleles.Map.fold_wa ~f:(+.) ~init:0. amap in
-            Alleles.Map.map_wa ~f:(fun v -> v /. sum) amap
+        let res =
+          match fastq_file_lst with
+          | []              -> invalid_argf "Cmdliner lied!"
+          | [fastq_file]    ->
+              let check_rc = not dont_check_rc in
+              Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
+          | [read1; read2] ->
+              Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
+          | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
         in
-        report_likelihood g amap do_not_bucket print_top
-      end
+        let () =
+          match res with
+          | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
+                                                  report_mismatches ~print_top g amap
+          | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
+                                                  report_mismatches_list ~print_top g amap
+          | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
+                                                  report_likelihood ?reduce_resolution
+                                                    ?bucket ~print_top "likelihood" g amap
+          | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
+                                                  report_likelihood ?reduce_resolution
+                                                    ?bucket ~print_top "loglikelihood" g amap
+          | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
+                                                  report_likelihood ?reduce_resolution
+                                                    ?bucket ~print_top "phredlihood" g amap
+        in
+        Ok ()
+  end
+  |> function
+      | Error msg -> eprintf "%s" msg; 1
+      | Ok ()     -> 0
 
-*)
 let () =
   let open Cmdliner in
   let open Common_options in
@@ -333,7 +290,7 @@ let () =
     in
     Term.(const type_
             (* Graph construction args *)
-            $ file_arg $ merge_arg
+            $ file_arg $ merge_arg $ distance_flag
             $ num_alt_arg $ allele_arg $ allele_regex_arg
               $ do_not_join_same_sequence_paths_flag
               $ remove_reference_flag

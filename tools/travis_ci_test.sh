@@ -7,6 +7,7 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 eval `opam config env`
 export OPAMYES="true"
 
+opam pin add biocaml https://github.com/biocaml/biocaml.git
 make setup
 
 # for test coverage
@@ -51,6 +52,10 @@ case "$TEST" in
   adjA)
     echo testing adjcent finding for A_gen only
     ./adjacents.native A_gen
+    ;;
+  alleleDiffA)
+    echo testing allele differences between A_gen
+    time ./test_allele_distances.native A_gen > A_sim.csv
     ;;
   *)
     ;;

@@ -108,7 +108,7 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
+let to_filename_and_graph_args ?alignment_file ?merge_file ~distance num_alt_to_add
   ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference =
   let open Ref_graph in
   let to_ofname_and_cache_args base input =
@@ -139,8 +139,10 @@ let to_filename_and_graph_args ?alignment_file ?merge_file num_alt_to_add
   in
   match alignment_file, merge_file with
   | _, (Some prefix)          ->
-      let base = Filename.basename prefix ^ "_mgd" in
-      Ok (to_ofname_and_cache_args base (MergeFromPrefix prefix))
+      let base =
+        sprintf "%s_%s_mgd" (Distances.show_logic distance) (Filename.basename prefix)
+      in
+      Ok (to_ofname_and_cache_args base (MergeFromPrefix (prefix, distance)))
   | (Some alignment_file), _  ->
       let base = Filename.basename alignment_file |> Filename.chop_extension in
       Ok (to_ofname_and_cache_args base (AlignmentFile alignment_file))
@@ -170,3 +172,28 @@ let num_reads_arg =
   let doc = "Number of reads to take from the front of the FASTA file" in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["reads"])
 
+let distance_flag =
+  let open Distances in
+  let d = "How to compute the distance between alleles: " in
+  Arg.(value & vflag Trie
+    [ Trie,        info ~doc:(d ^ "trie based off of allele names.") ["trie"]
+    ; AverageExon, info ~doc:(d ^ "smallest shared exon distance.") ["ave-exon"]
+    ])
+
+let to_distance_targets_and_candidates alignment_file_opt merge_opt =
+  let open Mas_parser in
+  match alignment_file_opt, merge_opt with
+  | _, (Some prefix) ->
+      let gen = from_file (prefix ^ "_gen.txt") in
+      let nuc = from_file (prefix ^ "_nuc.txt") in
+      let t, c = Merge_mas.merge_mp_to_dc_inputs ~gen ~nuc in
+      Ok (nuc.reference, nuc.ref_elems, t, c)
+  | Some af, None ->
+      let mp = from_file af in
+      let targets =
+        List.fold_left mp.alt_elems ~init:StringMap.empty
+          ~f:(fun m (allele, alst) -> StringMap.add ~key:allele ~data:alst m)
+      in
+      Ok (mp.reference, mp.ref_elems, targets, targets)
+  | None, None  ->
+      Error "Either a file or merge argument must be specified"

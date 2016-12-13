@@ -251,7 +251,6 @@ let reference_starts_and_ends lst =
     start, e, l
 
 let add_reference_elems g aindex allele ref_elems =
-  let open Mas_parser in
   let open Nodes in
   let bse () = A.Set.singleton aindex allele in
   let add_start start_pos lst =
@@ -273,21 +272,22 @@ let add_reference_elems g aindex allele ref_elems =
     `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
-      match state, e with
-      | []            , Start start_pos               -> add_start start_pos state
-      | `Ended _ :: _ , Start start_pos               -> add_start start_pos state
-      | []            , Boundary _
-      | `Ended _ :: _ , Boundary _                    -> state        (* ignore *)
-      | []            , al_el
-      | `Ended _ :: _ , al_el                         ->
-          inv_argf "Unexpected %s after end for %s"
-            (al_el_to_string al_el) allele
-      | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
-      | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
-      | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
-      | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
-      | `Started (_, _) :: tl,     Start sp             ->
-          inv_argf "Unexpected second start at %d for %s" sp allele)
+    let open Mas_parser in
+    match state, e with
+    | []            , Start start_pos               -> add_start start_pos state
+    | `Ended _ :: _ , Start start_pos               -> add_start start_pos state
+    | []            , Boundary _
+    | `Ended _ :: _ , Boundary _                    -> state        (* ignore *)
+    | []            , al_el
+    | `Ended _ :: _ , al_el                         ->
+        inv_argf "Unexpected %s after end for %s"
+          (al_el_to_string al_el) allele
+    | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
+    | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
+    | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
+    | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
+    | `Started (_, _) :: tl,     Start sp             ->
+        inv_argf "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
       | `Started _ -> inv_argf "Still have a Started in %s ref" allele
       | `Ended (start, end_) -> { start; end_})
@@ -315,8 +315,8 @@ let test_consecutive_elements =
   | `Sequence close_pos ->
       begin function
       | End end_pos :: tl when end_pos = close_pos        -> `End (close_pos, tl)
-      | Gap { start; length} :: tl when start = close_pos ->
-          let new_close = start + length in
+      | Gap { gstart; length} :: tl when gstart = close_pos ->
+          let new_close = gstart + length in
           `Continue (None, (`Gap new_close), tl)
       | Start _ :: _                                      ->
           invalid_argf "Another start after a Sequence close %d." close_pos
@@ -517,12 +517,12 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           else (* close_pos > ref_pos *)
             rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
               ~new_node tl
-    | (Gap { start; length} :: tl) as l ->
-        if start > ref_pos then begin
+    | (Gap { gstart; length} :: tl) as l ->
+        if gstart > ref_pos then begin
           add_allele_edge prev ref_node;
           main_loop state ~prev ~next:ref_node l
         end else
-          let close_pos = start + length in
+          let close_pos = gstart + length in
           if close_pos <= ref_pos then
             ref_gap_loop state ~prev ref_node ref_pos tl
           else (* close_pos > ref_pos *)
@@ -576,14 +576,14 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
             let close_pos = start + String.length s in
             close_position_loop ~prev ~next ~allele_node:new_node state (`Sequence close_pos) t
         end
-    | Gap {start; length} :: t ->
-        let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
+    | Gap {gstart; length} :: t ->
+        let open_res = split_in ~prev ~next ~visit:add_allele_edge gstart in begin
         match open_res with
         | `AfterLast prev         ->
             solo_loop state next t
         | `InGap (prev, next, _)
         | `AtNext (prev, next)    ->
-            let close_pos = start + length in
+            let close_pos = gstart + length in
             close_position_loop ~prev ~next ~allele_node:prev state (`Gap close_pos) t
         end
   in
@@ -1053,20 +1053,24 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
   }
 
 type input =
-  | AlignmentFile of string      (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
-  | MergeFromPrefix of string     (* Ex. A, B, full path to prefix *)
+  (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
+  | AlignmentFile of string
+  (* Ex. A, B, full path to prefix *)
+  | MergeFromPrefix of (string * Distances.logic)
 
 let input_to_string = function
-  | AlignmentFile path  -> Filename.basename path
-  | MergeFromPrefix prefix_path -> Filename.basename prefix_path ^ "_mgd"
+  | AlignmentFile path        -> Filename.basename path
+  | MergeFromPrefix (pp, dl)  -> sprintf "%s-%s_mgd"
+                                  (Distances.show_logic dl)
+                                  (Filename.basename pp)
 
 let construct_from_file ~join_same_sequence ~remove_reference ?which = function
   | AlignmentFile file ->
       Ok (construct_from_parsed
             ~join_same_sequence ~remove_reference ?which
             (Mas_parser.from_file file))
-  | MergeFromPrefix prefix ->
-      Merge_mas.and_check prefix >>= fun (alignment, merge_map) ->
+  | MergeFromPrefix (prefix, dl) ->
+      Merge_mas.do_it prefix dl >>= fun (alignment, merge_map) ->
         Ok (construct_from_parsed ~merge_map
             ~join_same_sequence ~remove_reference ?which alignment)
 

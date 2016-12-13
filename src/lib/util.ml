@@ -1,4 +1,5 @@
 
+open MoreLabels
 include Nonstd
 module String = Sosa.Native_string
 
@@ -45,22 +46,34 @@ let index_string s index =
 
 let _pair_of_empty_strings = String.empty, String.empty
 (** Compare two strings and display vertical bars for mismatches. *)
-let manual_comp_display ?(labels=_pair_of_empty_strings)s1 s2 =
+let manual_comp_display ?width ?(labels=_pair_of_empty_strings) s1 s2 =
   let msm = ref 0 in
-  let cs = String.mapi s1 ~f:(fun index c1 ->
-    match String.get s2 ~index with
-    | None                 -> incr msm; 'X'
-    | Some c2 when c1 = c2 -> ' '
-    | Some _               -> incr msm; '|')
+  let mismatch_string =
+    String.mapi s1 ~f:(fun index c1 ->
+      match String.get s2 ~index with
+      | None                 -> incr msm; 'X'
+      | Some c2 when c1 = c2 -> ' '
+      | Some _ (*c1 <> c2*)  -> incr msm; '|')
   in
   let ms = string_of_int !msm in
   let n  = String.length ms in
-  let t,b = labels in
-  let label_length = max (max (String.length t) (String.length b)) n in
-  let tp = sprintf "%-*s" label_length t in
-  let bp = sprintf "%-*s" label_length b in
-  sprintf "%s%s\n%*s%s\n%s%s"
-    tp s1 label_length ms cs bp s2
+  let top, bottom = labels in
+  let label_length = max (max (String.length top) (String.length bottom)) n in
+  let top_row = sprintf "%-*s%s" label_length top s1 in
+  let mid_row = sprintf "%*s%s" label_length ms mismatch_string in
+  let bot_row = sprintf "%-*s%s" label_length bottom s2 in
+  let index = Option.value width ~default:max_int in
+  let rec loop acc t m b =
+    let t, tl = String.split_at t ~index in
+    let m, ml = String.split_at m ~index in
+    let b, bl = String.split_at b ~index in
+    let nacc = (sprintf "%s\n%s\n%s" t m b) :: acc in
+    if String.is_empty tl && String.is_empty ml && String.is_empty bl then
+      String.concat ~sep:"\n" (List.rev nacc)
+    else
+      loop nacc tl ml bl
+  in
+  loop [] top_row mid_row bot_row
 
 let insert_chars ?(every=120) ?(token=';') ics s =
   String.to_character_list s
@@ -95,3 +108,15 @@ let opt_is_true = function
   | Some true  -> true
   | Some false -> false
   | None       -> false
+
+let list_map_consecutives f lst =
+  let rec loop acc = function
+    | []
+    | _ :: []     -> List.rev acc
+    | a :: b :: t -> loop (f a b :: acc) (b :: t)
+  in
+  loop [] lst
+
+module StringMap = Map.Make (struct
+  type t = string [@@deriving ord]
+end)
