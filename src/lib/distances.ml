@@ -82,7 +82,7 @@ module AverageExon = struct
           | Some dist -> (al2, dist) :: acc)
       in
       let with_reference = (ref_allele, ref_diff) :: all_distances in
-      List.sort with_reference ~cmp:(fun (a1,d1) (a2,d2) -> compare d1 d2))
+      List.sort with_reference ~cmp:(fun (_,d1) (_,(d2:float)) -> compare d1 d2))
 
 end
 
