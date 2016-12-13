@@ -2,7 +2,6 @@
     multiple alignment files. *)
 
 open Util
-open MoreLabels
 
 module TrieDistances = struct
 

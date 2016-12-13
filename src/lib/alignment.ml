@@ -17,7 +17,7 @@ let rec merge_splst l1 l2 =
         h2 :: merge_splst l1 t2
 
 module NodeMapQueue = struct
-  include MoreLabels.Map.Make
+  include Map.Make
     (struct
 
       open Ref_graph

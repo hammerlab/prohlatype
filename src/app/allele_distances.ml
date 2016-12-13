@@ -1,6 +1,5 @@
 (** Compute distances between MHC alleles. *)
 open Util
-open MoreLabels
 
 let app_name = "allele_distances"
 

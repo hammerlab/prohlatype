@@ -1,5 +1,5 @@
 
-open MoreLabels
+include MoreLabels
 include Nonstd
 module String = Sosa.Native_string
 

@@ -1,7 +1,6 @@
 
 open Util
 open Graph
-open MoreLabels
 module A = Alleles
 
 (* TODO:
@@ -1292,13 +1291,13 @@ let search_through_gap g node ~pos =
       end else
         Ok (root_allele, all_edges, rootn) *)
 
-module NodeSet = MoreLabels.Set.Make
+module NodeSet = Set.Make
   (struct
     type t = Nodes.t
     let compare = Nodes.compare
   end)
 
-module EdgeNodeSet = MoreLabels.Set.Make
+module EdgeNodeSet = Set.Make
   (struct
     (* edges first since these edges point into the respective node. *)
     type t = Edges.t * Nodes.t
