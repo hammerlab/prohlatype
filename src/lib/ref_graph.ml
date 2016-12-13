@@ -1291,11 +1291,7 @@ let search_through_gap g node ~pos =
       end else
         Ok (root_allele, all_edges, rootn) *)
 
-module NodeSet = Set.Make
-  (struct
-    type t = Nodes.t
-    let compare = Nodes.compare
-  end)
+module NodeSet = Set.Make (Nodes)
 
 module EdgeNodeSet = Set.Make
   (struct
