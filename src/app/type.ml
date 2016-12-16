@@ -22,7 +22,7 @@ let output_values_assoc contents to_string aindex assoc =
       (to_string w)
       (Alleles.Set.cardinal a)
       (insert_chars ['\t'; '\t'; '\n']
-        (Alleles.Set.to_human_readable aindex ~max_length:60 ~complement:`No a)))
+        (Alleles.Set.to_human_readable aindex ~max_length:120 ~complement:`No a)))
 
 let default_error_fname = "typing_errors.log"
 
