@@ -783,7 +783,6 @@ module JoinSameSequencePaths = struct
     loop min_int q []
 
   let same_debug = ref false
-  let same_debug2 = ref false
 
   let rec add_node_successors_only g v q =
     let open Nodes in
@@ -932,7 +931,7 @@ module JoinSameSequencePaths = struct
       else
         let nq, amp = at_min_position q in
         let next_pos = peak_min_position nq in
-        if !same_debug2 then
+        if !same_debug then
           eprintf "popping [%s] peaking at %d\n"
             (List.map ~f:(fun (p, s) -> sprintf "(%d,%s)" p s) amp
              |> String.concat ~sep:";")
