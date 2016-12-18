@@ -246,7 +246,7 @@ module Align (Ag : Alignment_config) = struct
         | Some sq -> assign_loop sq
         | None    -> `Stopped mis_map
     in
-    Ref_graph.adjacents_at gt ~pos >>= begin fun (edge_node_set, seen_alleles, _) ->
+    Ref_graph.adjacents_at gt ~pos >>= begin fun {edge_node_set; seen_alleles} ->
       (* TODO. For now assume that everything that isn't seen has a full mismatch,
         this isn't strictly true since the Start of that allele could be within
         the range of the search str.
