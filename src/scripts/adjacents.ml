@@ -40,8 +40,8 @@ let test_file file =
    default: A_nuc *)
 let () =
   let n = Array.length Sys.argv in
-  if !Sys.interactive then
-    ()
-  else
+  if !Sys.interactive then () else begin
+    Ref_graph.adjacents_debug_ref := true;
     let file = if n <= 1 then "A_nuc" else Sys.argv.(1) in
     test_file file
+  end

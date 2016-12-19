@@ -1108,7 +1108,7 @@ module Adjacents = struct
 
   (* A general combination of [up] and [down] that is a parameterized
      search that should tell us when to stop recursing. *)
-  let up_and ?max_height ~init ~if_new ~down g ~pos node =
+  let up_and ?max_height ?prev_edge_node_set ~init ~if_new ~down g ~pos node =
     let rec up i adjacents acc ~new_nodes cur =
       match max_height with
       | Some h when i >= h  -> adjacents, acc, NodeSet.union new_nodes cur
@@ -1123,7 +1123,11 @@ module Adjacents = struct
               up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
     in
     let wrap_if_new e a = snd (if_new e a) in
-    let adj_strt, nacc = G.fold_pred_e wrap_if_new g node (EdgeNodeSet.empty, init) in
+    let initial_edge_set =
+      Option.value prev_edge_node_set
+        ~default:EdgeNodeSet.empty
+    in
+    let adj_strt, nacc = G.fold_pred_e wrap_if_new g node (initial_edge_set, init) in
     let new_nodes = G.fold_pred NodeSet.add g node NodeSet.empty in
     let cur = NodeSet.singleton node in
     up 0 adj_strt nacc ~new_nodes cur
@@ -1154,7 +1158,7 @@ module Adjacents = struct
      the stopping condition. The advantage is that we check less frequently and
      probably when it matters: when we increase the level of how far back in
      the graph we look for adjacents. *)
-  let check_by_levels ?max_height ~f ~stop ~init g node =
+  let check_by_levels ?max_height ?prev_edge_node_set ~f ~stop ~init g node =
     let if_new (pn, e, n) ((adjacents, acc) as s) =
       if !adjacents_debug_ref then
         eprintf "if_new check of %s -> %s\n"
@@ -1175,7 +1179,11 @@ module Adjacents = struct
       else
         `Continue state
     in
-    up_and ?max_height ~init ~if_new ~down g ~pos node
+    let init =
+      Option.value_map prev_edge_node_set ~default:init
+        ~f:(EdgeNodeSet.fold ~init ~f:(fun (e, n) a -> f e n a))
+    in
+    up_and ?max_height ?prev_edge_node_set ~init ~if_new ~down g ~pos node
 
 end (* Adjacents *)
 
@@ -1193,17 +1201,29 @@ let alleles_with_data_private ?include_ends aindex bounds ~pos =
   es
 
 (* At or past *)
-let adjacents_at_private ?max_edge_debug_length ?(max_height=10000) g aindex offset posarr bounds ~pos =
+let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
+  ?prev_edge_node_set ~pos g aindex offset posarr bounds =
   let max_length = max_edge_debug_length in
+  let all_edges = alleles_with_data_private ~include_ends:false aindex bounds ~pos in
+  let prev_edge_node_set =
+    Option.map prev_edge_node_set ~f:(EdgeNodeSet.fold ~init:EdgeNodeSet.empty
+        ~f:(fun ((edge, node) as en) nes ->
+            if (Nodes.position node > pos || Nodes.inside pos node)
+            && not A.Set.(is_empty (inter all_edges edge)) then
+              EdgeNodeSet.add en nes
+            else
+              nes))
+  in
   find_node_at_private ~pos g aindex offset posarr >>= fun rootn ->
-    let all_edges = alleles_with_data_private ~include_ends:false aindex bounds ~pos in
     let stop es_acc =
       if es_acc = all_edges then true else
         begin
           if !adjacents_debug_ref then
-            eprintf "Still missing\n1:%s\n"
+            eprintf "Still missing\n1:%s\n2:%s\n"
               (A.Set.to_human_readable ?max_length aindex
-                (A.Set.diff all_edges es_acc));
+                (A.Set.diff all_edges es_acc))
+              (A.Set.to_human_readable ?max_length aindex
+                (A.Set.diff es_acc all_edges));
             false
         end
     in
@@ -1218,16 +1238,20 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000) g aindex off
         A.Set.union edge edge_set
     in
     let init = A.Set.init aindex in
-    Ok ( Adjacents.check_by_levels ~max_height ~init ~stop g rootn ~f)
+    Ok ( Adjacents.check_by_levels ?prev_edge_node_set ~max_height ~init ~stop g rootn ~f)
 
 let create_adjacents_arr g aindex offset posarr bounds =
   let st, en = range_pr bounds in
   let len = en - st + 1 in
+  let pensr = ref None in
   Array.init len ~f:(fun i ->
     let pos = offset + i in
-    match adjacents_at_private g aindex offset posarr bounds ~pos with
+    if true then eprintf "pos:%d\n%!" pos;
+    match adjacents_at_private ?prev_edge_node_set:!pensr g aindex offset posarr bounds ~pos with
     | Error _ -> None
-    | Ok (edge_node_set, seen_alleles, _) -> Some {edge_node_set; seen_alleles})
+    | Ok (edge_node_set, seen_alleles, _) ->
+        pensr := Some edge_node_set;
+        Some {edge_node_set; seen_alleles})
 
 type construct_which_args =
   | NumberOfAlts of int
