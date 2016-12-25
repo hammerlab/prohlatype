@@ -1,5 +1,5 @@
 
-open MoreLabels
+include MoreLabels
 include Nonstd
 module String = Sosa.Native_string
 
@@ -74,6 +74,12 @@ let manual_comp_display ?width ?(labels=_pair_of_empty_strings) s1 s2 =
       loop nacc tl ml bl
   in
   loop [] top_row mid_row bot_row
+
+let mismatch_indices s1 s2 =
+  String.fold2_exn s1 s2 ~init:(0, []) ~f:(fun (i, a) c1 c2 ->
+    if c1 = c2 then (i + 1, a) else (i + 1, i :: a))
+  |> snd
+  |> List.rev
 
 let insert_chars ?(every=120) ?(token=';') ics s =
   String.to_character_list s

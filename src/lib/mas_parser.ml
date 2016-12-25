@@ -345,13 +345,13 @@ let from_in_channel ic =
     let reversed = loop_header Header in
     let ref_elems = normalized_seq reversed.ref_ps in
     let alt_elems =
-      Hashtbl.fold (fun all ps acc ->
+      Hashtbl.fold ~init:[] ~f:(fun ~key:all ~data:ps acc ->
           if ps.sequence = [] then begin
             printf "Dropping empty sequence: %s\n" ps.allele;
             acc
           end else
             (all, normalized_seq ps) :: acc)
-        reversed.alg_htbl []
+        reversed.alg_htbl
     in
     { align_date
     ; reference = reversed.ref

@@ -3,20 +3,23 @@
 open Util
 open Common
 
+let adjacents_at_test { Ref_graph.g; aindex; offset; posarr; bounds} ~pos =
+  Ref_graph.adjacents_at_private g aindex offset posarr bounds ~pos
+
 let test_graph file g pos =
   let open Ref_graph in
-  match adjacents_at g ~pos with
+  match adjacents_at_test g ~pos with
   | Error e ->
       printf "Couldn't find adjacents at %d for %s because of %s" pos file e
-  | Ok (ens, es, stack) ->
-      print_endline (edge_node_set_to_table g.aindex ens)
+  | Ok (edge_node_set, _, _) ->
+      print_endline (EdgeNodeSet.to_table g.aindex edge_node_set)
 
 let test_graph_fail file g pos =
   let open Ref_graph in
-  match adjacents_at g ~pos with
+  match adjacents_at_test g ~pos with
   | Error e ->
       invalid_argf "Couldn't find adjacents at %d for %s because of %s" pos file e
-  | Ok (ens, es, stack) ->
+  | Ok _ ->
       ()
 
 let test_file file =
@@ -37,8 +40,8 @@ let test_file file =
    default: A_nuc *)
 let () =
   let n = Array.length Sys.argv in
-  if !Sys.interactive then
-    ()
-  else
+  if !Sys.interactive then () else begin
+    Ref_graph.adjacents_debug_ref := true;
     let file = if n <= 1 then "A_nuc" else Sys.argv.(1) in
     test_file file
+  end

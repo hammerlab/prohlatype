@@ -10,7 +10,6 @@
 *)
 open Util
 open Common
-open MoreLabels
 
 let apply_allele a r =
   let open Mas_parser in
@@ -30,22 +29,21 @@ let load_fasta f =
     let allele = List.nth_exn (String.split ~on:(`Character ' ') hdr) 1 in
     allele, s)
 
-module Sm = Map.Make (struct type t = string let compare = compare end)
-
 let merge ?(known=[||]) mp fa =
   let to_map =
-    List.fold_left ~init:Sm.empty ~f:(fun m (key,data) -> Sm.add ~key ~data m)
+    List.fold_left ~init:StringMap.empty
+      ~f:(fun m (key,data) -> StringMap.add ~key ~data m)
   in
   let ms = to_map mp in
   let fs = to_map fa in
   let mgd =
-    Sm.merge ms fs ~f:(fun allele align_seq_o fasta_o ->
+    StringMap.merge ms fs ~f:(fun allele align_seq_o fasta_o ->
       match (align_seq_o, fasta_o) with
       | None, None      -> assert false
       | None, Some f    -> Some (`JustFasta f)
       | Some a, None    -> Some (`JustAlign a)
       | Some a, Some f  -> Some (if a = f then `Same a else `Diff (a, f)))
-    |> Sm.bindings
+    |> StringMap.bindings
   in
   let just_fasta, rest = List.partition_map mgd
     ~f:(function | (a, `JustFasta s) -> `Fst (a,s) | r -> `Snd r)

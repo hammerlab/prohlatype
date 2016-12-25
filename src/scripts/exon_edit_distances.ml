@@ -50,11 +50,6 @@ end)
 let canonical a1 a2 =
   min a1 a2 , max a1 a2
 
-module SSet = Set.Make (struct
-  type t = string
-  let compare (s1 :string) s2 = compare s1 s2
-end)
-
 let compute_distance_map ?(verbose=false) ?versus dist mp =
   let open Mas_parser in
   let against_allele allele exons map =
@@ -73,9 +68,9 @@ let compute_distance_map ?(verbose=false) ?versus dist mp =
   | None    ->
       loop DMap.empty nuc_seqs
   | Some vs ->
-      let targets = List.filter nuc_seqs ~f:(fun (a, _) -> SSet.mem a vs) in
+      let targets = List.filter nuc_seqs ~f:(fun (a, _) -> StringSet.mem a vs) in
       List.fold_left nuc_seqs ~init:DMap.empty ~f:(fun map (allele, exon) ->
-        if SSet.mem allele vs then (* Assume self-similarity *)
+        if StringSet.mem allele vs then (* Assume self-similarity *)
           map
         else
           against_allele allele exon map targets)
@@ -99,8 +94,8 @@ let () =
     else
       let open Mas_parser in
       let versus =
-        List.fold_left gen_mp.alt_elems ~init:(SSet.singleton gen_mp.reference)
-          ~f:(fun s (allele, _) -> SSet.add allele s)
+        List.fold_left gen_mp.alt_elems ~init:(StringSet.singleton gen_mp.reference)
+          ~f:(fun s (allele, _) -> StringSet.add allele s)
       in
       let dmap = time (fun () ->
           compute_distance_map ~verbose:true (List.map2 ~f:dist) ~versus

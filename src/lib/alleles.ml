@@ -5,22 +5,17 @@ type allele = string [@@deriving eq, ord]
 let compare = compare_allele
 let equal = equal_allele
 
-module SMap = Map.Make (struct
-    type t = string
-    let compare = compare_allele
-  end)
-
 type index =
   { size      : int
-  ; to_index  : int SMap.t
+  ; to_index  : int StringMap.t
   ; to_allele : string array
   }
 
 let index lst =
   let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
   let size, to_index =
-    Array.fold_left to_allele ~init:(0, SMap.empty )
-      ~f:(fun (i, sm) a -> (i + 1, SMap.add a i sm))
+    Array.fold_left to_allele ~init:(0, StringMap.empty )
+      ~f:(fun (i, sm) a -> (i + 1, StringMap.add a i sm))
   in
   { size; to_index; to_allele }
 
@@ -135,7 +130,7 @@ module Set = struct
     BitSet.create (size - 1)
 
   let set { to_index; _ } s allele =
-    BitSet.set s (SMap.find allele to_index)
+    BitSet.set s (StringMap.find allele to_index)
 
   let unite ~into from = BitSet.unite into from
 
@@ -145,7 +140,7 @@ module Set = struct
     s
 
   let clear { to_index; _ } s allele =
-    BitSet.unset s (SMap.find allele to_index)
+    BitSet.unset s (StringMap.find allele to_index)
 
   let min_elt { size; to_allele; _ } s =
     let rec loop idx =
@@ -156,7 +151,7 @@ module Set = struct
     loop 0
 
   let is_set { to_index; _ } s allele =
-    BitSet.is_set s (SMap.find allele to_index)
+    BitSet.is_set s (StringMap.find allele to_index)
 
   let fold { to_allele; } ~f ~init s =
     Enum.fold (fun i a -> f a to_allele.(i)) init (BitSet.enum s)
@@ -240,7 +235,7 @@ module Map = struct
     Array.init size ~f:(fun i -> f to_allele.(i))
 
   let get { to_index; _} m a =
-    m.(SMap.find a to_index)
+    m.(StringMap.find a to_index)
 
   let cardinal = Array.length
 
@@ -248,7 +243,7 @@ module Map = struct
     Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
 
   let update_spec { to_index; _} m a f =
-    let j = SMap.find a to_index in
+    let j = StringMap.find a to_index in
     m.(j) <- f m.(j)
 
   let update_all s m f =

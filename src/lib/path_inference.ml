@@ -401,6 +401,9 @@ module Phred_lhd = Multiple (struct
     match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
     | CR.Error e -> Error (CE.to_string_hum e)
     | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr)
+    (*match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
+    | CR.Error e -> Error (CE.to_string_hum e)
+    | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr) *)
 
   let map ?check_rc ?early_stop g idx th =
     let open Alignment in

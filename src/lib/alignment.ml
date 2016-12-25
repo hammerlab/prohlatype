@@ -1,28 +1,29 @@
 
 open Util
 
-let rec merge_splst l1 l2 =
-  match l1, l2 with
-  | [], [] -> []
-  | [], ls -> ls
-  | ls, [] -> ls
-  | h1 :: t1, h2 :: t2 ->
-      let o1 = fst h1 in
-      let o2 = fst h2 in
-      if o1 = o2 then
-        (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge_splst t1 t2
-      else if o1 < o2 then
-        h1 :: merge_splst t1 l2
-      else
-        h2 :: merge_splst l1 t2
+module NodeMapQueue(V : sig
+  type a
+  val merge : a -> a -> a
+end) : sig
 
-module NodeMapQueue = struct
-  include MoreLabels.Map.Make
+  type 'a t
+
+  type key = Ref_graph.Nodes.t
+
+  val at_min_position : V.a t -> V.a t * (key * V.a) list
+
+  val add_to_queue : V.a t -> key -> V.a -> V.a t
+
+  val empty : V.a t
+
+  val is_empty : V.a t -> bool
+
+end = struct
+
+  include Map.Make
     (struct
-
-      open Ref_graph
-      type t =  Nodes.t
-      let compare = Nodes.compare_by_position_first
+      type t = Ref_graph.Nodes.t
+      let compare = Ref_graph.Nodes.compare_by_position_first
     end)
 
   let at_min_position q =
@@ -44,9 +45,30 @@ module NodeMapQueue = struct
   let add_to_queue q key data =
     match find key q with
     | exception Not_found -> add ~key ~data q
-    | offlst -> add ~key ~data:(merge_splst offlst data) q
+    | offlst -> add ~key ~data:(V.merge offlst data) q
 
-  end
+  end (* NodeMapQueue *)
+
+module Nmq = NodeMapQueue (struct
+
+  type a = (int * Alleles.Set.t) list
+
+  let rec merge l1 l2 =
+    match l1, l2 with
+    | [], [] -> []
+    | [], ls -> ls
+    | ls, [] -> ls
+    | h1 :: t1, h2 :: t2 ->
+        let o1 = fst h1 in
+        let o2 = fst h2 in
+        if o1 = o2 then
+          (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge t1 t2
+        else if o1 < o2 then
+          h1 :: merge t1 l2
+        else
+          h2 :: merge l1 t2
+end)
+
 
 (* How we measure the quality of alignment over a segment, a segment refers to
    a contiguous sequence, whether in the node of our graph, or to other
@@ -205,7 +227,7 @@ module Align (Ag : Alignment_config) = struct
           (vertex_name node)
           (search_pos_edge_lst_to_string gt.aindex nsplst)
       end;
-      NodeMapQueue.add_to_queue queue node nsplst
+      Nmq.add_to_queue queue node nsplst
     (* Match a sequence, and add successor nodes to the queue for processing.
        Return an optional current queue and stop-state, where None mean stop. *)
     and match_and_add_succ state_opt ((node, splst) as ns) =
@@ -238,15 +260,15 @@ module Align (Ag : Alignment_config) = struct
                 | _  -> (s, add_successors queue (node, acc))))
     in
     let rec assign_loop (stop, q) =
-      if NodeMapQueue.is_empty q then
+      if Nmq.is_empty q then
         `Finished mis_map
       else
-        let nq, elst = NodeMapQueue.at_min_position q in
+        let nq, elst = Nmq.at_min_position q in
         match List.fold_left elst ~init:(Some (stop, nq)) ~f:match_and_add_succ with
         | Some sq -> assign_loop sq
         | None    -> `Stopped mis_map
     in
-    Ref_graph.adjacents_at gt ~pos >>= begin fun (edge_node_set, seen_alleles, _) ->
+    Ref_graph.adjacents_at gt ~pos >>= begin fun {edge_node_set; seen_alleles} ->
       (* TODO. For now assume that everything that isn't seen has a full mismatch,
         this isn't strictly true since the Start of that allele could be within
         the range of the search str.
@@ -263,7 +285,7 @@ module Align (Ag : Alignment_config) = struct
           Ok (`Stopped mis_map)
       | Some stop ->
           let startq_opt =
-            EdgeNodeSet.fold edge_node_set ~init:(Some (stop, NodeMapQueue.empty))
+            EdgeNodeSet.fold edge_node_set ~init:(Some (stop, Nmq.empty))
               (* Since the adjacents aren't necessarily at pos we have extra
                 bookkeeping at the start of the recursion. *)
               ~f:(fun (edge, node) state_opt ->
@@ -433,7 +455,7 @@ module PhredLikelihood_config = struct
     let cs = String.get_exn s p in
     let er = Array.get a p in
     if cs = c then
-      { m with sum_llhd = m.sum_llhd +. log (1. -. er) }
+      { m with sum_llhd = m.sum_llhd +. log1p (-.er) }
     else
       { mismatches = m.mismatches +. 1.
       ; sum_llhd = m.sum_llhd +. log er
