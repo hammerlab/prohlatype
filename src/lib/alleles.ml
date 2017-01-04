@@ -142,14 +142,6 @@ module Set = struct
   let clear { to_index; _ } s allele =
     BitSet.unset s (StringMap.find allele to_index)
 
-  let min_elt { size; to_allele; _ } s =
-    let rec loop idx =
-      if idx = size then raise Not_found else
-        if BitSet.is_set s idx then to_allele.(idx)
-        else loop (idx + 1)
-    in
-    loop 0
-
   let is_set { to_index; _ } s allele =
     BitSet.is_set s (StringMap.find allele to_index)
 
@@ -178,12 +170,6 @@ module Set = struct
 
   let is_empty t =
     BitSet.count t = 0
-
-  let any t =
-    BitSet.count t > 0
-
-  let all {size; _} t =
-    BitSet.count t = size
 
   let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
@@ -239,27 +225,6 @@ module Map = struct
 
   let cardinal = Array.length
 
-  (* let map { to_allele; _} s f =
-    Array.mapi to_allele ~f:(fun i a -> f (BitSet.is_set s i) a)*)
-
-  let update_spec { to_index; _} m a f =
-    let j = StringMap.find a to_index in
-    m.(j) <- f m.(j)
-
-  let update_all s m f =
-    for j = 0 to Array.length m - 1 do
-      m.(j) <- f (BitSet.is_set s j) m.(j)
-    done
-
-  let update_from s ~f m =
-    Enum.iter (fun i -> m.(i) <- f m.(i)) (BitSet.enum s)
-
-  let update_from_and_fold s ~f ~init m =
-    Enum.fold (fun i acc ->         (* Accumulator in 2nd position. *)
-      let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
-      m.(i) <- nm;
-      nacc) init (BitSet.enum s)
-
   let update2 ~source ~dest f =
     for i = 0 to Array.length source - 1 do
       dest.(i) <- f source.(i) dest.(i)
@@ -291,7 +256,7 @@ module Map = struct
   let values_assoc index amap =
     Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
       let a = index.to_allele.(i) in
-      try 
+      try
         let s = List.assoc v asc in
         (* TODO: make these modules recursive to allow maps to see inside sets *)
         Set.set index s a;
@@ -300,6 +265,10 @@ module Map = struct
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd
 
-  let to_array amap = amap
+  let update_from_and_fold s ~f ~init m =
+    Enum.fold (fun i acc ->         (* Accumulator in 2nd position. *)
+      let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
+      m.(i) <- nm;
+      nacc) init (BitSet.enum s)
 
 end (* Map *)
