@@ -173,15 +173,15 @@ let number_of_alleles g =
 (** [starts_by_position g] returns an associated list of alignment_position and
     an a set of alleles that start at that position. *)
 let starts_by_position { aindex; bounds; _ } =
-  Alleles.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
+  A.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
       let pos = fst sep.start in
       try
         let bts = List.assoc pos asc in
-        Alleles.Set.set aindex bts allele;
+        A.Set.set aindex bts allele;
         asc
       with Not_found ->
-        (pos, Alleles.Set.singleton aindex allele) :: asc))
+        (pos, A.Set.singleton aindex allele) :: asc))
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
@@ -190,18 +190,18 @@ let create_compressed_starts t =
   let ng = G.copy t.g in
   let open Nodes in
   List.iter start_asc ~f:(fun (pos, allele_set) ->
-    if Alleles.Set.cardinal allele_set > 1 then begin
-      let a_str = Alleles.Set.to_string ~compress:true t.aindex allele_set in
+    if A.Set.cardinal allele_set > 1 then begin
+      let a_str = A.Set.to_string ~compress:true t.aindex allele_set in
       let node = G.V.create (S (pos, a_str)) in
       G.add_vertex ng node;
-      Alleles.Set.iter t.aindex allele_set ~f:(fun allele ->
+      A.Set.iter t.aindex allele_set ~f:(fun allele ->
         let rm = S (pos, allele) in
         G.iter_succ (fun sv ->
           try
             let eset = G.find_edge ng node sv |> G.E.label in
-            Alleles.Set.set t.aindex eset allele
+            A.Set.set t.aindex eset allele
           with Not_found ->
-            let bt = Alleles.Set.singleton t.aindex allele in
+            let bt = A.Set.singleton t.aindex allele in
             G.add_edge_e ng (G.E.create node bt sv)) ng rm;
         G.remove_vertex ng rm)
     end);
