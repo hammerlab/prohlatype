@@ -219,7 +219,7 @@ module Align (Ag : Alignment_config) = struct
       let nsplst =
         List.filter_map splst ~f:(fun (sp, ep) ->
           let i = Alleles.Set.inter edge ep in
-          if Alleles.Set.is_empty i then None else Some (sp, i))
+          if Alleles.Set.cardinal i = 0 then None else Some (sp, i))
       in
       if !debug_ref then begin
         eprintf "Considering adding to queue %s -> %s -> %s\n%!"

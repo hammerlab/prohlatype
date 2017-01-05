@@ -67,8 +67,6 @@ module Set : sig
   (** [complement index t] returns a set of all the alleles not in [t].*)
   val complement : index -> t -> t
 
-  val is_empty : t -> bool
-
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : ?compress:bool -> index -> t -> string
 

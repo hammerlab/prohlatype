@@ -168,9 +168,6 @@ module Set = struct
     for i = 0 to size - 1 do BitSet.toggle c i done;
     c
 
-  let is_empty t =
-    BitSet.count t = 0
-
   let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev

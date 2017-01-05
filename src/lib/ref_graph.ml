@@ -953,10 +953,14 @@ module RemoveSequence = struct
       |> A.index
     in
     let nbounds = A.Map.init naindex (A.Map.get aindex bounds) in
-    let newe oe =
-      let ne = A.Set.init naindex in
-      A.Set.iter aindex (fun a -> if a <> seq then A.Set.set naindex ne a) oe;
-      ne
+    let without_seq oe =
+      (* If just this edge = seq to be removed *)
+      if A.Set.cardinal oe = 1 && A.Set.is_set aindex oe seq then
+        None
+      else
+        let ne = A.Set.init naindex in
+        A.Set.iter aindex (fun a -> if a <> seq then A.Set.set naindex ne a) oe;
+        Some ne
     in
     (* As is the norm, new_graph is mutated. *)
     let new_graph = G.create ~size:(A.Map.cardinal nbounds) () in
@@ -967,21 +971,21 @@ module RemoveSequence = struct
         let nq, me = NodeQueue.at_min_position q in
         List.fold_left me ~init:nq ~f:(fun queue node ->
           let nq = G.fold_succ_e (fun (p, e, sn) queue ->
-            let ne = newe e in
-            if A.Set.is_empty ne then
-              queue
-            else begin
-              match sn with
-              | S _ -> invalid_argf "pointing back at a start %s while remove %s"
-                          (vertex_name sn) seq
-              | E _ -> G.add_vertex new_graph sn;
-                       G.add_edge_e new_graph (p, ne, sn);
-                       queue
-              | B _
-              | N _ -> G.add_vertex new_graph sn;
-                       G.add_edge_e new_graph (p, ne, sn);
-                       NodeQueue.add sn queue
-            end) g node queue
+            match without_seq e with
+            | None    -> queue   (* don't add anything *)
+            | Some ne ->
+                begin
+                  match sn with
+                  | S _ -> invalid_argf "pointing back at a start %s while remove %s"
+                              (vertex_name sn) seq
+                  | E _ -> G.add_vertex new_graph sn;
+                          G.add_edge_e new_graph (p, ne, sn);
+                          queue
+                  | B _
+                  | N _ -> G.add_vertex new_graph sn;
+                          G.add_edge_e new_graph (p, ne, sn);
+                          NodeQueue.add sn queue
+                end) g node queue
           in
           nq)
         |> loop
@@ -1209,7 +1213,8 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
     Option.map prev_edge_node_set ~f:(EdgeNodeSet.fold ~init:EdgeNodeSet.empty
         ~f:(fun ((edge, node) as en) nes ->
             if (Nodes.position node > pos || Nodes.inside pos node)
-            && not A.Set.(is_empty (inter all_edges edge)) then
+            (* Can be optimized with an non-empty intersect method *)
+            && A.Set.(cardinal (inter all_edges edge)) > 0 then
               EdgeNodeSet.add en nes
             else
               nes))
