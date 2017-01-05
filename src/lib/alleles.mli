@@ -28,14 +28,14 @@ module Set : sig
 
   (** [set index t allele] will make sure that [allele] is
       in [t], specifically [is_set index t allele] will be [true]. *)
-  val set : index -> t -> allele -> unit
+  val set : index -> t -> allele -> t
 
   val unite : into:t -> t -> unit
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
       [false]. *)
-  val clear : index -> t -> allele -> unit
+  val clear : index -> t -> allele -> t
 
   (** [is_set index t allele] is [allele] in [t]. *)
   val is_set : index -> t -> allele -> bool

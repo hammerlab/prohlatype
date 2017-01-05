@@ -177,11 +177,21 @@ let starts_by_position { aindex; bounds; _ } =
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
       let pos = fst sep.start in
       try
-        let bts = List.assoc pos asc in
-        A.Set.set aindex bts allele;
-        asc
+        let bts, rest = remove_and_assoc pos asc in
+        (pos, A.Set.set aindex bts allele) :: rest
       with Not_found ->
         (pos, A.Set.singleton aindex allele) :: asc))
+
+let add_allele_edge g index pv nv allele =
+  let new_edge =
+    try
+      let eset = G.find_edge g pv nv |> G.E.label in
+      G.remove_edge g pv nv;
+      G.E.create pv (A.Set.set index eset allele) nv
+    with Not_found ->
+      G.E.create pv (A.Set.singleton index allele) nv
+  in
+  G.add_edge_e g new_edge
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
@@ -196,13 +206,7 @@ let create_compressed_starts t =
       G.add_vertex ng node;
       A.Set.iter t.aindex allele_set ~f:(fun allele ->
         let rm = S (pos, allele) in
-        G.iter_succ (fun sv ->
-          try
-            let eset = G.find_edge ng node sv |> G.E.label in
-            A.Set.set t.aindex eset allele
-          with Not_found ->
-            let bt = A.Set.singleton t.aindex allele in
-            G.add_edge_e ng (G.E.create node bt sv)) ng rm;
+        G.iter_succ (fun sv -> add_allele_edge ng t.aindex node sv allele) ng rm;
         G.remove_vertex ng rm)
     end);
   { t with g = ng }
@@ -389,6 +393,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
   in
+  let add_allele_edge pv nv = add_allele_edge g aindex pv nv allele in
   let do_nothing _ _ = () in
   let advance_until ~visit ~prev ~next pos =
     let rec forward node msg =
@@ -427,8 +432,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
+      let s_inter = A.Set.clear aindex s_inter allele in
       G.add_edge_e g (G.E.create v1 s_inter v2);
-      A.Set.clear aindex s_inter allele;
       List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
       (v1, v2)
     in
@@ -440,14 +445,6 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | `AfterLast _ as al -> al
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
-  in
-  let add_allele_edge pv nv =
-    try
-      let eset = G.find_edge g pv nv |> G.E.label in
-      A.Set.set aindex eset allele
-    with Not_found ->
-      let bt = A.Set.singleton aindex allele in
-      G.add_edge_e g (G.E.create pv bt nv)
   in
   let rec advance_until_boundary ~visit ~prev ~next pos idx =
     let rec forward node msg =
@@ -958,8 +955,8 @@ module RemoveSequence = struct
       if A.Set.cardinal oe = 1 && A.Set.is_set aindex oe seq then
         None
       else
-        let ne = A.Set.init naindex in
-        A.Set.iter aindex (fun a -> if a <> seq then A.Set.set naindex ne a) oe;
+        let ne = A.Set.fold aindex oe ~init:(A.Set.init naindex)
+                  ~f:(fun ne a -> if a <> seq then A.Set.set naindex ne a else ne) in
         Some ne
     in
     (* As is the norm, new_graph is mutated. *)
@@ -1196,13 +1193,12 @@ let within ?(include_ends=true) pos sep =
     ((include_ends && pos <= sep.end_) || pos < sep.end_)
 
 let alleles_with_data_private ?include_ends aindex bounds ~pos =
-  let es = A.Set.init aindex in
-  A.Map.iter aindex bounds ~f:(fun sep_lst allele ->
-    List.iter sep_lst ~f:(fun sep ->
+  A.Map.fold aindex bounds ~init:(A.Set.init aindex) ~f:(fun es sep_lst allele ->
+    List.fold_left sep_lst ~init:es ~f:(fun es sep ->
       if within ?include_ends pos sep then
         A.Set.set aindex es allele
-      (* No need to clear! *)));
-  es
+      else
+        es))
 
 (* At or past *)
 let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)

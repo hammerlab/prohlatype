@@ -130,17 +130,18 @@ module Set = struct
     BitSet.create (size - 1)
 
   let set { to_index; _ } s allele =
-    BitSet.set s (StringMap.find allele to_index)
+    BitSet.set s (StringMap.find allele to_index);
+    s
 
   let unite ~into from = BitSet.unite into from
 
   let singleton index allele =
     let s = init index in
-    set index s allele;
-    s
+    set index s allele
 
   let clear { to_index; _ } s allele =
-    BitSet.unset s (StringMap.find allele to_index)
+    BitSet.unset s (StringMap.find allele to_index);
+    s
 
   let is_set { to_index; _ } s allele =
     BitSet.is_set s (StringMap.find allele to_index)
@@ -254,10 +255,9 @@ module Map = struct
     Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
       let a = index.to_allele.(i) in
       try
-        let s = List.assoc v asc in
+        let s, rest = remove_and_assoc v asc in
         (* TODO: make these modules recursive to allow maps to see inside sets *)
-        Set.set index s a;
-        (i + 1, asc)
+        (i + 1, (v, Set.set index s a) :: rest)
       with Not_found ->
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd

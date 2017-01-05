@@ -95,7 +95,7 @@ let report_likelihood ?reduce_resolution ?bucket ~print_top contents g amap =
                 let arr = Array.init n (fun _ -> Alleles.Set.init g.aindex) in
                 Alleles.Map.iter g.aindex amap ~f:(fun v allele ->
                   let index = if v = e then n - 1 else truncate ((v -. s) /. d) in
-                  Alleles.Set.set g.aindex arr.(index) allele);
+                  arr.(index) <- Alleles.Set.set g.aindex arr.(index) allele);
                 Array.mapi ~f:(fun i set -> s +. d *. (float i), set) arr
                 |> Array.to_list
           end
