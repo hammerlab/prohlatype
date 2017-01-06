@@ -1,5 +1,7 @@
 
 open Util
+module BitSet = Batteries.BitSet
+module Enum = Batteries.Enum
 
 type allele = string [@@deriving eq, ord]
 let compare = compare_allele
@@ -144,10 +146,10 @@ module Set = struct
     s
 
   let is_set { to_index; _ } s allele =
-    BitSet.is_set s (StringMap.find allele to_index)
+    BitSet.mem s (StringMap.find allele to_index)
 
   let fold { to_allele; } ~f ~init s =
-    Enum.fold (fun i a -> f a to_allele.(i)) init (BitSet.enum s)
+    Enum.fold (fun a i -> f a to_allele.(i)) init (BitSet.enum s)
 
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
@@ -156,7 +158,7 @@ module Set = struct
 
   let empty = BitSet.empty
   let compare = BitSet.compare
-  let equals = BitSet.equals
+  let equals = BitSet.equal
 
   let union = BitSet.union
 
@@ -177,7 +179,7 @@ module Set = struct
 
   let complement_string ?(compress=false) ?prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
-        ~f:(fun (i, acc) a -> if BitSet.is_set s i
+        ~f:(fun (i, acc) a -> if BitSet.mem s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
@@ -263,7 +265,7 @@ module Map = struct
     |> snd
 
   let update_from_and_fold s ~f ~init m =
-    Enum.fold (fun i acc ->         (* Accumulator in 2nd position. *)
+    Enum.fold (fun acc i ->
       let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
       m.(i) <- nm;
       nacc) init (BitSet.enum s)
