@@ -1247,7 +1247,6 @@ let create_adjacents_arr g aindex offset posarr bounds =
   let pensr = ref None in
   Array.init len ~f:(fun i ->
     let pos = offset + i in
-    if true then eprintf "pos:%d\n%!" pos;
     match adjacents_at_private ?prev_edge_node_set:!pensr g aindex offset posarr bounds ~pos with
     | Error _ -> None
     | Ok (edge_node_set, seen_alleles, _) ->
