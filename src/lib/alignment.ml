@@ -62,6 +62,7 @@ module Nmq = NodeMapQueue (struct
         let o1 = fst h1 in
         let o2 = fst h2 in
         if o1 = o2 then
+          (* These sets should have no intersect: union can be made faster! *)
           (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge t1 t2
         else if o1 < o2 then
           h1 :: merge t1 l2
