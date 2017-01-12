@@ -102,6 +102,7 @@ module MSet : sig
   val of_set : Set.t -> t
   val complement : index -> t -> t
   val cardinal : t -> int
+  val inter_set : t -> Set.t -> t
   val union_separate : t -> t -> t
   val to_human_readable : ?compress:bool -> ?max_length:int ->
     ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string

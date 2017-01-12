@@ -224,7 +224,7 @@ module MSet = struct
   let complement {size; _} lst =
     List.map lst ~f:BitSet.of_list
     |> List.reduce  ~f:BitSet.union
-    |> begin function
+    |> function
         | None   -> []
         | Some b ->
             let d = size - 1 in
@@ -237,7 +237,9 @@ module MSet = struct
                 loop (i :: acc) (i + 1)
             in
             loop [] 0
-        end
+
+  let inter_set t s =
+    List.map t ~f:(List.filter ~f:(BitSet.mem s))
 
   let rec cardinal = function
     | []     -> 0

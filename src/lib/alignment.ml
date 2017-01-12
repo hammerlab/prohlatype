@@ -2,7 +2,7 @@
 open Util
 
 module AllelesSetOffsetLists = struct
-  type a = (int * Alleles.Set.t) list
+  type a = (int * Alleles.MSet.t) list
 
   let rec merge l1 l2 =
     match l1, l2 with
@@ -14,7 +14,7 @@ module AllelesSetOffsetLists = struct
         let o2 = fst h2 in
         if o1 = o2 then
           (* These sets should have no intersect: union can be made faster! *)
-          (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge t1 t2
+          (o1, Alleles.MSet.union_separate (snd h1) (snd h2)) :: merge t1 t2
         else if o1 < o2 then
           h1 :: merge t1 l2
         else
@@ -152,7 +152,7 @@ let debug_ref = ref false
 
 let search_pos_edge_lst_to_string aindex l =
   List.map l ~f:(fun (o, e) -> sprintf "%d, %s" o
-    (Alleles.Set.to_human_readable ~compress:true aindex e))
+    (Alleles.MSet.to_human_readable ~compress:true aindex e))
   |> String.concat ~sep:";"
   |> sprintf "[%s]"
 
@@ -195,10 +195,10 @@ module Align (Ag : Alignment_config) = struct
           (Ag.to_string sa)
           search_pos
           (Ag.aligned_to_string aligned)
-          (Alleles.Set.to_human_readable ~max_length:20000 gt.aindex edge_set)
+          (Alleles.MSet.to_human_readable ~max_length:20000 gt.aindex edge_set)
           (Option.value ~default:"---" (Option.map node ~f:Nodes.vertex_name));
 
-      Alleles.Map.update_from_and_fold edge_set mis_map ~init:(Some stop)
+      Alleles.Map.update_from_and_fold_mset edge_set mis_map ~init:(Some stop)
         ~f:(fun stop_opt current ->
               match stop_opt with
               | None      -> current, None
@@ -219,8 +219,8 @@ module Align (Ag : Alignment_config) = struct
     and add_edge_node splst (_, edge, node) queue =
       let nsplst =
         List.filter_map splst ~f:(fun (sp, ep) ->
-          let i = Alleles.Set.inter edge ep in
-          if Alleles.Set.cardinal i = 0 then None else Some (sp, i))
+          let i = Alleles.MSet.inter_set ep edge in
+          if Alleles.MSet.cardinal i = 0 then None else Some (sp, i))
       in
       if !debug_ref then begin
         eprintf "Considering adding to queue %s -> %s -> %s\n%!"
@@ -275,8 +275,9 @@ module Align (Ag : Alignment_config) = struct
         the range of the search str.
         - One approach would be to add the other starts, to the adjacents results.  *)
       let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
+      let notseenm = Alleles.MSet.of_set not_seen in
       let mismatch_whole_read = Ag.mismatches search_str_length in
-      let assigned_not_seen = assign not_seen ~search_pos:0 Ag.stop_init mismatch_whole_read in
+      let assigned_not_seen = assign notseenm ~search_pos:0 Ag.stop_init mismatch_whole_read in
       match assigned_not_seen with
       | None ->
           (* This is also a weird case where we may stop aligning because of the
@@ -291,7 +292,8 @@ module Align (Ag : Alignment_config) = struct
                 bookkeeping at the start of the recursion. *)
               ~f:(fun (edge, node) state_opt ->
                     Option.bind state_opt ~f:(fun (stop, queue) ->
-                      let assign_start = assign ~node edge ~search_pos:0 stop in
+                      let medge = Alleles.MSet.of_set edge in
+                      let assign_start = assign ~node medge ~search_pos:0 stop in
                       match node with
                       | S _              ->
                           invalid_argf "Asked to compute mismatches at %s, not a sequence node"
@@ -302,10 +304,10 @@ module Align (Ag : Alignment_config) = struct
                       | B (p, _)         ->
                           let dist = p - pos in
                           if dist <= 0 then
-                            Some (stop, add_successors queue (node, [0, edge]))
+                            Some (stop, add_successors queue (node, [0, medge]))
                           else if dist < search_str_length then begin
                             assign_start (Ag.mismatches dist)
-                            |> Option.map ~f:(fun s -> (s, add_successors queue (node, [dist, edge])))
+                            |> Option.map ~f:(fun s -> (s, add_successors queue (node, [dist, medge])))
                           end else begin
                             assign_start (Ag.mismatches search_str_length)
                             |> Option.map ~f:(fun s -> (s, queue (* Nothing left to match. *)))
@@ -319,7 +321,7 @@ module Align (Ag : Alignment_config) = struct
                                 |> Option.map ~f:(fun s -> (s, queue))
                             | GoOn (mismatches, search_pos)  ->
                                 assign_start mismatches
-                                |> Option.map ~f:(fun s -> (s, add_successors queue (node, [search_pos, edge])))
+                                |> Option.map ~f:(fun s -> (s, add_successors queue (node, [search_pos, medge])))
                           in
                           let dist = p - pos in
                           if dist <= 0 then
