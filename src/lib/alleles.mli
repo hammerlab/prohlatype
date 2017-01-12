@@ -96,6 +96,18 @@ module Set : sig
 
 end (* Set *)
 
+module MSet : sig
+
+  type t
+  val of_set : Set.t -> t
+  val complement : index -> t -> t
+  val cardinal : t -> int
+  val union_separate : t -> t -> t
+  val to_human_readable : ?compress:bool -> ?max_length:int ->
+    ?complement:[ `No | `Prefix of string | `Yes] -> index -> t -> string
+
+end
+
 (** Maps over indexed alleles. *)
 module Map : sig
 
@@ -150,4 +162,5 @@ module Map : sig
       elements of [map].*)
   val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 
+  val update_from_and_fold_mset : MSet.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 end (* Map *)

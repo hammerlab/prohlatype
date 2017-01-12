@@ -210,6 +210,53 @@ module Set = struct
 
 end (* Set *)
 
+module MSet = struct
+
+  (* The order of the indices should be sorted! *)
+  type t = int list list
+
+  let of_set s =
+    BitSet.enum s
+    |> Enum.fold (fun acc i -> i :: acc) []
+    |> List.rev
+    |> fun a -> a :: []
+
+  let complement {size; _} lst =
+    List.map lst ~f:BitSet.of_list
+    |> List.reduce  ~f:BitSet.union
+    |> begin function
+        | None   -> []
+        | Some b ->
+            let d = size - 1 in
+            let rec loop acc i =
+              if i > d then
+                [ List.rev acc ]
+              else if BitSet.mem b i then
+                loop acc i
+              else
+                loop (i :: acc) (i + 1)
+            in
+            loop [] 0
+        end
+
+  let rec cardinal = function
+    | []     -> 0
+    | l :: t -> List.length l + cardinal t
+
+  let union_separate l1 l2 =
+    l1 @ l2
+
+  let to_set { size; _} l =
+    let s = BitSet.create (size - 1) in
+    List.iter l ~f:(List.iter ~f:(BitSet.set s));
+    s
+
+  let to_human_readable ?compress ?max_length ?complement i t =
+    let s = to_set i t in
+    Set.to_human_readable ?compress ?max_length ?complement i s
+
+end (* MSet *)
+
 module Map = struct
 
   type 'a t = 'a array
@@ -269,5 +316,12 @@ module Map = struct
       let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
       m.(i) <- nm;
       nacc) init (BitSet.enum s)
+
+  let update_from_and_fold_mset s ~f ~init m =
+    List.fold_left s ~init ~f:(fun acc a ->
+      List.fold_left a ~init:acc ~f:(fun acc i ->
+        let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
+        m.(i) <- nm;
+        nacc))
 
 end (* Map *)
