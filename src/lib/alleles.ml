@@ -213,37 +213,42 @@ end (* Set *)
 module MSet = struct
 
   (* The order of the indices should be sorted! *)
-  type t = int list list
+  type t = int list list [@@deriving show]
 
   let of_set s =
     BitSet.enum s
-    |> Enum.fold (fun acc i -> i :: acc) []
-    |> List.rev
+    |> BatList.of_enum
     |> fun a -> a :: []
 
-  let complement {size; _} lst =
-    List.map lst ~f:BitSet.of_list
-    |> List.reduce  ~f:BitSet.union
-    |> function
-        | None   -> []
-        | Some b ->
-            let d = size - 1 in
-            let rec loop acc i =
-              if i > d then
-                [ List.rev acc ]
-              else if BitSet.mem b i then
-                loop acc i
-              else
-                loop (i :: acc) (i + 1)
-            in
-            loop [] 0
+  let complement {size; _} =
+    function
+    | []
+    | [[]] -> [ List.init (size - 1) ~f:(fun i -> i)]
+    | lst  ->
+        List.map lst ~f:(BitSet.of_list)
+        |> List.reduce ~f:BitSet.union
+        |> function
+            | None   -> []
+            | Some b ->
+                let d = size - 1 in
+                let rec loop acc i =
+                  if i > d then
+                    [ List.rev acc ]
+                  else if BitSet.mem b i then
+                    loop acc i
+                  else
+                    loop (i :: acc) (i + 1)
+                in
+                loop [] 0
 
   let inter_set t s =
-    List.map t ~f:(List.filter ~f:(BitSet.mem s))
+    List.filter_map t ~f:(fun l ->
+      match List.filter ~f:(BitSet.mem s) l with
+      | [] -> None
+      | l  -> Some l)
 
-  let rec cardinal = function
-    | []     -> 0
-    | l :: t -> List.length l + cardinal t
+  let cardinal l =
+    List.fold_left l ~init:0 ~f:(fun a l -> a + List.length l)
 
   let union_separate l1 l2 =
     l1 @ l2
