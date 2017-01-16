@@ -129,7 +129,7 @@ module Set = struct
   type t = BitSet.t
 
   let init {size; _} =
-    BitSet.create (size - 1)
+    BitSet.create size
 
   let set { to_index; _ } s allele =
     BitSet.set s (StringMap.find allele to_index);
