@@ -27,6 +27,14 @@ let encode ?(pos=0) ?len ?(ext=0) s =
   done;
   !r
 
+let encode_long ?(pos=0) ?len ?(ext=0L) s =
+  let r = ref ext in
+  let len = Option.value len ~default:(String.length s) in
+  for i = pos to pos + len - 1 do
+    r := Int64.mul 4L (Int64.add !r (Int64.of_int (int_at s i)));
+  done;
+  !r
+
 let int_at_or_N s index =
   let c = String.get_exn s ~index in
   if c = 'N' then None else Some (char_to_int c)

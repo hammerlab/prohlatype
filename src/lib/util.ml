@@ -126,3 +126,11 @@ let list_map_consecutives f lst =
 module StringMap = Map.Make (struct
   type t = string [@@deriving ord]
 end)
+
+let remove_and_assoc el list =
+  let rec loop acc = function
+    | []                      -> raise Not_found
+    | (e, v) :: t when e = el -> v, (List.rev acc @ t)
+    | h :: t                  -> loop (h :: acc) t
+  in
+  loop [] list

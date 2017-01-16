@@ -15,6 +15,7 @@ val int_to_char : int -> char
 
 val encode : ?pos:int -> ?len:int -> ?ext:int -> string -> int
 
+val encode_long : ?pos:int -> ?len:int -> ?ext:int64 -> string -> int64
 
 (** [encode_N_tolerant text] converts the nucleotides in [text] to a list of integers
     that encode. The list grows for every 'N' encountered.

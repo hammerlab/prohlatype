@@ -173,15 +173,25 @@ let number_of_alleles g =
 (** [starts_by_position g] returns an associated list of alignment_position and
     an a set of alleles that start at that position. *)
 let starts_by_position { aindex; bounds; _ } =
-  Alleles.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
+  A.Map.fold aindex bounds ~init:[] ~f:(fun asc sep_lst allele ->
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
       let pos = fst sep.start in
       try
-        let bts = List.assoc pos asc in
-        Alleles.Set.set aindex bts allele;
-        asc
+        let bts, rest = remove_and_assoc pos asc in
+        (pos, A.Set.set aindex bts allele) :: rest
       with Not_found ->
-        (pos, Alleles.Set.singleton aindex allele) :: asc))
+        (pos, A.Set.singleton aindex allele) :: asc))
+
+let add_allele_edge g index pv nv allele =
+  let new_edge =
+    try
+      let eset = G.find_edge g pv nv |> G.E.label in
+      G.remove_edge g pv nv;
+      G.E.create pv (A.Set.set index eset allele) nv
+    with Not_found ->
+      G.E.create pv (A.Set.singleton index allele) nv
+  in
+  G.add_edge_e g new_edge
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
@@ -190,19 +200,13 @@ let create_compressed_starts t =
   let ng = G.copy t.g in
   let open Nodes in
   List.iter start_asc ~f:(fun (pos, allele_set) ->
-    if Alleles.Set.cardinal allele_set > 1 then begin
-      let a_str = Alleles.Set.to_string ~compress:true t.aindex allele_set in
+    if A.Set.cardinal allele_set > 1 then begin
+      let a_str = A.Set.to_string ~compress:true t.aindex allele_set in
       let node = G.V.create (S (pos, a_str)) in
       G.add_vertex ng node;
-      Alleles.Set.iter t.aindex allele_set ~f:(fun allele ->
+      A.Set.iter t.aindex allele_set ~f:(fun allele ->
         let rm = S (pos, allele) in
-        G.iter_succ (fun sv ->
-          try
-            let eset = G.find_edge ng node sv |> G.E.label in
-            Alleles.Set.set t.aindex eset allele
-          with Not_found ->
-            let bt = Alleles.Set.singleton t.aindex allele in
-            G.add_edge_e ng (G.E.create node bt sv)) ng rm;
+        G.iter_succ (fun sv -> add_allele_edge ng t.aindex node sv allele) ng rm;
         G.remove_vertex ng rm)
     end);
   { t with g = ng }
@@ -389,6 +393,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | None   -> try List.assoc from end_to_start_nodes
                 with Not_found -> invalid_arg msg
   in
+  let add_allele_edge pv nv = add_allele_edge g aindex pv nv allele in
   let do_nothing _ _ = () in
   let advance_until ~visit ~prev ~next pos =
     let rec forward node msg =
@@ -427,8 +432,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
+      let s_inter = A.Set.clear aindex s_inter allele in
       G.add_edge_e g (G.E.create v1 s_inter v2);
-      A.Set.clear aindex s_inter allele;
       List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
       (v1, v2)
     in
@@ -440,14 +445,6 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
     | `AfterLast _ as al -> al
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
-  in
-  let add_allele_edge pv nv =
-    try
-      let eset = G.find_edge g pv nv |> G.E.label in
-      A.Set.set aindex eset allele
-    with Not_found ->
-      let bt = A.Set.singleton aindex allele in
-      G.add_edge_e g (G.E.create pv bt nv)
   in
   let rec advance_until_boundary ~visit ~prev ~next pos idx =
     let rec forward node msg =
@@ -953,10 +950,14 @@ module RemoveSequence = struct
       |> A.index
     in
     let nbounds = A.Map.init naindex (A.Map.get aindex bounds) in
-    let newe oe =
-      let ne = A.Set.init naindex in
-      A.Set.iter aindex (fun a -> if a <> seq then A.Set.set naindex ne a) oe;
-      ne
+    let without_seq oe =
+      (* If just this edge = seq to be removed *)
+      if A.Set.cardinal oe = 1 && A.Set.is_set aindex oe seq then
+        None
+      else
+        let ne = A.Set.fold aindex oe ~init:(A.Set.init naindex)
+                  ~f:(fun ne a -> if a <> seq then A.Set.set naindex ne a else ne) in
+        Some ne
     in
     (* As is the norm, new_graph is mutated. *)
     let new_graph = G.create ~size:(A.Map.cardinal nbounds) () in
@@ -967,21 +968,21 @@ module RemoveSequence = struct
         let nq, me = NodeQueue.at_min_position q in
         List.fold_left me ~init:nq ~f:(fun queue node ->
           let nq = G.fold_succ_e (fun (p, e, sn) queue ->
-            let ne = newe e in
-            if A.Set.is_empty ne then
-              queue
-            else begin
-              match sn with
-              | S _ -> invalid_argf "pointing back at a start %s while remove %s"
-                          (vertex_name sn) seq
-              | E _ -> G.add_vertex new_graph sn;
-                       G.add_edge_e new_graph (p, ne, sn);
-                       queue
-              | B _
-              | N _ -> G.add_vertex new_graph sn;
-                       G.add_edge_e new_graph (p, ne, sn);
-                       NodeQueue.add sn queue
-            end) g node queue
+            match without_seq e with
+            | None    -> queue   (* don't add anything *)
+            | Some ne ->
+                begin
+                  match sn with
+                  | S _ -> invalid_argf "pointing back at a start %s while remove %s"
+                              (vertex_name sn) seq
+                  | E _ -> G.add_vertex new_graph sn;
+                          G.add_edge_e new_graph (p, ne, sn);
+                          queue
+                  | B _
+                  | N _ -> G.add_vertex new_graph sn;
+                          G.add_edge_e new_graph (p, ne, sn);
+                          NodeQueue.add sn queue
+                end) g node queue
           in
           nq)
         |> loop
@@ -1192,13 +1193,12 @@ let within ?(include_ends=true) pos sep =
     ((include_ends && pos <= sep.end_) || pos < sep.end_)
 
 let alleles_with_data_private ?include_ends aindex bounds ~pos =
-  let es = A.Set.init aindex in
-  A.Map.iter aindex bounds ~f:(fun sep_lst allele ->
-    List.iter sep_lst ~f:(fun sep ->
+  A.Map.fold aindex bounds ~init:(A.Set.init aindex) ~f:(fun es sep_lst allele ->
+    List.fold_left sep_lst ~init:es ~f:(fun es sep ->
       if within ?include_ends pos sep then
         A.Set.set aindex es allele
-      (* No need to clear! *)));
-  es
+      else
+        es))
 
 (* At or past *)
 let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
@@ -1209,7 +1209,8 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
     Option.map prev_edge_node_set ~f:(EdgeNodeSet.fold ~init:EdgeNodeSet.empty
         ~f:(fun ((edge, node) as en) nes ->
             if (Nodes.position node > pos || Nodes.inside pos node)
-            && not A.Set.(is_empty (inter all_edges edge)) then
+            (* Can be optimized with an non-empty intersect method *)
+            && A.Set.(cardinal (inter all_edges edge)) > 0 then
               EdgeNodeSet.add en nes
             else
               nes))
@@ -1246,7 +1247,6 @@ let create_adjacents_arr g aindex offset posarr bounds =
   let pensr = ref None in
   Array.init len ~f:(fun i ->
     let pos = offset + i in
-    if true then eprintf "pos:%d\n%!" pos;
     match adjacents_at_private ?prev_edge_node_set:!pensr g aindex offset posarr bounds ~pos with
     | Error _ -> None
     | Ok (edge_node_set, seen_alleles, _) ->

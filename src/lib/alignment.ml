@@ -1,6 +1,26 @@
 
 open Util
 
+module AllelesSetOffsetLists = struct
+  type a = (int * Alleles.Set.t) list
+
+  let rec merge l1 l2 =
+    match l1, l2 with
+    | [], [] -> []
+    | [], ls -> ls
+    | ls, [] -> ls
+    | h1 :: t1, h2 :: t2 ->
+        let o1 = fst h1 in
+        let o2 = fst h2 in
+        if o1 = o2 then
+          (* These sets should have no intersect: union can be made faster! *)
+          (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge t1 t2
+        else if o1 < o2 then
+          h1 :: merge t1 l2
+        else
+          h2 :: merge l1 t2
+end (* AllelesSetOffsetLists *)
+
 module NodeMapQueue(V : sig
   type a
   val merge : a -> a -> a
@@ -49,26 +69,7 @@ end = struct
 
   end (* NodeMapQueue *)
 
-module Nmq = NodeMapQueue (struct
-
-  type a = (int * Alleles.Set.t) list
-
-  let rec merge l1 l2 =
-    match l1, l2 with
-    | [], [] -> []
-    | [], ls -> ls
-    | ls, [] -> ls
-    | h1 :: t1, h2 :: t2 ->
-        let o1 = fst h1 in
-        let o2 = fst h2 in
-        if o1 = o2 then
-          (o1, Alleles.Set.union (snd h1) (snd h2)) :: merge t1 t2
-        else if o1 < o2 then
-          h1 :: merge t1 l2
-        else
-          h2 :: merge l1 t2
-end)
-
+module Nmq = NodeMapQueue (AllelesSetOffsetLists)
 
 (* How we measure the quality of alignment over a segment, a segment refers to
    a contiguous sequence, whether in the node of our graph, or to other
@@ -219,7 +220,7 @@ module Align (Ag : Alignment_config) = struct
       let nsplst =
         List.filter_map splst ~f:(fun (sp, ep) ->
           let i = Alleles.Set.inter edge ep in
-          if Alleles.Set.is_empty i then None else Some (sp, i))
+          if Alleles.Set.cardinal i = 0 then None else Some (sp, i))
       in
       if !debug_ref then begin
         eprintf "Considering adding to queue %s -> %s -> %s\n%!"

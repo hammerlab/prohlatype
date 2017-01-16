@@ -1,0 +1,15 @@
+$ time for ((i=0;i<10;i++)) ; do ./type.native -m ../foreign/IMGTHLA/alignments/A  ~/Documents/projects/hlatyping/upenn/cf/120013_1_A.fastq --phred-llhd | md5; done
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+ef4cde7f2ce0906c5027c1d1ba3af71b
+
+real	9m36.880s
+user	9m29.231s
+sys	0m2.328s0

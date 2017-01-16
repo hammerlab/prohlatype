@@ -27,19 +27,15 @@ module Set : sig
   val singleton : index -> allele -> t
 
   (** [set index t allele] will make sure that [allele] is
-      in [t], specifically [is_set index t allele] will be [true].
-      *)
-  val set : index -> t -> allele -> unit
+      in [t], specifically [is_set index t allele] will be [true]. *)
+  val set : index -> t -> allele -> t
 
   val unite : into:t -> t -> unit
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
       [false]. *)
-  val clear : index -> t -> allele -> unit
-
-  (** [min_elt index t] returns the allele with the minimum value in [t]. *)
-  val min_elt : index -> t -> allele
+  val clear : index -> t -> allele -> t
 
   (** [is_set index t allele] is [allele] in [t]. *)
   val is_set : index -> t -> allele -> bool
@@ -70,14 +66,6 @@ module Set : sig
 
   (** [complement index t] returns a set of all the alleles not in [t].*)
   val complement : index -> t -> t
-
-  val is_empty : t -> bool
-
-  (** [any t] are any of the alleles in the set? *)
-  val any : t -> bool
-
-  (** [all t] are all of the alleles in the set? *)
-  val all : index -> t -> bool
 
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : ?compress:bool -> index -> t -> string
@@ -125,26 +113,9 @@ module Map : sig
   (** [cardinal m] size of the map [m]. *)
   val cardinal : 'a t -> int
 
-  (** [update_all set map f] apply [f] to all alleles in [map] where whether
-      they are in [set] is passed the first arg to [f]. *)
-  val update_all : Set.t -> 'a t -> (bool -> 'a -> 'a) -> unit
-
-  (** [update_from set f map] apply [f] to all alleles in [map] that are
-      in [set]. *)
-  val update_from : Set.t -> f:('a -> 'a) -> 'a t -> unit
-
-  (** [update_from_and_fold set f init map] updates and folds over the [set]
-      elements of [map].*)
-  val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
-
-  val update_spec : index -> 'a t -> allele -> ('a -> 'a) -> unit
-
   (** [update2 source dest u] update the value of [dest] with the result of
       [u] and the values of the same allele of [source] and [dest]. *)
   val update2 : source:'a t -> dest:'b t -> ('a -> 'b -> 'b) -> unit
-
-  (** [map2_wa f m1 m2] map from two maps. *)
-  val map2_wa : f:('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
 
   (** [fold index f init map] fold over all alleles found in the [map]. *)
   val fold : index -> f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
@@ -168,11 +139,15 @@ module Map : sig
       key (wa = without allele) .*)
   val map_wa : f:('a -> 'b) -> 'a t -> 'b t
 
+  (** [map2_wa f m1 m2] map from two maps. *)
+  val map2_wa : f:('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
+
   (** [values_assoc index m] compress (invert) the values found in [m] into
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
-  (** [to_array map] returns all of the values in [map]. *)
-  val to_array : 'a t -> 'a array
+  (** [update_from_and_fold set f init map] updates and folds over the [set]
+      elements of [map].*)
+  val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 
 end (* Map *)
