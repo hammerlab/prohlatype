@@ -1,7 +1,6 @@
 #require "nonstd"
 #require "sosa"
 #require "ocamlgraph"
-#require "batteries"
 #require "ppx_deriving.runtime"
 #require "biocaml.unix"
 

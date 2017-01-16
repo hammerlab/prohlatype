@@ -1,7 +1,7 @@
 
 open Util
-module BitSet = Batteries.BitSet
-module Enum = Batteries.Enum
+
+module BitSet = Bitset
 
 type allele = string [@@deriving eq, ord]
 let compare = compare_allele
@@ -149,7 +149,7 @@ module Set = struct
     BitSet.mem s (StringMap.find allele to_index)
 
   let fold { to_allele; } ~f ~init s =
-    Enum.fold (fun a i -> f a to_allele.(i)) init (BitSet.enum s)
+    BitSet.fold ~f:(fun a i -> f a to_allele.(i)) ~init s
 
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
@@ -265,9 +265,9 @@ module Map = struct
     |> snd
 
   let update_from_and_fold s ~f ~init m =
-    Enum.fold (fun acc i ->
+    BitSet.fold ~f:(fun acc i ->
       let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
       m.(i) <- nm;
-      nacc) init (BitSet.enum s)
+      nacc) ~init s
 
 end (* Map *)
