@@ -93,7 +93,8 @@ let rec valid_position_value_and_mask extendable sfun t x =
     extend t (x+1);
     valid_position_value_and_mask false sfun t x
   end else
-    invalid_arg ("Bitset."^sfun^": index past length: " ^ (string_of_int x))
+    invalid_arg (Printf.sprintf "Bitset.%s: index past length: %d, size %d"
+                  sfun x t.size )
 
 let apply_bit_op sfun t x =
   let pos, cur, mask = valid_position_value_and_mask true sfun t x in
@@ -141,7 +142,6 @@ let compare t1 t2 =
   let len2 = Array.length t2.data in
   let mlen = min len1 len2 in
   let rec loop i =
-    Printf.printf "loop %d\n%!" i;
     if i = mlen then begin
       if len1 < len2 then
         loop_second i
@@ -156,12 +156,10 @@ let compare t1 t2 =
       else
         loop (i + 1)
   and loop_first i =
-    Printf.printf "loop_first %d\n%!" i;
     if i >= len1 then 0 else
       let d = Int64.compare (Array.unsafe_get t1.data i) 0L in
       if d <> 0 then d else loop_first (i + 1)
   and loop_second i =
-    Printf.printf "loop_second %d\n%!" i;
     if i >= len2 then 0 else
       let d = Int64.compare 0L (Array.unsafe_get t2.data i) in
       if d <> 0 then d else loop_second (i + 1)
