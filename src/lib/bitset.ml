@@ -208,7 +208,8 @@ let next_set_bit64 ?starting_at i =
   if i = 0L then
     None
   else
-    let j = Int64.(shift_right_logical (mul (logand i (mul i (-1L))) magic) 58) in
+    (*let j = Int64.(shift_right_logical (mul (logand i (mul i (-1L))) magic) 58) in *)
+    let j = Int64.(shift_right_logical (mul (logand i (add (lognot i) 1L)) magic) 58) in
     Some (Array.unsafe_get mtable (Int64.to_int j))
 
 (* Find the first set bit in the bit array *)
