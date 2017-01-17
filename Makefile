@@ -1,5 +1,5 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner batteries biocaml.unix
-SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner batteries biocaml
+SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving.4.1 nonstd.0.0.1 sosa.0.2.0 ocamlgraph.1.8.6 cmdliner.0.9.8 batteries.2.5.3 biocaml.0.6.0
 TOOLS=mhc2gpdf type align2fasta allele_distances
 TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances
 
