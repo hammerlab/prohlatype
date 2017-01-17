@@ -88,8 +88,57 @@ let fold_over_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
   in
   Tg.fold proc g.g init
 
+let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
+  let open Nodes in
+  let rec fill_partial_matches node state = function
+    | [] -> state
+    | ls -> fold_partials_on_successor node state ls
+  and fold_partials_on_successor node state plst =
+    G.fold_succ_e (partial_state_on_successors plst) g.g node state
+  and partial_state_on_successors plst (_, in_edge, node) state =
+    match node with
+    | S _      -> invalid_argf "Start should not be a successor!"
+    | E _      -> state
+    | B _      -> fold_partials_on_successor node state plst (* skip *)
+    | N (p, s) ->
+        let l = String.length s in
+        let f (state, pacc) (krem, k_edge, bstate) =
+          let kei = Alleles.Set.inter in_edge k_edge in
+          if Alleles.Set.cardinal kei > 0 then begin
+            if krem <= l then
+              close state (p, s) (part ~index:0 krem) bstate, pacc
+            else
+              state, (krem - l, kei, extend (p, s) (part ~index:0 l) (Some bstate)) :: pacc
+          end else
+            state, pacc
+        in
+        let state, nplst = List.fold_left plst ~f ~init:(state, []) in
+        fill_partial_matches node state nplst
+  in
+  let all_incoming n =
+    G.fold_pred_e (fun (_,e,_) a -> Alleles.Set.union e a) g.g n
+      (Alleles.Set.init g.aindex)
+  in
+  let proc node state =
+    match node with
+    | S _ | E _ | B _ -> state
+    | N (p, s)        ->
+        let in_edges = all_incoming node in
+        let f (state, pacc) ss =
+          match ss with
+          | { index; length = `Whole  } ->
+              absorb state (p, s) (whole ~index), pacc
+          | { index; length = `Part l } ->
+              state, (k - l, in_edges, extend (p, s) (part ~index l) None) :: pacc
+        in
+        let state, plst = fold_over_kmers_in_string s ~k ~f ~init:(state, []) in
+        fill_partial_matches node state plst
+  in
+  Tg.fold proc g.g init
+
+
 (* Not 'N' tolerant. *)
-let kmer_counts ~k g =
+let kmer_counts ~biological ~k g =
   let init = Kmer_table.make k 0 in
   let absorb tbl (_al, sequence) { index; length = `Whole } =
     let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
@@ -105,7 +154,10 @@ let kmer_counts ~k g =
     Kmer_table.update ((+) 1) tbl i;
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
+  if biological then
+    fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
+  else
+    fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 type position =
   { alignment : alignment_position
@@ -144,7 +196,7 @@ let create_at_penultimate ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
+  fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let create ~k g =
   let init = Kmer_table.make k [] in
@@ -171,7 +223,7 @@ let create ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
+  fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let starting_with index s =
   let k = Kmer_table.k index in

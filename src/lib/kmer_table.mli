@@ -1,6 +1,6 @@
 (** Storage of K-mer keyed data.
 
-    Each table is specific to a given K, specific at construction time.
+    Each table is specific to a given K, specifiied at construction time.
     Using a string of different length from K will result in unspecified
     behavior.*)
 
@@ -37,10 +37,10 @@ val fold : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a
 val iter : f:('a -> unit) -> 'a t -> unit
 
 (** [foldi f init table] fold with the int "code" of the table. *)
-val foldi : f:('a -> int -> 'b -> 'a) -> init:'a -> 'b t -> 'a
+val foldi : f:('a -> index -> 'b -> 'a) -> init:'a -> 'b t -> 'a
 
 (** [iteri f table] *)
-val iteri : f:(int -> 'a -> unit) -> 'a t -> unit
+val iteri : f:(index -> 'a -> unit) -> 'a t -> unit
 
 (** [folds f init table] fold with the kmer of each value in table. *)
 val folds : f:('a -> string -> 'b -> 'a) -> init:'a -> 'b t -> 'a

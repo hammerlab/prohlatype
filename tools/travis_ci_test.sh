@@ -56,6 +56,13 @@ case "$TEST" in
     echo testing allele differences between A_gen
     time ./test_allele_distances.native A_gen > A_sim.csv
     ;;
+  biologicalKmers)
+    echo testing that biological Kmers are found
+    time ./biological_kmers.native A_gen
+    time ./biological_kmers.native A_nuc
+    time ./biological_kmers.native B_gen
+    time ./biological_kmers.native B_nuc
+    ;;
   *)
     ;;
 esac

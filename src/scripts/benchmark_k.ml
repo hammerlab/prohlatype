@@ -9,7 +9,7 @@ let () =
     let input = Ref_graph.AlignmentFile (to_alignment_file file) in
     let carg = Cache.graph_args ~input () in
     let g = Cache.graph carg in
-    let kt = Index.kmer_counts g ~k in
+    let kt = Index.kmer_counts g ~biological:true ~k in
     let dst = Kmer_table.distr kt in
     let ds_str =
       Array.to_list dst
