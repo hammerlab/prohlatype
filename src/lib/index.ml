@@ -1,7 +1,6 @@
 (** Graph Indexing
 
-  This methodology uses a Kmer-table of positions where the kmer-ends to
-  provide an index.
+  This methodology uses a Kmer-table of kmer starts provide an index.
 
   Positions point to the last element of a kmer (ie. the "A" in 4-mer "TGCA"),
   for two reasons:
@@ -48,7 +47,7 @@ let fold_over_kmers_in_string ~k ~f ~init s =
   in
   loop 0 init
 
-let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
+let fold_over_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
   let open Nodes in
   let rec fill_partial_matches node state = function
     | [] -> state
@@ -61,9 +60,6 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
     | B _ as n        -> fold_partials_on_successor n state plst (* skip node *)
     | (N (p, s) as n) ->
         let l = String.length s in
-        (* I'm not thrilled with f's lexical hiding (see below) but haven't
-           thought of a good name for the external 'f' similar to
-           'extend' and 'close' *)
         let f (state, pacc) (krem, bstate) =
           if krem <= l then
             let nstate = close state (p, s) (part ~index:0 krem) bstate in
@@ -82,7 +78,7 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
         let f (state, pacc) ss =
           match ss with
           | { index; length = `Whole  } ->
-              let nstate = f state (p, s) (whole ~index) in
+              let nstate = absorb state (p, s) (whole ~index) in
               nstate, pacc
           | { index; length = `Part l } ->
               state, (k - l, extend (p, s) (part ~index l) None) :: pacc
@@ -95,7 +91,7 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
 (* Not 'N' tolerant. *)
 let kmer_counts ~k g =
   let init = Kmer_table.make k 0 in
-  let f tbl (_al, sequence) { index; length = `Whole } =
+  let absorb tbl (_al, sequence) { index; length = `Whole } =
     let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
     Kmer_table.update ((+) 1) tbl i;
     tbl
@@ -109,7 +105,7 @@ let kmer_counts ~k g =
     Kmer_table.update ((+) 1) tbl i;
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 type position =
   { alignment : alignment_position
@@ -131,7 +127,7 @@ type t = position list Kmer_table.t
 (* The failed method were we store the penultimate position of the Kmer *)
 let create_at_penultimate ~k g =
   let init = Kmer_table.make k [] in
-  let f tbl (alignment, sequence) { index; length = `Whole } =
+  let absorb tbl (alignment, sequence) { index; length = `Whole } =
     let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
     let p = { alignment; sequence; offset = index + k - 1 } in
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
@@ -148,11 +144,11 @@ let create_at_penultimate ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let create ~k g =
   let init = Kmer_table.make k [] in
-  let f tbl (alignment, sequence) { index; length = `Whole } =
+  let absorb tbl (alignment, sequence) { index; length = `Whole } =
     let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
     let p = { alignment; sequence; offset = index } in
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
@@ -175,7 +171,7 @@ let create ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let starting_with index s =
   let k = Kmer_table.k index in
