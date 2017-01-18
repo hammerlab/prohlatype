@@ -15,8 +15,9 @@ let kmer_table_from_fasta ~k file =
             match ss.Index.length with
             | `Part _ -> kt
             | `Whole  ->
-                Kmer_table.update succ kt
-                  (Kmer_to_int.encode ~pos:ss.Index.index ~len:k seq);kt))
+                Kmer_to_int.encode_N_tolerant ~pos:ss.Index.index ~len:k seq
+                |> List.iter ~f:(Kmer_table.update succ kt) ;
+                kt))
 
 let comp ~k file =
   let fasta_kt = kmer_table_from_fasta ~k (to_fasta_file file) in
