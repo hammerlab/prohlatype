@@ -58,10 +58,8 @@ case "$TEST" in
     ;;
   biologicalKmers)
     echo testing that biological Kmers are found
-    time ./biological_kmers.native A_gen
-    time ./biological_kmers.native A_nuc
-    time ./biological_kmers.native B_gen
-    time ./biological_kmers.native B_nuc
+    cp src/scripts/biological_kmer_tests.sh .
+    time ./biological_kmer_tests.sh
     ;;
   *)
     ;;
