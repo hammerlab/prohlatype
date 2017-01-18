@@ -148,22 +148,20 @@ let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
   in
   Tg.fold proc g.g init
 
-
-(* Not 'N' tolerant. *)
 let kmer_counts ~biological ~k g =
   let init = Kmer_table.make k 0 in
   let absorb tbl (_al, sequence) { index; length = `Whole } =
-    let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
-    Kmer_table.update ((+) 1) tbl i;
+    let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
+    List.iter ilst ~f:(Kmer_table.update ((+) 1) tbl);
     tbl
   in
   let extend (_al, sequence) { index; length = `Part len } = function
-    | None     -> Kmer_to_int.encode sequence ~pos:index ~len
-    | Some ext -> Kmer_to_int.encode sequence ~pos:index ~len ~ext
+    | None      -> Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len
+    | Some exts -> Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len ~exts
   in
-  let close tbl (_al, sequence) { index; length = `Part len} ext =
-    let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
-    Kmer_table.update succ tbl i;
+  let close tbl (_al, sequence) { index; length = `Part len} exts =
+    let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len ~exts in
+    List.iter ilst ~f:(Kmer_table.update succ tbl);
     tbl
   in
   if biological then
