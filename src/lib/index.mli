@@ -13,13 +13,21 @@ val fold_over_kmers_in_string :
 
 val fold_over_kmers_in_graph :
   k:int ->
-  f:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
   init:'a ->
+  absorb:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
   extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
   close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
   Ref_graph.t -> 'a
 
-val kmer_counts : k:int -> Ref_graph.t -> int Kmer_table.t
+val fold_over_biological_kmers_in_graph :
+  k:int ->
+  init:'a ->
+  absorb:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
+  extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
+  close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
+  Ref_graph.t -> 'a
+
+val kmer_counts : biological:bool -> k:int -> Ref_graph.t -> int Kmer_table.t
 
 (** Public API *)
 

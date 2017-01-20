@@ -1,7 +1,7 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner batteries biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving.4.1 nonstd.0.0.1 sosa.0.2.0 ocamlgraph.1.8.6 cmdliner.0.9.8 batteries.2.5.3 biocaml.0.6.0
 TOOLS=mhc2gpdf type align2fasta allele_distances
-TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances
+TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
 
 .PHONY: default setup clean build tools tests covered_tests
@@ -51,6 +51,9 @@ exon_edit_distances:
 
 test_allele_distances:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts test_allele_distances.native
+
+biological_kmers:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts biological_kmers.native
 
 tests:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts $(foreach t, $(TESTS),$(t).native)

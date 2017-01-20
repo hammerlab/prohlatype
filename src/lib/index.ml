@@ -1,7 +1,6 @@
 (** Graph Indexing
 
-  This methodology uses a Kmer-table of positions where the kmer-ends to
-  provide an index.
+  This methodology uses a Kmer-table of kmer starts provide an index.
 
   Positions point to the last element of a kmer (ie. the "A" in 4-mer "TGCA"),
   for two reasons:
@@ -48,7 +47,7 @@ let fold_over_kmers_in_string ~k ~f ~init s =
   in
   loop 0 init
 
-let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
+let fold_over_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
   let open Nodes in
   let rec fill_partial_matches node state = function
     | [] -> state
@@ -61,9 +60,6 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
     | B _ as n        -> fold_partials_on_successor n state plst (* skip node *)
     | (N (p, s) as n) ->
         let l = String.length s in
-        (* I'm not thrilled with f's lexical hiding (see below) but haven't
-           thought of a good name for the external 'f' similar to
-           'extend' and 'close' *)
         let f (state, pacc) (krem, bstate) =
           if krem <= l then
             let nstate = close state (p, s) (part ~index:0 krem) bstate in
@@ -82,8 +78,7 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
         let f (state, pacc) ss =
           match ss with
           | { index; length = `Whole  } ->
-              let nstate = f state (p, s) (whole ~index) in
-              nstate, pacc
+              absorb state (p, s) (whole ~index), pacc
           | { index; length = `Part l } ->
               state, (k - l, extend (p, s) (part ~index l) None) :: pacc
         in
@@ -92,24 +87,87 @@ let fold_over_kmers_in_graph ~k ~f ~init ~extend ~close g =
   in
   Tg.fold proc g.g init
 
-(* Not 'N' tolerant. *)
-let kmer_counts ~k g =
+let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
+  let open Nodes in
+  let rec fill_partial_matches node state = function
+    | [] -> state
+    | ls -> fold_partials_on_successor node state ls
+  and fold_partials_on_successor node state plst =
+    G.fold_succ_e (partial_state_on_successors plst) g.g node state
+  and partial_state_on_successors plst (_, in_edge, node) state =
+    match node with
+    | S _      -> invalid_argf "Start should not be a successor!"
+    | E _      -> state
+    | B _      ->
+        (* skip the node BUT filter on the alleles going to this node! *)
+        let nplst =
+          List.filter_map plst ~f:(fun (k, ke, bstate) ->
+            let kei = Alleles.Set.inter in_edge ke in
+            if Alleles.Set.cardinal kei > 0 then
+              Some (k, kei, bstate)
+            else None)
+        in
+        begin match nplst with
+        | [] -> state
+        | lst -> fold_partials_on_successor node state lst
+        end
+    | N (p, s) ->
+        let l = String.length s in
+        let f (state, pacc) (krem, k_edge, bstate) =
+          let kei = Alleles.Set.inter in_edge k_edge in
+          if Alleles.Set.cardinal kei > 0 then begin
+            if krem <= l then
+              close state (p, s) (part ~index:0 krem) bstate, pacc
+            else
+              state, (krem - l, kei, extend (p, s) (part ~index:0 l) (Some bstate)) :: pacc
+          end else
+            state, pacc
+        in
+        let state, nplst = List.fold_left plst ~f ~init:(state, []) in
+        fill_partial_matches node state nplst
+  in
+  (*let all_incoming n =
+    G.fold_pred_e (fun (_,e,_) a -> Alleles.Set.union e a) g.g n
+      (Alleles.Set.init g.aindex)
+  in *)
+  let everything = Alleles.Set.(complement g.aindex (empty ())) in
+  let proc node state =
+    match node with
+    | S _ | E _ | B _ -> state
+    | N (p, s)        ->
+        (*let in_edges = all_incoming node in *)
+        let f (state, pacc) ss =
+          match ss with
+          | { index; length = `Whole  } ->
+              absorb state (p, s) (whole ~index), pacc
+          | { index; length = `Part l } ->
+              state, (k - l, everything, extend (p, s) (part ~index l) None) :: pacc
+        in
+        let state, plst = fold_over_kmers_in_string s ~k ~f ~init:(state, []) in
+        fill_partial_matches node state plst
+  in
+  Tg.fold proc g.g init
+
+let kmer_counts ~biological ~k g =
   let init = Kmer_table.make k 0 in
-  let f tbl (_al, sequence) { index; length = `Whole } =
-    let i = Kmer_to_int.encode sequence ~pos:index ~len:k in
-    Kmer_table.update ((+) 1) tbl i;
+  let absorb tbl (_al, sequence) { index; length = `Whole } =
+    let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
+    List.iter ilst ~f:(Kmer_table.update ((+) 1) tbl);
     tbl
   in
   let extend (_al, sequence) { index; length = `Part len } = function
-    | None     -> Kmer_to_int.encode sequence ~pos:index ~len
-    | Some ext -> Kmer_to_int.encode sequence ~pos:index ~len ~ext
+    | None      -> Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len
+    | Some exts -> Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len ~exts
   in
-  let close tbl (_al, sequence) { index; length = `Part len} ext =
-    let i = Kmer_to_int.encode sequence ~pos:index ~len ~ext in
-    Kmer_table.update ((+) 1) tbl i;
+  let close tbl (_al, sequence) { index; length = `Part len} exts =
+    let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len ~exts in
+    List.iter ilst ~f:(Kmer_table.update succ tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  if biological then
+    fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
+  else
+    fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 type position =
   { alignment : alignment_position
@@ -131,7 +189,7 @@ type t = position list Kmer_table.t
 (* The failed method were we store the penultimate position of the Kmer *)
 let create_at_penultimate ~k g =
   let init = Kmer_table.make k [] in
-  let f tbl (alignment, sequence) { index; length = `Whole } =
+  let absorb tbl (alignment, sequence) { index; length = `Whole } =
     let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
     let p = { alignment; sequence; offset = index + k - 1 } in
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
@@ -148,19 +206,17 @@ let create_at_penultimate ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let create ~k g =
   let init = Kmer_table.make k [] in
-  let f tbl (alignment, sequence) { index; length = `Whole } =
+  let absorb tbl (alignment, sequence) { index; length = `Whole } =
     let ilst = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len:k in
     let p = { alignment; sequence; offset = index } in
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
   let extend (alignment, sequence) { index; length = `Part len } ext_opt =
-    (*let () = printf "At %d, %s extend at %d len %d" alignment
-          (Ref_graph.index_string sequence index) index len in *)
     match ext_opt with
     | None     ->
         let nj = Kmer_to_int.encode_N_tolerant sequence ~pos:index ~len in
@@ -175,7 +231,7 @@ let create ~k g =
     List.iter ilst ~f:(Kmer_table.update (fun lst -> p :: lst) tbl);
     tbl
   in
-  fold_over_kmers_in_graph ~k g ~f ~close ~extend ~init
+  fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let starting_with index s =
   let k = Kmer_table.k index in
@@ -201,6 +257,5 @@ let lookup ?(max_neighbors=0) index s =
           |> fun lst -> Ok lst
         else
           error "not implemented max_neighbors: %d" max_neighbors
-
 
 let k = Kmer_table.k

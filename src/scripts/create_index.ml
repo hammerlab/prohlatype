@@ -14,6 +14,8 @@ let g_and_idx ?(k=10) ?input ?n () =
   in
   n, g2
 
+let _, (gm, im) =
+  g_and_idx ~input:(Ref_graph.MergeFromPrefix (to_merge_prefix "A", Distances.Trie)) ()
 (*
 let lst = [3; 5; 10; 15; 20; 50; 100; 150; 200; 250]
 let idxs = List.map lst ~f:(fun n -> g_and_idx ~n:(Ref_graph.NumberOfAlts n) ())
