@@ -71,7 +71,7 @@ let merge ?(known=[||]) mp fa =
       List.fold_left just_diff ~init:true ~f:(fun all_ok (allele, (a, f)) ->
         let k = Array.exists ~f:((=) allele) known in
         printf "known: %b %s:\n %s\n" k allele
-          (manual_comp_display ~labels:("align: ","fasta: ") a f);
+          (manual_comp_display ~width:100 ~labels:("align: ","fasta: ") a f);
         k)
     in
     if all_known then return := 0 else return := 1
