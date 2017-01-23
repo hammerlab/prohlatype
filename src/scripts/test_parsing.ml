@@ -148,11 +148,13 @@ let () =
   else
     let fname = if n <= 1 then None else Some (Sys.argv.(2)) in
     to_fnames ?fname (imgthla_dir // "alignments")
-    |> List.iter ~f:(fun f ->
+    |> List.fold_left ~init:0 ~f:(fun s f ->
         try
           let p = Mas_parser.from_file f in
           test_result p;
-          printf "parsed and checked %s\n" f
+          printf "parsed and checked %s\n" f;
+          s
         with e ->
           eprintf "failed to parse %s\n" f;
-          raise e)
+          -1)
+    |> exit
