@@ -106,6 +106,6 @@ let () =
       end
       |> function
         | Ok () -> printf "equal\n"
-        | Error e -> printf ": %s\n" e; exit 1);
+        | Error e -> printf ": ERROR %s\n" e; exit 1);
     printf "All tests passed for %s\n" prefix
   end
