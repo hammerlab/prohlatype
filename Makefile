@@ -40,7 +40,7 @@ adjacents:
 benchmark_k:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts benchmark_k.native
 
-merged_tests:
+merged_sensible_test:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts merged_sensible_test.native
 
 mas_align_test:
