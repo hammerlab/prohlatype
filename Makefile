@@ -22,7 +22,7 @@ clean:
 
 ## Tests --- this might not scale
 
-parsing:
+test_parsing:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts test_parsing.native
 
 round_trip:
