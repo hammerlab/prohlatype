@@ -31,9 +31,12 @@ let to_fnames ?fname ?suffix dir =
   in
   let not_swap s = not (String.is_prefix ~prefix:"." s) in
   let not_readme s =
-    (* Get the original, not Sosa strings *)
-    not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
-          = "readme")
+    try
+      (* Get the original, not Sosa strings *)
+      not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
+            = "readme")
+    with Invalid_argument _ ->  (* files without extensions. *)
+        false
   in
   Sys.readdir dir
   |> Array.to_list
