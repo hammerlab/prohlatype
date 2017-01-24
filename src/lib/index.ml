@@ -234,28 +234,10 @@ let create ~k g =
   fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 let starting_with index s =
-  let k = Kmer_table.k index in
-  match String.sub s ~index:0 ~length:k with
-  | None    -> error "Not long enough %s for index size %d" s k
-  | Some ss -> Ok (Kmer_table.lookup_kmer index ss)
+  Kmer_table.lookup_kmer index s
 
 let lookup ?(max_neighbors=0) index s =
-  let k = Kmer_table.k index in
-  match String.sub s ~index:0 ~length:k with
-  | None    -> error "Not long enough %s for index size %d" s k
-  | Some ss ->
-      match String.index_of_character ss 'N' with
-      | Some p -> error "'N' at %d in read" p
-      | None   ->
-        if max_neighbors = 0 then
-          Ok (Kmer_table.lookup_kmer index ss)
-        else if max_neighbors = 1 then
-          let ns = Kmer_to_int.neighbors ~k (Kmer_to_int.encode ss) in
-          let init = Kmer_table.lookup_kmer index ss in
-          Array.fold_left ~init ~f:(fun acc n ->
-            List.append acc (Kmer_table.lookup index n)) ns
-          |> fun lst -> Ok lst
-        else
-          error "not implemented max_neighbors: %d" max_neighbors
+  Kmer_table.lookup_kmer_neighbors ~d:max_neighbors index s >>= fun pos_list_arr ->
+    Ok (List.concat (Array.to_list pos_list_arr))
 
 let k = Kmer_table.k
