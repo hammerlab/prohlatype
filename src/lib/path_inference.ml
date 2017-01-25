@@ -3,17 +3,37 @@
 
 open Util
 
+(* The configuration of how we compute a metric of a single nucleotide sequence
+    (abstracted by the [thread] type) versus the alleles in our variant graphs
+
+   In practice, this interface is not used, but acts as a stepping stone to
+   understanding the elements necessary for [Multiple_config].
+*)
 module type Single_config = sig
 
-  type t  (* How we measure the alignment of a sequence against an allele. *)
+  (* How we measure the alignment of a single sequence against a single allele.
+     For example:
+        - an integer (probably non-negative) of the number of mismatches
+        - a float for the product log-likelihood's across all the positions. *)
+  type t
 
-  val to_string : t -> string           (* Display *)
+  (* For display purposes. *)
+  val to_string : t -> string
 
-  type stop_parameter
+  (* An abstract nucleotide sequence. This might be:
+      - just a sequence of letters.
+      - the sequence paired with the Phred quality scores of that sequence. *)
   type thread
 
+  (* To perform [Index.lookup]'s we need to expose the nucleotide sequence. *)
   val thread_to_seq : thread -> string
+
+  (* To consider the reverse complement. *)
   val reverse_complement : thread -> thread
+
+  (* Because the [compute]ing the metric might be costly we expose a type to
+     model an early stopping criterion. *)
+  type stop_parameter
 
   val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread -> Index.position ->
     ([ `Finished of t Alleles.Map.t | `Stopped of t Alleles.Map.t ], string) result
