@@ -5,7 +5,7 @@ set -e
 echo A_gen    && ./round_trip.native A_gen    "A*01:01:01:01"    "A*31:01:24" "A*68:01:24" "A*32:01:24"
 echo A_nuc    && ./round_trip.native A_nuc    "A*01:01:01:01"    "A*01:11N"
 echo B_gen    && ./round_trip.native B_gen    "B*07:02:01"
-echo B_nuc    && ./round_trip.native B_nuc    "B*07:02:01"       "B*44:02:01:02S"
+echo B_nuc    && ./round_trip.native B_nuc    "B*07:02:01"       "B*44:02:01:02S" "B*07:44N"
 echo C_gen    && ./round_trip.native C_gen    "C*01:02:01"
 echo C_nuc    && ./round_trip.native C_nuc    "C*01:02:01"       "C*04:09N"
 echo DRB_nuc  && ./round_trip.native DRB_nuc  "DRB1*01:01:01"
