@@ -6,6 +6,9 @@ module String = Sosa.Native_string
 let invalid_argf ?(prefix="") fmt =
   ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
+let failwithf fmt =
+  ksprintf failwith fmt
+
 let id x = x
 
 let result_bind ~f oe =

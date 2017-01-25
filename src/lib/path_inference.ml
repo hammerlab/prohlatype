@@ -46,7 +46,7 @@ module type Single_config = sig
      against graph [g] at [position] and optionally stopping because of
      [early_stop]. *)
   val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread ->
-    Index.position -> (m product, string) result
+    Index.position -> m product
 
   (* For paired end sequencing we want to compute a single metric by combining
      the result for both pairs. We force this reduction because if the user
@@ -56,77 +56,83 @@ module type Single_config = sig
 
   (* Similar to combining paired reads, sometimes a read may have a valid
      lookup to multiple positions in the graph, this function allows us the
-     user how to choose amongst the best positions. *)
+     user how to choose amongst the best positions. The second argument
+     represent the tail of all the found positions and might be empty when
+     lookup found only one position.  *)
   val reduce_across_positions : m Alleles.Map.t -> m Alleles.Map.t list -> m Alleles.Map.t
 
 end (* Single_config *)
 
 type sequence_alignment_error =
-  | NoPositions
-  | AllStopped of int
-  | Other of string
-  | SequenceNotLongEnough of too_short
+  | NoIndexedPositions
+  | AllComputesStopped of int
+  | SequenceTooShort of too_short
   | ToThread of string
   [@@deriving show]
 
 module AgainstSequence (C : Single_config) = struct
 
   let against_positions ?early_stop g ps seq =
-    let rec loop acc = function
-      | []     -> `Fin acc
-      | h :: t ->
-          match C.compute ?early_stop g seq h with
-          | Error e -> `Errored e
-          | Ok r    -> loop (r :: acc) t
-    in
-    match loop [] ps with
-    | `Errored e -> Error (Other e)
-    | `Fin res   ->
-        let f = function | Finished f -> `Fst f | Stopped s -> `Snd s in
-        match List.partition_map res ~f with
-        | [], []      -> Error NoPositions
-        | [], als     -> Error (AllStopped (List.length als))
-        | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
+    let res = List.map ps ~f:(C.compute ?early_stop g seq) in
+    let f = function | Finished f -> `Fst f | Stopped s -> `Snd s in
+    match List.partition_map res ~f with
+    | [], []      -> Error NoIndexedPositions
+    | [], als     -> Error (AllComputesStopped (List.length als))
+    | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
 
-(*  let single_no_rc ?early_stop g idx seq =
+  let single_no_rc ?early_stop g idx seq =
     match Index.lookup idx (C.thread_to_seq seq) with
-    | Error e -> Error (Other e)
-    | Ok []   -> Error NoPositions
+    | Error e -> Error (SequenceTooShort e)
+    | Ok []   -> Error NoIndexedPositions
     | Ok ps   -> against_positions ?early_stop g ps seq
 
   let single_with_rc ?early_stop g idx seq =
-    let revs = C.reverse_complement seq in
     let is = Index.lookup idx (C.thread_to_seq seq) in
-    let ir = Index.lookup idx (C.thread_to_seq revs) in
-    match is, ir with
-    | Error es, Error er -> Error (Other (sprintf "reg: %s, rev-comp: %s" es er))
-    | Error es, Ok []    -> Error (Other (sprintf "reg: %s, rev-comp: %s" es er))
-    *)
-
+    match is with
+    | Error e -> Error (SequenceTooShort e)
+      (* No point checking rev comp since it should have the same length! *)
+    | Ok  []  ->
+        let revt = C.reverse_complement seq in
+        begin match Index.lookup idx (C.thread_to_seq revt) with
+        | Error e ->
+            failwithf "Reverse complement sequence %s shorter than original %s!"
+              (C.thread_to_seq seq) (C.thread_to_seq revt)
+        | Ok []   -> Error NoIndexedPositions
+        | Ok rps  -> against_positions ?early_stop g rps revt
+        end
+    | Ok ps   ->
+        let revt = C.reverse_complement seq in
+        begin match Index.lookup idx (C.thread_to_seq revt) with
+        | Error e ->
+            failwithf "Reverse complement sequence %s shorter than original %s!"
+              (C.thread_to_seq seq) (C.thread_to_seq revt)
+        | Ok []   -> against_positions ?early_stop g ps seq
+        | Ok rps  -> against_positions ?early_stop g rps revt
+        end
 
   let single ?(check_rc=true) ?early_stop g idx seq =
     match Index.lookup idx (C.thread_to_seq seq) with
-    | Error e -> Error (SequenceNotLongEnough e)
+    | Error e -> Error (SequenceTooShort e)
     | Ok []   ->
         if check_rc then
           let revt = C.reverse_complement seq in
             match Index.lookup idx (C.thread_to_seq revt) with
-            | Error e -> Error (SequenceNotLongEnough e)
+            | Error e -> Error (SequenceTooShort e)
             | Ok ps   -> against_positions ?early_stop g ps revt
         else
-          Error NoPositions
+          Error NoIndexedPositions
     | Ok ps   -> against_positions ?early_stop g ps seq
 
   let paired ?early_stop g idx seq1 seq2 =
     let where t = Index.lookup idx (C.thread_to_seq t) in
     let ap = against_positions ?early_stop g in
     match Index.lookup idx (C.thread_to_seq seq1) with
-    | Error e -> Error (SequenceNotLongEnough e)
+    | Error e -> Error (SequenceTooShort e)
     | Ok []   ->
         let rev1 = C.reverse_complement seq1 in
         begin match where rev1, where seq2 with
         | Error e, _
-        | _,      Error e -> Error (SequenceNotLongEnough e)
+        | _,      Error e -> Error (SequenceTooShort e)
         | Ok ps1, Ok ps2  ->
             match ap ps1 rev1, ap ps2 seq2 with
             | Ok r, Ok l -> Ok (C.combine_pairs r l)
@@ -138,7 +144,7 @@ module AgainstSequence (C : Single_config) = struct
         let rev2 = C.reverse_complement seq2 in
         begin match where seq1, where rev2 with
         | Error e, _
-        | _,      Error e -> Error (SequenceNotLongEnough e)
+        | _,      Error e -> Error (SequenceTooShort e)
         | Ok ps1, Ok ps2  ->
             match ap ps1 seq1, ap ps2 rev2 with
             | Ok r, Ok l -> Ok (C.combine_pairs r l)

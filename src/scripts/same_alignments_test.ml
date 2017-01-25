@@ -82,7 +82,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   in
   let stop = float (String.length read + 100) in (* Don't stop ever *)
   let size = Ref_graph.number_of_alleles g in
-  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos |> unwrap_ok in
+  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
@@ -206,16 +206,11 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
       | Ok (pos, manm)  ->
           let stop = float (String.length sub_read + 100) in
           let size = Ref_graph.number_of_alleles g in
-          match Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos with
-          | Error mes ->
-              eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
-                sub_read (Index.show_position pos) mes;
-              over_reads (i + 1) tl
-          | Ok m2     ->
-              let m2 = unwrap_sf m2 in
-              match compare_manual g manm m2 (String.length sub_read) with
-              | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
-              | ba -> printf " see differences.\n%!"; Some (read, ba)
+          let m2 = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
+          let m2 = unwrap_sf m2 in
+          match compare_manual g manm m2 (String.length sub_read) with
+          | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
+          | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
   (n, over_reads 0 reads)
 
