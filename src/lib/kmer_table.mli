@@ -4,15 +4,12 @@
     Using a string of different length from K will result in unspecified
     behavior.*)
 
+open Util
+
 (** Kmer table. *)
 type 'a t
 
 type index = int
-
-type too_short =
-  | InputSequenceTooShort of int * int
-
-val too_short_to_string : too_short -> string
 
 (** The [k] used when constructing a table. *)
 val k : 'a t -> int

@@ -21,19 +21,11 @@ let init k f =
 let update f {table;_} index =
   table.(index) <- f table.(index)
 
-type too_short =
-  | InputSequenceTooShort of int * int
-
-let too_short_to_string = function
-  | InputSequenceTooShort (n, k) ->
-      sprintf "String length %d not long enough to extract %d-mer for table."
-        n k
-
 let correct_size tbl s =
   let n = String.length s in
   let k = k tbl in
   if n < k then
-    Error (InputSequenceTooShort (n, k))
+    Error (TooShort { actual = n; desired = k})
   else
     Ok ()
 
@@ -53,9 +45,9 @@ let lookup_kmer_N_tolerant tbl s =
     Ok (Kmer_to_int.encode_N_tolerant ~len:tbl.k s
         |> List.map ~f:(lookup tbl))
 
-(* One not-so-sensible idea to make this function total (without the
-   InputSequenceTooShort error) would be to map less than kmer to all possible
-   kmer's. (3,4): ACG -> [NACG; ANCG; ACNG; ACGN]. *)
+(* One not-so-sensible idea to make this function total (without the TooShort
+   error) would be to map less than kmer to all possible kmer's.
+   (3,4): ACG -> [NACG; ANCG; ACNG; ACGN]. *)
 let lookup_kmer_neighbors ~d tbl s =
   correct_size tbl s >>= fun () ->
     Ok (Kmer_to_int.encode_neighbors ~len:tbl.k ~d s

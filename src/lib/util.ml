@@ -153,3 +153,7 @@ let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
 
 let likelihood ?alph_size ?er ~len m =
   exp (log_likelihood ?alph_size ?er ~len m)
+
+type too_short =
+  | TooShort of { desired: int ; actual: int}
+  [@@deriving show]

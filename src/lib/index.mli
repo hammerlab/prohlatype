@@ -1,4 +1,5 @@
 (** A graph Index. *)
+open Util
 open Ref_graph
 
 (** Essentially private API that will be hidden. *)
@@ -55,4 +56,4 @@ val k : t -> int
 (** Find positions in the index based off of the first [k] elements of the
     string. *)
 val lookup: ?max_neighbors:int -> t ->  string ->
-  (position list, Kmer_table.too_short) result
+  (position list, too_short) result
