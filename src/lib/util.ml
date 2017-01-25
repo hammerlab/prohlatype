@@ -8,19 +8,29 @@ let invalid_argf ?(prefix="") fmt =
 
 let id x = x
 
-let error_bind ~f oe =
+let result_bind ~f oe =
   match oe with
   | Error e -> Error e
   | Ok o -> f o
 
-let (>>=) oe f = error_bind ~f oe
+let (>>=) oe f = result_bind ~f oe
 
-let error_map ~f oe =
+let result_map ~f oe =
   match oe with
   | Error e -> Error e
   | Ok o    -> Ok (f o)
 
-let (>>|) oe ~f = error_map ~f oe
+let (>>|) oe ~f = result_map ~f oe
+
+let error_map ~f oe =
+  match oe with
+  | Error e -> Error (f e)
+  | Ok o    -> Ok o
+
+let error_bind ~f oe =
+  match oe with
+  | Error e -> f e
+  | Ok o    -> Ok o
 
 let error fmt = ksprintf (fun s -> Error s) fmt
 

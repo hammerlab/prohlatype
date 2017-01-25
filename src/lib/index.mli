@@ -49,10 +49,10 @@ type t = position list Kmer_table.t
 (** Index a graph. *)
 val create : k:int -> Ref_graph.t -> t
 
-(** Returns where the kmer starts the given sequence. *)
-val starting_with : t -> string -> (position list, string) result
-
 (** What [k] are we using to index the graph. *)
 val k : t -> int
 
-val lookup: ?max_neighbors:int -> t ->  string -> (position list, string) result
+(** Find positions in the index based off of the first [k] elements of the
+    string. *)
+val lookup: ?max_neighbors:int -> t ->  string ->
+  (position list, Kmer_table.too_short) result

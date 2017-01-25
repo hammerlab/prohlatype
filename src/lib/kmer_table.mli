@@ -9,6 +9,11 @@ type 'a t
 
 type index = int
 
+type too_short =
+  | InputSequenceTooShort of int * int
+
+val too_short_to_string : too_short -> string
+
 (** The [k] used when constructing a table. *)
 val k : 'a t -> int
 
@@ -22,19 +27,19 @@ val update : ( 'a -> 'a) -> 'a t -> index -> unit
 
 (** [update_kmer f kmer table] will mutate the value associated with [kmer] in [table]
     by calling [f]. *)
-val update_kmer : ('a -> 'a) -> 'a t -> string -> (unit, string) result
+val update_kmer : ('a -> 'a) -> 'a t -> string -> (unit, too_short) result
 
 (** [lookup table index] *)
 val lookup : 'a t -> index -> 'a
 
 (** [lookup_kmer table kmer] *)
-val lookup_kmer : 'a t -> string -> ('a, string) result
+val lookup_kmer : 'a t -> string -> ('a, too_short) result
 
 (** [lookup_kmer_N_tolerant table kmer] *)
-val lookup_kmer_N_tolerant : 'a t -> string -> ('a list, string) result
+val lookup_kmer_N_tolerant : 'a t -> string -> ('a list, too_short) result
 
 (** [lookup_kmer_neighbors d table kmer]  Also N_tolerant. *)
-val lookup_kmer_neighbors : d:int -> 'a t -> string -> ('a array, string) result
+val lookup_kmer_neighbors : d:int -> 'a t -> string -> ('a array, too_short) result
 
 (** [fold f init table] *)
 val fold : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a

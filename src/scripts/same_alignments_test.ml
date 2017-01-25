@@ -69,7 +69,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   let pos =
     let open Index in
     match lookup idx sub_read with
-    | Error m     -> invalid_argf "error looking up %s in index: %s" sub_read m
+    | Error m     -> invalid_argf "error looking up %s in index: %s" sub_read (Kmer_table.too_short_to_string m)
     | Ok []       -> invalid_argf "empty position returned looking up %s in index" sub_read
     | Ok (h :: t) ->
           match compare_pos with
@@ -157,9 +157,11 @@ let describe_error ?(length=100) ?(k=10) file read gi =
   (gnm1, i_nm1, pnm1, snm1, alnm1), (gn, i_n, pn, sn, aln)
 
 let manual g idx read =
-  Index.lookup idx read >>= function
-    | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
-    | []     -> error "read not in index"
+  Index.lookup idx read
+  |> error_map ~f:Kmer_table.too_short_to_string >>=
+      function
+      | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
+      | []     -> error "read not in index"
 
 let compare_manual g m fm read_len =
   let open Alignment in

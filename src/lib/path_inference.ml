@@ -105,12 +105,12 @@ module AgainstSequence (C : Single_config) = struct
 
   let single ?(check_rc=true) ?early_stop g idx seq =
     match Index.lookup idx (C.thread_to_seq seq) with
-    | Error e -> Error (Other e)
+    | Error e -> Error (Other (Kmer_table.too_short_to_string e))
     | Ok []   ->
         if check_rc then
           let revt = C.reverse_complement seq in
             match Index.lookup idx (C.thread_to_seq revt) with
-            | Error e -> Error (Other e)
+            | Error e -> Error (Other (Kmer_table.too_short_to_string e))
             | Ok ps   -> against_positions ?early_stop g ps revt
         else
           Error NoPositions
@@ -120,12 +120,12 @@ module AgainstSequence (C : Single_config) = struct
     let where t = Index.lookup idx (C.thread_to_seq t) in
     let ap = against_positions ?early_stop g in
     match Index.lookup idx (C.thread_to_seq seq1) with
-    | Error e -> Error (Other e)
+    | Error e -> Error (Other (Kmer_table.too_short_to_string e))
     | Ok []   ->
         let rev1 = C.reverse_complement seq1 in
         begin match where rev1, where seq2 with
         | Error e, _
-        | _,      Error e -> Error (Other e)
+        | _,      Error e -> Error (Other (Kmer_table.too_short_to_string e))
         | Ok ps1, Ok ps2  ->
             match ap ps1 rev1, ap ps2 seq2 with
             | Ok r, Ok l -> Ok (C.combine_pairs r l)
@@ -137,7 +137,7 @@ module AgainstSequence (C : Single_config) = struct
         let rev2 = C.reverse_complement seq2 in
         begin match where seq1, where rev2 with
         | Error e, _
-        | _,      Error e -> Error (Other e)
+        | _,      Error e -> Error (Other (Kmer_table.too_short_to_string e))
         | Ok ps1, Ok ps2  ->
             match ap ps1 seq1, ap ps2 rev2 with
             | Ok r, Ok l -> Ok (C.combine_pairs r l)
