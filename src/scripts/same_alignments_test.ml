@@ -45,6 +45,7 @@ ex:
 
 open Util
 open Common
+open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let input = Ref_graph.AlignmentFile file in
@@ -55,7 +56,7 @@ let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
     Cache.((invalid_arg_on_error "construct graph and index"
             graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ?n () })
 
-let unwrap_sf = function | `Stopped r | `Finished r -> r
+let unwrap_sf = function | Stopped r | Finished r -> r
 
 let al_to_list idx r =
   (* Don't worry about stopping in these tests. *)

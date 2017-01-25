@@ -156,6 +156,11 @@ let search_pos_edge_lst_to_string aindex l =
   |> String.concat ~sep:";"
   |> sprintf "[%s]"
 
+(* I want to call this a result instead. *)
+type 'a product =
+  | Finished of 'a Alleles.Map.t
+  | Stopped of 'a Alleles.Map.t
+
 module Align (Ag : Alignment_config) = struct
 
   module Ta = MakeThreadAlignment(Ag)
@@ -262,12 +267,12 @@ module Align (Ag : Alignment_config) = struct
     in
     let rec assign_loop (stop, q) =
       if Nmq.is_empty q then
-        `Finished mis_map
+        Finished mis_map
       else
         let nq, elst = Nmq.at_min_position q in
         match List.fold_left elst ~init:(Some (stop, nq)) ~f:match_and_add_succ with
         | Some sq -> assign_loop sq
-        | None    -> `Stopped mis_map
+        | None    -> Stopped mis_map
     in
     Ref_graph.adjacents_at gt ~pos >>= begin fun {edge_node_set; seen_alleles} ->
       (* TODO. For now assume that everything that isn't seen has a full mismatch,
@@ -282,8 +287,8 @@ module Align (Ag : Alignment_config) = struct
           (* This is also a weird case where we may stop aligning because of the
              alleles that we haven't seen. Should we communicate this explicitly to
              the 'Ag' logic? At least, we're communicating this condition via the
-             `Stopped | `Finished distinction.  *)
-          Ok (`Stopped mis_map)
+             Stopped | Finished distinction.  *)
+          Ok (Stopped mis_map)
       | Some stop ->
           let startq_opt =
             EdgeNodeSet.fold edge_node_set ~init:(Some (stop, Nmq.empty))
@@ -332,7 +337,7 @@ module Align (Ag : Alignment_config) = struct
                           end))
           in
           match startq_opt with
-          | None        -> Ok (`Stopped mis_map)
+          | None        -> Ok (Stopped mis_map)
           | Some startq -> Ok (assign_loop startq)
     end
 
