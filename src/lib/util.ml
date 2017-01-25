@@ -134,3 +134,12 @@ let remove_and_assoc el list =
     | h :: t                  -> loop (h :: acc) t
   in
   loop [] list
+
+let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
+  let lmp = log (er /. (float (alph_size - 1))) in
+  let lcp = log (1. -. er) in
+  let c = (float len) -. mismatches in
+  c *. lcp +. mismatches *. lmp
+
+let likelihood ?alph_size ?er ~len m =
+  exp (log_likelihood ?alph_size ?er ~len m)
