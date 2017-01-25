@@ -51,6 +51,7 @@ type sequence_alignment_error =
   | AllStopped of int
   | Other of string
   | ToThread of string
+  [@@deriving show]
 
 module AgainstSequence (C : Single_config) = struct
 
@@ -330,13 +331,6 @@ module Multiple (C : Multiple_config) = struct
     | `OneReadPairedFinished (_, (errors, amap)) -> errors, amap
 
 end (* Multiple *)
-
-(** Typing. *)
-let sequence_alignment_error_to_string = function
-  | NoPositions  -> "No positions found"
-  | AllStopped n -> sprintf "Stopped %d positions" n
-  | Other m      -> sprintf "Error: %s" m
-  | ToThread m   -> sprintf "ToThread: %s" m
 
 module MismatchesList = Multiple (struct
   type mp = (int * int) list
