@@ -3,19 +3,6 @@
 
 open Util
 
-let report_mismatches el_to_string state aindex mm =
-  printf "reporting %s mismatches\n" state;
-  let () =
-    Alleles.Map.values_assoc aindex mm
-    |> List.sort ~cmp:(fun (i1,_) (i2,_) -> compare i1 i2)
-    |> List.iter ~f:(fun (w, a) ->
-        printf "%s\t%s\n"
-          (el_to_string w)
-          (insert_chars ['\t'; '\t'; '\n']
-            (Alleles.Set.to_human_readable aindex ~max_length:10000 ~complement:`No a)))
-  in
-  printf "finished reporting mismatches\n%!"
-
 module type Single_config = sig
 
   type t  (* How we measure the alignment of a sequence against an allele. *)
