@@ -161,7 +161,7 @@ module Align (Ag : Alignment_config) = struct
   module Ta = MakeThreadAlignment(Ag)
 
   type node_result =
-    | Finished of Ag.t
+    | Fin of Ag.t
     | GoOn of Ag.t * int
 
   let align_against s =
@@ -170,7 +170,7 @@ module Align (Ag : Alignment_config) = struct
     fun ?start ~search_pos ~node_seq ~node_offset () ->
       match align ?start ~thread_offset:search_pos ~segment:node_seq ~offset:node_offset with
       | Both m
-      | First (m, _)   -> Finished m      (* end of the search string *)
+      | First (m, _)   -> Fin m      (* end of the search string *)
       | Second (m, so) -> GoOn (m, so)
 
   let compute ?early_stop gt search_seq pos =
@@ -249,7 +249,7 @@ module Align (Ag : Alignment_config) = struct
             List.fold_left splst ~init:(Some (stop, [])) ~f:(fun stop_opt (search_pos, edge) ->
               Option.bind stop_opt ~f:(fun (stop, acc) ->
                 match nmas ~search_pos ~node_seq ~node_offset:0 () with
-                | Finished local_mismatches            ->
+                | Fin local_mismatches                 ->
                     assign ~node edge ~search_pos stop local_mismatches
                     |> Option.map ~f:(fun s -> s, acc)
                 | GoOn (local_mismatches, search_pos)  ->
@@ -314,10 +314,10 @@ module Align (Ag : Alignment_config) = struct
                           let nmas_and_assign ~node_offset ~start_mismatches =
                             match nmas ~search_pos:start_mismatches ~node_seq ~node_offset
                                     ~start:(Ag.mismatches start_mismatches) () with
-                            | Finished mismatches            ->
+                            | Fin mismatches                ->
                                 assign_start mismatches
                                 |> Option.map ~f:(fun s -> (s, queue))
-                            | GoOn (mismatches, search_pos)  ->
+                            | GoOn (mismatches, search_pos) ->
                                 assign_start mismatches
                                 |> Option.map ~f:(fun s -> (s, add_successors queue (node, [search_pos, edge])))
                           in
@@ -513,7 +513,7 @@ let manual_mismatches gt search_seq pos =
           Ok (nmas ~node_seq:graph_seq ~node_offset:0 ())
     else
       let mn = Mismatches.mismatches n in
-      Ok (Mismatches.Finished mn))
+      Ok (Mismatches.Fin mn))
 
 let to_weights lst =
   let flst = List.map ~f:float_of_int lst in

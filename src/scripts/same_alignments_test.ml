@@ -167,7 +167,7 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (Mismatches.Finished sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
+          | Ok (Mismatches.Fin sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
             acc
           | Ok (Mismatches.GoOn (sa, sp)) , wa when wa = sa.MismatchesCounts.mismatches + (read_len - sp)  ->
             acc
@@ -259,7 +259,7 @@ let () =
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((Mismatches.Finished m), m2)   -> sprintf "Finished %d vs %d" m.Mismatches_config.mismatches m2
+                 | Ok ((Mismatches.Fin m), m2)        -> sprintf "Fin %d vs %d" m.Mismatches_config.mismatches m2
                  | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.Mismatches_config.mismatches m2 p
                  | Error (msg, d)          -> sprintf "Error %s %d" msg d));
             exit 1
