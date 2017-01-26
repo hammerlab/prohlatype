@@ -48,9 +48,15 @@ case "$TEST" in
     echo testing merging of C
     ./merged_sensible_test.native C
     ;;
-  adjA)
-    echo testing adjcent finding for A_gen only
-    ./adjacents.native A_gen
+  adj)
+    echo testing adjcent finding for A_gen
+    time ./adjacents.native A_gen 2>/dev/null
+    echo testing adjcent finding for A_nuc
+    time ./adjacents.native A_nuc 2>/dev/null
+    echo testing adjcent finding for B_gen
+    time ./adjacents.native B_gen 2>/dev/null
+    echo testing adjcent finding for B_nuc
+    time ./adjacents.native B_nuc 2>/dev/null
     ;;
   alleleDiffA)
     echo testing allele differences between A_gen
