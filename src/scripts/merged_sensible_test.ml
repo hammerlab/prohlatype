@@ -3,9 +3,10 @@ open Common
 open Util
 
 let to_input prefix = function
-  | `Merge    -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
-  | `Genetic  -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_gen"))
-  | `Nuclear  -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
+  | `MergeTrie      -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
+  | `MergeAveExon   -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon)
+  | `Genetic        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_gen"))
+  | `Nuclear        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
 
 let load prefix t =
   Cache.(graph (graph_args ~input:(to_input prefix t) ()))
@@ -25,7 +26,7 @@ let test_same ~merged_seq ~genetic_seq (nuc, gen) =
       error "Merged list for %s doesn't have the same number %d of xon elements as genetic %d %s"
         nuc mxs_n gxs_n gen
     else begin
-      list_zip mxs gxs 
+      list_zip mxs gxs
       |> list_fold_ok ~init:() ~f:(fun () (m, g) ->
           if m <> g then
             error "while testing %s vs %s\n%s\n" nuc gen
@@ -33,7 +34,7 @@ let test_same ~merged_seq ~genetic_seq (nuc, gen) =
           else
               Ok ())
     end
-  end else 
+  end else
     Ok ()
 
 let compare_different_lengths ~s ~b =
@@ -91,21 +92,26 @@ let () =
   if !Sys.interactive then () else begin
     let n = Array.length Sys.argv in
     let prefix = if n < 2 then "A" else Sys.argv.(1) in
-    let merged_graph = load prefix `Merge in
+    let merged_ave_exon_graph = load prefix `MergeAveExon in
+    let merged_trie_graph = load prefix `MergeTrie in
     let genetic_graph = load prefix `Genetic in
     let nuclear_graph = load prefix `Nuclear in
-    List.iter merged_graph.Ref_graph.merge_map ~f:(fun ((nuc, gen) as p) ->
-      printf "comparing %s vs %s %!" nuc gen;
-      Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
-        Ref_graph.sequence ~boundaries:true genetic_graph gen >>= fun genetic_seq ->
-          if nuc = gen then
-            test_same ~merged_seq ~genetic_seq p
-          else
-            Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
-              test_diff ~merged_seq ~genetic_seq ~nuclear_seq p
-      end
-      |> function
-        | Ok () -> printf "equal\n"
-        | Error e -> printf ": ERROR %s\n" e; exit 1);
-    printf "All tests passed for %s\n" prefix
+    let comp merged_graph =
+      List.iter merged_graph.Ref_graph.merge_map ~f:(fun ((nuc, gen) as p) ->
+        printf "comparing %s vs %s %!" nuc gen;
+        Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
+          Ref_graph.sequence ~boundaries:true genetic_graph gen >>= fun genetic_seq ->
+            if nuc = gen then
+              test_same ~merged_seq ~genetic_seq p
+            else
+              Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
+                test_diff ~merged_seq ~genetic_seq ~nuclear_seq p
+        end
+        |> function
+          | Ok () -> printf "equal\n"
+          | Error e -> printf ": ERROR %s\n" e; exit 1);
+      printf "All tests passed for %s\n" prefix
+  in
+  comp merged_trie_graph;
+  comp merged_ave_exon_graph;
   end
