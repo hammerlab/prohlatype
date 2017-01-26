@@ -235,46 +235,46 @@ let replace_sequence r s = { r with sequence = s }
 (* TODO: Figure out how to impute these from genetic. *)
 let a_01_11N ?(verbose=false) r =
   let open Boundaries in
-  if r.bm.index = 1 (*&& r.bm.position = 396 *) then begin
+  if r.bm.index = 1 then begin
     if verbose then
       printf "Adjusting A*01:11N's third exon!\n";
-    { r with sequence =
+    r
+    (* The latest (2017-01-24): 3270 IMGT release doesn't include the splice
+       variant in the alignment file.
+      { r with sequence =
         List.filter r.sequence
           ~f:(function | Gap { gstart = 1084 } -> false | _ -> true)
-        @ [ Sequence { start = 1085; s = "T" }
-          ; Gap { gstart = 1102; length = 17 }
-          ; Gap { gstart = 1122; length = 14 }
-          ]
-    }
+         @ [ Sequence { start = 1085; s = "T" }
+           ; Gap { gstart = 1102; length = 17 }
+           ; Gap { gstart = 1122; length = 14 }
+           ]
+    } *)
   end else
     r
 
 let drop_splice_failure_from_exon ?(verbose=false) name ~index ~end_pos r =
   let open Boundaries in
   if r.bm.index = index then begin
+    let ns = List.filter r.sequence ~f:(fun e -> start_position e < end_pos) in
     if verbose then
-      printf "Adjusting %s's %d exon\n" name (index + 1);
-    { r with sequence =
-        List.filter r.sequence ~f:(fun e -> start_position e < end_pos)
-    }
+      printf "Adjusting %s's %d exon\nbefore:%s\nafter:%s\n" name (index + 1)
+        (al_els_to_string r.sequence) (al_els_to_string ns);
+    { r with sequence = ns }
   end else
     r
 
 let known_splice_adjustments ?verbose = function
   | "A*01:11N"            -> a_01_11N ?verbose
-  (* r.bm.position = 745 *)
   | "A*29:01:01:02N"
   | "A*26:01:01:03N"
-  | "A*03:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:2 ~end_pos:2048
-  (* r.bm.position = 0 *)
+  | "A*03:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:2 ~end_pos:2035
   | "B*15:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:(-1) ~end_pos:75
-  (* r.bm.position = 1176 *)
   | "C*04:09N"       as n -> drop_splice_failure_from_exon ?verbose n ~index:6 ~end_pos:2999
   | _                     -> id
 
-let map_instr_to_alignments ?(fail_on_empty=true) nallele ~gen ~nuc alg =
+let map_instr_to_alignments ?verbose ?(fail_on_empty=true) nallele ~gen ~nuc alg =
   let open Boundaries in
-  let splice_adj = known_splice_adjustments nallele in
+  let splice_adj = known_splice_adjustments ?verbose nallele in
   let rec start = function
     | FillFromGenetic f :: tl when before_start f.bm ->
                 fill_from_g [] f tl ~gen ~nuc
@@ -647,7 +647,7 @@ let reference_positions_align ?seq lst =
 
 let same_alts ?verbose instr =
   list_fold_ok ~init:([], []) ~f:(fun (instr_acc, alt_acc) (allele, gen, nuc) ->
-    map_instr_to_alignments allele ~gen ~nuc instr >>= fun ainstr ->
+    map_instr_to_alignments ?verbose allele ~gen ~nuc instr >>= fun ainstr ->
     let all_elems = align_same ?verbose ("same: " ^ allele) ainstr in
       Ok ( (allele, ainstr) :: instr_acc
          , (allele, all_elems) :: alt_acc))
@@ -743,7 +743,7 @@ let do_it ?verbose prefix dl =
     else
       let nuc = nuc_mp.ref_elems in
       let gen = gen_mp.ref_elems in
-      map_instr_to_alignments nuc_mp.reference ~gen ~nuc instr >>= fun ref_instr ->
+      map_instr_to_alignments ?verbose nuc_mp.reference ~gen ~nuc instr >>= fun ref_instr ->
         let new_ref_elems = align_reference ref_instr in
         reference_positions_align ~seq:("reference:" ^ gen_mp.reference)
           new_ref_elems >>= fun _ref_position_check ->
@@ -758,7 +758,7 @@ let do_it ?verbose prefix dl =
             (* Add the same, alleles with both genetic and nucleic data.*)
             same_alts ?verbose instr same >>= fun (alt_inst, alt_als) ->
               let rdiff = reference_as_diff ref_instr in
-              let rmap = List.fold_left ((gen_mp.reference, rdiff) :: alt_inst) 
+              let rmap = List.fold_left ((gen_mp.reference, rdiff) :: alt_inst)
                 ~init:StringMap.empty ~f:(fun m (al,inst) -> StringMap.add al inst m)
               in
               (* TODO: Clear up this logic since we're computing distances for
@@ -771,7 +771,8 @@ let do_it ?verbose prefix dl =
                 diff_alts ?verbose ~na:just_nuc dmap rmap >>=
                     fun (diff_alt_lst, diff_map_lst) ->
                       let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
-                      printf "Finished merging!\n%!";
+                      if Option.value ~default:false verbose then
+                        printf "Finished merging!\n%!";
                       Ok ({ align_date = gen_mp.align_date
                           ; reference  = gen_mp.reference
                           ; ref_elems  = new_ref_elems
