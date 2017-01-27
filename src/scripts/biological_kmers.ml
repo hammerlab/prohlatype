@@ -22,10 +22,13 @@ let kmer_table_from_fasta ~k file =
   in
   kt, fasta_seqs
 
-let create_kmer_counts ~k file =
+let create_kmer_counts ~k file known_diff_alleles =
   let fasta_kt, fasta_seqs = kmer_table_from_fasta ~k (to_fasta_file file) in
+  let n = Ref_graph.Alleles { specific = []; regex = [".*"]
+                            ; without = known_diff_alleles }
+  in
   let input = Ref_graph.AlignmentFile (to_alignment_file file) in
-  let gm = Cache.(graph (graph_args ~input ())) in
+  let gm = Cache.(graph (graph_args ~input ~n ())) in
   let graph_kt = Index.kmer_counts ~biological:true ~k gm in
   fasta_kt, fasta_seqs, graph_kt
 
@@ -85,13 +88,15 @@ let () =
     ()
   else
     let n = Array.length Sys.argv in
-    let file, known_diffs =
+    let file, known_diff_alleles =
       if n <= 1 then
         "A_nuc", []
       else
         Sys.argv.(1), Array.to_list (Array.sub Sys.argv 1 (n - 1))
     in
-    let from_fasta, fasta_seqs, from_graph = create_kmer_counts ~k file in
-    match diff from_fasta from_graph fasta_seqs known_diffs with
+    let from_fasta, fasta_seqs, from_graph =
+      create_kmer_counts ~k file known_diff_alleles
+    in
+    match diff from_fasta from_graph fasta_seqs known_diff_alleles with
     | None     -> print_endline "same"
     | Some msg -> print_endline msg; exit (-1)

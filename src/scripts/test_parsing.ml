@@ -31,9 +31,12 @@ let to_fnames ?fname ?suffix dir =
   in
   let not_swap s = not (String.is_prefix ~prefix:"." s) in
   let not_readme s =
-    (* Get the original, not Sosa strings *)
-    not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
-          = "readme")
+    try
+      (* Get the original, not Sosa strings *)
+      not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
+            = "readme")
+    with Invalid_argument _ ->  (* files without extensions. *)
+        false
   in
   Sys.readdir dir
   |> Array.to_list
@@ -145,11 +148,13 @@ let () =
   else
     let fname = if n <= 1 then None else Some (Sys.argv.(2)) in
     to_fnames ?fname (imgthla_dir // "alignments")
-    |> List.iter ~f:(fun f ->
+    |> List.fold_left ~init:0 ~f:(fun s f ->
         try
           let p = Mas_parser.from_file f in
           test_result p;
-          printf "parsed and checked %s\n" f
+          printf "parsed and checked %s\n" f;
+          s
         with e ->
           eprintf "failed to parse %s\n" f;
-          raise e)
+          -1)
+    |> exit

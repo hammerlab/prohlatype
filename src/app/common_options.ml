@@ -128,7 +128,7 @@ let to_filename_and_graph_args ?alignment_file ?merge_file ~distance num_alt_to_
                               |> Digest.to_hex
                           in
                           sprintf "%s_spec_%s_%b" base sr_dig remove_reference
-                          , (Some (Alleles { specific; regex }))
+                          , (Some (Alleles { specific; regex; without = [] }))
     in
     option_based_fname
     , { Cache.input

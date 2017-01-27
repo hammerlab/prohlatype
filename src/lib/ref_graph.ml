@@ -1257,16 +1257,19 @@ type construct_which_args =
   | NumberOfAlts of int
   | Alleles of { specific : string list
                ; regex    : string list
+               ; without  : string list
                }
 
 let construct_which_args_to_string = function
-  | NumberOfAlts n                   -> sprintf "N%d" n
-  | Alleles { specific; regex = [] } when List.length specific < 5
-                                     -> sprintf "S%s" (String.concat ~sep:"_" specific)
-  | Alleles { specific; regex }      -> String.concat (specific @ regex)
-                                        |> Digest.string
-                                        |> Digest.to_hex
-                                        |> sprintf "R%s"
+  | NumberOfAlts n                          -> sprintf "N%d" n
+  | Alleles { specific
+            ; regex = []
+            ; without = []
+            } when List.length specific < 5 -> sprintf "S%s" (String.concat ~sep:"_" specific)
+  | Alleles { specific; regex; without }    -> String.concat (specific @ regex @ without)
+                                               |> Digest.string
+                                               |> Digest.to_hex
+                                               |> sprintf "R%s"
 
 let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
   ?(remove_reference=false) r =
@@ -1279,7 +1282,7 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
         alt_elems
     | Some (NumberOfAlts num_alt_to_add) ->
         List.take alt_elems num_alt_to_add
-    | Some (Alleles {specific; regex})   ->
+    | Some (Alleles {specific; regex; without })   ->
         let assoc_wrap name =
           if name = reference then None else
             try Some (name, List.assoc name alt_elems)
@@ -1294,7 +1297,8 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
           List.filter alt_elems ~f:(fun (alt, alt_seq) ->
             List.exists regexes ~f:(fun r -> Re.execp r alt))
         in
-        from_specific @ from_regex
+        List.filter ~f:(fun (a, _) -> not (List.mem a ~set:without))
+          (from_specific @ from_regex)
   in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
