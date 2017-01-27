@@ -667,14 +667,6 @@ module NodeQueue = struct
 
 end
 
-let node_queue_with_start_nodes aindex bounds =
-  let open Nodes in
-  A.Map.fold aindex bounds ~init:NodeQueue.empty
-    ~f:(fun q sep_lst allele ->
-          List.fold_left sep_lst ~init:q
-            ~f:(fun q sep ->
-                  NodeQueue.add (S (fst sep.start, allele)) q))
-
 module FoldAtSamePosition = struct
 
   let after_start_nodes g aindex bounds =
@@ -689,7 +681,11 @@ module FoldAtSamePosition = struct
     let without_old, amp = NodeQueue.at_min_position q in
     let withnew =
       List.fold_left amp ~init:without_old
-        ~f:(fun q n -> NodeQueue.add_successors g n q)
+        ~f:(fun q n ->
+              if Nodes.is_seq_or_boundary n then
+                NodeQueue.add_successors g n q
+              else
+                q)
     in
     withnew, amp
 
@@ -704,11 +700,22 @@ module FoldAtSamePosition = struct
     in
     loop init q
 
+
   let fold_after_starts g aindex bounds ~f ~init =
     fold_from g (after_start_nodes g aindex bounds) ~f ~init
 
+  let node_queue_with_start_and_successors_nodes g aindex bounds =
+    let open Nodes in
+    A.Map.fold aindex bounds ~init:NodeQueue.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                let s = S (fst sep.start, allele) in
+                let nq = NodeQueue.add s q in
+                NodeQueue.add_successors g s nq))
+
   let f g aindex bounds ~f ~init =
-    fold_from g (node_queue_with_start_nodes aindex bounds) ~f ~init
+    fold_from g (node_queue_with_start_and_successors_nodes g aindex bounds) ~f ~init
 
 end (* FoldAtSamePosition *)
 
@@ -734,8 +741,6 @@ let create_by_position g aindex bounds =
     let p = Nodes.position (List.hd_exn lst) in
     let j = p - st in
     let num_redirects = j - (i + 1) in
-    Printf.printf "i: %d, j: %d, p: %d, num_redirects: %d\n"
-      i j p num_redirects;
     (j, NL lst :: (redirects i num_redirects acc))))
   |> snd
   |> List.rev
