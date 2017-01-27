@@ -48,12 +48,6 @@ module type Single_config = sig
   val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread ->
     Index.position -> m product
 
-  (* For paired end sequencing we want to compute a single metric by combining
-     the result for both pairs. We force this reduction because if the user
-     doesn't want to combine the results, they can always treat each read as
-     a single read. *)
-  val combine_pairs : m Alleles.Map.t -> m Alleles.Map.t -> m Alleles.Map.t
-
   (* Similar to combining paired reads, sometimes a read may have a valid
      lookup to multiple positions in the graph, this function allows us the
      user how to choose amongst the best positions. The second argument
@@ -62,8 +56,17 @@ module type Single_config = sig
   val reduce_across_positions : m Alleles.Map.t -> m Alleles.Map.t list ->
     m Alleles.Map.t
 
-  val regular_or_complement : regular:m Alleles.Map.t -> reverse_complement:m Alleles.Map.t ->
-    bool
+  (* If the regular and the reverse_complement strands both have positions in
+     the index, compare the resulting (reduced) maps to determine if regular
+     is better (ie true). *)
+  val regular_or_complement : regular:m Alleles.Map.t ->
+      reverse_complement:m Alleles.Map.t -> bool
+
+  (* For paired end sequencing we want to compute a single metric by combining
+     the result for both pairs. We force this reduction because if the user
+     doesn't want to combine the results, they can always treat each read as
+     a single read. *)
+  val combine_pairs : m Alleles.Map.t -> m Alleles.Map.t -> m Alleles.Map.t
 
 end (* Single_config *)
 
@@ -71,6 +74,7 @@ type sequence_alignment_error =
   | NoIndexedPositions
   | AllComputesStopped of int
   | SequenceTooShort of too_short
+  | InconsistentPairOrientation of bool   (* true = both regular *)
   | ToThread of string
   [@@deriving show]
 
@@ -90,7 +94,8 @@ module AgainstSequence (C : Single_config) = struct
     | Ok []   -> Error NoIndexedPositions
     | Ok ps   -> against_positions ?early_stop g ps seq
 
-  let single_with_rc ?early_stop g idx seq =
+  let single_with_rc_with_choice ?early_stop g idx seq =
+    let ap st ps seq = against_positions ?early_stop g ps seq >>| fun e -> (e, st) in
     let is = Index.lookup idx (C.thread_to_seq seq) in
     match is with
     | Error e -> Error (SequenceTooShort e)
@@ -102,22 +107,25 @@ module AgainstSequence (C : Single_config) = struct
               failwithf "Reverse complement sequence %s shorter than original %s!"
                 (C.thread_to_seq seq) (C.thread_to_seq rev_seq)
           | [], Ok []  -> Error NoIndexedPositions
-          | ps, Ok []  -> against_positions ?early_stop g ps seq
-          | [], Ok rps -> against_positions ?early_stop g rps rev_seq
+          | ps, Ok []  -> ap `Reg ps seq
+          | [], Ok rps -> ap `Comp rps rev_seq
           | ps, Ok rps ->
-              let reg_e = against_positions ?early_stop g ps seq in
-              let rcp_e = against_positions ?early_stop g rps rev_seq in
+              let reg_e = ap `Reg ps seq in
+              let rcp_e = ap `Comp rps rev_seq in
               begin match reg_e, rcp_e with
-                | Error e,    Error _ -> reg_e
-                | Ok m,       Error _ -> reg_e
-                | Error _,    Ok m    -> rcp_e
-                | Ok regular, Ok reverse_complement ->
+                | Error e,          Error _                    -> reg_e
+                | Ok _,             Error _                    -> reg_e
+                | Error _,          Ok _                       -> rcp_e
+                | Ok (regular, _),  Ok (reverse_complement, _) ->
                   if C.regular_or_complement ~regular ~reverse_complement then
                     reg_e
                   else
                     rcp_e
               end
         end
+
+  let single_with_rc ?early_stop g idx seq =
+    single_with_rc_with_choice ?early_stop g idx seq >>| fun (r, _) -> r
 
   let single ?(check_rc=true) ?early_stop g idx seq =
     if check_rc then
@@ -126,34 +134,13 @@ module AgainstSequence (C : Single_config) = struct
       single_no_rc ?early_stop g idx seq
 
   let paired ?early_stop g idx seq1 seq2 =
-    let where t = Index.lookup idx (C.thread_to_seq t) in
-    let ap = against_positions ?early_stop g in
-    match Index.lookup idx (C.thread_to_seq seq1) with
-    | Error e -> Error (SequenceTooShort e)
-    | Ok []   ->
-        let rev1 = C.reverse_complement seq1 in
-        begin match where rev1, where seq2 with
-        | Error e, _
-        | _,      Error e -> Error (SequenceTooShort e)
-        | Ok ps1, Ok ps2  ->
-            match ap ps1 rev1, ap ps2 seq2 with
-            | Ok r, Ok l -> Ok (C.combine_pairs r l)
-            | Ok o, _
-            | _,    Ok o -> Ok o
-            | Error e, _ -> Error e
-        end
-    | Ok ps ->
-        let rev2 = C.reverse_complement seq2 in
-        begin match where seq1, where rev2 with
-        | Error e, _
-        | _,      Error e -> Error (SequenceTooShort e)
-        | Ok ps1, Ok ps2  ->
-            match ap ps1 seq1, ap ps2 rev2 with
-            | Ok r, Ok l -> Ok (C.combine_pairs r l)
-            | Ok o, _
-            | _,    Ok o -> Ok o
-            | Error e, _ -> Error e
-        end
+    single_with_rc_with_choice ?early_stop g idx seq1 >>= fun (m1, c1) ->
+      single_with_rc_with_choice ?early_stop g idx seq2 >>= fun (m2, c2) ->
+        match c1, c2 with
+        | `Reg,  `Reg   -> Error (InconsistentPairOrientation true)
+        | `Comp, `Comp  -> Error (InconsistentPairOrientation false)
+        | `Reg,  `Comp
+        | `Comp, `Reg   -> Ok (C.combine_pairs m1 m2)
 
   type stop_parameter = C.stop_parameter
   type thread = C.thread
