@@ -59,7 +59,11 @@ module type Single_config = sig
      user how to choose amongst the best positions. The second argument
      represent the tail of all the found positions and might be empty when
      lookup found only one position.  *)
-  val reduce_across_positions : m Alleles.Map.t -> m Alleles.Map.t list -> m Alleles.Map.t
+  val reduce_across_positions : m Alleles.Map.t -> m Alleles.Map.t list ->
+    m Alleles.Map.t
+
+  val regular_or_complement : regular:m Alleles.Map.t -> reverse_complement:m Alleles.Map.t ->
+    bool
 
 end (* Single_config *)
 
@@ -91,37 +95,35 @@ module AgainstSequence (C : Single_config) = struct
     match is with
     | Error e -> Error (SequenceTooShort e)
       (* No point checking rev comp since it should have the same length! *)
-    | Ok  []  ->
-        let revt = C.reverse_complement seq in
-        begin match Index.lookup idx (C.thread_to_seq revt) with
-        | Error e ->
-            failwithf "Reverse complement sequence %s shorter than original %s!"
-              (C.thread_to_seq seq) (C.thread_to_seq revt)
-        | Ok []   -> Error NoIndexedPositions
-        | Ok rps  -> against_positions ?early_stop g rps revt
-        end
-    | Ok ps   ->
-        let revt = C.reverse_complement seq in
-        begin match Index.lookup idx (C.thread_to_seq revt) with
-        | Error e ->
-            failwithf "Reverse complement sequence %s shorter than original %s!"
-              (C.thread_to_seq seq) (C.thread_to_seq revt)
-        | Ok []   -> against_positions ?early_stop g ps seq
-        | Ok rps  -> against_positions ?early_stop g rps revt
+    | Ok ls   ->
+        let rev_seq = C.reverse_complement seq in
+        begin match ls, Index.lookup idx (C.thread_to_seq rev_seq) with
+          | _, Error e ->
+              failwithf "Reverse complement sequence %s shorter than original %s!"
+                (C.thread_to_seq seq) (C.thread_to_seq rev_seq)
+          | [], Ok []  -> Error NoIndexedPositions
+          | ps, Ok []  -> against_positions ?early_stop g ps seq
+          | [], Ok rps -> against_positions ?early_stop g rps rev_seq
+          | ps, Ok rps ->
+              let reg_e = against_positions ?early_stop g ps seq in
+              let rcp_e = against_positions ?early_stop g rps rev_seq in
+              begin match reg_e, rcp_e with
+                | Error e,    Error _ -> reg_e
+                | Ok m,       Error _ -> reg_e
+                | Error _,    Ok m    -> rcp_e
+                | Ok regular, Ok reverse_complement ->
+                  if C.regular_or_complement ~regular ~reverse_complement then
+                    reg_e
+                  else
+                    rcp_e
+              end
         end
 
   let single ?(check_rc=true) ?early_stop g idx seq =
-    match Index.lookup idx (C.thread_to_seq seq) with
-    | Error e -> Error (SequenceTooShort e)
-    | Ok []   ->
-        if check_rc then
-          let revt = C.reverse_complement seq in
-            match Index.lookup idx (C.thread_to_seq revt) with
-            | Error e -> Error (SequenceTooShort e)
-            | Ok ps   -> against_positions ?early_stop g ps revt
-        else
-          Error NoIndexedPositions
-    | Ok ps   -> against_positions ?early_stop g ps seq
+    if check_rc then
+      single_with_rc ?early_stop g idx seq
+    else
+      single_no_rc ?early_stop g idx seq
 
   let paired ?early_stop g idx seq1 seq2 =
     let where t = Index.lookup idx (C.thread_to_seq t) in
@@ -197,6 +199,9 @@ module ListMismatches_config = struct
 
   let combine_pairs = Alleles.Map.map2_wa ~f:(@)
 
+  let regular_or_complement ~regular ~reverse_complement =
+    to_min regular < to_min reverse_complement
+
 end (* ListMismatches_config *)
 
 module ListMismatches = AgainstSequence (ListMismatches_config)
@@ -226,8 +231,10 @@ module SequenceMismatches = AgainstSequence (struct
             (b, s))
         |> snd
 
-
   let combine_pairs = Alleles.Map.map2_wa ~f:(+)
+
+  let regular_or_complement ~regular ~reverse_complement =
+    to_min regular < to_min reverse_complement
 
 end)
 
@@ -276,6 +283,9 @@ module PhredLlhdMismatches = AgainstSequence ( struct
       { mismatches = m1.mismatches +. m2.mismatches
       ; sum_llhd   = m1.sum_llhd +. m2.sum_llhd
       })
+
+  let regular_or_complement ~regular ~reverse_complement =
+    to_max regular > to_max reverse_complement
 
 end) (* PhredLlhdMismatches *)
 
