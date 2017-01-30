@@ -78,6 +78,7 @@ type sequence_alignment_error =
   | ToThread of string
   [@@deriving show]
 
+(* Given a Single_config return functions that process a single or paired read. *)
 module AgainstSequence (C : Single_config) = struct
 
   let lookup ?distance idx thread =
@@ -150,13 +151,16 @@ module AgainstSequence (C : Single_config) = struct
 
 end (* AgainstSequence *)
 
+(* Configurations of different metrics to measure against a read. *)
+
 module ThreadIsJustSequence = struct
   type thread = string
   let thread_to_seq s = s
   let reverse_complement = Util.reverse_complement
 end
 
-module ListMismatches_config = struct
+(* Keep track of all the positions where we have mismatches. *)
+module List_mismatches_config = struct
 
   type m = (int * int) list
   let to_string l =
@@ -192,11 +196,9 @@ module ListMismatches_config = struct
   let regular_or_complement ~regular ~reverse_complement =
     to_min regular < to_min reverse_complement
 
-end (* ListMismatches_config *)
+end (* List_mismatches_config *)
 
-module ListMismatches = AgainstSequence (ListMismatches_config)
-
-module SequenceMismatches = AgainstSequence (struct
+module Count_mismatches_config = struct
 
   type m = int
   let to_string = sprintf "%d"
@@ -226,9 +228,9 @@ module SequenceMismatches = AgainstSequence (struct
   let regular_or_complement ~regular ~reverse_complement =
     to_min regular < to_min reverse_complement
 
-end)
+end (* Count_mismatches_config *)
 
-module PhredLlhdMismatches = AgainstSequence ( struct
+module Phred_likelihood_config = struct
 
   open Alignment
 
@@ -277,7 +279,11 @@ module PhredLlhdMismatches = AgainstSequence ( struct
   let regular_or_complement ~regular ~reverse_complement =
     to_max regular > to_max reverse_complement
 
-end) (* PhredLlhdMismatches *)
+end (* Phred_likelihood_config *)
+
+module List_mismatches = AgainstSequence (List_mismatches_config)
+module Count_mismatches = AgainstSequence(Count_mismatches_config)
+module Phred_likelihood = AgainstSequence (Phred_likelihood_config)
 
 module type Multiple_config = sig
 
@@ -357,12 +363,12 @@ module MismatchesList = Multiple (struct
   type re = (int * int) list list
   let empty = []
 
-  type stop_parameter = ListMismatches.stop_parameter
-  type thread = ListMismatches.thread
+  type stop_parameter = List_mismatches.stop_parameter
+  type thread = List_mismatches.thread
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map = ListMismatches.single
-  let map_paired = ListMismatches.paired
+  let map = List_mismatches.single
+  let map_paired = List_mismatches.paired
   let reduce v l = v :: l
 end)
 
@@ -371,12 +377,12 @@ module Mismatches = Multiple (struct
   type re = int
   let empty = 0
 
-  type stop_parameter = SequenceMismatches.stop_parameter
-  type thread = SequenceMismatches.thread
+  type stop_parameter = Count_mismatches.stop_parameter
+  type thread = Count_mismatches.thread
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map = SequenceMismatches.single
-  let map_paired = SequenceMismatches.paired
+  let map = Count_mismatches.single
+  let map_paired = Count_mismatches.paired
   let reduce = (+)
 end)
 
@@ -384,18 +390,18 @@ module Llhd_config = struct
   type mp = float
   type re = float
 
-  type stop_parameter = SequenceMismatches.stop_parameter
-  type thread = SequenceMismatches.thread
+  type stop_parameter = Count_mismatches.stop_parameter
+  type thread = Count_mismatches.thread
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
   let map l ?check_rc ?distance ?early_stop g idx th =
     let len = String.length th in
-    SequenceMismatches.single ?check_rc ?early_stop g idx th >>= fun m ->
+    Count_mismatches.single ?check_rc ?early_stop g idx th >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(l ~len) m)
 
   let map_paired l ?distance ?early_stop g idx th1 th2 =
     let len = String.length th1 in
-    SequenceMismatches.paired ?early_stop g idx th1 th2 >>= fun m ->
+    Count_mismatches.paired ?early_stop g idx th1 th2 >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(l ~len) m)
 
 end (* Llhd_config *)
@@ -406,8 +412,8 @@ module Phred_lhd = Multiple (struct
 
   let empty = 0.
 
-  type stop_parameter = PhredLlhdMismatches.stop_parameter
-  type thread = PhredLlhdMismatches.thread
+  type stop_parameter = Phred_likelihood.stop_parameter
+  type thread = Phred_likelihood.thread
 
   let to_thread fqi =
     let module CE = Core_kernel.Error in
@@ -421,12 +427,12 @@ module Phred_lhd = Multiple (struct
 
   let map ?check_rc ?distance ?early_stop g idx th =
     let open Alignment in
-    PhredLlhdMismatches.single ?distance ?check_rc ?early_stop g idx th >>= fun amap ->
+    Phred_likelihood.single ?distance ?check_rc ?early_stop g idx th >>= fun amap ->
       Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
 
   let map_paired ?distance ?early_stop g idx th1 th2 =
     let open Alignment in
-    PhredLlhdMismatches.paired ?distance ?early_stop g idx th1 th2 >>= fun amap ->
+    Phred_likelihood.paired ?distance ?early_stop g idx th1 th2 >>= fun amap ->
       Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
 
   let reduce = (+.)
