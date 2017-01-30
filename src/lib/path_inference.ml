@@ -326,19 +326,6 @@ module Multiple (C : Multiple_config) = struct
     in
     Fastq.fold ?number_of_reads ~init:([], amap) ~f fastq_file
 
-  let map_over_fastq ?number_of_reads fastq_file ?check_rc ?distance ?early_stop g idx =
-    let f fqi =
-      match C.to_thread fqi with
-      | Error e     -> Error (ToThread e, fqi)
-      | Ok seq  ->
-          match C.map ?distance ?check_rc ?early_stop g idx seq with
-          | Error e -> Error (e, fqi)
-          | Ok a    -> Ok a
-    in
-    Fastq.fold ?number_of_reads ~init:[] fastq_file
-      ~f:(fun acc fqi -> (f fqi) :: acc)
-    |> List.rev
-
   let fold_over_paired ?number_of_reads file1 file2 ?distance ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi1 fqi2 =
@@ -445,42 +432,6 @@ module Phred_lhd = Multiple (struct
   let reduce = (+.)
 
 end) (* Phred_lhd *)
-
-
-let map ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
-  let early_stop =
-    Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
-  in
-  match as_ with
-  | `MismatchesList       ->
-      `MismatchesList (MismatchesList.map_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
-  | `Mismatches           ->
-      `Mismatches (Mismatches.map_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
-  | `Likelihood error     ->
-      let module Likelihood = Multiple (struct
-        include Llhd_config
-        let empty = 1.
-        let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> likelihood ~er:error ~len (float m))
-        let reduce l a = a *. l
-      end) in
-      `Likelihood (Likelihood.map_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
-  | `LogLikelihood error  ->
-      let module LogLikelihood = Multiple (struct
-        include Llhd_config
-        let empty = 0.
-        let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let reduce l a = a +. l
-      end) in
-     `LogLikelihood (LogLikelihood.map_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
-  | `PhredLikelihood ->
-      `PhredLikelihood (Phred_lhd.map_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
 
 let type_ ?filter ?check_rc ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
   let early_stop =
