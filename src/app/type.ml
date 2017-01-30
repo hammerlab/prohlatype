@@ -26,12 +26,14 @@ let output_values_assoc contents to_string aindex assoc =
 
 let default_error_fname = "typing_errors.log"
 
-let report_errors ~error_output elst =
+let report_errors ~all_options ~error_output elst =
   let oc, close =
     match error_output with
-    | `DefaultFile -> open_out default_error_fname, true
-    | `Stderr      -> stderr, false
-    | `Stdout      -> stdout, false
+    | `InputPrefixed  -> let fname = sprintf "%s_typing_errors.log" all_options in
+                         open_out fname, true
+    | `DefaultFile    -> open_out default_error_fname, true
+    | `Stderr         -> stderr, false
+    | `Stdout         -> stdout, false
   in
   List.iter elst ~f:(fun (sae, fqi) ->
     fprintf oc "%s\n%s\n%s\n"
@@ -126,6 +128,11 @@ let report_likelihood ?reduce_resolution ?bucket ~print_top contents g amap =
       | 1 -> sort values |> Compress.compress ~level:`One |> sort |> output
       | _ -> invalid_argf "You promised me parsing! %d" n
 
+let basename_without_extension f =
+  let bn = Filename.basename f in
+  try Filename.chop_extension bn
+  with Invalid_argument _ -> bn
+
 let type_
   (* Graph construction args. *)
   alignment_file
@@ -147,7 +154,7 @@ let type_
     ?alignment_file ?merge_file ~distance num_alt_to_add
     ~allele_list ~allele_regex_list
     ~join_same_sequence ~remove_reference
-    >>= begin fun (_option_based_fname, cargs) ->
+    >>= begin fun (option_based_fname, cargs) ->
         let open Cache in
         let open Ref_graph in
         let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
@@ -159,30 +166,36 @@ let type_
           | `LogLikelihood    -> `LogLikelihood likelihood_error
           | `PhredLikelihood  -> `PhredLikelihood
         in
-        let res =
+        let input_files, res =
           match fastq_file_lst with
           | []              -> invalid_argf "Cmdliner lied!"
           | [fastq_file]    ->
               let check_rc = not dont_check_rc in
+              basename_without_extension fastq_file,
               Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
           | [read1; read2] ->
+              sprintf "%s-%s"
+                (basename_without_extension read1)
+                (basename_without_extension read2),
               Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
           | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
         in
+        let all_options = sprintf "%s_%s" option_based_fname input_files in
+        let re = report_errors ~all_options ~error_output in
         let () =
           match res with
-          | `Mismatches (error_list, amap)      -> report_errors ~error_output error_list;
-                                                  report_mismatches ~print_top g amap
-          | `MismatchesList (error_list, amap)  -> report_errors ~error_output error_list;
-                                                  report_mismatches_list ~print_top g amap
-          | `Likelihood (error_list, amap)      -> report_errors ~error_output error_list;
-                                                  report_likelihood ?reduce_resolution
+          | `Mismatches (error_list, amap)      -> re error_list;
+                                                   report_mismatches ~print_top g amap
+          | `MismatchesList (error_list, amap)  -> re error_list;
+                                                   report_mismatches_list ~print_top g amap
+          | `Likelihood (error_list, amap)      -> re error_list;
+                                                   report_likelihood ?reduce_resolution
                                                     ?bucket ~print_top "likelihood" g amap
-          | `LogLikelihood (error_list, amap)   -> report_errors ~error_output error_list;
-                                                  report_likelihood ?reduce_resolution
+          | `LogLikelihood (error_list, amap)   -> re error_list;
+                                                   report_likelihood ?reduce_resolution
                                                     ?bucket ~print_top "loglikelihood" g amap
-          | `PhredLikelihood (error_list, amap) -> report_errors ~error_output error_list;
-                                                  report_likelihood ?reduce_resolution
+          | `PhredLikelihood (error_list, amap) -> re error_list;
+                                                   report_likelihood ?reduce_resolution
                                                     ?bucket ~print_top "phredlihood" g amap
         in
         Ok ()
@@ -243,10 +256,11 @@ let () =
       sprintf "Output errors such as sequences that don't match to %s. \
                By default output is written to %s." dest default_error_fname
     in
-    Arg.(value & vflag `DefaultFile
-      [ `Stdout,      info ~doc:(doc "standard output") ["error-stdout"]
-      ; `Stderr,      info ~doc:(doc "standard error") ["error-stderr"]
-      ; `DefaultFile, info ~doc:(doc "default filename") ["error-default"]
+    Arg.(value & vflag `InputPrefixed
+      [ `Stdout,        info ~doc:(doc "standard output") ["error-stdout"]
+      ; `Stderr,        info ~doc:(doc "standard error") ["error-stderr"]
+      ; `DefaultFile,   info ~doc:(doc "default filename") ["error-default"]
+      ; `InputPrefixed, info ~doc:(doc "input prefixed") ["error-input-prefixed"]
       ])
   in
   let reduce_resolution_arg =
