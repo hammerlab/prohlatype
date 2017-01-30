@@ -40,7 +40,14 @@ val reverse_complement : k:int -> int -> int
 (** [reverse_complement k p] computes the pattern of [p]'s reverse complement,
     where [p] is a pattern for a [k]-mer. *)
 
-(** Returns powers of 4. *)
-val pow4 : int -> int
+(** [pow b n] returns [b ^ n]. *)
+val pow : int -> int -> int
 
-val neighbors : k:int -> int -> int array
+(** Neighbors that are [d] distance away from a [k] encoded value [e].
+
+    @param Takes a list of indices in (0, k] that should be skipped. *)
+val neighbors : ?skip:int list -> ?d:int -> k:int -> int -> int array
+
+(** Encode all of the neighbors of a string that are [d] distance away.
+    Automatically, "N-tolerant". *)
+val encode_neighbors : ?len:int -> d:int -> string -> int array

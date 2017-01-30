@@ -156,12 +156,17 @@ let search_pos_edge_lst_to_string aindex l =
   |> String.concat ~sep:";"
   |> sprintf "[%s]"
 
+(* I want to call this a result instead. *)
+type 'a product =
+  | Finished of 'a Alleles.Map.t
+  | Stopped of 'a Alleles.Map.t
+
 module Align (Ag : Alignment_config) = struct
 
   module Ta = MakeThreadAlignment(Ag)
 
   type node_result =
-    | Finished of Ag.t
+    | Fin of Ag.t
     | GoOn of Ag.t * int
 
   let align_against s =
@@ -170,7 +175,7 @@ module Align (Ag : Alignment_config) = struct
     fun ?start ~search_pos ~node_seq ~node_offset () ->
       match align ?start ~thread_offset:search_pos ~segment:node_seq ~offset:node_offset with
       | Both m
-      | First (m, _)   -> Finished m      (* end of the search string *)
+      | First (m, _)   -> Fin m      (* end of the search string *)
       | Second (m, so) -> GoOn (m, so)
 
   let compute ?early_stop gt search_seq pos =
@@ -249,7 +254,7 @@ module Align (Ag : Alignment_config) = struct
             List.fold_left splst ~init:(Some (stop, [])) ~f:(fun stop_opt (search_pos, edge) ->
               Option.bind stop_opt ~f:(fun (stop, acc) ->
                 match nmas ~search_pos ~node_seq ~node_offset:0 () with
-                | Finished local_mismatches            ->
+                | Fin local_mismatches                 ->
                     assign ~node edge ~search_pos stop local_mismatches
                     |> Option.map ~f:(fun s -> s, acc)
                 | GoOn (local_mismatches, search_pos)  ->
@@ -262,79 +267,78 @@ module Align (Ag : Alignment_config) = struct
     in
     let rec assign_loop (stop, q) =
       if Nmq.is_empty q then
-        `Finished mis_map
+        Finished mis_map
       else
         let nq, elst = Nmq.at_min_position q in
         match List.fold_left elst ~init:(Some (stop, nq)) ~f:match_and_add_succ with
         | Some sq -> assign_loop sq
-        | None    -> `Stopped mis_map
+        | None    -> Stopped mis_map
     in
-    Ref_graph.adjacents_at gt ~pos >>= begin fun {edge_node_set; seen_alleles} ->
-      (* TODO. For now assume that everything that isn't seen has a full mismatch,
-        this isn't strictly true since the Start of that allele could be within
-        the range of the search str.
-        - One approach would be to add the other starts, to the adjacents results.  *)
-      let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
-      let mismatch_whole_read = Ag.mismatches search_str_length in
-      let assigned_not_seen = assign not_seen ~search_pos:0 Ag.stop_init mismatch_whole_read in
-      match assigned_not_seen with
-      | None ->
-          (* This is also a weird case where we may stop aligning because of the
-             alleles that we haven't seen. Should we communicate this explicitly to
-             the 'Ag' logic? At least, we're communicating this condition via the
-             `Stopped | `Finished distinction.  *)
-          Ok (`Stopped mis_map)
-      | Some stop ->
-          let startq_opt =
-            EdgeNodeSet.fold edge_node_set ~init:(Some (stop, Nmq.empty))
-              (* Since the adjacents aren't necessarily at pos we have extra
-                bookkeeping at the start of the recursion. *)
-              ~f:(fun (edge, node) state_opt ->
-                    Option.bind state_opt ~f:(fun (stop, queue) ->
-                      let assign_start = assign ~node edge ~search_pos:0 stop in
-                      match node with
-                      | S _              ->
-                          invalid_argf "Asked to compute mismatches at %s, not a sequence node"
-                            (vertex_name node)
-                      | E _              ->
+    let {edge_node_set; seen_alleles} = Ref_graph.adjacents_at gt ~pos in
+    (* TODO. For now assume that everything that isn't seen has a full mismatch,
+      this isn't strictly true since the Start of that allele could be within
+      the range of the search str.
+      - One approach would be to add the other starts, to the adjacents results.  *)
+    let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
+    let mismatch_whole_read = Ag.mismatches search_str_length in
+    let assigned_not_seen = assign not_seen ~search_pos:0 Ag.stop_init mismatch_whole_read in
+    match assigned_not_seen with
+    | None ->
+        (* This is also a weird case where we may stop aligning because of the
+            alleles that we haven't seen. Should we communicate this explicitly to
+            the 'Ag' logic? At least, we're communicating this condition via the
+            Stopped | Finished distinction.  *)
+        Stopped mis_map
+    | Some stop ->
+        let startq_opt =
+          EdgeNodeSet.fold edge_node_set ~init:(Some (stop, Nmq.empty))
+            (* Since the adjacents aren't necessarily at pos we have extra
+              bookkeeping at the start of the recursion. *)
+            ~f:(fun (edge, node) state_opt ->
+                  Option.bind state_opt ~f:(fun (stop, queue) ->
+                    let assign_start = assign ~node edge ~search_pos:0 stop in
+                    match node with
+                    | S _              ->
+                        invalid_argf "Asked to compute mismatches at %s, not a sequence node"
+                          (vertex_name node)
+                    | E _              ->
+                        assign_start (Ag.mismatches search_str_length)
+                        |> Option.map ~f:(fun s -> (s, queue))
+                    | B (p, _)         ->
+                        let dist = p - pos in
+                        if dist <= 0 then
+                          Some (stop, add_successors queue (node, [0, edge]))
+                        else if dist < search_str_length then begin
+                          assign_start (Ag.mismatches dist)
+                          |> Option.map ~f:(fun s -> (s, add_successors queue (node, [dist, edge])))
+                        end else begin
+                          assign_start (Ag.mismatches search_str_length)
+                          |> Option.map ~f:(fun s -> (s, queue (* Nothing left to match. *)))
+                        end
+                    | N (p, node_seq)  ->
+                        let nmas_and_assign ~node_offset ~start_mismatches =
+                          match nmas ~search_pos:start_mismatches ~node_seq ~node_offset
+                                  ~start:(Ag.mismatches start_mismatches) () with
+                          | Fin mismatches                ->
+                              assign_start mismatches
+                              |> Option.map ~f:(fun s -> (s, queue))
+                          | GoOn (mismatches, search_pos) ->
+                              assign_start mismatches
+                              |> Option.map ~f:(fun s -> (s, add_successors queue (node, [search_pos, edge])))
+                        in
+                        let dist = p - pos in
+                        if dist <= 0 then
+                          nmas_and_assign ~node_offset:(-dist) ~start_mismatches:0
+                        else if dist < search_str_length then
+                          nmas_and_assign ~node_offset:0 ~start_mismatches:dist
+                        else begin
                           assign_start (Ag.mismatches search_str_length)
                           |> Option.map ~f:(fun s -> (s, queue))
-                      | B (p, _)         ->
-                          let dist = p - pos in
-                          if dist <= 0 then
-                            Some (stop, add_successors queue (node, [0, edge]))
-                          else if dist < search_str_length then begin
-                            assign_start (Ag.mismatches dist)
-                            |> Option.map ~f:(fun s -> (s, add_successors queue (node, [dist, edge])))
-                          end else begin
-                            assign_start (Ag.mismatches search_str_length)
-                            |> Option.map ~f:(fun s -> (s, queue (* Nothing left to match. *)))
-                          end
-                      | N (p, node_seq)  ->
-                          let nmas_and_assign ~node_offset ~start_mismatches =
-                            match nmas ~search_pos:start_mismatches ~node_seq ~node_offset
-                                    ~start:(Ag.mismatches start_mismatches) () with
-                            | Finished mismatches            ->
-                                assign_start mismatches
-                                |> Option.map ~f:(fun s -> (s, queue))
-                            | GoOn (mismatches, search_pos)  ->
-                                assign_start mismatches
-                                |> Option.map ~f:(fun s -> (s, add_successors queue (node, [search_pos, edge])))
-                          in
-                          let dist = p - pos in
-                          if dist <= 0 then
-                            nmas_and_assign ~node_offset:(-dist) ~start_mismatches:0
-                          else if dist < search_str_length then
-                            nmas_and_assign ~node_offset:0 ~start_mismatches:dist
-                          else begin
-                            assign_start (Ag.mismatches search_str_length)
-                            |> Option.map ~f:(fun s -> (s, queue))
-                          end))
-          in
-          match startq_opt with
-          | None        -> Ok (`Stopped mis_map)
-          | Some startq -> Ok (assign_loop startq)
-    end
+                        end))
+        in
+        match startq_opt with
+        | None        -> Stopped mis_map
+        | Some startq -> assign_loop startq
 
   let mismatches = Ag.mismatches
 
@@ -513,7 +517,7 @@ let manual_mismatches gt search_seq pos =
           Ok (nmas ~node_seq:graph_seq ~node_offset:0 ())
     else
       let mn = Mismatches.mismatches n in
-      Ok (Mismatches.Finished mn))
+      Ok (Mismatches.Fin mn))
 
 let to_weights lst =
   let flst = List.map ~f:float_of_int lst in

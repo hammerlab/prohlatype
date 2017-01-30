@@ -11,11 +11,11 @@ type index = int
 let k {k;_} = k
 
 let make k e =
-  let n = Kmer_to_int.pow4 k in
+  let n = Kmer_to_int.pow 4 k in
   { k; table = Array.make n e }
 
 let init k f =
-  let n = Kmer_to_int.pow4 k in
+  let n = Kmer_to_int.pow 4 k in
   { k; table = Array.init n ~f:(fun i -> f (Kmer_to_int.decode ~k i)) }
 
 let update f {table;_} index =
@@ -24,21 +24,34 @@ let update f {table;_} index =
 let correct_size tbl s =
   let n = String.length s in
   let k = k tbl in
-  if n <> k then
-    invalid_argf "String length %d doesn't match table: %d" n k
+  if n < k then
+    Error (TooShort { actual = n; desired = k})
   else
-    ()
+    Ok ()
 
 let update_kmer f tbl s =
-  correct_size tbl s;
-  update f tbl (Kmer_to_int.encode s)
+  correct_size tbl s >>= fun () ->
+    Ok (update f tbl (Kmer_to_int.encode ~len:tbl.k s))
 
 let lookup {table; _} index =
   table.(index)
 
 let lookup_kmer tbl s =
-  correct_size tbl s;
-  lookup tbl (Kmer_to_int.encode s)
+  correct_size tbl s >>= fun () ->
+    Ok (lookup tbl (Kmer_to_int.encode ~len:tbl.k s))
+
+let lookup_kmer_N_tolerant tbl s =
+  correct_size tbl s >>= fun () ->
+    Ok (Kmer_to_int.encode_N_tolerant ~len:tbl.k s
+        |> List.map ~f:(lookup tbl))
+
+(* One not-so-sensible idea to make this function total (without the TooShort
+   error) would be to map less than kmer to all possible kmer's.
+   (3,4): ACG -> [NACG; ANCG; ACNG; ACGN]. *)
+let lookup_kmer_neighbors ~d tbl s =
+  correct_size tbl s >>= fun () ->
+    Ok (Kmer_to_int.encode_neighbors ~len:tbl.k ~d s
+        |> Array.map ~f:(lookup tbl))
 
 let distr { table; _} =
   let mx = Array.fold_left ~f:max ~init:0 table in

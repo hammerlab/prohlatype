@@ -8,19 +8,13 @@ let adjacents_at_test { Ref_graph.g; aindex; offset; posarr; bounds} ~pos =
 
 let test_graph file g pos =
   let open Ref_graph in
-  match adjacents_at_test g ~pos with
-  | Error e ->
-      printf "Couldn't find adjacents at %d for %s because of %s" pos file e
-  | Ok (edge_node_set, _, _) ->
-      print_endline (EdgeNodeSet.to_table g.aindex edge_node_set)
+  let (edge_node_set, _, _) = adjacents_at_test g ~pos in
+  print_endline (EdgeNodeSet.to_table g.aindex edge_node_set)
 
 let test_graph_fail file g pos =
   let open Ref_graph in
-  match adjacents_at_test g ~pos with
-  | Error e ->
-      invalid_argf "Couldn't find adjacents at %d for %s because of %s" pos file e
-  | Ok _ ->
-      ()
+  let _ = adjacents_at_test g ~pos in
+  ()
 
 let test_file file =
   let open Ref_graph in

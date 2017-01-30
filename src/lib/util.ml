@@ -6,21 +6,34 @@ module String = Sosa.Native_string
 let invalid_argf ?(prefix="") fmt =
   ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
+let failwithf fmt =
+  ksprintf failwith fmt
+
 let id x = x
 
-let error_bind ~f oe =
+let result_bind ~f oe =
   match oe with
   | Error e -> Error e
   | Ok o -> f o
 
-let (>>=) oe f = error_bind ~f oe
+let (>>=) oe f = result_bind ~f oe
 
-let error_map ~f oe =
+let result_map ~f oe =
   match oe with
   | Error e -> Error e
   | Ok o    -> Ok (f o)
 
-let (>>|) oe ~f = error_map ~f oe
+let (>>|) oe ~f = result_map ~f oe
+
+let error_map ~f oe =
+  match oe with
+  | Error e -> Error (f e)
+  | Ok o    -> Ok o
+
+let error_bind ~f oe =
+  match oe with
+  | Error e -> f e
+  | Ok o    -> Ok o
 
 let error fmt = ksprintf (fun s -> Error s) fmt
 
@@ -134,3 +147,16 @@ let remove_and_assoc el list =
     | h :: t                  -> loop (h :: acc) t
   in
   loop [] list
+
+let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
+  let lmp = log (er /. (float (alph_size - 1))) in
+  let lcp = log (1. -. er) in
+  let c = (float len) -. mismatches in
+  c *. lcp +. mismatches *. lmp
+
+let likelihood ?alph_size ?er ~len m =
+  exp (log_likelihood ?alph_size ?er ~len m)
+
+type too_short =
+  | TooShort of { desired: int ; actual: int}
+  [@@deriving show]

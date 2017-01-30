@@ -4,6 +4,8 @@
     Using a string of different length from K will result in unspecified
     behavior.*)
 
+open Util
+
 (** Kmer table. *)
 type 'a t
 
@@ -22,13 +24,19 @@ val update : ( 'a -> 'a) -> 'a t -> index -> unit
 
 (** [update_kmer f kmer table] will mutate the value associated with [kmer] in [table]
     by calling [f]. *)
-val update_kmer : ('a -> 'a) -> 'a t -> string -> unit
+val update_kmer : ('a -> 'a) -> 'a t -> string -> (unit, too_short) result
 
 (** [lookup table index] *)
 val lookup : 'a t -> index -> 'a
 
 (** [lookup_kmer table kmer] *)
-val lookup_kmer : 'a t -> string -> 'a
+val lookup_kmer : 'a t -> string -> ('a, too_short) result
+
+(** [lookup_kmer_N_tolerant table kmer] *)
+val lookup_kmer_N_tolerant : 'a t -> string -> ('a list, too_short) result
+
+(** [lookup_kmer_neighbors d table kmer]  Also N_tolerant. *)
+val lookup_kmer_neighbors : d:int -> 'a t -> string -> ('a array, too_short) result
 
 (** [fold f init table] *)
 val fold : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a

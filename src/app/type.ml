@@ -37,7 +37,7 @@ let report_errors ~error_output elst =
     fprintf oc "%s\n%s\n%s\n"
       fqi.Biocaml_unix.Fastq.name
       fqi.Biocaml_unix.Fastq.sequence
-      (Path_inference.sequence_alignment_error_to_string sae));
+      (Path_inference.show_sequence_alignment_error sae));
   if close then close_out oc
 
 let report_mismatches ~print_top g amap =

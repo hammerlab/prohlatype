@@ -45,6 +45,7 @@ ex:
 
 open Util
 open Common
+open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let input = Ref_graph.AlignmentFile file in
@@ -55,7 +56,7 @@ let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
     Cache.((invalid_arg_on_error "construct graph and index"
             graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ?n () })
 
-let unwrap_sf = function | `Stopped r | `Finished r -> r
+let unwrap_sf = function | Stopped r | Finished r -> r
 
 let al_to_list idx r =
   (* Don't worry about stopping in these tests. *)
@@ -68,7 +69,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   let pos =
     let open Index in
     match lookup idx sub_read with
-    | Error m     -> invalid_argf "error looking up %s in index: %s" sub_read m
+    | Error m     -> invalid_argf "error looking up %s in index: %s" sub_read (show_too_short m)
     | Ok []       -> invalid_argf "empty position returned looking up %s in index" sub_read
     | Ok (h :: t) ->
           match compare_pos with
@@ -81,7 +82,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   in
   let stop = float (String.length read + 100) in (* Don't stop ever *)
   let size = Ref_graph.number_of_alleles g in
-  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos |> unwrap_ok in
+  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
@@ -156,9 +157,11 @@ let describe_error ?(length=100) ?(k=10) file read gi =
   (gnm1, i_nm1, pnm1, snm1, alnm1), (gn, i_n, pn, sn, aln)
 
 let manual g idx read =
-  Index.lookup idx read >>= function
-    | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
-    | []     -> error "read not in index"
+  Index.lookup idx read
+  |> error_map ~f:show_too_short >>=
+      function
+      | h :: _ -> Ok (h, Alignment.manual_mismatches g read h)
+      | []     -> error "read not in index"
 
 let compare_manual g m fm read_len =
   let open Alignment in
@@ -167,7 +170,7 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (Mismatches.Finished sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
+          | Ok (Mismatches.Fin sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
             acc
           | Ok (Mismatches.GoOn (sa, sp)) , wa when wa = sa.MismatchesCounts.mismatches + (read_len - sp)  ->
             acc
@@ -203,16 +206,11 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
       | Ok (pos, manm)  ->
           let stop = float (String.length sub_read + 100) in
           let size = Ref_graph.number_of_alleles g in
-          match Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos with
-          | Error mes ->
-              eprintf "Wasn't able to compute mismatches for %s at %s because of %s"
-                sub_read (Index.show_position pos) mes;
-              over_reads (i + 1) tl
-          | Ok m2     ->
-              let m2 = unwrap_sf m2 in
-              match compare_manual g manm m2 (String.length sub_read) with
-              | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
-              | ba -> printf " see differences.\n%!"; Some (read, ba)
+          let m2 = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
+          let m2 = unwrap_sf m2 in
+          match compare_manual g manm m2 (String.length sub_read) with
+          | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
+          | ba -> printf " see differences.\n%!"; Some (read, ba)
   in
   (n, over_reads 0 reads)
 
@@ -259,7 +257,7 @@ let () =
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((Mismatches.Finished m), m2)   -> sprintf "Finished %d vs %d" m.Mismatches_config.mismatches m2
+                 | Ok ((Mismatches.Fin m), m2)        -> sprintf "Fin %d vs %d" m.Mismatches_config.mismatches m2
                  | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.Mismatches_config.mismatches m2 p
                  | Error (msg, d)          -> sprintf "Error %s %d" msg d));
             exit 1

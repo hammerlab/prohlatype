@@ -3,116 +3,144 @@
 
 open Util
 
-let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
-  let lmp = log (er /. (float (alph_size - 1))) in
-  let lcp = log (1. -. er) in
-  let c = (float len) -. mismatches in
-  c *. lcp +. mismatches *. lmp
+type 'a product = 'a Alignment.product =
+  | Finished of 'a Alleles.Map.t
+  | Stopped of 'a Alleles.Map.t
 
-let likelihood ?alph_size ?er ~len m =
-  exp (log_likelihood ?alph_size ?er ~len m)
+(* The configuration of how we compute a metric of a single nucleotide sequence
+    (abstracted by the [thread] type) versus the alleles in our variant graphs.
+    This interface acts as a configuration for the [AgainstSequence] functor.
 
-let report_mismatches el_to_string state aindex mm =
-  printf "reporting %s mismatches\n" state;
-  let () =
-    Alleles.Map.values_assoc aindex mm
-    |> List.sort ~cmp:(fun (i1,_) (i2,_) -> compare i1 i2)
-    |> List.iter ~f:(fun (w, a) ->
-        printf "%s\t%s\n"
-          (el_to_string w)
-          (insert_chars ['\t'; '\t'; '\n']
-            (Alleles.Set.to_human_readable aindex ~max_length:10000 ~complement:`No a)))
-  in
-  printf "finished reporting mismatches\n%!"
-
+    In practice, this interface is not used, but acts as a stepping stone to
+    understanding the elements necessary for [Multiple_config]. *)
 module type Single_config = sig
 
-  type t  (* How we measure the alignment of a sequence against an allele. *)
+  (* The metric of a single sequence against a single allele.
+     For example:
+        - an integer (probably non-negative) of the number of mismatches
+        - a float for the product log-likelihood's across all the positions
+        - a list of all the mismatch locations!
+  *)
+  type m
 
-  val to_string : t -> string           (* Display *)
+  (* For display purposes. *)
+  val to_string : m -> string
 
-  type stop_parameter
+  (* An abstract nucleotide sequence. This might be:
+      - just a sequence of letters.
+      - the sequence paired with the Phred quality scores of that sequence. *)
   type thread
 
+  (* To perform [Index.lookup]'s we need to expose the nucleotide sequence. *)
   val thread_to_seq : thread -> string
+
+  (* To consider the reverse complement. *)
   val reverse_complement : thread -> thread
 
-  val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread -> Index.position ->
-    ([ `Finished of t Alleles.Map.t | `Stopped of t Alleles.Map.t ], string) result
+  (* Because [compute]ing the metric might be costly we expose a type to
+     support an early stopping criterion. This split is modeled is also modeled
+     via the [product] type. *)
+  type stop_parameter
 
-  val combine_pairs : t Alleles.Map.t -> t Alleles.Map.t -> t Alleles.Map.t
+  (* [compute ~early_stop g thread position] Meausre the metric for [thread]
+     against graph [g] at [position] and optionally stopping because of
+     [early_stop]. *)
+  val compute : ?early_stop:stop_parameter -> Ref_graph.t -> thread ->
+    Index.position -> m product
 
-  val reduce_across_positions : t Alleles.Map.t -> t Alleles.Map.t list -> t Alleles.Map.t
+  (* Similar to combining paired reads, sometimes a read may have a valid
+     lookup to multiple positions in the graph, this function allows us the
+     user how to choose amongst the best positions. The second argument
+     represent the tail of all the found positions and might be empty when
+     lookup found only one position.  *)
+  val reduce_across_positions : m Alleles.Map.t -> m Alleles.Map.t list ->
+    m Alleles.Map.t
+
+  (* If the regular and the reverse_complement strands both have positions in
+     the index, compare the resulting (reduced) maps to determine if regular
+     is better (ie true). *)
+  val regular_or_complement : regular:m Alleles.Map.t ->
+      reverse_complement:m Alleles.Map.t -> bool
+
+  (* For paired end sequencing we want to compute a single metric by combining
+     the result for both pairs. We force this reduction because if the user
+     doesn't want to combine the results, they can always treat each read as
+     a single read. *)
+  val combine_pairs : m Alleles.Map.t -> m Alleles.Map.t -> m Alleles.Map.t
 
 end (* Single_config *)
 
 type sequence_alignment_error =
-  | NoPositions
-  | AllStopped of int
-  | Other of string
+  | NoIndexedPositions
+  | AllComputesStopped of int
+  | SequenceTooShort of too_short
+  | InconsistentPairOrientation of bool   (* true = both regular *)
   | ToThread of string
+  [@@deriving show]
 
 module AgainstSequence (C : Single_config) = struct
 
   let against_positions ?early_stop g ps seq =
-    let rec loop acc = function
-      | []     -> `Fin acc
-      | h :: t ->
-          match C.compute ?early_stop g seq h with
-          | Error e -> `Errored e
-          | Ok r    -> loop (r :: acc) t
-    in
-    match loop [] ps with
-    | `Errored e -> Error (Other e)
-    | `Fin res   ->
-        let f = function | `Finished f -> `Fst f | `Stopped s -> `Snd s in
-        match List.partition_map res ~f with
-        | [], []      -> Error NoPositions
-        | [], als     -> Error (AllStopped (List.length als))
-        | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
+    let res = List.map ps ~f:(C.compute ?early_stop g seq) in
+    let f = function | Finished f -> `Fst f | Stopped s -> `Snd s in
+    match List.partition_map res ~f with
+    | [], []      -> Error NoIndexedPositions
+    | [], als     -> Error (AllComputesStopped (List.length als))
+    | r :: rs, _  -> Ok (C.reduce_across_positions r rs)
 
-  let single ?(check_rc=true) ?early_stop g idx seq =
+  let single_no_rc ?early_stop g idx seq =
     match Index.lookup idx (C.thread_to_seq seq) with
-    | Error e -> Error (Other e)
-    | Ok []   ->
-        if check_rc then
-          let revt = C.reverse_complement seq in
-            match Index.lookup idx (C.thread_to_seq revt) with
-            | Error e -> Error (Other e)
-            | Ok ps   -> against_positions ?early_stop g ps revt
-        else
-          Error NoPositions
+    | Error e -> Error (SequenceTooShort e)
+    | Ok []   -> Error NoIndexedPositions
     | Ok ps   -> against_positions ?early_stop g ps seq
 
+  let single_with_rc_with_choice ?early_stop g idx seq =
+    let ap st ps seq = against_positions ?early_stop g ps seq >>| fun e -> (e, st) in
+    let is = Index.lookup idx (C.thread_to_seq seq) in
+    match is with
+    | Error e -> Error (SequenceTooShort e)
+      (* No point checking rev comp since it should have the same length! *)
+    | Ok ls   ->
+        let rev_seq = C.reverse_complement seq in
+        begin match ls, Index.lookup idx (C.thread_to_seq rev_seq) with
+          | _, Error e ->
+              failwithf "Reverse complement sequence %s shorter than original %s!"
+                (C.thread_to_seq seq) (C.thread_to_seq rev_seq)
+          | [], Ok []  -> Error NoIndexedPositions
+          | ps, Ok []  -> ap `Reg ps seq
+          | [], Ok rps -> ap `Comp rps rev_seq
+          | ps, Ok rps ->
+              let reg_e = ap `Reg ps seq in
+              let rcp_e = ap `Comp rps rev_seq in
+              begin match reg_e, rcp_e with
+                | Error e,          Error _                    -> reg_e
+                | Ok _,             Error _                    -> reg_e
+                | Error _,          Ok _                       -> rcp_e
+                | Ok (regular, _),  Ok (reverse_complement, _) ->
+                  if C.regular_or_complement ~regular ~reverse_complement then
+                    reg_e
+                  else
+                    rcp_e
+              end
+        end
+
+  let single_with_rc ?early_stop g idx seq =
+    single_with_rc_with_choice ?early_stop g idx seq >>| fun (r, _) -> r
+
+  let single ?(check_rc=true) ?early_stop g idx seq =
+    if check_rc then
+      single_with_rc ?early_stop g idx seq
+    else
+      single_no_rc ?early_stop g idx seq
+
   let paired ?early_stop g idx seq1 seq2 =
-    let where t = Index.lookup idx (C.thread_to_seq t) in
-    let ap = against_positions ?early_stop g in
-    match Index.lookup idx (C.thread_to_seq seq1) with
-    | Error e -> Error (Other e)
-    | Ok []   ->
-        let rev1 = C.reverse_complement seq1 in
-        begin match where rev1, where seq2 with
-        | Error e, _
-        | _,      Error e -> Error (Other e)
-        | Ok ps1, Ok ps2  ->
-            match ap ps1 rev1, ap ps2 seq2 with
-            | Ok r, Ok l -> Ok (C.combine_pairs r l)
-            | Ok o, _
-            | _,    Ok o -> Ok o
-            | Error e, _ -> Error e
-        end
-    | Ok ps ->
-        let rev2 = C.reverse_complement seq2 in
-        begin match where seq1, where rev2 with
-        | Error e, _
-        | _,      Error e -> Error (Other e)
-        | Ok ps1, Ok ps2  ->
-            match ap ps1 seq1, ap ps2 rev2 with
-            | Ok r, Ok l -> Ok (C.combine_pairs r l)
-            | Ok o, _
-            | _,    Ok o -> Ok o
-            | Error e, _ -> Error e
-        end
+    single_with_rc_with_choice ?early_stop g idx seq1 >>= fun (m1, c1) ->
+      single_with_rc_with_choice ?early_stop g idx seq2 >>= fun (m2, c2) ->
+        match c1, c2 with
+        | `Reg,  `Reg   -> Error (InconsistentPairOrientation true)
+        | `Comp, `Comp  -> Error (InconsistentPairOrientation false)
+        | `Reg,  `Comp
+        | `Comp, `Reg   -> Ok (C.combine_pairs m1 m2)
 
   type stop_parameter = C.stop_parameter
   type thread = C.thread
@@ -127,7 +155,7 @@ end
 
 module ListMismatches_config = struct
 
-  type t = (int * int) list
+  type m = (int * int) list
   let to_string l =
     String.concat ~sep:"; "
       (List.map l ~f:(fun (p,v) -> sprintf "(%d,%d)" p v))
@@ -158,13 +186,16 @@ module ListMismatches_config = struct
 
   let combine_pairs = Alleles.Map.map2_wa ~f:(@)
 
+  let regular_or_complement ~regular ~reverse_complement =
+    to_min regular < to_min reverse_complement
+
 end (* ListMismatches_config *)
 
 module ListMismatches = AgainstSequence (ListMismatches_config)
 
 module SequenceMismatches = AgainstSequence (struct
 
-  type t = int
+  type m = int
   let to_string = sprintf "%d"
 
   type stop_parameter = int * float
@@ -187,8 +218,10 @@ module SequenceMismatches = AgainstSequence (struct
             (b, s))
         |> snd
 
-
   let combine_pairs = Alleles.Map.map2_wa ~f:(+)
+
+  let regular_or_complement ~regular ~reverse_complement =
+    to_min regular < to_min reverse_complement
 
 end)
 
@@ -196,7 +229,7 @@ module PhredLlhdMismatches = AgainstSequence ( struct
 
   open Alignment
 
-  type t = PhredLikelihood_config.t
+  type m = PhredLikelihood_config.t
   let to_string = PhredLikelihood_config.to_string
 
   type stop_parameter = int * float
@@ -237,6 +270,9 @@ module PhredLlhdMismatches = AgainstSequence ( struct
       { mismatches = m1.mismatches +. m2.mismatches
       ; sum_llhd   = m1.sum_llhd +. m2.sum_llhd
       })
+
+  let regular_or_complement ~regular ~reverse_complement =
+    to_max regular > to_max reverse_complement
 
 end) (* PhredLlhdMismatches *)
 
@@ -330,13 +366,6 @@ module Multiple (C : Multiple_config) = struct
     | `OneReadPairedFinished (_, (errors, amap)) -> errors, amap
 
 end (* Multiple *)
-
-(** Typing. *)
-let sequence_alignment_error_to_string = function
-  | NoPositions  -> "No positions found"
-  | AllStopped n -> sprintf "Stopped %d positions" n
-  | Other m      -> sprintf "Error: %s" m
-  | ToThread m   -> sprintf "ToThread: %s" m
 
 module MismatchesList = Multiple (struct
   type mp = (int * int) list

@@ -8,6 +8,8 @@ TESTS=test_parsing round_trip same_alignments_test check_multiple adjacents benc
 
 default: build
 
+all: build tools tests
+
 build:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma
 

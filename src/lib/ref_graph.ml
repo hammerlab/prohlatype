@@ -103,8 +103,13 @@ let between g start stop =
   ng
 
 type by_position =
-  | NL of Nodes.t list
-  | Redirect of int * int
+  | NL of Nodes.t list  (* A list of nodes that start at a given position. *)
+  | Redirect of int     (* A redirect (index into array - NOT position) of where
+                           to find the previous Node list. In
+                           [by_position_array] below, that location should
+                           contain the nodes that span this position. *)
+
+and by_position_array = by_position array
 
 module NodeSet = struct
   include Set.Make (Nodes)
@@ -155,8 +160,8 @@ type t =
   ; g             : G.t                     (* The actual graph. *)
   ; aindex        : A.index                 (* The allele index, for Sets and Maps. *)
   ; bounds        : sep list A.Map.t        (* Map of where the alleles start and stop. *)
-  ; posarr        : by_position array
-  ; adjacents_arr : adjacent_info option array
+  ; posarr        : by_position_array
+  ; adjacents_arr : adjacent_info array
   ; offset        : int
   ; merge_map     : (string * string) list  (* Left empty if not a merged graph *)
   }
@@ -274,8 +279,6 @@ let load fname =
 
 (** Construction *)
 
-let inv_argf ?(prefix="") fmt = ksprintf invalid_arg ("%s" ^^ fmt) prefix
-
 let relationship pos v =
   let open Nodes in
   let end_pos p s = p + String.length s in
@@ -292,11 +295,11 @@ let relationship pos v =
 (*first_start, last_end, end_to_next_start_assoc *)
 let reference_starts_and_ends lst =
   match lst with
-  | []                  -> inv_argf "Reference has no start and ends"
+  | []                  -> invalid_argf "Reference has no start and ends"
   | {start; end_} :: [] -> start, end_, []
   | {start; end_} :: t  ->
     let rec loop ep acc = function
-      | []                  -> inv_argf "stop before empty"
+      | []                  -> invalid_argf "stop before empty"
       | {start; end_} :: [] -> end_, (ep, start) :: acc
       | {start; end_} :: t  -> loop end_ ((ep, start) :: acc) t
     in
@@ -333,16 +336,16 @@ let add_reference_elems g aindex allele ref_elems =
     | `Ended _ :: _ , Boundary _                    -> state        (* ignore *)
     | []            , al_el
     | `Ended _ :: _ , al_el                         ->
-        inv_argf "Unexpected %s after end for %s"
+        invalid_argf "Unexpected %s after end for %s"
           (al_el_to_string al_el) allele
     | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
     | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
     | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
     | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
     | `Started (_, _) :: tl,     Start sp             ->
-        inv_argf "Unexpected second start at %d for %s" sp allele)
+        invalid_argf "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
-      | `Started _ -> inv_argf "Still have a Started in %s ref" allele
+      | `Started _ -> invalid_argf "Still have a Started in %s ref" allele
       | `Ended (start, end_) -> { start; end_})
   |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
@@ -454,7 +457,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       | S _ | E _ -> forward nv "Skipping start End"
       | B (p, c) when p = pos ->
           if c <> idx then
-            inv_argf "Boundary at %d position diff from reference %d count %d"
+            invalid_argf "Boundary at %d position diff from reference %d count %d"
               p c idx
           else
             pv, nv
@@ -463,10 +466,10 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           visit pv nv;
           forward nv (sprintf "Trying to find B %d %d after %d" pos idx p)
       | B (p, c) (*when p > pos*) ->
-          inv_argf "Next Boundary %d %d after desired boundary %d %d"
+          invalid_argf "Next Boundary %d %d after desired boundary %d %d"
             p c pos idx
       | N (p, _) ->
-          inv_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
+          invalid_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
             p pos idx allele
     in
     loop prev next
@@ -491,10 +494,10 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       | []              ->
         begin
           match previous_starts_and_ends with
-          | [] -> inv_argf "Failed to find start for %s." allele
+          | [] -> invalid_argf "Failed to find start for %s." allele
           | ls -> None
         end
-      | s :: _          -> inv_argf "Encountered %s in %s instead of Start"
+      | s :: _          -> invalid_argf "Encountered %s in %s instead of Start"
                             (al_el_to_string s) allele
     in
     match find_start_loop lst with
@@ -515,8 +518,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
       start_loop ns tl
   (* When the only thing that matters is the previous node. *)
   and solo_loop state prev = function
-    | []                        -> inv_argf "No End at allele sequence: %s" allele
-    | Start p :: _              -> inv_argf "Another start %d in %s allele sequence." p allele
+    | []                        -> invalid_argf "No End at allele sequence: %s" allele
+    | Start p :: _              -> invalid_argf "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl         -> add_end state end_pos prev tl
     | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
                                    add_allele_edge prev boundary_node;
@@ -528,8 +531,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   (* When traversing a reference gap. We have to keep check allele elements
     position to check when to join back with the next reference node. *)
   and ref_gap_loop state ~prev ref_node ref_pos = function
-    | []                                -> inv_argf "No End at allele sequence: %s" allele
-    | Start p :: _                      -> inv_argf "Another start %d in %s allele sequence." p allele
+    | []                                -> invalid_argf "No End at allele sequence: %s" allele
+    | Start p :: _                      -> invalid_argf "Another start %d in %s allele sequence." p allele
     | (End end_pos :: tl) as lst        ->
         if end_pos <= ref_pos then
           add_end state end_pos prev tl
@@ -538,14 +541,14 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
           main_loop state ~prev ~next:ref_node lst
     | (Boundary { idx; pos} :: tl) as l ->
         if pos < ref_pos then
-          inv_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
+          invalid_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
             allele idx pos ref_pos
         else if pos = ref_pos then
           if ref_node = B (pos, idx) then
             let () = add_allele_edge prev ref_node in
             main_loop state ~prev ~next:ref_node tl
           else
-            inv_argf "Allele %s has a boundary %d at %d where ref gap ends %d."
+            invalid_argf "Allele %s has a boundary %d at %d where ref gap ends %d."
               allele idx pos ref_pos
         else
           let () = add_allele_edge prev ref_node in
@@ -592,8 +595,8 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
         close_position_loop state ~prev ~next ~allele_node new_pe lst
   (* When not in a reference gap *)
   and main_loop state ~prev ~next = function
-    | []              -> inv_argf "No End at allele sequence: %s" allele
-    | Start p :: _    -> inv_argf "Another start %d in %s allele sequence." p allele
+    | []              -> invalid_argf "No End at allele sequence: %s" allele
+    | Start p :: _    -> invalid_argf "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl  ->
         let prev =
           match split_in ~prev ~next ~visit:add_allele_edge end_pos with
@@ -664,14 +667,6 @@ module NodeQueue = struct
 
 end
 
-let node_queue_with_start_nodes aindex bounds =
-  let open Nodes in
-  A.Map.fold aindex bounds ~init:NodeQueue.empty
-    ~f:(fun q sep_lst allele ->
-          List.fold_left sep_lst ~init:q
-            ~f:(fun q sep ->
-                  NodeQueue.add (S (fst sep.start, allele)) q))
-
 module FoldAtSamePosition = struct
 
   let after_start_nodes g aindex bounds =
@@ -686,7 +681,11 @@ module FoldAtSamePosition = struct
     let without_old, amp = NodeQueue.at_min_position q in
     let withnew =
       List.fold_left amp ~init:without_old
-        ~f:(fun q n -> NodeQueue.add_successors g n q)
+        ~f:(fun q n ->
+              if Nodes.is_seq_or_boundary n then
+                NodeQueue.add_successors g n q
+              else
+                q)
     in
     withnew, amp
 
@@ -701,11 +700,22 @@ module FoldAtSamePosition = struct
     in
     loop init q
 
+
   let fold_after_starts g aindex bounds ~f ~init =
     fold_from g (after_start_nodes g aindex bounds) ~f ~init
 
+  let node_queue_with_start_and_successors_nodes g aindex bounds =
+    let open Nodes in
+    A.Map.fold aindex bounds ~init:NodeQueue.empty
+      ~f:(fun q sep_lst allele ->
+            List.fold_left sep_lst ~init:q
+              ~f:(fun q sep ->
+                let s = S (fst sep.start, allele) in
+                let nq = NodeQueue.add s q in
+                NodeQueue.add_successors g s nq))
+
   let f g aindex bounds ~f ~init =
-    fold_from g (node_queue_with_start_nodes aindex bounds) ~f ~init
+    fold_from g (node_queue_with_start_and_successors_nodes g aindex bounds) ~f ~init
 
 end (* FoldAtSamePosition *)
 
@@ -721,28 +731,20 @@ let range { bounds; _ } =
 
 let create_by_position g aindex bounds =
   let st, en = range_pr bounds in
-  let len = en - st + 1 in
-  let arr = Array.make len [] in
-  FoldAtSamePosition.(f g aindex bounds ~init:() ~f:(fun () lst ->
+  let rec redirects dest num acc =
+    if num <= 0 then
+      acc
+    else
+      redirects dest (num - 1) ((Redirect dest) :: acc)
+  in
+  FoldAtSamePosition.(f g aindex bounds ~init:(0, []) ~f:(fun (i,acc) lst ->
     let p = Nodes.position (List.hd_exn lst) in
     let j = p - st in
-    arr.(j) <- lst));
-  let narr = Array.make len (NL []) in
-  let rec forward p i =
-    if i = len then () else
-      match arr.(i) with
-      | [] -> narr.(i) <- Redirect (p, min_int); forward p (i + 1)
-      | ls -> narr.(i) <- NL ls; forward i (i + 1)
-  in
-  forward 0 0;
-  let rec backward p i =
-    if i < 0 then () else
-      match narr.(i) with
-      | Redirect (b, _) -> narr.(i) <- Redirect (b, p); backward p (i - 1)
-      | NL _            -> backward i (i - 1)
-  in
-  backward (len - 1) (len - 1);
-  narr
+    let num_redirects = j - (i + 1) in
+    (j, NL lst :: (redirects i num_redirects acc))))
+  |> snd
+  |> List.rev
+  |> Array.of_list
 
 module JoinSameSequencePaths = struct
 
@@ -1001,12 +1003,28 @@ module RemoveSequence = struct
 
 end (* RemoveSequence *)
 
+let find_nodes_at_private offset posarr ~pos =
+  (* TODO: At the end-of-the-day this array is still a bit hacky for this
+     data-structure. I know ahead of time that for each valid position there
+     must be a node! I should encode that in the types. *)
+  let rec lookup_at redirect j =
+    match posarr.(j) with
+    | NL []         -> failwithf "Empty node list at %d" j
+    | NL (h :: tl)  -> h, tl
+    | Redirect prev ->
+        if redirect then
+          lookup_at false prev
+        else
+          failwithf "Double redirect at %d" j
+  in
+  lookup_at true (pos - offset)
+
 let find_node_at_private ?allele ?ongap ~pos g aindex offset posarr =
   let module M = struct exception Found end in
   let open Nodes in
   let all_str, test =
     match allele with
-    | None   -> "", (fun n -> is_seq_or_boundary n && Nodes.inside pos n)
+    | None   -> "", (fun n -> Nodes.is_seq_or_boundary n && Nodes.inside pos n)
     | Some a ->
         let is_along_allele node =
           try
@@ -1017,27 +1035,17 @@ let find_node_at_private ?allele ?ongap ~pos g aindex offset posarr =
             true
         in
         (" " ^ a)
-        , (fun n -> is_seq_or_boundary n && is_along_allele n && Nodes.inside pos n)
+        , (fun n -> Nodes.is_seq_or_boundary n && is_along_allele n && Nodes.inside pos n)
   in
-  let from_list lst =
-    match List.find lst ~f:test with
-    | Some n -> Ok n
-    | None   ->
-        begin match ongap with
-        | None   -> error "%sin a gap at %d" all_str pos
-        | Some f -> f lst
-        end
-  in
-  let rec lookup_at redirect j =
-    match posarr.(j) with
-    | NL ls           -> from_list ls
-    | Redirect (p, _) ->
-        if redirect then
-          lookup_at false p
-        else
-          error "Double redirect at %d" j (* TODO: replace array with GADT? *)
-  in
-  lookup_at true (pos - offset)
+  let h, tl = find_nodes_at_private offset posarr ~pos in
+  let lst = h :: tl in
+  match List.find lst ~f:test with
+  | Some n -> Ok n
+  | None   ->
+      begin match ongap with
+      | None   -> error "%sin a gap at %d" all_str pos
+      | Some f -> f lst
+      end
 
 let adjacents_debug_ref = ref false
 
@@ -1215,31 +1223,31 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
             else
               nes))
   in
-  find_node_at_private ~pos g aindex offset posarr >>= fun rootn ->
-    let stop es_acc =
-      if es_acc = all_edges then true else
-        begin
-          if !adjacents_debug_ref then
-            eprintf "Still missing\n1:%s\n2:%s\n"
-              (A.Set.to_human_readable ?max_length aindex
-                (A.Set.diff all_edges es_acc))
-              (A.Set.to_human_readable ?max_length aindex
-                (A.Set.diff es_acc all_edges));
-            false
-        end
-    in
-    let f edge node edge_set =
-      match node with
-      | Nodes.E p when p <= pos -> edge_set
-      | _ ->
+  let rootn, _ = find_nodes_at_private offset posarr ~pos in
+  let stop es_acc =
+    if es_acc = all_edges then true else
+      begin
         if !adjacents_debug_ref then
-          eprintf "Adding %s <- %s.\n"
-            (Nodes.vertex_name node)
-            (A.Set.to_human_readable ?max_length aindex edge);
-        A.Set.union edge edge_set
-    in
-    let init = A.Set.init aindex in
-    Ok ( Adjacents.check_by_levels ?prev_edge_node_set ~max_height ~init ~stop g rootn ~f)
+          eprintf "Still missing\n1:%s\n2:%s\n"
+            (A.Set.to_human_readable ?max_length aindex
+              (A.Set.diff all_edges es_acc))
+            (A.Set.to_human_readable ?max_length aindex
+              (A.Set.diff es_acc all_edges));
+          false
+      end
+  in
+  let f edge node edge_set =
+    match node with
+    | Nodes.E p when p <= pos -> edge_set
+    | _ ->
+      if !adjacents_debug_ref then
+        eprintf "Adding %s <- %s.\n"
+          (Nodes.vertex_name node)
+          (A.Set.to_human_readable ?max_length aindex edge);
+      A.Set.union edge edge_set
+  in
+  let init = A.Set.init aindex in
+  Adjacents.check_by_levels ?prev_edge_node_set ~max_height ~init ~stop g rootn ~f
 
 let create_adjacents_arr g aindex offset posarr bounds =
   let st, en = range_pr bounds in
@@ -1247,11 +1255,11 @@ let create_adjacents_arr g aindex offset posarr bounds =
   let pensr = ref None in
   Array.init len ~f:(fun i ->
     let pos = offset + i in
-    match adjacents_at_private ?prev_edge_node_set:!pensr g aindex offset posarr bounds ~pos with
-    | Error _ -> None
-    | Ok (edge_node_set, seen_alleles, _) ->
-        pensr := Some edge_node_set;
-        Some {edge_node_set; seen_alleles})
+    let (edge_node_set, seen_alleles, _) =
+      adjacents_at_private ?prev_edge_node_set:!pensr g aindex offset posarr bounds ~pos
+    in
+    pensr := Some edge_node_set;
+    {edge_node_set; seen_alleles})
 
 type construct_which_args =
   | NumberOfAlts of int
@@ -1519,20 +1527,6 @@ let search_through_gap g node ~pos =
       | None   -> error "Couldn't work through gap before %s for %d"
                     (Nodes.vertex_name node) pos
 
-(*let find_root_position ({g; aindex; _} as gt) ~pos =
-  let all_edges = alleles_with_data gt ~pos in
-  let root_allele = A.Set.min_elt aindex all_edges in
-  find_node_at ~next_if_gap:true gt root_allele ~pos >>=
-    fun rootn ->
-      if Nodes.position rootn > pos then begin  (* In a gap, work backwards! *)
-        search_through_gap g rootn ~pos >>= fun (n, e) ->
-          let new_root_allele = A.Set.min_elt aindex e in
-          Ok (new_root_allele, all_edges, n)
-      end else
-        Ok (root_allele, all_edges, rootn) *)
-
 let adjacents_at ?max_edge_debug_length ?max_height ~pos
     { offset; adjacents_arr; _} =
-  match adjacents_arr.(pos - offset) with
-  | None    -> error "No nodes at %d" pos
-  | Some r  -> Ok r
+  adjacents_arr.(pos - offset)
