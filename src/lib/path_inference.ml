@@ -24,7 +24,7 @@ module type Single_config = sig
   type m
 
   (* For display purposes. *)
-  val to_string : m -> string
+  val metric_to_string : m -> string
 
   (* An abstract nucleotide sequence. This might be:
       - just a sequence of letters.
@@ -151,10 +151,9 @@ module AgainstSequence (C : Single_config) = struct
 
 end (* AgainstSequence *)
 
-(* Configurations of different metrics to measure against a read. *)
+(* Configurations of different metrics to measure against a single read. *)
 
 module ThreadIsJustSequence = struct
-  type thread = string
   let thread_to_seq s = s
   let reverse_complement = Util.reverse_complement
 end
@@ -162,16 +161,8 @@ end
 (* Keep track of all the positions where we have mismatches. *)
 module List_mismatches_config = struct
 
-  type m = (int * int) list
-  let to_string l =
-    String.concat ~sep:"; "
-      (List.map l ~f:(fun (p,v) -> sprintf "(%d,%d)" p v))
-
-  type stop_parameter = int * float
-
+  include Alignment.Position_mismatches
   include ThreadIsJustSequence
-
-  let compute = Alignment.compute_mismatches_lst
 
   (* Lowest mismatch across all alleles. *)
   let to_min =
@@ -198,16 +189,11 @@ module List_mismatches_config = struct
 
 end (* List_mismatches_config *)
 
+(* Count the number of mismatches when the read is aligned against the graph. *)
 module Count_mismatches_config = struct
 
-  type m = int
-  let to_string = sprintf "%d"
-
-  type stop_parameter = int * float
-
+  include Alignment.Mismatches
   include ThreadIsJustSequence
-
-  let compute = Alignment.compute_mismatches
 
   (* Lowest mismatch across all alleles. *)
   let to_min = Alleles.Map.fold_wa ~init:max_int ~f:min
@@ -230,15 +216,10 @@ module Count_mismatches_config = struct
 
 end (* Count_mismatches_config *)
 
+(* Compute the 'Phred' likelihood of the read aligning aginst the graph. *)
 module Phred_likelihood_config = struct
 
-  open Alignment
-
-  type m = PhredLikelihood_config.t
-  let to_string = PhredLikelihood_config.to_string
-
-  type stop_parameter = int * float
-  type thread = string * float array
+  include Alignment.Phred_likelihood
 
   let reverse_complement (s, a) =
     let n = Array.length a in
@@ -247,15 +228,14 @@ module Phred_likelihood_config = struct
 
   let thread_to_seq (s, _) = s
 
-  let compute = Alignment.compute_plhd
-
   (* There are 2 ways to compute Best in this case:
      1. lowest number of mismatches as in the other mismatch counting algorithms
      2. highest sum of log likelihoods -> highest probability
      we use 2. *)
   let to_max =
+    let open Alignment in
     Alleles.Map.fold_wa ~init:neg_infinity
-      ~f:(fun a t -> max a t.PhredLikelihood_config.sum_llhd)
+      ~f:(fun a t -> max a t.sum_llhd)
 
   let reduce_across_positions s = function
     | [] -> s
@@ -270,7 +250,7 @@ module Phred_likelihood_config = struct
         |> snd
 
   let combine_pairs =
-    let open PhredLikelihood_config in
+    let open Alignment in
     Alleles.Map.map2_wa ~f:(fun m1 m2 ->
       { mismatches = m1.mismatches +. m2.mismatches
       ; sum_llhd   = m1.sum_llhd +. m2.sum_llhd
@@ -281,13 +261,14 @@ module Phred_likelihood_config = struct
 
 end (* Phred_likelihood_config *)
 
-module List_mismatches = AgainstSequence (List_mismatches_config)
-module Count_mismatches = AgainstSequence(Count_mismatches_config)
-module Phred_likelihood = AgainstSequence (Phred_likelihood_config)
+module List_mismatches_of_sequence = AgainstSequence (List_mismatches_config)
+module Count_mismatches_of_sequence = AgainstSequence (Count_mismatches_config)
+module Phred_likelihood_of_sequence = AgainstSequence (Phred_likelihood_config)
 
+(* How we compute a metric across a set of reads .*)
 module type Multiple_config = sig
 
-  type mp     (* map step *)
+  type mp     (* The metric, "map step" *)
   type re     (* reduce across alleles *)
 
   val empty : re
@@ -358,62 +339,58 @@ module Multiple (C : Multiple_config) = struct
 
 end (* Multiple *)
 
-module MismatchesList = Multiple (struct
+module List_mismatches_of_reads = Multiple (struct
   type mp = (int * int) list
   type re = (int * int) list list
   let empty = []
 
-  type stop_parameter = List_mismatches.stop_parameter
-  type thread = List_mismatches.thread
+  include List_mismatches_of_sequence
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map = List_mismatches.single
-  let map_paired = List_mismatches.paired
+  let map = single
+  let map_paired = paired
   let reduce v l = v :: l
-end)
+end)  (* List_mismatches_of_reads *)
 
-module Mismatches = Multiple (struct
+module Number_of_mismatches_of_reads = Multiple (struct
   type mp = int
   type re = int
   let empty = 0
 
-  type stop_parameter = Count_mismatches.stop_parameter
-  type thread = Count_mismatches.thread
+  include Count_mismatches_of_sequence
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map = Count_mismatches.single
-  let map_paired = Count_mismatches.paired
+  let map = single
+  let map_paired = paired
   let reduce = (+)
-end)
+end)  (* Number_of_mismatches_of_reads *)
 
-module Llhd_config = struct
+module Likelihood_of_multiple_config = struct
   type mp = float
   type re = float
 
-  type stop_parameter = Count_mismatches.stop_parameter
-  type thread = Count_mismatches.thread
+  include Count_mismatches_of_sequence
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
   let map l ?check_rc ?distance ?early_stop g idx th =
     let len = String.length th in
-    Count_mismatches.single ?check_rc ?early_stop g idx th >>= fun m ->
+    single ?check_rc ?early_stop g idx th >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(l ~len) m)
 
   let map_paired l ?distance ?early_stop g idx th1 th2 =
     let len = String.length th1 in
-    Count_mismatches.paired ?early_stop g idx th1 th2 >>= fun m ->
+    paired ?early_stop g idx th1 th2 >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(l ~len) m)
 
-end (* Llhd_config *)
+end (* Likelihood_of_multiple_config *)
 
-module Phred_lhd = Multiple (struct
+module Phred_likelihood_of_reads = Multiple (struct
   type mp = float
   type re = float
 
   let empty = 0.
 
-  type stop_parameter = Phred_likelihood.stop_parameter
-  type thread = Phred_likelihood.thread
+  include Phred_likelihood_of_sequence
 
   let to_thread fqi =
     let module CE = Core_kernel.Error in
@@ -426,85 +403,87 @@ module Phred_lhd = Multiple (struct
     | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr) *)
 
   let map ?check_rc ?distance ?early_stop g idx th =
-    let open Alignment in
-    Phred_likelihood.single ?distance ?check_rc ?early_stop g idx th >>= fun amap ->
-      Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
+    single ?distance ?check_rc ?early_stop g idx th >>= fun amap ->
+      Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
   let map_paired ?distance ?early_stop g idx th1 th2 =
-    let open Alignment in
-    Phred_likelihood.paired ?distance ?early_stop g idx th1 th2 >>= fun amap ->
-      Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.PhredLikelihood_config.sum_llhd))
+    paired ?distance ?early_stop g idx th1 th2 >>= fun amap ->
+      Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
   let reduce = (+.)
 
-end) (* Phred_lhd *)
+end) (* Phred_likelihood_of_reads *)
 
-let type_ ?filter ?check_rc ?(as_=`PhredLikelihood) g idx ?number_of_reads ~fastq_file =
+let type_ ?filter ?check_rc ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads ~fastq_file =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
-  | `MismatchesList       ->
-      `MismatchesList (MismatchesList.fold_over_fastq
+  | `List_mismatches_of_reads       ->
+      `List_mismatches_of_reads (List_mismatches_of_reads.fold_over_fastq
           ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
-  | `Mismatches           ->
-      `Mismatches (Mismatches.fold_over_fastq
+  | `Number_of_mismatches_of_reads  ->
+      `Number_of_mismatches_of_reads (Number_of_mismatches_of_reads.fold_over_fastq
           ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
-  | `Likelihood error     ->
-      let module Likelihood = Multiple (struct
-        include Llhd_config
-        let empty = 1.
-        let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> likelihood ~er:error ~len (float m))
-        let reduce l a = a *. l
-      end) in
-      `Likelihood (Likelihood.fold_over_fastq
+  | `Likelihood_of_reads error      ->
+      let module Likelihood_of_reads = Multiple (struct
+          include Likelihood_of_multiple_config
+          let empty = 1.
+          let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
+          let map_paired = map_paired (fun ~len m -> likelihood ~er:error ~len (float m))
+          let reduce l a = a *. l
+        end) (* Likelihood_of_reads *)
+      in
+      `Likelihood_of_reads (Likelihood_of_reads.fold_over_fastq
           ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
-  | `LogLikelihood error  ->
-      let module LogLikelihood = Multiple (struct
-        include Llhd_config
-        let empty = 0.
-        let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let reduce l a = a +. l
-      end) in
-      `LogLikelihood (LogLikelihood.fold_over_fastq
+  | `LogLikelihood_of_reads error   ->
+      let module LogLikelihood_of_reads = Multiple (struct
+          include Likelihood_of_multiple_config
+          let empty = 0.
+          let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
+          let map_paired = map_paired (fun ~len m -> log_likelihood ~er:error ~len (float m))
+          let reduce l a = a +. l
+        end)  (* LogLikelihood_of_reads *)
+      in
+      `LogLikelihood_of_reads (LogLikelihood_of_reads.fold_over_fastq
           ?number_of_reads fastq_file ?early_stop g idx)
-  | `PhredLikelihood ->
-      `PhredLikelihood (Phred_lhd.fold_over_fastq
+  | `Phred_likelihood_of_reads      ->
+      `Phred_likelihood_of_reads (Phred_likelihood_of_reads.fold_over_fastq
           ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
 
-let type_paired ?filter ?(as_=`PhredLikelihood) g idx ?number_of_reads f1 f2 =
+let type_paired ?filter ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads f1 f2 =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
-  | `MismatchesList       ->
-      `MismatchesList (MismatchesList.fold_over_paired
+  | `List_mismatches_of_reads       ->
+      `List_mismatches_of_reads (List_mismatches_of_reads.fold_over_paired
           ?number_of_reads f1 f2 ?early_stop g idx)
-  | `Mismatches           ->
-      `Mismatches (Mismatches.fold_over_paired
+  | `Number_of_mismatches_of_reads  ->
+      `Number_of_mismatches_of_reads (Number_of_mismatches_of_reads.fold_over_paired
           ?number_of_reads f1 f2 ?early_stop g idx)
-  | `Likelihood error     ->
-      let module Likelihood = Multiple (struct
-        include Llhd_config
-        let empty = 1.
-        let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> likelihood ~er:error ~len (float m))
-        let reduce l a = a *. l
-      end) in
-      `Likelihood (Likelihood.fold_over_paired
+  | `Likelihood_of_reads error      ->
+      let module Likelihood_of_reads = Multiple (struct
+          include Likelihood_of_multiple_config
+          let empty = 1.
+          let map = map (fun ~len m -> likelihood ~er:error ~len (float m))
+          let map_paired = map_paired (fun ~len m -> likelihood ~er:error ~len (float m))
+          let reduce l a = a *. l
+        end) (* Likelihood_of_reads *)
+      in
+      `Likelihood_of_reads (Likelihood_of_reads.fold_over_paired
           ?number_of_reads f1 f2 ?early_stop g idx)
-  | `LogLikelihood error  ->
-      let module LogLikelihood = Multiple (struct
-        include Llhd_config
-        let empty = 0.
-        let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let map_paired = map_paired (fun ~len m -> log_likelihood ~er:error ~len (float m))
-        let reduce l a = a +. l
-      end) in
-      `LogLikelihood (LogLikelihood.fold_over_paired
+  | `LogLikelihood_of_reads error   ->
+      let module LogLikelihood_of_reads = Multiple (struct
+          include Likelihood_of_multiple_config
+          let empty = 0.
+          let map = map (fun ~len m -> log_likelihood ~er:error ~len (float m))
+          let map_paired = map_paired (fun ~len m -> log_likelihood ~er:error ~len (float m))
+          let reduce l a = a +. l
+        end)  (* LogLikelihood_of_reads *)
+      in
+      `LogLikelihood_of_reads (LogLikelihood_of_reads.fold_over_paired
           ?number_of_reads f1 f2 ?early_stop g idx)
-  | `PhredLikelihood ->
-      `PhredLikelihood (Phred_lhd.fold_over_paired
+  | `Phred_likelihood_of_reads      ->
+      `Phred_likelihood_of_reads (Phred_likelihood_of_reads.fold_over_paired
           ?number_of_reads f1 f2 ?early_stop g idx)

@@ -160,11 +160,11 @@ let type_
         let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
         let new_as =
           match as_stat with
-          | `MismatchesList   -> `MismatchesList
-          | `Mismatches       -> `Mismatches
-          | `Likelihood       -> `Likelihood likelihood_error
-          | `LogLikelihood    -> `LogLikelihood likelihood_error
-          | `PhredLikelihood  -> `PhredLikelihood
+          | `List_mismatches_of_reads       -> `List_mismatches_of_reads
+          | `Number_of_mismatches_of_reads  -> `Number_of_mismatches_of_reads
+          | `Likelihood_of_reads            -> `Likelihood_of_reads likelihood_error
+          | `LogLikelihood_of_reads         -> `LogLikelihood_of_reads likelihood_error
+          | `Phred_likelihood_of_reads      -> `Phred_likelihood_of_reads
         in
         let input_files, res =
           match fastq_file_lst with
@@ -184,19 +184,24 @@ let type_
         let re = report_errors ~all_options ~error_output in
         let () =
           match res with
-          | `Mismatches (error_list, amap)      -> re error_list;
-                                                   report_mismatches ~print_top g amap
-          | `MismatchesList (error_list, amap)  -> re error_list;
-                                                   report_mismatches_list ~print_top g amap
-          | `Likelihood (error_list, amap)      -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "likelihood" g amap
-          | `LogLikelihood (error_list, amap)   -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "loglikelihood" g amap
-          | `PhredLikelihood (error_list, amap) -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "phredlihood" g amap
+          | `Number_of_mismatches_of_reads (error_list, amap) ->
+              re error_list;
+              report_mismatches ~print_top g amap
+          | `List_mismatches_of_reads (error_list, amap)      ->
+              re error_list;
+              report_mismatches_list ~print_top g amap
+          | `Likelihood_of_reads (error_list, amap)           ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "likelihood" g amap
+          | `LogLikelihood_of_reads (error_list, amap)        ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "loglikelihood" g amap
+          | `Phred_likelihood_of_reads (error_list, amap)     ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "phredlihood" g amap
         in
         Ok ()
   end
@@ -221,12 +226,12 @@ let () =
   in
   let stat_flag =
     let d = "What statistics to compute over each sequences: " in
-    Arg.(value & vflag `LogLikelihood
-      [ `LogLikelihood,   info ~doc:(d ^ "log likelihood") ["log-likelihood"]
-      ; `Likelihood,      info ~doc:(d ^ "likelihood") ["likelihood"]
-      ; `Mismatches,      info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
-      ; `MismatchesList,  info ~doc:(d ^ "list of mismatches") ["mis-list"]
-      ; `PhredLikelihood, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
+    Arg.(value & vflag `LogLikelihood_of_reads
+      [ `LogLikelihood_of_reads,   info ~doc:(d ^ "log likelihood") ["log-likelihood"]
+      ; `Likelihood_of_reads,      info ~doc:(d ^ "likelihood") ["likelihood"]
+      ; `Number_of_mismatches_of_reads,      info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
+      ; `List_mismatches_of_reads,  info ~doc:(d ^ "list of mismatches") ["mis-list"]
+      ; `Phred_likelihood_of_reads, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
       ])
   in
   let filter_flag =

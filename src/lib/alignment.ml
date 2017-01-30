@@ -73,20 +73,23 @@ module Nmq = NodeMapQueue (AllelesSetOffsetLists)
 
 (* How we measure the quality of alignment over a segment, a segment refers to
    a contiguous sequence, whether in the node of our graph, or to other
-   potential paths due to start/end offsets.  *)
-module type Segment_alignment_measure = sig
+   potential paths due to start/end offsets. This logic is combined with
+   {Alignment_config} to parameterize the Alignment algorithm. *)
+module type Segment_alignment_config = sig
 
+  (* What we measure per segment. *)
   type t
   val mismatches : int -> t
   val to_string : t -> string
 
+  (* The "sequence" being aligned against a segment. *)
   type thread
-  val thread_length : thread -> int
-  val thread_update : thread -> int -> char -> t -> t
+  val length : thread -> int
+  val update : thread -> int -> char -> t -> t
 
 end
 
-module MakeThreadAlignment (Am : Segment_alignment_measure) : sig
+module Make_segment_alignment (Am : Segment_alignment_config) : sig
 
   type segment_result =
     | Both of Am.t
@@ -104,7 +107,7 @@ end = struct
     | Second of Am.t * int
 
   let alignment ?start ~thread ~thread_offset ~segment ~offset =
-    let l1 = Am.thread_length thread in
+    let l1 = Am.length thread in
     let l2 = String.length segment in
     let rec loop i m =
       let i1 = i + thread_offset in
@@ -118,33 +121,41 @@ end = struct
         Second (m, i1)
       else
         let c2 = String.get_exn segment i2 in
-        loop (i + 1) (Am.thread_update thread i1 c2 m)
+        loop (i + 1) (Am.update thread i1 c2 m)
     in
     let start = Option.value start ~default:(Am.mismatches 0) in
     loop 0 start
 
-end (* MakeThreadAlignment *)
+end (* Make_segment_alignment *)
 
+(* How we measure the alignment across combinations of segments; the graph. *)
 module type Alignment_config = sig
 
-  include Segment_alignment_measure
+  include Segment_alignment_config
 
-  (* Value to track for each allele /edge. *)
-  type a
-  val init : a
-  val aligned_to_string : a -> string
+  (* Value to track for each allele (edge). This will frequently be the same as
+    [t] but it doesn't need to be (ex. number of mismatches). *)
+  type m
+  val init : m
+
+  (* Updating per segment measuring to our final metric. *)
+  val from_segment : position:int -> t -> m
+
+  val metric_to_string : m -> string
 
   (* Global (across graph) value to track, use this to terminate alignment
-     early, by returning None in [update]. *)
+     early, by returning None in [update_metric]. This can be of the same type
+     as [m] and may be a metric over all the [m]'s (ex. maximum of the observed
+     mismatches). *)
   type stop
   type stop_parameter   (* Parameter to stopping logic. *)
 
   val stop_init : stop
   val stop_to_string : stop -> string
 
-  val from_segment : position:int -> t -> a
-
-  val update_state : ?early_stop:stop_parameter -> stop -> current:a -> aligned:a -> (a * stop) option
+  (* Update the per allele metric. *)
+  val update_metric : ?early_stop:stop_parameter -> stop ->
+    current:m -> aligned:m -> (m * stop) option
 
 end
 
@@ -161,16 +172,16 @@ type 'a product =
   | Finished of 'a Alleles.Map.t
   | Stopped of 'a Alleles.Map.t
 
-module Align (Ag : Alignment_config) = struct
+module Make_alignment (Ag : Alignment_config) = struct
 
-  module Ta = MakeThreadAlignment(Ag)
+  module Sa = Make_segment_alignment(Ag)
 
   type node_result =
     | Fin of Ag.t
     | GoOn of Ag.t * int
 
   let align_against s =
-    let open Ta in
+    let open Sa in
     let align = alignment ~thread:s in
     fun ?start ~search_pos ~node_seq ~node_offset () ->
       match align ?start ~thread_offset:search_pos ~segment:node_seq ~offset:node_offset with
@@ -184,7 +195,7 @@ module Align (Ag : Alignment_config) = struct
     let open Index in
 
     let nmas = align_against search_seq in
-    let search_str_length = Ag.thread_length search_seq in
+    let search_str_length = Ag.length search_seq in
     (* We need a globally valid position, maybe just pass this integer as
       argument instead? *)
     let pos = pos.alignment + pos.offset in
@@ -192,14 +203,14 @@ module Align (Ag : Alignment_config) = struct
     (* State and updating. *)
     let mis_map = Alleles.Map.make gt.aindex Ag.init in
 
-    let ag_update = Ag.update_state ?early_stop in
+    let ag_update = Ag.update_metric ?early_stop in
     let assign ?node edge_set ~search_pos stop sa =
       let aligned = Ag.from_segment ~position:search_pos sa in
       if !debug_ref then
         eprintf "Assigning %s at %d -> %s to %s because of:%s\n%!"
           (Ag.to_string sa)
           search_pos
-          (Ag.aligned_to_string aligned)
+          (Ag.metric_to_string aligned)
           (Alleles.Set.to_human_readable ~max_length:20000 gt.aindex edge_set)
           (Option.value ~default:"---" (Option.map node ~f:Nodes.vertex_name));
 
@@ -342,9 +353,16 @@ module Align (Ag : Alignment_config) = struct
 
   let mismatches = Ag.mismatches
 
-end (* Align *)
+  (* Export some types and values so that we can reuse them! *)
+  type m = Ag.m
+  type thread = Ag.thread
+  type stop_parameter = Ag.stop_parameter
+  let metric_to_string = Ag.metric_to_string
 
-module MismatchesCounts = struct
+end (* Make_alignment *)
+
+(* Just count the number of matches and mismatches across a segment. *)
+module Count_mismatches_in_segment = struct
 
   type t =
     { matches     : int
@@ -355,36 +373,36 @@ module MismatchesCounts = struct
   let mismatches n = { matches = 0; mismatches = n }
   let matches    n = { matches = n; mismatches = 0 }
 
-  let matched ?(n=1) m = { m with matches = m.matches + n }
-  let mismatched ?(n=1) m = { m with mismatches = m.mismatches + n }
-  let to_string m =
-    sprintf "{m : %d, ms: %d}" m.matches m.mismatches
+  let matched ?(n=1) t = { t with matches = t.matches + n }
+  let mismatched ?(n=1) t = { t with mismatches = t.mismatches + n }
+  let to_string t =
+    sprintf "{m : %d, ms: %d}" t.matches t.mismatches
 
   type thread = string
-  let thread_length = String.length
-  let thread_update t p c m =
+  let length = String.length
+  let update t p c m =
     let cs = String.get_exn t p in
     if cs = c then matched m else mismatched m
 
 end
 
+(* Configurations for different instances of Alignments against the graph. *)
 
-module Mismatches_config = struct
+module Count_mismatches_config = struct
 
-  include MismatchesCounts
+  include Count_mismatches_in_segment
 
-  type a = int
+  type m = int
   let init = 0
-  let aligned_to_string = sprintf "%d"
+  let metric_to_string = sprintf "%d"
 
   type stop = float                   (* Current sum. *)
   type stop_parameter = int * float   (* Number of edges, max mean. *)
   let stop_init = 0.
   let stop_to_string = sprintf "sum %f"
-
   let from_segment ~position sa = sa.mismatches
 
-  let update_state ?early_stop stop ~current ~aligned =
+  let update_metric ?early_stop stop ~current ~aligned =
     let newal = current + aligned in
     match early_stop with
     | None ->
@@ -396,20 +414,15 @@ module Mismatches_config = struct
         else
           Some (newal, nstop)
 
-end  (* Mismatches_config *)
+end  (* Count_mismatches_config *)
 
-module Mismatches = Align (Mismatches_config)
+module Position_mismatches_config = struct
 
-let num_mismatches_against_seq = Mismatches.align_against
-let compute_mismatches = Mismatches.compute
+  include Count_mismatches_in_segment
 
-module PositionMismatches_config = struct
-
-  include MismatchesCounts
-
-  type a = (int * int) list
+  type m = (int * int) list
   let init = []
-  let aligned_to_string l =
+  let metric_to_string l =
     List.map l ~f:(fun (p,m) -> sprintf "(%d,%d)" p m)
     |> String.concat ~sep:"; "
 
@@ -420,7 +433,7 @@ module PositionMismatches_config = struct
 
   let from_segment ~position sa = [position, sa.mismatches]
 
-  let update_state ?early_stop stop ~current ~aligned =
+  let update_metric ?early_stop stop ~current ~aligned =
     let newal = current @ aligned in
     match early_stop with
     | None -> Some (newal, stop)
@@ -431,19 +444,18 @@ module PositionMismatches_config = struct
         else
           Some (newal, nstop)
 
-end (* PositionMismatches_config *)
+end (* Position_mismatches_config *)
 
-module PositionMismatches = Align (PositionMismatches_config)
+type phred_likelihood =
+  { mismatches : float  (* number of mismatches, for stop logic. *)
+  ; sum_llhd   : float  (* log likelihood *)
+  }
+  [@@deriving show]
 
-let align_sequences_lst = PositionMismatches.align_against
-let compute_mismatches_lst = PositionMismatches.compute
+module Phred_likelihood_config = struct
 
-module PhredLikelihood_config = struct
-
-  type t =
-    { mismatches : float  (* number of mismatches, for stop logic. *)
-    ; sum_llhd   : float  (* log likelihood *)
-    }
+  (* Segment *)
+  type t = phred_likelihood
 
   let mismatches n =
     let default_error = log 0.01 in
@@ -451,24 +463,26 @@ module PhredLikelihood_config = struct
     { mismatches
     ; sum_llhd = mismatches *. default_error}
 
-  let to_string { mismatches; sum_llhd } =
-    sprintf "{mismatches: %f; sum_llhd: %f}" mismatches sum_llhd
+  let to_string =
+    show_phred_likelihood
 
   type thread = string * float array
-  let thread_length (s, _) = String.length s
-  let thread_update (s, a) p c m =
+  let length (s, _) = String.length s
+  let update (s, a) p c t =
     let cs = String.get_exn s p in
     let er = Array.get a p in
     if cs = c then
-      { m with sum_llhd = m.sum_llhd +. log1p (-.er) }
+      { t with sum_llhd = t.sum_llhd +. log1p (-.er) }
     else
-      { mismatches = m.mismatches +. 1.
-      ; sum_llhd = m.sum_llhd +. log er
+      { mismatches = t.mismatches +. 1.
+      ; sum_llhd = t.sum_llhd +. log er
       }
 
-  type a = t
+  (* Alignment *)
+  type m = phred_likelihood
+
   let init = mismatches 0
-  let aligned_to_string = to_string
+  let metric_to_string = to_string
 
   type stop = float                   (* Current sum. *)
   type stop_parameter = int * float   (* Number of edges, max mean. *)
@@ -476,7 +490,7 @@ module PhredLikelihood_config = struct
   let stop_to_string = sprintf "sum %f"
 
   let from_segment ~position v = v
-  let update_state ?early_stop stop ~current ~aligned =
+  let update_metric ?early_stop stop ~current ~aligned =
     let newal =
       { mismatches = current.mismatches +. aligned.mismatches
       ; sum_llhd   = current.sum_llhd +. aligned.sum_llhd
@@ -491,12 +505,15 @@ module PhredLikelihood_config = struct
         else
           Some (newal, nstop)
 
-end (* PhredLikelihood_config *)
+end (* Phred_likelihood_config *)
 
-module PhredLikelihood = Align (PhredLikelihood_config)
+module Position_mismatches = Make_alignment (Position_mismatches_config)
 
-let align_sequences_plhd = PhredLikelihood.align_against
-let compute_plhd = PhredLikelihood.compute
+module Mismatches = Make_alignment (Count_mismatches_config)
+
+module Phred_likelihood = Make_alignment (Phred_likelihood_config)
+
+(* Et cetera *)
 
 (* This method is a bad strawman... Would probably be much faster to
    go back to the original file and apply the Mas_parser changes to the
@@ -510,7 +527,7 @@ let manual_mismatches gt search_seq pos =
   in
   let n = String.length search_seq in
   let s = sequence ~start:(`Pad p) ~stop:(`Pad n) gt in
-  let nmas = num_mismatches_against_seq search_seq ~search_pos:0 in
+  let nmas = Mismatches.align_against search_seq ~search_pos:0 in
   Alleles.Map.map gt.aindex gt.bounds ~f:(fun sep_lst allele ->
     if contains_p sep_lst then
       s allele >>= fun graph_seq ->
