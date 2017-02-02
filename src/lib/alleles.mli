@@ -150,4 +150,7 @@ module Map : sig
       elements of [map].*)
   val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 
+  (** [choose m] return a single element from the map. *)
+  val choose : 'a t -> 'a
+
 end (* Map *)

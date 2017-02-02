@@ -270,4 +270,7 @@ module Map = struct
       m.(i) <- nm;
       nacc) init (BitSet.enum s)
 
+  let choose m =
+    m.(0)
+
 end (* Map *)
