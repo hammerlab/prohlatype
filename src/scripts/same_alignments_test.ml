@@ -170,15 +170,13 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (Mismatches.Fin sa),
-              wa when wa = sa.Count_mismatches_in_segment.mismatches ->
+          | Ok (Mismatches.Fin sa), wa when wa = sa                           ->
             acc
-          | Ok (Mismatches.GoOn (sa, sp)),
-            wa when wa = sa.Count_mismatches_in_segment.mismatches + (read_len - sp)  ->
+          | Ok (Mismatches.GoOn (sa, sp)), wa when wa = sa + (read_len - sp)  ->
             acc
-          | Ok cmo             , wa                                  ->
+          | Ok cmo             , wa                                           ->
             (allele, Ok (cmo, wa)) :: acc
-          | Error ec           , wa                                  ->
+          | Error ec           , wa                                           ->
             (allele, Error (ec, wa)) :: acc)
 
 
@@ -259,12 +257,9 @@ let () =
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((Mismatches.Fin m), m2)        ->
-                    sprintf "Fin %d vs %d" m.Count_mismatches_config.mismatches m2
-                 | Ok ((Mismatches.GoOn (m, p)), m2)  ->
-                    sprintf "GoOn %d vs %d, sp: %d" m.Count_mismatches_config.mismatches m2 p
-                 | Error (msg, d)                     ->
-                    sprintf "Error %s %d" msg d));
+                 | Ok ((Mismatches.Fin m), m2)        -> sprintf "Fin %d vs %d" m m2
+                 | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m m2 p
+                 | Error (msg, d)                     -> sprintf "Error %s %d" msg d));
             exit 1
         end
 

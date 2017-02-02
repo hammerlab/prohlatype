@@ -364,12 +364,15 @@ end (* Make_alignment *)
 (* Just count the number of matches and mismatches across a segment. *)
 module Count_mismatches_in_segment = struct
 
-  type t =
+  type t = int  (* mismatches *)
+  let to_string = string_of_int
+  let mismatches x = x
+  (*
     { matches     : int
     ; mismatches  : int
     }
-
   let zero         = { matches = 0; mismatches = 0 }
+
   let mismatches n = { matches = 0; mismatches = n }
   let matches    n = { matches = n; mismatches = 0 }
 
@@ -377,12 +380,14 @@ module Count_mismatches_in_segment = struct
   let mismatched ?(n=1) t = { t with mismatches = t.mismatches + n }
   let to_string t =
     sprintf "{m : %d, ms: %d}" t.matches t.mismatches
+    *)
 
   type thread = string
   let length = String.length
   let update t p c m =
     let cs = String.get_exn t p in
-    if cs = c then matched m else mismatched m
+    (*if cs = c then matched m else mismatched m*)
+    if cs = c then m else m + 1
 
 end
 
@@ -394,13 +399,13 @@ module Count_mismatches_config = struct
 
   type m = int
   let init = 0
-  let metric_to_string = sprintf "%d"
+  let metric_to_string = sprintf "mismatches %d"
 
   type stop = float                   (* Current sum. *)
   type stop_parameter = int * float   (* Number of edges, max mean. *)
   let stop_init = 0.
   let stop_to_string = sprintf "sum %f"
-  let from_segment ~position sa = sa.mismatches
+  let from_segment ~position sa = sa (*sa.mismatches *)
 
   let update_metric ?early_stop stop ~current ~aligned =
     let newal = current + aligned in
@@ -431,7 +436,7 @@ module Position_mismatches_config = struct
   let stop_init = 0.
   let stop_to_string = sprintf "sum %f"
 
-  let from_segment ~position sa = [position, sa.mismatches]
+  let from_segment ~position sa = [position, sa (*sa.mismatches*)]
 
   let update_metric ?early_stop stop ~current ~aligned =
     let newal = current @ aligned in
