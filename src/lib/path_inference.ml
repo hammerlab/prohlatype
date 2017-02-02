@@ -94,19 +94,19 @@ module AgainstSequence (C : Single_config) = struct
               if bm < b then (bm, m) else (b, s))
             |> snd
 
-  let lookup ?distance idx thread =
-    Index.lookup ?distance idx (C.thread_to_seq thread)
+  let lookup ~distance idx thread =
+    Index.lookup ~distance idx (C.thread_to_seq thread)
 
   let against_positions ?early_stop g ps seq =
     let res = List.map ps ~f:(C.compute ?early_stop g seq) in
     let f = function | Finished f -> `Fst f | Stopped s -> `Snd s in
     match List.partition_map res ~f with
-    | [], []      -> Error NoIndexedPositions
+    | [], []      -> Error NoIndexedPositions     (* assert false, call only on non-empty list! *)
     | [], als     -> Error (AllComputesStopped (List.length als))
     | r :: rs, _  -> Ok (reduce_across_positions r rs)
 
-  let soloed_no_rc ?distance ?early_stop g idx seq =
-    match lookup ?distance idx seq with
+  let soloed_no_rc ?early_stop ~distance g idx seq =
+    match lookup ~distance idx seq with
     | Error e -> Error (SequenceTooShort e)
     | Ok []   -> Error NoIndexedPositions
     | Ok ps   -> against_positions ?early_stop g ps seq
@@ -116,15 +116,15 @@ module AgainstSequence (C : Single_config) = struct
     let cm = min_el complement in
     (C.compare rm cm) <= 0
 
-  let soloed_with_rc_with_choice ?distance ?early_stop g idx seq =
+  let soloed_with_rc_with_choice ?early_stop ~distance g idx seq =
     let ap st ps seq = against_positions ?early_stop g ps seq >>| fun e -> (e, st) in
-    let is = lookup ?distance idx seq in
+    let is = lookup ~distance idx seq in
     match is with
     | Error e -> Error (SequenceTooShort e)
       (* No point checking rev comp since it should have the same length! *)
     | Ok ls   ->
         let rev_thread = C.reverse_complement seq in
-        begin match ls, lookup ?distance idx rev_thread with
+        begin match ls, lookup ~distance idx rev_thread with
           | _, Error e ->
               failwithf "Reverse complement sequence %s shorter than original %s!"
                 (C.thread_to_seq seq) (C.thread_to_seq rev_thread)
@@ -146,23 +146,43 @@ module AgainstSequence (C : Single_config) = struct
               end
         end
 
-  let soloed_with_rc ?distance ?early_stop g idx seq =
-    soloed_with_rc_with_choice ?distance ?early_stop g idx seq >>| fun (r, _) -> r
+  let soloed_with_rc ?early_stop ~distance g idx seq =
+    soloed_with_rc_with_choice ?early_stop ~distance g idx seq >>| fun (r, _) -> r
 
-  let soloed ?(check_rc=true) ?distance ?early_stop g idx seq =
-    if check_rc then
-      soloed_with_rc ?distance ?early_stop g idx seq
-    else
-      soloed_no_rc ?distance ?early_stop g idx seq
+  let up_to max_distance f =
+    let rec loop d = function
+        | Error NoIndexedPositions
+        | Error (AllComputesStopped _) when d < max_distance ->
+            loop (d + 1) (f d)
+        | res ->
+            res
+    in
+    loop 1 (f 0)
 
-  let paired ?distance ?early_stop g idx seq1 seq2 =
-    soloed_with_rc_with_choice ?distance ?early_stop g idx seq1 >>= fun (m1, c1) ->
-      soloed_with_rc_with_choice ?distance ?early_stop g idx seq2 >>= fun (m2, c2) ->
-        match c1, c2 with
-        | `Reg,  `Reg   -> Error (InconsistentPairOrientation true)
-        | `Comp, `Comp  -> Error (InconsistentPairOrientation false)
-        | `Reg,  `Comp
-        | `Comp, `Reg   -> Ok (C.combine_pairs m1 m2)
+  let soloed ?(check_rc=true) ?max_distance ?early_stop g idx seq =
+    let f distance =
+      if check_rc then
+        soloed_with_rc ?early_stop ~distance g idx seq
+      else
+        soloed_no_rc ?early_stop ~distance g idx seq
+    in
+    match max_distance with
+    | None              -> f 0
+    | Some max_distance -> up_to max_distance f
+
+  let paired ?max_distance ?early_stop g idx seq1 seq2 =
+    let f distance =
+      soloed_with_rc_with_choice ?early_stop ~distance g idx seq1 >>= fun (m1, c1) ->
+        soloed_with_rc_with_choice ?early_stop ~distance g idx seq2 >>= fun (m2, c2) ->
+          match c1, c2 with
+          | `Reg,  `Reg   -> Error (InconsistentPairOrientation true)
+          | `Comp, `Comp  -> Error (InconsistentPairOrientation false)
+          | `Reg,  `Comp
+          | `Comp, `Reg   -> Ok (C.combine_pairs m1 m2)
+    in
+    match max_distance with
+    | None              -> f 0
+    | Some max_distance -> up_to max_distance f
 
   type stop_parameter = C.stop_parameter
   type thread = C.thread
@@ -242,11 +262,6 @@ module Phred_likelihood_config = struct
       ; sum_llhd   = m1.sum_llhd +. m2.sum_llhd
       })
 
-    (*
-  let regular_or_complement ~regular ~reverse_complement =
-    to_max regular > to_max reverse_complement
-    *)
-
 end (* Phred_likelihood_config *)
 
 module List_mismatches_of_sequence = AgainstSequence (List_mismatches_config)
@@ -275,14 +290,14 @@ module type Multiple_config = sig
 
   val map :
     ?check_rc:bool ->
-    ?distance:int ->
+    ?max_distance:int ->
     ?early_stop:stop_parameter ->
     Ref_graph.t -> Index.t ->
     thread ->
     (me Alleles.Map.t, sequence_alignment_error) result
 
   val map_paired :
-    ?distance:int ->
+    ?max_distance:int ->
     ?early_stop:stop_parameter ->
     Ref_graph.t -> Index.t ->
     thread ->
@@ -294,22 +309,33 @@ module type Multiple_config = sig
 
 end (* Multiple_config *)
 
+(* TODO: Consider adding early_stop to this data structure if it proves that
+  we end up never varying this parameter. We haven't developed a different
+  (better?) stopping logic then when the min mismatches goes above some
+  boundary. *)
+
+type fastq_fold_args =
+  { number_of_reads : int option
+  ; check_rc        : bool option
+  ; max_distance    : int option
+  } [@@deriving]
+
 module Multiple (C : Multiple_config) = struct
 
-  let fold_over_fastq ?number_of_reads fastq_file ?check_rc ?distance ?early_stop g idx =
+  let fold_over_fastq fastq_file { number_of_reads; check_rc; max_distance} ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi =
       match C.to_thread fqi with
       | Error e     -> ((ToThread e, fqi) :: errors), amap
       | Ok seq  ->
-          match C.map ?distance ?check_rc ?early_stop g idx seq with
+          match C.map ?max_distance ?check_rc ?early_stop g idx seq with
           | Error e -> ((e, fqi) :: errors), amap
           | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                        errors, amap
     in
     Fastq.fold ?number_of_reads ~init:([], amap) ~f fastq_file
 
-  let fold_over_paired ?number_of_reads file1 file2 ?distance ?early_stop g idx =
+  let fold_over_paired file1 file2 { number_of_reads; max_distance; _} ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi1 fqi2 =
       match C.to_thread fqi1 with
@@ -318,7 +344,7 @@ module Multiple (C : Multiple_config) = struct
           match C.to_thread fqi2 with
           | Error e -> ((ToThread e, fqi2) :: errors), amap
           | Ok seq2 ->
-            match C.map_paired ?distance ?early_stop g idx seq1 seq2 with
+            match C.map_paired ?max_distance ?early_stop g idx seq1 seq2 with
             | Error e -> ((e, fqi1) :: errors), amap      (* TODO: return both fqi1 and fqi2 ? *)
             | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                          errors, amap
@@ -369,14 +395,14 @@ module Likelihood_of_multiple_config = struct
   type re = float
 
   let to_thread fqi = Ok fqi.Biocaml_unix.Fastq.sequence
-  let map likelihood ?check_rc ?distance ?early_stop g idx th =
+  let map likelihood ?check_rc ?max_distance ?early_stop g idx th =
     let len = String.length th in
-    soloed ?check_rc ?early_stop g idx th >>= fun m ->
+    soloed ?check_rc ?max_distance ?early_stop g idx th >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(likelihood ~len) m)
 
-  let map_paired likelihood ?distance ?early_stop g idx th1 th2 =
+  let map_paired likelihood ?max_distance ?early_stop g idx th1 th2 =
     let len = String.length th1 in
-    paired ?early_stop g idx th1 th2 >>= fun m ->
+    paired ?max_distance ?early_stop g idx th1 th2 >>= fun m ->
       Ok (Alleles.Map.map_wa ~f:(likelihood ~len) m)
 
   let reduce = (+.)
@@ -402,12 +428,12 @@ module Phred_likelihood_of_reads = Multiple (struct
     | CR.Error e -> Error (CE.to_string_hum e)
     | CR.Ok qarr -> Ok (fqi.Biocaml_unix.Fastq.sequence, qarr) *)
 
-  let map ?check_rc ?distance ?early_stop g idx th =
-    soloed ?check_rc ?distance ?early_stop g idx th >>= fun amap ->
+  let map ?check_rc ?max_distance ?early_stop g idx th =
+    soloed ?max_distance ?check_rc ?early_stop g idx th >>= fun amap ->
       Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
-  let map_paired ?distance ?early_stop g idx th1 th2 =
-    paired ?distance ?early_stop g idx th1 th2 >>= fun amap ->
+  let map_paired ?max_distance ?early_stop g idx th1 th2 =
+    paired ?max_distance ?early_stop g idx th1 th2 >>= fun amap ->
       Ok (Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
   (* log likelihoods -> + *)
@@ -415,17 +441,17 @@ module Phred_likelihood_of_reads = Multiple (struct
 
 end) (* Phred_likelihood_of_reads *)
 
-let type_ ?filter ?check_rc ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads ~fastq_file =
+let type_ ?filter ?(as_=`Phred_likelihood_of_reads) fold_args g idx ~fastq_file =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
   | `List_mismatches_of_reads       ->
       `List_mismatches_of_reads (List_mismatches_of_reads.fold_over_fastq
-          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
+          fastq_file fold_args ?early_stop g idx)
   | `Number_of_mismatches_of_reads  ->
       `Number_of_mismatches_of_reads (Number_of_mismatches_of_reads.fold_over_fastq
-          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
+          fastq_file fold_args ?early_stop g idx)
   | `Likelihood_of_reads error      ->
       (* These modules are created dynamically because they are parameterized
          the error that we assign to matching a base incorrectly. *)
@@ -438,7 +464,7 @@ let type_ ?filter ?check_rc ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_r
         end) (* Likelihood_of_reads *)
       in
       `Likelihood_of_reads (Likelihood_of_reads.fold_over_fastq
-          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
+          fastq_file fold_args ?early_stop g idx)
   | `LogLikelihood_of_reads error   ->
       let module LogLikelihood_of_reads = Multiple (struct
           include Likelihood_of_multiple_config
@@ -449,22 +475,22 @@ let type_ ?filter ?check_rc ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_r
         end)  (* LogLikelihood_of_reads *)
       in
       `LogLikelihood_of_reads (LogLikelihood_of_reads.fold_over_fastq
-          ?number_of_reads fastq_file ?early_stop g idx)
+          fastq_file fold_args ?early_stop g idx)
   | `Phred_likelihood_of_reads      ->
       `Phred_likelihood_of_reads (Phred_likelihood_of_reads.fold_over_fastq
-          ?number_of_reads fastq_file ?check_rc ?early_stop g idx)
+          fastq_file fold_args ?early_stop g idx)
 
-let type_paired ?filter ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads f1 f2 =
+let type_paired ?filter ?(as_=`Phred_likelihood_of_reads) fold_args g idx f1 f2 =
   let early_stop =
     Option.map filter ~f:(fun n -> Ref_graph.number_of_alleles g, float n)
   in
   match as_ with
   | `List_mismatches_of_reads       ->
       `List_mismatches_of_reads (List_mismatches_of_reads.fold_over_paired
-          ?number_of_reads f1 f2 ?early_stop g idx)
+          f1 f2 fold_args ?early_stop g idx)
   | `Number_of_mismatches_of_reads  ->
       `Number_of_mismatches_of_reads (Number_of_mismatches_of_reads.fold_over_paired
-          ?number_of_reads f1 f2 ?early_stop g idx)
+          f1 f2 fold_args ?early_stop g idx)
   | `Likelihood_of_reads error      ->
       let module Likelihood_of_reads = Multiple (struct
           include Likelihood_of_multiple_config
@@ -475,7 +501,7 @@ let type_paired ?filter ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads
         end) (* Likelihood_of_reads *)
       in
       `Likelihood_of_reads (Likelihood_of_reads.fold_over_paired
-          ?number_of_reads f1 f2 ?early_stop g idx)
+          f1 f2 fold_args ?early_stop g idx)
   | `LogLikelihood_of_reads error   ->
       let module LogLikelihood_of_reads = Multiple (struct
           include Likelihood_of_multiple_config
@@ -486,7 +512,7 @@ let type_paired ?filter ?(as_=`Phred_likelihood_of_reads) g idx ?number_of_reads
         end)  (* LogLikelihood_of_reads *)
       in
       `LogLikelihood_of_reads (LogLikelihood_of_reads.fold_over_paired
-          ?number_of_reads f1 f2 ?early_stop g idx)
+          f1 f2 fold_args ?early_stop g idx)
   | `Phred_likelihood_of_reads      ->
       `Phred_likelihood_of_reads (Phred_likelihood_of_reads.fold_over_paired
-          ?number_of_reads f1 f2 ?early_stop g idx)
+          f1 f2 fold_args ?early_stop g idx)
