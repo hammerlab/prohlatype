@@ -318,7 +318,7 @@ type fastq_fold_args =
   { number_of_reads : int option
   ; check_rc        : bool option
   ; max_distance    : int option
-  } [@@deriving]
+  } [@@deriving show]
 
 module Multiple (C : Multiple_config) = struct
 
