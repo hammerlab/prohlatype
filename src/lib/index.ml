@@ -233,8 +233,8 @@ let create ~k g =
   in
   fold_over_biological_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
-let lookup ?(max_neighbors=0) index s =
-  Kmer_table.lookup_kmer_neighbors ~d:max_neighbors index s >>= fun pos_list_arr ->
+let lookup ?(distance=0) index s =
+  Kmer_table.lookup_kmer_neighbors ~d:distance index s >>= fun pos_list_arr ->
     Ok (List.concat (Array.to_list pos_list_arr))
 
 let k = Kmer_table.k

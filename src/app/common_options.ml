@@ -19,6 +19,20 @@ let positive_int_parser =
 let positive_int =
   positive_int_parser, (fun frmt -> Format.fprintf frmt "%d")
 
+let non_negative_int_parser =
+  fun s ->
+    try
+      let d = Scanf.sscanf s "%d" (fun x -> x) in
+      if d < 0 then
+        `Error (s ^ " is negative")
+      else
+        `Ok d
+    with Scanf.Scan_failure msg ->
+      `Error msg
+
+let non_negative_int =
+  non_negative_int_parser, (fun frmt -> Format.fprintf frmt "%d")
+
 let file_arg =
   let docv = "FILE" in
   let doc  = sprintf "File to lookup IMGT allele alignments." in

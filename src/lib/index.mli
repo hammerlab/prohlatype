@@ -55,5 +55,5 @@ val k : t -> int
 
 (** Find positions in the index based off of the first [k] elements of the
     string. *)
-val lookup: ?max_neighbors:int -> t ->  string ->
+val lookup: ?distance:int -> t ->  string ->
   (position list, too_short) result

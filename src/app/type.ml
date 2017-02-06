@@ -146,7 +146,7 @@ let type_
   (* What are we typing. *)
     fastq_file_lst number_of_reads
   (* How are we typing *)
-    filter multi_pos as_stat likelihood_error dont_check_rc
+    filter multi_pos as_stat likelihood_error dont_check_rc max_distance
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
   let join_same_sequence = not not_join_same_seq in
@@ -160,43 +160,59 @@ let type_
         let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
         let new_as =
           match as_stat with
-          | `MismatchesList   -> `MismatchesList
-          | `Mismatches       -> `Mismatches
-          | `Likelihood       -> `Likelihood likelihood_error
-          | `LogLikelihood    -> `LogLikelihood likelihood_error
-          | `PhredLikelihood  -> `PhredLikelihood
+          | `List_mismatches_of_reads       -> `List_mismatches_of_reads
+          | `Number_of_mismatches_of_reads  -> `Number_of_mismatches_of_reads
+          | `Likelihood_of_reads            -> `Likelihood_of_reads likelihood_error
+          | `LogLikelihood_of_reads         -> `LogLikelihood_of_reads likelihood_error
+          | `Phred_likelihood_of_reads      -> `Phred_likelihood_of_reads
+        in
+        let fastq_fold_args =
+          { Path_inference.number_of_reads = number_of_reads
+          ; check_rc                       = Some (not dont_check_rc)
+          ; max_distance                   = max_distance
+          }
+        in
+        let ffs =
+          sprintf "%s%s%s"
+            (Option.value_map ~default:"" ~f:string_of_int number_of_reads)
+            (if dont_check_rc then "" else "-check_rc-")
+            (Option.value_map ~default:"" ~f:string_of_int max_distance);
         in
         let input_files, res =
           match fastq_file_lst with
           | []              -> invalid_argf "Cmdliner lied!"
           | [fastq_file]    ->
-              let check_rc = not dont_check_rc in
               basename_without_extension fastq_file,
-              Path_inference.type_ ?filter ~check_rc ~as_:new_as g idx ?number_of_reads ~fastq_file
+              Path_inference.type_ ?filter ~as_:new_as fastq_fold_args g idx ~fastq_file
           | [read1; read2] ->
               sprintf "%s-%s"
                 (basename_without_extension read1)
                 (basename_without_extension read2),
-              Path_inference.type_paired ?filter ~as_:new_as g idx ?number_of_reads read1 read2
+              Path_inference.type_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
           | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
         in
-        let all_options = sprintf "%s_%s" option_based_fname input_files in
+        let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
         let re = report_errors ~all_options ~error_output in
         let () =
           match res with
-          | `Mismatches (error_list, amap)      -> re error_list;
-                                                   report_mismatches ~print_top g amap
-          | `MismatchesList (error_list, amap)  -> re error_list;
-                                                   report_mismatches_list ~print_top g amap
-          | `Likelihood (error_list, amap)      -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "likelihood" g amap
-          | `LogLikelihood (error_list, amap)   -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "loglikelihood" g amap
-          | `PhredLikelihood (error_list, amap) -> re error_list;
-                                                   report_likelihood ?reduce_resolution
-                                                    ?bucket ~print_top "phredlihood" g amap
+          | `Number_of_mismatches_of_reads (error_list, amap) ->
+              re error_list;
+              report_mismatches ~print_top g amap
+          | `List_mismatches_of_reads (error_list, amap)      ->
+              re error_list;
+              report_mismatches_list ~print_top g amap
+          | `Likelihood_of_reads (error_list, amap)           ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "likelihood" g amap
+          | `LogLikelihood_of_reads (error_list, amap)        ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "loglikelihood" g amap
+          | `Phred_likelihood_of_reads (error_list, amap)     ->
+              re error_list;
+              report_likelihood ?reduce_resolution ?bucket ~print_top
+                "phredlihood" g amap
         in
         Ok ()
   end
@@ -221,12 +237,12 @@ let () =
   in
   let stat_flag =
     let d = "What statistics to compute over each sequences: " in
-    Arg.(value & vflag `LogLikelihood
-      [ `LogLikelihood,   info ~doc:(d ^ "log likelihood") ["log-likelihood"]
-      ; `Likelihood,      info ~doc:(d ^ "likelihood") ["likelihood"]
-      ; `Mismatches,      info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
-      ; `MismatchesList,  info ~doc:(d ^ "list of mismatches") ["mis-list"]
-      ; `PhredLikelihood, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
+    Arg.(value & vflag `LogLikelihood_of_reads
+      [ `LogLikelihood_of_reads,   info ~doc:(d ^ "log likelihood") ["log-likelihood"]
+      ; `Likelihood_of_reads,      info ~doc:(d ^ "likelihood") ["likelihood"]
+      ; `Number_of_mismatches_of_reads,      info ~doc:(d ^ "mismatches, that are then added then added together") ["mismatches"]
+      ; `List_mismatches_of_reads,  info ~doc:(d ^ "list of mismatches") ["mis-list"]
+      ; `Phred_likelihood_of_reads, info ~doc:(d ^ "sum of log likelihoods based of phred qualities") ["phred-llhd"]
       ])
   in
   let filter_flag =
@@ -287,6 +303,11 @@ let () =
   let do_not_check_rc_flag =
     Arg.(value & flag & info ["do-not-check-rc"])
   in
+  let max_distance_arg =
+    let docv = "NON-NEGATIVE INTEGER" in
+    let doc  = "Distance away from base kmer to check for positions." in
+    Arg.(value & opt (some non_negative_int) None & info ~doc ["kmer-distance"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -317,6 +338,7 @@ let () =
             (* How are we typing *)
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
+              $ max_distance_arg
             (* Output *)
             $ print_top_flag
               $ do_not_normalize_flag

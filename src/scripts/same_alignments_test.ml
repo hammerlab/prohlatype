@@ -82,7 +82,7 @@ let test_case ?compare_pos ~length (g, idx) read =
   in
   let stop = float (String.length read + 100) in (* Don't stop ever *)
   let size = Ref_graph.number_of_alleles g in
-  let al = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
+  let al = Alignment.Mismatches.compute ~early_stop:(size, stop) g sub_read pos in
   let lal = al_to_list g.Ref_graph.aindex al in
   pos, sub_read, (List.rev lal)
 
@@ -170,13 +170,13 @@ let compare_manual g m fm read_len =
     ~f:(fun acc cm allele ->
           let with_all = Alleles.Map.get aindx fm allele in
           match cm, with_all with
-          | Ok (Mismatches.Fin sa)   , wa when wa = sa.MismatchesCounts.mismatches ->
+          | Ok (Mismatches.Fin sa), wa when wa = sa                           ->
             acc
-          | Ok (Mismatches.GoOn (sa, sp)) , wa when wa = sa.MismatchesCounts.mismatches + (read_len - sp)  ->
+          | Ok (Mismatches.GoOn (sa, sp)), wa when wa = sa + (read_len - sp)  ->
             acc
-          | Ok cmo             , wa                                  ->
+          | Ok cmo             , wa                                           ->
             (allele, Ok (cmo, wa)) :: acc
-          | Error ec           , wa                                  ->
+          | Error ec           , wa                                           ->
             (allele, Error (ec, wa)) :: acc)
 
 
@@ -206,7 +206,7 @@ let compare_reads ?length ?(k=10) ?(drop=0) ?num_comp reads_file ~file =
       | Ok (pos, manm)  ->
           let stop = float (String.length sub_read + 100) in
           let size = Ref_graph.number_of_alleles g in
-          let m2 = Alignment.compute_mismatches ~early_stop:(size, stop) g sub_read pos in
+          let m2 = Alignment.Mismatches.compute ~early_stop:(size, stop) g sub_read pos in
           let m2 = unwrap_sf m2 in
           match compare_manual g manm m2 (String.length sub_read) with
           | [] -> printf " everything matched!\n%!"; over_reads (i + 1) tl
@@ -257,9 +257,9 @@ let () =
             List.iter blst ~f:(fun (allele, oe) ->
               printf "\t%s: %s\n" allele
                 (match oe with
-                 | Ok ((Mismatches.Fin m), m2)        -> sprintf "Fin %d vs %d" m.Mismatches_config.mismatches m2
-                 | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m.Mismatches_config.mismatches m2 p
-                 | Error (msg, d)          -> sprintf "Error %s %d" msg d));
+                 | Ok ((Mismatches.Fin m), m2)        -> sprintf "Fin %d vs %d" m m2
+                 | Ok ((Mismatches.GoOn (m, p)), m2)  -> sprintf "GoOn %d vs %d, sp: %d" m m2 p
+                 | Error (msg, d)                     -> sprintf "Error %s %d" msg d));
             exit 1
         end
 
