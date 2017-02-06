@@ -188,7 +188,7 @@ let neighbors ?skip ?(d=1) ~k e =
         let other_coeff = (others cur_coeff).(diff.(i)) in
         let p4 = pow 4 ci in
         (*Printf.printf "i: %d other_coeff: %d, cur_coeff: %d, p4: %d\n"
-          i other_coeff cur_coeff p4; *)
+          i other_coeff cur_coeff p4;*)
         loop (a + (other_coeff - cur_coeff) * p4) (i + 1)
     in
     loop e 0
@@ -225,10 +225,11 @@ let neighbors ?skip ?(d=1) ~k e =
         apply combs.(k) diffi.(j))
 
 let encode_neighbors ?len ~d s =
-  let k = String.length s in
+  let k = Option.value len ~default:(String.length s) in
   let ens, skip = encode_N_tolerant_with_pos ?len s in
   if d = 0 then
     Array.of_list ens
-  else
+  else begin
     List.map ens ~f:(neighbors ~skip ~d ~k)
     |> Array.concat
+  end
