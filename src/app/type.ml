@@ -306,7 +306,7 @@ let () =
   let max_distance_arg =
     let docv = "NON-NEGATIVE INTEGER" in
     let doc  = "Distance away from base kmer to check for positions." in
-    Arg.(value & opt (some non_negative_int) None & info ~doc ["kmer-distance"])
+    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["kmer-distance"])
   in
   let type_ =
     let version = "0.0.0" in
