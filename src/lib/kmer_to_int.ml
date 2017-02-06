@@ -177,7 +177,9 @@ let threes k i =
 
 (* Neighbors that are [d] distance away from a [k] encoded value [e]. *)
 let neighbors ?skip ?(d=1) ~k e =
-  let coefs = coefficients ~k e in
+  (* Keep them in reverse order so that as the index increases so does the
+     power of the base. *)
+  let coefs = rev_coefficients ~k e in
   (* comb : array of powers that is being mutated, d of them.
      diff : array of indices into other values to apply, also d of them. *)
   let apply comb diff =
@@ -187,9 +189,10 @@ let neighbors ?skip ?(d=1) ~k e =
         let cur_coeff = coefs.(ci) in
         let other_coeff = (others cur_coeff).(diff.(i)) in
         let p4 = pow 4 ci in
-        (*Printf.printf "i: %d other_coeff: %d, cur_coeff: %d, p4: %d\n"
-          i other_coeff cur_coeff p4;*)
-        loop (a + (other_coeff - cur_coeff) * p4) (i + 1)
+        let b = a + (other_coeff - cur_coeff) * p4 in
+        (*Printf.printf "i: %d other_coeff: %d, cur_coeff: %d, p4: %d a: %d -> b: %d\n"
+          i other_coeff cur_coeff p4 a b;*)
+        loop b (i + 1)
     in
     loop e 0
   in
