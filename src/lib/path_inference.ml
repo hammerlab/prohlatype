@@ -354,6 +354,7 @@ module Multiple (C : Multiple_config) = struct
         (fun fqi -> fqi.Biocaml_unix.Fastq.name)
     in
     match res with
+    | `StoppedByFilter (errors, amap)            -> errors, amap
     | `DesiredReads (errors, amap)               -> errors, amap
     | `BothFinished (errors, amap)               -> errors, amap
     (* Continue typing on the soloed? *)

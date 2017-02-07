@@ -1,23 +1,46 @@
 
+module Sset = Set.Make (struct type t = string [@@deriving ord] end)
+
 open Core_kernel.Std
 
 let to_stop = function
   | None   -> fun _ -> false
   | Some n -> fun r -> r >= n
 
-let fold (type a) ?number_of_reads file ~f ~(init : a) =
+(* read header -> display, stop *)
+let to_filter = function
+  | None      -> fun _ -> true, false
+  | Some []   -> fun _ -> false, true     (* Throw an exception? *)
+  | Some lst  ->
+      let s = ref (Sset.of_list lst) in
+      fun el ->
+        if Sset.mem el !s then begin
+          s := Sset.remove el !s;
+          true, Sset.cardinal !s <= 0
+        end else
+          false, false
+
+
+let fold (type a) ?number_of_reads ?specific_reads file ~f ~(init : a) =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
+  let filt = to_filter specific_reads in
   let module M = struct exception Fin of a end in
   try
     Future_unix.Reader.with_file file ~f:(fun rdr ->
       (* Avoid circular dep *)
       let fr = Biocaml_unix.Fastq.read rdr in
       Future_unix.Pipe.fold fr ~init:(0,init) ~f:(fun (c, acc) oe ->
-        if stop c then raise (M.Fin acc) else
-        match oe with
-        | Error e -> eprintf "%s\n" (Error.to_string_hum e); (c, acc)
-        | Ok fqi  -> (c + 1, f acc fqi)))
+        if stop c then
+          raise (M.Fin acc)
+        else
+          match oe with
+          | Error e -> eprintf "%s\n" (Error.to_string_hum e); (c, acc)
+          | Ok fqi  -> match filt fqi.Biocaml_unix.Fastq.name with
+                      | true,  true  -> raise (M.Fin (f acc fqi))
+                      | false, true  -> raise (M.Fin acc)
+                      | true,  false -> c + 1, f acc fqi
+                      | false, false -> c, acc))
     |> snd
   with M.Fin m -> m
 
@@ -64,9 +87,10 @@ let rec same cmp l1 l2 =
   in
   double_loop l2 [] l1
 
-let fold_paired ?number_of_reads file1 file2 ~f ~init to_key =
+let fold_paired ?number_of_reads ?specific_reads file1 file2 ~f ~init to_key =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
+  let filt = to_filter specific_reads in
   let cmp r1 r2 = (to_key r1) = (to_key r2) in
   let same = same cmp in
   let open Future_unix in
@@ -100,7 +124,11 @@ let fold_paired ?number_of_reads file1 file2 ~f ~init to_key =
                   two_pipe_fold c (a::s1) s2 acc
               | `Ok (Ok a), `Ok (Ok b)          ->
                   if cmp a b then
-                    two_pipe_fold (c + 1) s1 s2 (f acc a b)
+                    match filt a.Biocaml_unix.Fastq.name with
+                    | true,  true  -> `StoppedByFilter (f acc a b)
+                    | false, true  -> `StoppedByFilter acc
+                    | true, false  -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
+                    | false, false -> two_pipe_fold c s1 s2 acc
                   else
                     let ns1 = a :: s1 in
                     let ns2 = b :: s2 in
