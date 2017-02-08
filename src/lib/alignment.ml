@@ -480,7 +480,7 @@ module Phred_likelihood_config = struct
       { t with sum_llhd = t.sum_llhd +. log1p (-.er) }
     else
       { mismatches = t.mismatches +. 1.
-      ; sum_llhd = t.sum_llhd +. log er
+      ; sum_llhd = t.sum_llhd +. log (er /. 3.)
       }
 
   (* Alignment *)
