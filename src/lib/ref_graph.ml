@@ -157,6 +157,7 @@ type adjacent_info =
 
 type t =
   { align_date    : string                  (* When the alignment was created by IMGT. *)
+  ; reference     : string
   ; g             : G.t                     (* The actual graph. *)
   ; aindex        : A.index                 (* The allele index, for Sets and Maps. *)
   ; bounds        : sep list A.Map.t        (* Map of where the alleles start and stop. *)
@@ -1335,6 +1336,7 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
   let posarr = create_by_position g aindex bounds in
   let adjacents_arr = create_adjacents_arr g aindex offset posarr bounds in
   { align_date
+  ; reference
   ; g
   ; aindex
   ; bounds
