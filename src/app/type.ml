@@ -134,27 +134,35 @@ let basename_without_extension f =
   with Invalid_argument _ -> bn
 
 let paired_datum_header =
-  "Read name\t
-   Read 1\t
-   Read 2\t
-   Position 1\t
-   Position 2\t
-   Reference Value\t
-   Min Allele\t
-   Min Value\t"
+  "Read name\t\
+   Read 1\t\
+   First RC\t\
+   Read 2\t\
+   Position 1\t\
+   Position 2\t\
+   Reference Value\t\
+   Min Value\t
+   Min Allele Set\t\n"
 
 let paired_datum_to_string ?(read_prefix=10) ref_of_amap min_of_amap value_to_string d =
   let open Path_inference in
-  let min_allele, min_value = min_of_amap d.amap in
-  sprintf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s"
+  let min_allele_set, min_value = min_of_amap d.amap in
+  sprintf "%s\t%s\t%b\t%s\t%s\t%s\t%s\t%s\t%s"
     d.name
-    (String.sub_exn ~index:0 ~length:read_prefix d.read1)
-    (String.sub_exn ~index:0 ~length:read_prefix d.read1)
+    (if d.first_rc then
+      String.sub_exn ~index:0 ~length:read_prefix (reverse_complement d.read1)
+    else
+      String.sub_exn ~index:0 ~length:read_prefix d.read1)
+    d.first_rc
+    (if d.first_rc then
+      String.sub_exn ~index:0 ~length:read_prefix d.read2
+    else
+      String.sub_exn ~index:0 ~length:read_prefix (reverse_complement d.read2))
     (Index.show_position d.position1)
     (Index.show_position d.position2)
     (value_to_string (ref_of_amap d.amap))
-    min_allele
     (value_to_string min_value)
+    min_allele_set
 
 let display_datums ref_of_amap min_of_amap value_to_string dlst =
   print_endline paired_datum_header;
@@ -223,35 +231,37 @@ let type_
           let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
           let re = report_errors ~all_options ~error_output in
           let get_ref amap = Alleles.Map.get g.aindex amap g.reference in
+          let best_allele_set op amap =
+            let s = Alleles.Set.singleton g.aindex g.reference in
+            let v = get_ref amap in
+            let ms, mv =
+              Alleles.Map.fold g.aindex ~init:(s, v) ~f:(fun (ms,mv) v al ->
+                if op v mv then
+                  Alleles.Set.singleton g.aindex al, v
+                else if v = mv then
+                  Alleles.Set.set g.aindex ms al, v
+                else
+                  (ms, mv)) amap
+            in
+            Alleles.Set.to_human_readable ~max_length:10000 g.aindex ms, mv
+          in
           let () =
             match res with
             | `Number_of_mismatches_of_reads (error_list, acc) ->
                 re error_list;
-                display_datums get_ref (fun amap ->
-                  Alleles.Map.fold g.aindex ~init:(g.reference, get_ref amap)
-                    ~f:(fun ((_,mv) as p) v al -> if v < mv then al, v else p) amap)
-                  (sprintf "%d") acc
+                display_datums get_ref (best_allele_set (<)) (sprintf "%d") acc
             | `List_mismatches_of_reads (error_list, _)       ->
                 re error_list;
                 failwith "Listing mismatches of mapped reads is not implemented."
             | `Likelihood_of_reads (error_list, acc)          ->
                 re error_list;
-                display_datums get_ref (fun amap ->
-                  Alleles.Map.fold g.aindex ~init:(g.reference, get_ref amap)
-                    ~f:(fun ((_,mv) as p) v al -> if v > mv then al, v else p) amap)
-                  (sprintf "%0.4f") acc
+                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
             | `LogLikelihood_of_reads (error_list, acc)       ->
                 re error_list;
-                display_datums get_ref (fun amap ->
-                  Alleles.Map.fold g.aindex ~init:(g.reference, get_ref amap)
-                    ~f:(fun ((_,mv) as p) v al -> if v > mv then al, v else p) amap)
-                  (sprintf "%0.4f") acc
+                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
             | `Phred_likelihood_of_reads (error_list, acc)    ->
                 re error_list;
-                display_datums get_ref (fun amap ->
-                  Alleles.Map.fold g.aindex ~init:(g.reference, get_ref amap)
-                    ~f:(fun ((_,mv) as p) v al -> if v > mv then al, v else p) amap)
-                  (sprintf "%0.4f") acc
+                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
           in
           Ok ()
         else

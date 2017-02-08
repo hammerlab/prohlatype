@@ -176,8 +176,8 @@ module AgainstSequence (C : Single_config) = struct
     | None              -> f 0
     | Some max_distance -> up_to max_distance f
 
-  let combine_pairs (p1, m1) (p2, m2) =
-    (p1, p2, C.combine_pairs m1 m2)
+  let combine_pairs first_rc (p1, m1) (p2, m2) =
+    (first_rc, p1, p2, C.combine_pairs m1 m2)
 
   let paired ?max_distance ?early_stop g idx seq1 seq2 =
     let f distance =
@@ -186,8 +186,8 @@ module AgainstSequence (C : Single_config) = struct
           match c1, c2 with
           | `Reg,  `Reg   -> Error (InconsistentPairOrientation true)
           | `Comp, `Comp  -> Error (InconsistentPairOrientation false)
-          | `Reg,  `Comp
-          | `Comp, `Reg   -> Ok (combine_pairs m1 m2)
+          | `Reg,  `Comp  -> Ok (combine_pairs false m1 m2)
+          | `Comp, `Reg   -> Ok (combine_pairs true m1 m2)
     in
     match max_distance with
     | None              -> f 0
@@ -311,7 +311,7 @@ module type Multiple_config = sig
     Ref_graph.t -> Index.t ->
     thread ->
     thread ->
-    (Index.position * Index.position * me Alleles.Map.t, sequence_alignment_error) result
+    (bool * Index.position * Index.position * me Alleles.Map.t, sequence_alignment_error) result
 
   (* Aggregate the mapped [me]'s into a single [re]. *)
   val reduce : me -> re -> re
@@ -333,6 +333,7 @@ type fastq_fold_args =
 type 'a paired_datum =
   { name      : string
   ; read1     : string
+  ; first_rc  : bool              (* First or second is reverse complement *)
   ; read2     : string
   ; position1 : Index.position
   ; position2 : Index.position
@@ -366,9 +367,9 @@ module Multiple (C : Multiple_config) = struct
           | Error e -> ((ToThread e, fqi2) :: errors), amap
           | Ok seq2 ->
             match C.map_paired ?max_distance ?early_stop g idx seq1 seq2 with
-            | Error e           -> ((e, fqi1) :: errors), amap      (* TODO: return both fqi1 and fqi2 ? *)
-            | Ok (_p1, _p2, a)  -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
-                                   errors, amap
+            | Error e               -> ((e, fqi1) :: errors), amap      (* TODO: return both fqi1 and fqi2 ? *)
+            | Ok (_rc, _p1, _p2, a) -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
+                                       errors, amap
     in
     let res =
       Fastq.fold_paired ?number_of_reads ~specific_reads ~init:([], amap) ~f file1 file2
@@ -381,7 +382,8 @@ module Multiple (C : Multiple_config) = struct
     (* Continue typing on the soloed? *)
     | `OneReadPairedFinished (_, (errors, amap)) -> errors, amap
 
-  let map_over_paired file1 file2 { number_of_reads; max_distance; _} ?early_stop g idx =
+  let map_over_paired file1 file2 { number_of_reads; specific_reads; max_distance; _}
+    ?early_stop g idx =
     let f (errors, amap_accum) fqi1 fqi2 =
       match C.to_thread fqi1 with
       | Error e     -> ((ToThread e, fqi1) :: errors), amap_accum
@@ -390,18 +392,19 @@ module Multiple (C : Multiple_config) = struct
           | Error e -> ((ToThread e, fqi2) :: errors), amap_accum
           | Ok seq2 ->
             match C.map_paired ?max_distance ?early_stop g idx seq1 seq2 with
-            | Error e         -> ((e, fqi1) :: errors), amap_accum
-            | Ok (p1, p2, a)  -> errors,
-                                  ( { name      = fqi1.Biocaml_unix.Fastq.name
-                                    ; read1     = fqi1.Biocaml_unix.Fastq.sequence
-                                    ; read2     = fqi2.Biocaml_unix.Fastq.sequence
-                                    ; position1 = p1
-                                    ; position2 = p2
-                                    ; amap      = a
-                                    } :: amap_accum)
+            | Error e             -> ((e, fqi1) :: errors), amap_accum
+            | Ok (rc, p1, p2, a)  -> errors,
+                                    ( { name      = fqi1.Biocaml_unix.Fastq.name
+                                      ; read1     = fqi1.Biocaml_unix.Fastq.sequence
+                                      ; first_rc  = rc
+                                      ; read2     = fqi2.Biocaml_unix.Fastq.sequence
+                                      ; position1 = p1
+                                      ; position2 = p2
+                                      ; amap      = a
+                                      } :: amap_accum)
     in
     let res =
-      Fastq.fold_paired ?number_of_reads ~init:([], []) ~f file1 file2
+      Fastq.fold_paired ?number_of_reads ~specific_reads ~init:([], []) ~f file1 file2
         (fun fqi -> fqi.Biocaml_unix.Fastq.name)
     in
     match res with
@@ -454,8 +457,8 @@ module Likelihood_of_multiple_config = struct
 
   let map_paired likelihood ?max_distance ?early_stop g idx th1 th2 =
     let len = String.length th1 in
-    paired ?max_distance ?early_stop g idx th1 th2 >>= fun (p1, p2, m) ->
-      Ok (p1, p2, Alleles.Map.map_wa ~f:(likelihood ~len) m)
+    paired ?max_distance ?early_stop g idx th1 th2 >>= fun (rc, p1, p2, m) ->
+      Ok (rc, p1, p2, Alleles.Map.map_wa ~f:(likelihood ~len) m)
 
   let reduce = (+.)
 
@@ -485,8 +488,8 @@ module Phred_likelihood_of_reads = Multiple (struct
       Ok (p1, Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
   let map_paired ?max_distance ?early_stop g idx th1 th2 =
-    paired ?max_distance ?early_stop g idx th1 th2 >>= fun (p1, p2, amap) ->
-      Ok (p1, p2, Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
+    paired ?max_distance ?early_stop g idx th1 th2 >>= fun (rc, p1, p2, amap) ->
+      Ok (rc, p1, p2, Alleles.Map.map_wa amap ~f:(fun pt -> pt.Alignment.sum_llhd))
 
   (* log likelihoods -> + *)
   let reduce = (+.)
