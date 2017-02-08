@@ -69,7 +69,7 @@ end (* Single_config *)
 
 type sequence_alignment_error =
   | NoIndexedPositions
-  | AllComputesStopped of int
+  | AllComputesStopped of int             (* number of positions. *)
   | SequenceTooShort of too_short
   | InconsistentPairOrientation of bool   (* true = both regular
                                           , false = both complement *)
@@ -316,13 +316,15 @@ end (* Multiple_config *)
 
 type fastq_fold_args =
   { number_of_reads : int option
+  ; specific_reads  : string list
   ; check_rc        : bool option
   ; max_distance    : int option
   } [@@deriving show]
 
 module Multiple (C : Multiple_config) = struct
 
-  let fold_over_fastq fastq_file { number_of_reads; check_rc; max_distance} ?early_stop g idx =
+  let fold_over_fastq fastq_file { number_of_reads; specific_reads; check_rc; max_distance }
+      ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi =
       match C.to_thread fqi with
@@ -333,9 +335,10 @@ module Multiple (C : Multiple_config) = struct
           | Ok a    -> Alleles.Map.update2 ~source:a ~dest:amap C.reduce;
                        errors, amap
     in
-    Fastq.fold ?number_of_reads ~init:([], amap) ~f fastq_file
+    Fastq.fold ?number_of_reads ~specific_reads ~init:([], amap) ~f fastq_file
 
-  let fold_over_paired file1 file2 { number_of_reads; max_distance; _} ?early_stop g idx =
+  let fold_over_paired file1 file2 { number_of_reads; specific_reads; max_distance; _}
+      ?early_stop g idx =
     let amap = Alleles.Map.make g.Ref_graph.aindex C.empty in
     let f (errors, amap) fqi1 fqi2 =
       match C.to_thread fqi1 with
@@ -350,10 +353,11 @@ module Multiple (C : Multiple_config) = struct
                          errors, amap
     in
     let res =
-      Fastq.fold_paired ?number_of_reads ~init:([], amap) ~f file1 file2
+      Fastq.fold_paired ?number_of_reads ~specific_reads ~init:([], amap) ~f file1 file2
         (fun fqi -> fqi.Biocaml_unix.Fastq.name)
     in
     match res with
+    | `StoppedByFilter (errors, amap)            -> errors, amap
     | `DesiredReads (errors, amap)               -> errors, amap
     | `BothFinished (errors, amap)               -> errors, amap
     (* Continue typing on the soloed? *)
