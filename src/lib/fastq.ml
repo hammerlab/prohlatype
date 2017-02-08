@@ -9,19 +9,18 @@ let to_stop = function
 
 (* read header -> display, stop *)
 let to_filter = function
-  | None      -> fun _ -> true, false
-  | Some []   -> fun _ -> false, true     (* Throw an exception? *)
-  | Some lst  ->
+  | []   -> fun _ -> true, false
+  | lst  ->
       let s = ref (Sset.of_list lst) in
-      fun el ->
+      begin fun el ->
         if Sset.mem el !s then begin
           s := Sset.remove el !s;
           true, Sset.cardinal !s <= 0
         end else
           false, false
+      end
 
-
-let fold (type a) ?number_of_reads ?specific_reads file ~f ~(init : a) =
+let fold (type a) ?number_of_reads ?(specific_reads=[]) file ~f ~(init : a) =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
   let filt = to_filter specific_reads in
@@ -87,7 +86,7 @@ let rec same cmp l1 l2 =
   in
   double_loop l2 [] l1
 
-let fold_paired ?number_of_reads ?specific_reads file1 file2 ~f ~init to_key =
+let fold_paired ?number_of_reads ?(specific_reads=[]) file1 file2 ~f ~init to_key =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
   let filt = to_filter specific_reads in
@@ -123,19 +122,21 @@ let fold_paired ?number_of_reads ?specific_reads file1 file2 ~f ~init to_key =
                   eprintf "%s\n" (Error.to_string_hum eb);
                   two_pipe_fold c (a::s1) s2 acc
               | `Ok (Ok a), `Ok (Ok b)          ->
-                  if cmp a b then
-                    match filt a.Biocaml_unix.Fastq.name with
-                    | true,  true  -> `StoppedByFilter (f acc a b)
-                    | false, true  -> `StoppedByFilter acc
-                    | true, false  -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
-                    | false, false -> two_pipe_fold c s1 s2 acc
-                  else
+                  if cmp a b then begin
+                    filter_pass a b c s1 s2 acc
+                  end else
                     let ns1 = a :: s1 in
                     let ns2 = b :: s2 in
                     match same ns1 ns2 with
                     | Some (r1, r2, ns1, ns2) ->
-                        two_pipe_fold (c + 1) ns1 ns2 (f acc r1 r2)
+                        filter_pass r1 r2 c ns1 ns2 acc
                     | None ->
                         two_pipe_fold c ns1 ns2 acc
+        and filter_pass a b c s1 s2 acc =
+          match filt a.Biocaml_unix.Fastq.name with
+          | true,  true  -> `StoppedByFilter (f acc a b)
+          | false, true  -> `StoppedByFilter acc
+          | true, false  -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
+          | false, false -> two_pipe_fold c s1 s2 acc
       in
       two_pipe_fold 0 [] [] init))

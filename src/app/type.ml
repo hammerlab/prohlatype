@@ -144,7 +144,7 @@ let type_
   (* Process *)
     skip_disk_cache
   (* What are we typing. *)
-    fastq_file_lst number_of_reads
+    fastq_file_lst number_of_reads specific_reads
   (* How are we typing *)
     filter multi_pos as_stat likelihood_error dont_check_rc max_distance
   (* Output *)
@@ -168,6 +168,7 @@ let type_
         in
         let fastq_fold_args =
           { Path_inference.number_of_reads = number_of_reads
+          ; specific_reads                 = specific_reads
           ; check_rc                       = Some (not dont_check_rc)
           ; max_distance                   = max_distance
           }
@@ -308,6 +309,14 @@ let () =
     let doc  = "Distance away from base kmer to check for positions." in
     Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["kmer-distance"])
   in
+  let specific_read_args =
+    let docv = "STRING" in
+    let doc  = "Read name string (to be found in fastq) to type. Add multiple \
+                to create a custom set of reads." in
+    Arg.(value
+        & opt_all string []
+        & info ~doc ~docv ["sr"; "specific-read"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -334,7 +343,7 @@ let () =
             (* Process *)
             $ no_cache_flag
             (* What are we typing *)
-            $ fastq_file_arg $ num_reads_arg
+            $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* How are we typing *)
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
