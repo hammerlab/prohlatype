@@ -141,8 +141,8 @@ let paired_datum_header =
    Position 1\t\
    Position 2\t\
    Reference Value\t\
-   Min Value\t
-   Min Allele Set\t\n"
+   Min Value\t\
+   Min Allele Set"
 
 let paired_datum_to_string ?(read_prefix=10) ref_of_amap min_of_amap value_to_string d =
   let open Path_inference in
