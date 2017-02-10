@@ -144,9 +144,8 @@ let paired_datum_header =
    Min Value\t\
    Min Allele Set"
 
-let paired_datum_to_string ?(read_prefix=10) ref_of_amap min_of_amap value_to_string d =
+let paired_datum_to_string ?(read_prefix=10) ref_value min_value min_allele_set value_to_string d =
   let open Path_inference in
-  let min_allele_set, min_value = min_of_amap d.amap in
   sprintf "%s\t%s\t%b\t%s\t%s\t%s\t%s\t%s\t%s"
     d.name
     (if d.first_rc then
@@ -160,14 +159,20 @@ let paired_datum_to_string ?(read_prefix=10) ref_of_amap min_of_amap value_to_st
       String.sub_exn ~index:0 ~length:read_prefix (reverse_complement d.read2))
     (Index.show_position d.position1)
     (Index.show_position d.position2)
-    (value_to_string (ref_of_amap d.amap))
+    (value_to_string ref_value)
     (value_to_string min_value)
     min_allele_set
 
-let display_datums ref_of_amap min_of_amap value_to_string dlst =
+let display_datums cmp ref_of_amap min_of_amap value_to_string dlst =
+  let open Path_inference in
   print_endline paired_datum_header;
-  List.iter dlst ~f:(fun d ->
-    printf "%s\n" (paired_datum_to_string ref_of_amap min_of_amap value_to_string d))
+  List.map dlst ~f:(fun d ->
+    let min_allele_set, min_value = min_of_amap d.amap in
+    let ref_value = ref_of_amap d.amap in
+    d, ref_value, min_value, min_allele_set)
+  |> List.sort ~cmp:(fun (_d1, _rv1, mv1, mvs1) (_d2, _rv2, mv2, mvs1) -> cmp mv1 mv2)
+  |> List.iter ~f:(fun (d, rv, mv, mvs) ->
+        printf "%s\n" (paired_datum_to_string rv mv mvs value_to_string d))
 
 let type_
   (* Graph construction args. *)
@@ -246,22 +251,24 @@ let type_
             Alleles.Set.to_human_readable ~max_length:10000 g.aindex ms, mv
           in
           let () =
+            let min_comp (i1:int) (i2: int) = compare i1 i2 in
+            let max_comp (f1:float) (f2: float) = compare f2 f1 in
             match res with
             | `Number_of_mismatches_of_reads (error_list, acc) ->
                 re error_list;
-                display_datums get_ref (best_allele_set (<)) (sprintf "%d") acc
+                display_datums min_comp get_ref (best_allele_set (<)) (sprintf "%d") acc
             | `List_mismatches_of_reads (error_list, _)       ->
                 re error_list;
                 failwith "Listing mismatches of mapped reads is not implemented."
             | `Likelihood_of_reads (error_list, acc)          ->
                 re error_list;
-                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
             | `LogLikelihood_of_reads (error_list, acc)       ->
                 re error_list;
-                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
             | `Phred_likelihood_of_reads (error_list, acc)    ->
                 re error_list;
-                display_datums get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
           in
           Ok ()
         else
