@@ -235,6 +235,8 @@ let create ~k g =
 
 let lookup ?(distance=0) index s =
   Kmer_table.lookup_kmer_neighbors ~d:distance index s >>= fun pos_list_arr ->
-    Ok (List.concat (Array.to_list pos_list_arr))
+    (* Since kmer neighbors are very similar the lookup positions will also
+       be repetitive. It is helpful to take a step and trim this list. *)
+    Ok (List.concat (Array.to_list pos_list_arr) |> List.dedup)
 
 let k = Kmer_table.k

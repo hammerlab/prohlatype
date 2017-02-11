@@ -97,8 +97,21 @@ module AgainstSequence (C : Single_config) = struct
   let lookup ~distance idx thread =
     Index.lookup ~distance idx (C.thread_to_seq thread)
 
-  let compute_and_keep_position ?early_stop g seq p =
-    p, C.compute ?early_stop g seq p
+  let compute_and_keep_position =
+    (* TODO: 1. Figure out better initialization number.
+             2. Move to functoral interface.
+             3. Currently ignores early_stop and g as hash parameters, but
+                those shouldn't change between individual runs of a program
+                like type, but caveat emptor.  *)
+    let ht = Hashtbl.create 500 in
+    fun ?early_stop g seq p ->
+      let key = (p, seq) in
+      if Hashtbl.mem ht key then
+        p, Hashtbl.find ht key
+      else
+        let data = C.compute ?early_stop g seq p in
+        Hashtbl.add ht ~key ~data;
+        p, data
 
   let against_positions ?early_stop g ps seq =
     let res = List.map ps ~f:(compute_and_keep_position ?early_stop g seq) in
