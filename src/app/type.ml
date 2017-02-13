@@ -188,7 +188,9 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* How are we typing *)
     map_not_fold
-    filter multi_pos as_stat likelihood_error dont_check_rc max_distance
+    filter multi_pos as_stat likelihood_error
+      dont_check_rc
+      upto_kmer_hood allto_kmer_hood
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
   let join_same_sequence = not not_join_same_seq in
@@ -199,6 +201,7 @@ let type_
     >>= begin fun (option_based_fname, cargs) ->
         let open Cache in
         let open Ref_graph in
+        let open Path_inference in
         let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
         let new_as =
           match as_stat with
@@ -209,17 +212,25 @@ let type_
           | `Phred_likelihood_of_reads      -> `Phred_likelihood_of_reads
         in
         let fastq_fold_args =
-          { Path_inference.number_of_reads = number_of_reads
-          ; specific_reads                 = specific_reads
-          ; check_rc                       = Some (not dont_check_rc)
-          ; max_distance                   = max_distance
+          { number_of_reads = number_of_reads
+          ; specific_reads  = specific_reads
+          ; check_rc        = Some (not dont_check_rc)
+          ; kmer_hood       =
+              match allto_kmer_hood, upto_kmer_hood with
+              | Some n, _ -> Some (AllTo n)
+              | _, Some n -> Some (UpTo n)
+              | _, _      -> None
           }
         in
         let ffs =
           sprintf "%s%s%s"
             (Option.value_map ~default:"" ~f:string_of_int number_of_reads)
             (if dont_check_rc then "" else "-check_rc-")
-            (Option.value_map ~default:"" ~f:string_of_int max_distance);
+            (Option.value_map ~default:""
+              ~f:(function
+                  | UpTo n -> sprintf "Upto%d" n
+                  | AllTo n -> sprintf "Allto%d" n)
+                fastq_fold_args.kmer_hood);
         in
         if map_not_fold then
           let input_files, res =
@@ -230,7 +241,7 @@ let type_
                 sprintf "%s-%s"
                   (basename_without_extension read1)
                   (basename_without_extension read2),
-                Path_inference.type_map_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
+                type_map_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
             | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
           in
           let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
@@ -277,12 +288,12 @@ let type_
             | []              -> invalid_argf "Cmdliner lied!"
             | [fastq_file]    ->
                 basename_without_extension fastq_file,
-                Path_inference.type_ ?filter ~as_:new_as fastq_fold_args g idx ~fastq_file
+                type_soloed ?filter ~as_:new_as fastq_fold_args g idx ~fastq_file
             | [read1; read2] ->
                 sprintf "%s-%s"
                   (basename_without_extension read1)
                   (basename_without_extension read2),
-                Path_inference.type_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
+                type_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
             | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
           in
           let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
@@ -397,10 +408,15 @@ let () =
   let do_not_check_rc_flag =
     Arg.(value & flag & info ["do-not-check-rc"])
   in
-  let max_distance_arg =
+  let upto_kmer_hood_arg =
     let docv = "NON-NEGATIVE INTEGER" in
-    let doc  = "Distance away from base kmer to check for positions." in
-    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["kmer-distance"])
+    let doc  = "Exclusive distance away from base kmer to incrementally check for positions." in
+    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["up-to-kmer-hood"])
+  in
+  let allto_kmer_hood_arg =
+    let docv = "NON-NEGATIVE INTEGER" in
+    let doc  = "Exclusive distance away from base kmer include while looking for positions." in
+    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["all-to-kmer-hood"])
   in
   let specific_read_args =
     let docv = "STRING" in
@@ -445,7 +461,8 @@ let () =
             $ map_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
-              $ max_distance_arg
+              $ upto_kmer_hood_arg
+              $ allto_kmer_hood_arg
             (* Output *)
             $ print_top_flag
               $ do_not_normalize_flag
