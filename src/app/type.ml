@@ -188,6 +188,7 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* How are we typing *)
     map_not_fold
+    map_allele
     filter multi_pos as_stat likelihood_error
       dont_check_rc
       upto_kmer_hood allto_kmer_hood
@@ -251,13 +252,18 @@ let type_
             let s = Alleles.Set.singleton g.aindex g.reference in
             let v = get_ref amap in
             let ms, mv =
-              Alleles.Map.fold g.aindex ~init:(s, v) ~f:(fun (ms,mv) v al ->
-                if op v mv then
-                  Alleles.Set.singleton g.aindex al, v
-                else if v = mv then
-                  Alleles.Set.set g.aindex ms al, v
-                else
-                  (ms, mv)) amap
+              match map_allele with
+              | None ->
+                  Alleles.Map.fold g.aindex ~init:(s, v) ~f:(fun (ms,mv) v al ->
+                    if op v mv then
+                      Alleles.Set.singleton g.aindex al, v
+                    else if v = mv then
+                      Alleles.Set.set g.aindex ms al, v
+                    else
+                      (ms, mv)) amap
+              | Some al ->
+                  Alleles.Set.singleton g.aindex al,
+                  Alleles.Map.get g.aindex amap al
             in
             Alleles.Set.to_human_readable ~max_length:10000 g.aindex ms, mv
           in
@@ -430,6 +436,10 @@ let () =
     let doc = "Map the reads instead of folding and accumulating the results." in
     Arg.(value & flag & info ~doc ["map"])
   in
+  let map_allele_arg =
+    let doc = "Report the statistics of the passed allele." in
+    Arg.(value & opt (some string) None & info ~doc ["map-allele"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use HLA string graphs to type fastq samples." in
@@ -458,7 +468,7 @@ let () =
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* How are we typing *)
-            $ map_arg
+            $ map_arg $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
               $ upto_kmer_hood_arg
