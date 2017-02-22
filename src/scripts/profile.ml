@@ -30,16 +30,28 @@ let to_res g t =
     else
         None)
 
+let load_prohlatype fname =
+  Csv.load ~separator:'\t' fname
+  |> List.map ~f:(function
+    | [_; a] -> Nomenclature.parse a
+    | _ -> error "not 2")
+
+let lookup_position tsv = function
+  | Nomenclature.Two (_, _) as nmt ->
+      List.findi tsv ~f:(fun _i l ->
+        match l with
+        | Ok (_, (nmt2, _)) when nmt2 = nmt -> true
+        | _ -> false)
+      |> Option.map ~f:(fun (i, _) -> i)
+      |> Option.value ~default:max_int
+  | _ -> invalid_arg "Not 2 in mptt"
+
+(*
 let position to_prohlatype_fname (key, nmt) =
   match nmt with
   | Nomenclature.Two (_, _) ->
       let fname = to_prohlatype_fname key in
-      let as_tv =
-        Csv.load ~separator:'\t' fname
-        |> List.map ~f:(function
-              | [_; a] -> Nomenclature.parse a
-              | _ -> error "not 2")
-      in
+      let as_tv = load_prohlatype fname in
       List.findi as_tv ~f:(fun _i l ->
         match l with
         | Ok (_, (nmt2, _)) when nmt2 = nmt -> true
@@ -47,23 +59,29 @@ let position to_prohlatype_fname (key, nmt) =
       |> Option.map ~f:(fun (i, _) -> (i, key, nmt))
       |> Option.value ~default:(3000, key, nmt)
   | _ -> invalid_arg "Not 2 in mptt"
+  *)
 
 let prof_dir_example = "profc/type_out_%"
 
 (*let open Oml.Statistics in *)
-let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir ~map
+let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ?(filters=[2;4;6;8;10;12]) ~prof_dir
   ?(suffix="_nuc.txt") () =
   List.fold_left genes ~init:[] ~f:(fun acc gene ->
     let train_samples = to_res gene `Train in
     List.fold_left reads ~init:acc ~f:(fun acc read ->
       List.fold_left filters ~init:acc ~f:(fun acc filter ->
-        let to_filename k = sprintf "%s_%d/%s_%d_%s%s" prof_dir filter k read gene suffix in
-        let rr = List.map train_samples ~f:(position to_filename) in
-        let dt = List.map rr ~f:(fun (p,_,_) -> float p) |> Array.of_list in
-        (gene, read, filter, (map dt)) :: acc)))
+        let to_filename sample = sprintf "%s_%d/%s_%d_%s%s" prof_dir filter sample read gene suffix in
+        let positions =
+          List.map train_samples ~f:(fun (sample, res) ->
+            let filename = to_filename sample in
+            sample, res, lookup_position (load_prohlatype filename) res)
+        in
+        (gene, read, filter, positions) :: acc)))
 
 let display_analysis mp lst =
   printf "gene\tfilter\n";
   List.iter lst ~f:(fun (gene, _read, filter, m) ->
         printf "%s\t%d\t%s\n%!" gene filter (mp m))
 
+let in_top ?(n=10.0) arr =
+  Array.fold_left ~init:0.0 ~f:(fun s v -> if v < n then s +. 1. else s) arr
