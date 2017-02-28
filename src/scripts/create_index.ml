@@ -15,7 +15,7 @@ let g_and_idx ?(k=10) ?input ?n () =
   n, g2
 
 let _, (gm, im) =
-  g_and_idx ~input:(Ref_graph.MergeFromPrefix (to_merge_prefix "A", Distances.AverageExon)) ()
+  g_and_idx ~input:(Ref_graph.MergeFromPrefix (to_merge_prefix "C", Distances.AverageExon)) ()
 
 (*
 let lst = [3; 5; 10; 15; 20; 50; 100; 150; 200; 250]
