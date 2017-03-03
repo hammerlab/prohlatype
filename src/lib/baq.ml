@@ -227,58 +227,66 @@ let max_pos ?upto = function
              in
              loop a.(0) 0 0
 
+let recover_path vm =
+  let rec prev_match i pos acc =
+    (*printf "prev_match i: %d pos: %d: v: %f\n" i pos vm.(i).(pos);*)
+    let nacc = `M (i, pos / 3) :: acc in
+    if i = 0 then
+      nacc
+    else
+      let pm = pos - 3 in
+      let pi = pos - 2 in
+      let pd = pos - 1 in
+      let im1 = i - 1 in
+      (*printf "prev_match M: i: %d pos: %d: v: %f\n" im1 pm vm.(im1).(pm);
+      printf "prev_match I: i: %d pos: %d: v: %f\n" im1 pi vm.(im1).(pi);
+      printf "prev_match D: i: %d pos: %d: v: %f\n" im1 pd vm.(im1).(pd);*)
+      if vm.(im1).(pm) >= vm.(im1).(pi) then begin
+        if vm.(im1).(pm) >= vm.(im1).(pd) then
+          prev_match im1 pm nacc
+        else
+          prev_delete im1 pd nacc
+      end else if vm.(im1).(pi) >= vm.(im1).(pd) then
+        prev_insert im1 pi nacc
+      else
+        prev_delete im1 pd nacc
+  and prev_insert i pos acc =
+    (*printf "prev_insert i: %d pos: %d v: %f\n" i pos vm.(i).(pos);*)
+    let nacc = `I i :: acc in
+    if i = 0 then
+      nacc
+    else
+      let im1 = i - 1 in
+      let pm = pos - 1 in
+      let pi = pos in
+      if vm.(im1).(pm) >= vm.(im1).(pi) then
+        prev_match im1 pm nacc
+      else
+        prev_insert im1 pi nacc
+  and prev_delete i pos acc =       (* Can't start on a delete! *)
+    (*printf "prev_delete i: %d pos: %d v: %f\n" i pos vm.(i).(pos);*)
+    let nacc = `D (pos / 3) :: acc in
+    let pm = pos - 5 in
+    let pd  =pos - 3 in
+    if vm.(i).(pm) >= vm.(i).(pd) then
+      prev_match i pm nacc
+    else
+      prev_delete i pd nacc
+  in
+  let last = Array.length vm - 2 in
+  let pos = max_pos vm.(last) in
+  match pos mod 3 with
+  | 0 -> prev_match last pos []
+  | 1 -> prev_insert last pos []
+  | 2 -> prev_delete last pos []
+  | x -> assert false
+
 let viterbi ?(normalize=true) ?model_probs ~refs ~read read_probs =
   let vm, _ =
     forward_gen viterbi_recurrences ~normalize ?model_probs
       ~refs ~read read_probs
   in
-  let rec prev_match i pos acc =
-    let nacc = `M (i, pos / 3) :: acc in
-    if i = 0 then
-      nacc
-    else
-      let pm = vm.(i-1).(pos - 3) in
-      let pi = vm.(i-1).(pos - 2) in
-      let pd = vm.(i-1).(pos - 1) in
-      if pm >= pi then begin
-        if pm >= pd then
-          prev_match (i-1) (pos - 3) nacc
-        else
-          prev_delete (i-1) (pos - 1) nacc
-      end else if pi >= pd then
-        prev_insert (i-1) (pos - 1) nacc
-      else
-        prev_delete (i-1) (pos - 1) nacc
-  and prev_insert i pos acc =
-    let nacc = `I i :: acc in
-    if i = 0 then
-      nacc
-    else
-      let pm = vm.(i-1).(pos - 1) in
-      let pi = vm.(i-1).(pos) in
-      if pm >= pi then
-        prev_match (i-1) (pos - 1) nacc
-      else
-        prev_insert (i-1) pos nacc
-  and prev_delete i pos acc =       (* Can't start on a delete! *)
-    let nacc = `D (pos / 3) :: acc in
-    let pm = vm.(i).(pos - 5) in
-    let pd = vm.(i).(pos - 3) in
-    if pm >= pd then
-      prev_match i (pos - 5) nacc
-    else
-      prev_delete i (pos - 3) nacc
-  in
-  let last = Array.length vm - 2 in
-  let pos = max_pos vm.(last) in
-  let pth =
-    match pos mod 3 with
-    | 0 -> prev_match last pos []
-    | 1 -> prev_insert last pos []
-    | 2 -> prev_delete last pos []
-    | x -> assert false
-  in
-  vm, pth
+  vm, try Some (recover_path vm) with _ -> None
 
 let expand_path ?(insert_char ='-') ~refs ~read =
   let rec loop sref sread = function
