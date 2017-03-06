@@ -174,7 +174,7 @@ let forward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
     normalize i s;
   done;
   let fl = sum_over read_length (recurrences.end_ tm m ~i:rl1) in
-  normalize read_length fl;
+  (*normalize read_length fl;*)
   m, fl
 
 let forward ?(normalize=true) =
@@ -296,7 +296,7 @@ let viterbi ?(normalize=true) ?model_probs ~refs ~read read_probs =
     forward_gen viterbi_recurrences ~normalize ?model_probs
       ~refs ~read read_probs
   in
-  vm, try Some (recover_path vm) with _ -> None
+  vm, recover_path vm
 
 let expand_path ?(insert_char ='-') ~refs ~read =
   let rec loop sref sread = function
@@ -419,9 +419,29 @@ let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
     let s = sum_over i (fun k -> f_m ~i k, i_m ~i k, d_m ~i k) in
     normalize i s;
   done;
-  let fl = sum_over 0 (recurrences.first p_c_m ~insert_prob tm m) in
-  normalize 0 fl;
-  m, fl
+  let bl = sum_over 0 (recurrences.first p_c_m ~insert_prob tm m) in
+  (*normalize 0 bl;*)
+  m, bl
 
 let backward ?(normalize=true) =
   backward_gen ~normalize backward_recurrences
+
+let posterior ?(normalize=true) ?model_probs ~refs ~read read_probs =
+  let fm, lh = forward ~normalize ?model_probs ~refs ~read read_probs in
+  let bm, _ = backward ~normalize ?model_probs ~refs ~read read_probs in
+  let mm =
+    Array.mapi fm ~f:(fun i fmr ->
+      Array.mapi fmr ~f:(fun j v -> v *. bm.(i).(j) /. lh))
+  in
+  (* Could do the path recover without constructing mm. *)
+  let path =
+    Array.init (Array.length mm - 1) ~f:(fun i ->
+      let j = max_pos mm.(i) in
+      match j mod 3 with
+      | 0 -> `M (i, j / 3)
+      | 1 -> `I i
+      | 2 -> `D (j / 3)
+      | _ -> assert false)
+    |> Array.to_list
+  in
+  mm, path
