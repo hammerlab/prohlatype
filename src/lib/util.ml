@@ -160,3 +160,16 @@ let likelihood ?alph_size ?er ~len m =
 type too_short =
   | TooShort of { desired: int ; actual: int}
   [@@deriving show]
+
+let manual_phred_llhd_lst s1 s2 probability_of_error =
+  String.fold2_exn s1 s2 ~init:(0, []) ~f:(fun (i, a) c1 c2 ->
+    if c1 = c2 then
+      (i + 1, (`m (log1p (-. probability_of_error.(i)))) :: a)
+    else
+      (i + 1, (`X (log (probability_of_error.(i) /. 3.)) :: a)))
+  |> snd
+  |> List.rev
+
+let manual_phred_llhd s1 s2 probability_of_error =
+  manual_phred_llhd_lst s1 s2 probability_of_error
+  |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)

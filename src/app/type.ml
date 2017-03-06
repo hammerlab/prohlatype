@@ -133,6 +133,47 @@ let basename_without_extension f =
   try Filename.chop_extension bn
   with Invalid_argument _ -> bn
 
+let paired_datum_header =
+  "Read name\t\
+   Read 1\t\
+   First RC\t\
+   Read 2\t\
+   Position 1\t\
+   Position 2\t\
+   Reference Value\t\
+   Min Value\t\
+   Min Allele Set"
+
+let paired_datum_to_string ?(read_prefix=10) ref_value min_value min_allele_set value_to_string d =
+  let open Path_inference in
+  sprintf "%s\t%s\t%b\t%s\t%s\t%s\t%s\t%s\t%s"
+    d.name
+    (if d.first_rc then
+      String.sub_exn ~index:0 ~length:read_prefix (reverse_complement d.read1)
+    else
+      String.sub_exn ~index:0 ~length:read_prefix d.read1)
+    d.first_rc
+    (if d.first_rc then
+      String.sub_exn ~index:0 ~length:read_prefix d.read2
+    else
+      String.sub_exn ~index:0 ~length:read_prefix (reverse_complement d.read2))
+    (Index.show_position d.position1)
+    (Index.show_position d.position2)
+    (value_to_string ref_value)
+    (value_to_string min_value)
+    min_allele_set
+
+let display_datums cmp ref_of_amap min_of_amap value_to_string dlst =
+  let open Path_inference in
+  print_endline paired_datum_header;
+  List.map dlst ~f:(fun d ->
+    let min_allele_set, min_value = min_of_amap d.amap in
+    let ref_value = ref_of_amap d.amap in
+    d, ref_value, min_value, min_allele_set)
+  |> List.sort ~cmp:(fun (_d1, _rv1, mv1, mvs1) (_d2, _rv2, mv2, mvs1) -> cmp mv1 mv2)
+  |> List.iter ~f:(fun (d, rv, mv, mvs) ->
+        printf "%s\n" (paired_datum_to_string rv mv mvs value_to_string d))
+
 let type_
   (* Graph construction args. *)
   alignment_file
@@ -146,7 +187,11 @@ let type_
   (* What are we typing. *)
     fastq_file_lst number_of_reads specific_reads
   (* How are we typing *)
-    filter multi_pos as_stat likelihood_error dont_check_rc max_distance
+    map_not_fold
+    map_allele
+    filter multi_pos as_stat likelihood_error
+      dont_check_rc
+      upto_kmer_hood allto_kmer_hood
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
   let join_same_sequence = not not_join_same_seq in
@@ -157,6 +202,7 @@ let type_
     >>= begin fun (option_based_fname, cargs) ->
         let open Cache in
         let open Ref_graph in
+        let open Path_inference in
         let g, idx = Cache.(graph_and_two_index ~skip_disk_cache { k ; graph_args = cargs}) in
         let new_as =
           match as_stat with
@@ -167,55 +213,119 @@ let type_
           | `Phred_likelihood_of_reads      -> `Phred_likelihood_of_reads
         in
         let fastq_fold_args =
-          { Path_inference.number_of_reads = number_of_reads
-          ; specific_reads                 = specific_reads
-          ; check_rc                       = Some (not dont_check_rc)
-          ; max_distance                   = max_distance
+          { number_of_reads = number_of_reads
+          ; specific_reads  = specific_reads
+          ; check_rc        = Some (not dont_check_rc)
+          ; kmer_hood       =
+              match allto_kmer_hood, upto_kmer_hood with
+              | Some n, _ -> Some (AllTo n)
+              | _, Some n -> Some (UpTo n)
+              | _, _      -> None
           }
         in
         let ffs =
           sprintf "%s%s%s"
             (Option.value_map ~default:"" ~f:string_of_int number_of_reads)
             (if dont_check_rc then "" else "-check_rc-")
-            (Option.value_map ~default:"" ~f:string_of_int max_distance);
+            (Option.value_map ~default:""
+              ~f:(function
+                  | UpTo n -> sprintf "Upto%d" n
+                  | AllTo n -> sprintf "Allto%d" n)
+                fastq_fold_args.kmer_hood);
         in
-        let input_files, res =
-          match fastq_file_lst with
-          | []              -> invalid_argf "Cmdliner lied!"
-          | [fastq_file]    ->
-              basename_without_extension fastq_file,
-              Path_inference.type_ ?filter ~as_:new_as fastq_fold_args g idx ~fastq_file
-          | [read1; read2] ->
-              sprintf "%s-%s"
-                (basename_without_extension read1)
-                (basename_without_extension read2),
-              Path_inference.type_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
-          | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-        in
-        let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
-        let re = report_errors ~all_options ~error_output in
-        let () =
-          match res with
-          | `Number_of_mismatches_of_reads (error_list, amap) ->
-              re error_list;
-              report_mismatches ~print_top g amap
-          | `List_mismatches_of_reads (error_list, amap)      ->
-              re error_list;
-              report_mismatches_list ~print_top g amap
-          | `Likelihood_of_reads (error_list, amap)           ->
-              re error_list;
-              report_likelihood ?reduce_resolution ?bucket ~print_top
-                "likelihood" g amap
-          | `LogLikelihood_of_reads (error_list, amap)        ->
-              re error_list;
-              report_likelihood ?reduce_resolution ?bucket ~print_top
-                "loglikelihood" g amap
-          | `Phred_likelihood_of_reads (error_list, amap)     ->
-              re error_list;
-              report_likelihood ?reduce_resolution ?bucket ~print_top
-                "phredlihood" g amap
-        in
-        Ok ()
+        if map_not_fold then
+          let input_files, res =
+            match fastq_file_lst with
+            | []             -> invalid_argf "Cmdliner lied!"
+            | [fastq_file]   -> invalid_argf "Mapping only implemented for pairs."
+            | [read1; read2] ->
+                sprintf "%s-%s"
+                  (basename_without_extension read1)
+                  (basename_without_extension read2),
+                type_map_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+          in
+          let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
+          let re = report_errors ~all_options ~error_output in
+          let get_ref amap = Alleles.Map.get g.aindex amap g.reference in
+          let best_allele_set op amap =
+            let s = Alleles.Set.singleton g.aindex g.reference in
+            let v = get_ref amap in
+            let ms, mv =
+              match map_allele with
+              | None ->
+                  Alleles.Map.fold g.aindex ~init:(s, v) ~f:(fun (ms,mv) v al ->
+                    if op v mv then
+                      Alleles.Set.singleton g.aindex al, v
+                    else if v = mv then
+                      Alleles.Set.set g.aindex ms al, v
+                    else
+                      (ms, mv)) amap
+              | Some al ->
+                  Alleles.Set.singleton g.aindex al,
+                  Alleles.Map.get g.aindex amap al
+            in
+            Alleles.Set.to_human_readable ~max_length:10000 g.aindex ms, mv
+          in
+          let () =
+            let min_comp (i1:int) (i2: int) = compare i1 i2 in
+            let max_comp (f1:float) (f2: float) = compare f2 f1 in
+            match res with
+            | `Number_of_mismatches_of_reads (error_list, acc) ->
+                re error_list;
+                display_datums min_comp get_ref (best_allele_set (<)) (sprintf "%d") acc
+            | `List_mismatches_of_reads (error_list, _)       ->
+                re error_list;
+                failwith "Listing mismatches of mapped reads is not implemented."
+            | `Likelihood_of_reads (error_list, acc)          ->
+                re error_list;
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+            | `LogLikelihood_of_reads (error_list, acc)       ->
+                re error_list;
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+            | `Phred_likelihood_of_reads (error_list, acc)    ->
+                re error_list;
+                display_datums max_comp get_ref (best_allele_set (>)) (sprintf "%0.4f") acc
+          in
+          Ok ()
+        else
+          let input_files, res =
+            match fastq_file_lst with
+            | []              -> invalid_argf "Cmdliner lied!"
+            | [fastq_file]    ->
+                basename_without_extension fastq_file,
+                type_soloed ?filter ~as_:new_as fastq_fold_args g idx ~fastq_file
+            | [read1; read2] ->
+                sprintf "%s-%s"
+                  (basename_without_extension read1)
+                  (basename_without_extension read2),
+                type_paired ?filter ~as_:new_as fastq_fold_args g idx read1 read2
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+          in
+          let all_options = sprintf "%s_%s_%s" option_based_fname ffs input_files in
+          let re = report_errors ~all_options ~error_output in
+          let () =
+            match res with
+            | `Number_of_mismatches_of_reads (error_list, amap) ->
+                re error_list;
+                report_mismatches ~print_top g amap
+            | `List_mismatches_of_reads (error_list, amap)      ->
+                re error_list;
+                report_mismatches_list ~print_top g amap
+            | `Likelihood_of_reads (error_list, amap)           ->
+                re error_list;
+                report_likelihood ?reduce_resolution ?bucket ~print_top
+                  "likelihood" g amap
+            | `LogLikelihood_of_reads (error_list, amap)        ->
+                re error_list;
+                report_likelihood ?reduce_resolution ?bucket ~print_top
+                  "loglikelihood" g amap
+            | `Phred_likelihood_of_reads (error_list, amap)     ->
+                re error_list;
+                report_likelihood ?reduce_resolution ?bucket ~print_top
+                  "phredlihood" g amap
+          in
+          Ok ()
   end
   |> function
       | Error msg -> eprintf "%s" msg; 1
@@ -304,10 +414,15 @@ let () =
   let do_not_check_rc_flag =
     Arg.(value & flag & info ["do-not-check-rc"])
   in
-  let max_distance_arg =
+  let upto_kmer_hood_arg =
     let docv = "NON-NEGATIVE INTEGER" in
-    let doc  = "Distance away from base kmer to check for positions." in
-    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["kmer-distance"])
+    let doc  = "Exclusive distance away from base kmer to incrementally check for positions." in
+    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["up-to-kmer-hood"])
+  in
+  let allto_kmer_hood_arg =
+    let docv = "NON-NEGATIVE INTEGER" in
+    let doc  = "Exclusive distance away from base kmer include while looking for positions." in
+    Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["all-to-kmer-hood"])
   in
   let specific_read_args =
     let docv = "STRING" in
@@ -316,6 +431,14 @@ let () =
     Arg.(value
         & opt_all string []
         & info ~doc ~docv ["sr"; "specific-read"])
+  in
+  let map_arg =
+    let doc = "Map the reads instead of folding and accumulating the results." in
+    Arg.(value & flag & info ~doc ["map"])
+  in
+  let map_allele_arg =
+    let doc = "Report the statistics of the passed allele." in
+    Arg.(value & opt (some string) None & info ~doc ["map-allele"])
   in
   let type_ =
     let version = "0.0.0" in
@@ -345,9 +468,11 @@ let () =
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* How are we typing *)
+            $ map_arg $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
-              $ max_distance_arg
+              $ upto_kmer_hood_arg
+              $ allto_kmer_hood_arg
             (* Output *)
             $ print_top_flag
               $ do_not_normalize_flag

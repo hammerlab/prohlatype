@@ -51,7 +51,7 @@ let all ?number_of_reads file =
 let phred_probabilities s =
   let open Biocaml_unix in
   let n = String.length s in
-  let a = Array.create ~len:n 0. in
+  let a = Array.create ~len:n 0.0 in
   let rec loop i =
     if i = n then Ok a else
       Result.bind (Phred_score.of_char s.[i])
@@ -140,3 +140,29 @@ let fold_paired ?number_of_reads ?(specific_reads=[]) file1 file2 ~f ~init to_ke
           | false, false -> two_pipe_fold c s1 s2 acc
       in
       two_pipe_fold 0 [] [] init))
+
+let unwrap_cr_ok = function
+    | Result.Error _ -> invalid_arg "unwrap_cr_ok: " (*Error.to_string_hum e*)
+    | Result.Ok a    -> a
+
+let read_from_pair ~name file1 file2 =
+  let to_key a = a.Biocaml_unix.Fastq.name in
+  let res =
+    fold_paired
+      ~init:None ~f:(fun _ q1 q2 -> Some (q1, q2)) ~specific_reads:[name]
+        file1 file2 to_key
+  in
+  let opt =
+    match res with
+    | `BothFinished o
+    | `OneReadPairedFinished (_, o)
+    | `StoppedByFilter o
+    | `DesiredReads o -> o
+  in
+  match opt with
+  | None -> None
+  | Some (r1, r2) ->
+            Some ( r1.Biocaml_unix.Fastq.sequence
+                 , (phred_probabilities r1.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok)
+                 , r2.Biocaml_unix.Fastq.sequence
+                 , (phred_probabilities r2.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok))
