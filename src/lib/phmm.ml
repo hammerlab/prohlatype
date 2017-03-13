@@ -122,11 +122,14 @@ let forward_recurrences =
               end
   }
 
+let create_workspace_matrix ~read_length ~ref_length =
+  Array.make_matrix ~dimx:(read_length + 1) ~dimy:(ref_length * 3) 0.0
+
 (* TODO:
     - Make N tolerant for sequences/reads. This would require changing p_c_m to
       return a uniform error probability (ie 1) ?
     - Transition to computing everything in logs. *)
-let forward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
+let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
   let read_length = String.length read in   (* l *)
   let ref_length = String.length refs in    (* L *)
   let tm = TransitionMatrix.init ?model_probs read_length ref_length in
@@ -137,7 +140,11 @@ let forward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
     else
       read_probs.(i) /. 3.
   in
-  let m = Array.make_matrix ~dimx:(read_length + 1) ~dimy:(ref_length * 3) 0. in
+  let m =
+    match m with
+    | Some m -> m
+    | None   -> create_workspace_matrix ~read_length ~ref_length
+  in
   let over_row ~init ~g row f =
     let rec loop s k =
       if k = ref_length then
