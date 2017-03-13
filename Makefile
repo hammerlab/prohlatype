@@ -80,6 +80,9 @@ align2fasta:
 allele_distances:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app allele_distances.native
 
+time_phmm:
+	corebuild -package core_bench -I src/app time_phmm.native
+
 tools:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)
 
