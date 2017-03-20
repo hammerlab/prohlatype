@@ -27,7 +27,7 @@ module TransitionMatrix = struct
   let deletion_idx  = 2
   let start_end_idx = 3 (* Compress the two nodes ala the Samtools note. *)
 
-  let init ?(model_probs=`Default) read_length ref_length =
+  let init ?(model_probs=`Default) ~ref_length read_length =
     let mp =
       match model_probs with
       | `Default                 -> default_probabilities ~read_length ()
@@ -132,7 +132,7 @@ let create_workspace_matrix ~read_length ~ref_length =
 let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
   let read_length = String.length read in   (* l *)
   let ref_length = String.length refs in    (* L *)
-  let tm = TransitionMatrix.init ?model_probs read_length ref_length in
+  let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
   let insert_prob = 0.25 in (* There are 4 characters, assume equality. *)
   let p_c_m i k =
     if read.[i] = refs.[k] then
@@ -145,7 +145,7 @@ let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
     | Some m -> m
     | None   -> create_workspace_matrix ~read_length ~ref_length
   in
-  let over_row ~init ~g row f =
+  let over_row ~init ~g ~row f =
     let rec loop s k =
       if k = ref_length then
         s
@@ -171,16 +171,16 @@ let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
       ()
   in
   let rl1 = read_length - 1 in
-  let s1 = sum_over 0 (recurrences.start p_c_m ~insert_prob tm) in
+  let s1 = sum_over ~row:0 (recurrences.start p_c_m ~insert_prob tm) in
   normalize 0 s1;
   let f_m = recurrences.match_ p_c_m tm m in
   let i_m = recurrences.insert ~insert_prob tm m in
   let d_m = recurrences.delete tm m in
   for i = 1 to rl1 do
-    let s = sum_over i (fun k -> f_m ~i k, i_m ~i k, d_m ~i k) in
+    let s = sum_over ~row:i (fun k -> f_m ~i k, i_m ~i k, d_m ~i k) in
     normalize i s;
   done;
-  let fl = sum_over read_length (recurrences.end_ tm m ~i:rl1) in
+  let fl = sum_over ~row:read_length (recurrences.end_ tm m ~i:rl1) in
   (*normalize read_length fl;*)
   m, fl
 
@@ -379,7 +379,7 @@ let backward_recurrences ref_size =
 let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
   let read_length = String.length read in   (* l *)
   let ref_length = String.length refs in    (* L *)
-  let tm = TransitionMatrix.init ?model_probs read_length ref_length in
+  let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
   let insert_prob = 0.25 in
   let p_c_m i k =
     if k = ref_length || i = ref_length then
