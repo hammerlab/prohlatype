@@ -509,24 +509,13 @@ let fill_possibilities conf =
       ~f:(fun { current; _ } ->
             [ base_state_to_char conf.emissions.(k).(current) ]);
     for i = 0 to conf.read_size - 2 do
-      (*printf "k: %d, i: %d " k i; *)
       fm.(k).(i + 1) <-
         Array.map conf.transitions.(k).(i)
           ~f:(fun { previous ; current } ->
                 (base_state_to_char conf.emissions.(k).(current)) ::
                 (match previous with
-                  | None -> (*printf "empty \n";*) []
-                  | Some { index ; state} ->
-                    (*let l1 = Array.length fm.(k + state) in
-                    let l2 =
-                      if i <= l1 then
-                        Array.length fm.(k + state).(i)
-                      else
-                        min_int
-                    in
-                    printf "at index %d state: %d l1: %d l2: %d \n"
-                        index state l1 l2; *)
-                    fm.(k + state).(i).(index)))
+                  | None                  ->  []
+                  | Some { index ; state} -> fm.(k + state).(i).(index)))
     done;
   done;
   Array.map fm ~f:(fun r ->
@@ -575,7 +564,10 @@ type fwd_recurrences =
 let to_match_prob reference_state_arr base base_error =
   let of_char c = if base = c then 1. -. base_error else base_error /. 3. in
   Array.map reference_state_arr ~f:(function
-    | Unknown -> 1.   (* Treat like an 'N', anything goes. *)
+    | Unknown -> 1.   (* Treat like an 'N', anything goes.
+                         TODO: But need to figure out a way to not reward this.
+                               Specifically the probability shouldn't be higher than actual matches,
+                               so perhaps 1-. base_error is better? .*)
     | A       -> of_char 'A'
     | C       -> of_char 'C'
     | G       -> of_char 'G'
@@ -624,9 +616,6 @@ let forward_recurrences tm ~insert_prob max_transition_size =
                 }
               end
   ; middle  = begin fun fm emissions transitions base base_error ~i k ->
-                let () = printf "at k: %d i: %d \n emissions: %s \n transitions: %s\n"
-                  k i (show_emissions emissions) (show_transitions transitions)
-                in
                 let ce = to_match_prob emissions base base_error in
                 let match_ =
                   Array.map transitions
@@ -640,7 +629,6 @@ let forward_recurrences tm ~insert_prob max_transition_size =
                                 let pd = fm.(k + state).(i-1).delete.(index) in
                                 ce.(current) *. (t_m_m *. pm +. t_i_m *. pi +. t_d_m *. pd))
                 in
-                let () = printf "got match\n" in
                 let insert =
                   Array.map transitions
                       ~f:(fun { current; _ } ->
@@ -648,7 +636,6 @@ let forward_recurrences tm ~insert_prob max_transition_size =
                             let pi = fm.(k).(i-1).insert.(current) in
                             insert_prob *. (t_m_i *. pm +. t_i_i *. pi  ))
                 in
-                let () = printf "got insert\n" in
                 let delete =
                   Array.map transitions
                       ~f:(function
@@ -659,7 +646,6 @@ let forward_recurrences tm ~insert_prob max_transition_size =
                                 let pd = fm.(k + state).(i).insert.(index) in
                                 (t_m_d *. pm +. t_d_d *. pd))
                 in
-                let () = printf "got delete\n" in
                 { match_; insert; delete }
               end
   }
@@ -696,10 +682,10 @@ let forward_pass conf read read_prob =
     done;
     fm
 
-let build ?(read_size=10) ?len ?spec mp =
+let build ?read_size ?len ?spec mp =
   let alleles, rlarr = build_allele_and_rls ?spec mp in
   let rlarr = match len with | None -> rlarr | Some len -> Array.sub rlarr ~pos:0 ~len in
-  let conf, _tlr = build_matrix ~read_size rlarr in
+  let conf, _tlr = build_matrix ?read_size rlarr in
   alleles,
   rlarr,
   conf,
