@@ -3,6 +3,9 @@ open Common
 
 let k = 10 ;;
 
+let default_input =
+  Ref_graph.AlignmentFile (to_alignment_file "A_gen") ;;
+
 let gall, idxall =
   Cache.(graph_and_two_index { k = k ; graph_args = graph_args ~input:default_input () }) ;;
 
