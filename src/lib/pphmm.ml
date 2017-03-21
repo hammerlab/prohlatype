@@ -143,7 +143,7 @@ module Rlel = struct
       | h1 :: t1, h2 :: t2 -> let nvalue, nacc = f acc h1.value h2.value in
                               let length, l1, l2 = align h1 h2 t1 t2 in
                               let npair = { value = nvalue; length} in
-                              loop (npair :: lst) nacc (t1, t2)
+                              loop (npair :: lst) nacc (l1, l2)
       | _,        _        -> invalid_arg "different lengths"
     in
     loop [] nacc (nl1, nl2)
