@@ -1,4 +1,4 @@
-(* Parametric Profile Hidden Markov Model. 
+(* Parametric Profile Hidden Markov Model.
    "Parameterize" the match/insert/delete states by different alleles.
 
   TODO: Remove type annotations and transition to an interface.
@@ -120,7 +120,7 @@ module Rlel = struct
               { e with value = nvalue } :: l, nacc)
     in
     { hd = { l.hd with value = n_hd_value}; tl = List.rev ntl }, facc
-      
+
   let align c1 c2 l1 l2 =
     if c1.length < c2.length then
       c1.length
@@ -148,25 +148,38 @@ module Rlel = struct
     in
     loop [] nacc (nl1, nl2)
 
+  let fill_array ~f ret rl =
+    let rec fill_value v i length =
+      for j = i to i + length - 1 do ret.(j) <- v done
+    in
+    let rec loop i = function
+      | []                    -> ()
+      | { value; length} :: t -> fill_value (f value) i length;
+                                 loop (i + length) t
+    in
+    fill_value (f rl.hd.value) 0 rl.hd.length;
+    loop rl.hd.length rl.tl
+
+
 
 end (* Rlel *)
 
 type position_map = (Mas_parser.position * int) list
 
-(*** Construction 
+(*** Construction
   1. From Mas_parser.result -> Run-Length-Encoded-Lists Array of BaseState.t 's.
     a. Figure out the BaseState.t of reference sequence and a position map
        (position in Mas_parser.result to index into final array)
-       [initialize_base_array_and_position_map]. 
+       [initialize_base_array_and_position_map].
     b. Start Run-Length encoded lists and extend them with each alternate
        allele.
-  
- 
+
+
  ***)
 
 (* Figure out the BaseState.t of the reference and aggregate a position map:
    (position in Mas_parser.result * index into base_state array.) list.
-   
+
   The mapping (position into base_state array) is then recovered by iterating
   over this position map as we move along Mas_parser.alignment_element's for
   the alleles. *)
@@ -412,7 +425,7 @@ let to_f regular =
     | (Gapped (length, index)), Gap_    -> extend_gap ~length index, im_pair
     | (Regular index),          not_gap -> regular not_gap im_pair { state = -1; index }
     | (Gapped (length, index)), not_gap -> regular not_gap im_pair { state = -length; index }
- 
+
 (* Given a transition state (from, the source) run-length encoded list and a
    base-state (to, destination) run-length encoded list, return:
    1. Emission array/IndexMap
@@ -456,7 +469,7 @@ let merge ptsrl bsrl im  =
   in
   Rlel.fold_map2_same_length ptsrl bsrl ~init:IndexMap.empty ~f:(to_f regular)
   |> fun (rlst, trans_gm) -> rlst, (IndexMap.finalize trans_gm)
- 
+
 (* In the following "transitions" is used in 2 ways. The first, and the one in
    this type describes an indexing scheme between successives match, insert,
    and delete nodes. The second, as is more common in the TransitionMatrix of
@@ -481,7 +494,7 @@ let build_matrix ?(read_size=100) rlarr =
   let bigK = Array.length rlarr in
   let transitions_m = Array.make_matrix ~dimx:bigK ~dimy:(read_size - 1) [||] in
   let etrl = Rlel.init (Regular 1) in
-  let trans_rtl_m = Array.make_matrix ~dimx:bigK ~dimy:read_size etrl in
+  let trans_rtl_m = Array.make_matrix ~dimx:bigK ~dimy:(read_size - 1) etrl in
   let max_transitions_ref = ref 0 in
   let update_max_transitions trans_arr =
     max_transitions_ref := max !max_transitions_ref (Array.length trans_arr);
@@ -540,7 +553,7 @@ let build_matrix ?(read_size=100) rlarr =
   for k = 1 to bigK - 1 do merge_fill k done;
   let final_run_len =
     Array.mapi trans_rtl_m
-      ~f:(fun k rtl_row -> rtl_row.(read_size - 1))
+      ~f:(fun k rtl_row -> rtl_row.(read_size - 2))
   in
   { read_size
   ; emissions_a
@@ -590,8 +603,7 @@ type workspace = cell array array
 type fwd_recurrences =
   { start   : emissions -> transitions -> char -> float -> cell
   ; middle  : workspace -> emissions -> transitions -> char -> float -> i:int -> int -> cell
-(*; end_    : TransitionMatrix.t -> float array array -> i:int -> int -> float * float * float
-  *)
+  ; end_    : workspace -> int -> cell  (* Doesn't use the delete section. *)
   }
 
 let to_match_prob reference_state_arr base base_error =
@@ -609,16 +621,12 @@ let to_match_prob reference_state_arr base base_error =
     | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
 
 let make_constants size v =
-  let arr = Array.init size ~f:(fun i -> Array.make (i + 1) v) in
-  fun i ->
-    if i < 1 || i > size then
-      invalid_argf "More emission states: %d than possible! [1,%d]" i size
-    else
-      arr.(i-1)
+  let arr = Array.init size ~f:(fun i -> lazy (Array.make (i + 1) v)) in
+  fun i -> Lazy.force arr.(i-1)
 
 let wrap_array f arr = f (Array.length arr)
 
-let forward_recurrences tm ~insert_prob max_transition_size =
+let forward_recurrences tm ~insert_prob max_transition_size read_size =
 
   let t_s_m = tm `StartOrEnd `Match in
   let t_s_i = tm `StartOrEnd `Insert in
@@ -632,6 +640,9 @@ let forward_recurrences tm ~insert_prob max_transition_size =
 
   let t_m_d = tm `Match `Delete in
   let t_d_d = tm `Delete `Delete in
+
+  let t_m_s = tm `Match `StartOrEnd in
+  let t_i_s = tm `Insert `StartOrEnd in
 
   let just_zeros a = wrap_array (make_constants max_transition_size 0.) a in
   let init_deletes a = just_zeros a in
@@ -676,6 +687,13 @@ let forward_recurrences tm ~insert_prob max_transition_size =
                 in
                 { match_; insert; delete }
               end
+  ; end_    = begin fun fm k ->
+                let c =  fm.(k).(read_size-1) in
+                { match_ = Array.map ~f:(( *.) t_m_s) c.match_
+                ; insert = Array.map ~f:(( *.) t_i_s) c.insert
+                ; delete = [||]
+                }
+              end
   }
 
 let forward_pass conf read read_prob =
@@ -691,7 +709,7 @@ let forward_pass conf read read_prob =
     let fm = Array.make_matrix ~dimx:bigK  ~dimy:conf.read_size ecell in
     let tm = Phmm.TransitionMatrix.init ~ref_length:bigK conf.read_size in
     let insert_prob = 0.25 in
-    let recurrences = forward_recurrences tm ~insert_prob conf.max_transition in
+    let recurrences = forward_recurrences tm ~insert_prob conf.max_transition conf.read_size in
     (* Fill in start. *)
     for k = 0 to bigK - 1 do
       fm.(k).(0) <-
@@ -708,13 +726,15 @@ let forward_pass conf read read_prob =
             base base_prob ~i k
       done;
     done;
-    fm
+    let final = Array.init bigK ~f:(recurrences.end_ fm) in
+    fm, final
 
-let build ?read_size ?len ?spec mp =
-  let alleles, rlarr = build_allele_and_rls ?spec mp in
-  let rlarr = match len with | None -> rlarr | Some len -> Array.sub rlarr ~pos:0 ~len in
-  let conf, _tlr = build_matrix ?read_size rlarr in
-  alleles,
-  rlarr,
-  conf,
-  forward_pass conf
+let to_allele_arr fe rtl =
+  let len = Rlel.total_length rtl.(0) in
+  let ret = Array.make len 0. in
+  Array.iteri rtl ~f:(fun k rtl ->
+      (* value is an index into match/insert probs. *)
+      Rlel.fill_array ret rtl ~f:(function
+        | Regular i -> fe.(k).match_.(i) +. fe.(k).insert.(i)
+        | Gapped _  -> 0. (* an allele can end in a gap read_length in *)));
+  ret
