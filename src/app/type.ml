@@ -24,14 +24,12 @@ let output_values_assoc contents to_string aindex assoc =
       (insert_chars ['\t'; '\t'; '\n']
         (Alleles.Set.to_human_readable aindex ~max_length:120 ~complement:`No a)))
 
-let default_error_fname = "typing_errors.log"
-
 let report_errors ~all_options ~error_output elst =
   let oc, close =
     match error_output with
     | `InputPrefixed  -> let fname = sprintf "%s_typing_errors.log" all_options in
                          open_out fname, true
-    | `DefaultFile    -> open_out default_error_fname, true
+    | `DefaultFile    -> open_out Common_options.default_error_fname, true
     | `Stderr         -> stderr, false
     | `Stdout         -> stdout, false
   in
@@ -179,7 +177,10 @@ let type_
   alignment_file
   merge_file
   distance
-    num_alt_to_add allele_list allele_regex_list not_join_same_seq remove_reference
+  (* allele selection. *)
+  regex_list specific_list without_list number_alleles
+  (* construction args. *)
+  remove_reference
   (* Index *)
     k
   (* Process *)
@@ -194,11 +195,11 @@ let type_
       upto_kmer_hood allto_kmer_hood
   (* Output *)
     print_top do_not_normalize bucket error_output reduce_resolution =
-  let join_same_sequence = not not_join_same_seq in
-  Common_options.to_filename_and_graph_args
-    ?alignment_file ?merge_file ~distance num_alt_to_add
-    ~allele_list ~allele_regex_list
-    ~join_same_sequence ~remove_reference
+  (* Not exposing this command line arg. *)
+  let join_same_sequence = true in
+  Common_options.to_filename_and_graph_args ?alignment_file ?merge_file ~distance
+      ~specific_list ~regex_list ~without_list ?number_alleles
+      ~join_same_sequence ~remove_reference
     >>= begin fun (option_based_fname, cargs) ->
         let open Cache in
         let open Ref_graph in
@@ -334,10 +335,6 @@ let type_
 let () =
   let open Cmdliner in
   let open Common_options in
-  let print_top_flag =
-    let doc = "Print only the specified number (positive integer) of alleles" in
-    Arg.(value & opt (some int) None & info ~doc ["print-top"])
-  in
   let multi_pos_flag =
     let d = "How to aggregate multiple position matches: " in
     Arg.(value & vflag `Best
@@ -378,39 +375,6 @@ let () =
     in
     Arg.(value & opt float default & info ~doc ["likelihood-error"])
   in
-  let error_output_flag =
-    let doc dest =
-      sprintf "Output errors such as sequences that don't match to %s. \
-               By default output is written to %s." dest default_error_fname
-    in
-    Arg.(value & vflag `InputPrefixed
-      [ `Stdout,        info ~doc:(doc "standard output") ["error-stdout"]
-      ; `Stderr,        info ~doc:(doc "standard error") ["error-stderr"]
-      ; `DefaultFile,   info ~doc:(doc "default filename") ["error-default"]
-      ; `InputPrefixed, info ~doc:(doc "input prefixed") ["error-input-prefixed"]
-      ])
-  in
-  let reduce_resolution_arg =
-    let doc  = "Reduce the resolution of the PDF, to a lower number of \
-                \"digits\". The general HLA allele nomenclature \
-                has 4 levels of specificity depending on the number of colons \
-                in the name. For example A*01:01:01:01 has 4 and A*01:95 \
-                has 2. This argument specifies the number (1,2,or 3) of \
-                digits to reduce results to. For example, specifying 2 will \
-                choose the best (depending on metric) allele out of \
-                A*02:01:01:01, A*02:01:01:03, ...  A*02:01:02, ... \
-                A*02:01:100 for A*02:01. The resulting set will have at most \
-                the specified number of digit groups, but may have less."
-    in
-    let one_to_three_parser s =
-      match positive_int_parser s with
-      | `Ok x when x = 1 || x = 2 || x = 3 -> `Ok x
-      | `Ok x                              -> `Error (sprintf  "not 1 to 3: %d" x)
-      | `Error e                           -> `Error e
-    in
-    let one_to_three = one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d") in
-    Arg.(value & opt (some one_to_three) None & info ~doc ["reduce-resolution"])
-  in
   let do_not_check_rc_flag =
     Arg.(value & flag & info ["do-not-check-rc"])
   in
@@ -423,14 +387,6 @@ let () =
     let docv = "NON-NEGATIVE INTEGER" in
     let doc  = "Exclusive distance away from base kmer include while looking for positions." in
     Arg.(value & opt (some non_negative_int) None & info ~doc ~docv ["all-to-kmer-hood"])
-  in
-  let specific_read_args =
-    let docv = "STRING" in
-    let doc  = "Read name string (to be found in fastq) to type. Add multiple \
-                to create a custom set of reads." in
-    Arg.(value
-        & opt_all string []
-        & info ~doc ~docv ["sr"; "specific-read"])
   in
   let map_arg =
     let doc = "Map the reads instead of folding and accumulating the results." in
@@ -458,9 +414,13 @@ let () =
     Term.(const type_
             (* Graph construction args *)
             $ file_arg $ merge_arg $ distance_flag
-            $ num_alt_arg $ allele_arg $ allele_regex_arg
-              $ do_not_join_same_sequence_paths_flag
-              $ remove_reference_flag
+            (* allele selection. *)
+            $ regex_arg
+            $ allele_arg
+            $ without_arg
+            $ num_alt_arg
+            (* construction args. *)
+            $ remove_reference_flag
             (* Index *)
             $ kmer_size_arg
             (* Process *)

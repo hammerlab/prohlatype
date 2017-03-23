@@ -24,11 +24,9 @@ let kmer_table_from_fasta ~k file =
 
 let create_kmer_counts ~k file known_diff_alleles =
   let fasta_kt, fasta_seqs = kmer_table_from_fasta ~k (to_fasta_file file) in
-  let n = Ref_graph.Alleles { specific = []; regex = [".*"]
-                            ; without = known_diff_alleles }
-  in
+  let arg = Ref_graph.default_construction_arg in
   let input = Ref_graph.AlignmentFile (to_alignment_file file) in
-  let gm = Cache.(graph (graph_args ~input ~n ())) in
+  let gm = Cache.(graph (graph_args ~input ~arg)) in
   let graph_kt = Index.kmer_counts ~biological:true ~k gm in
   fasta_kt, fasta_seqs, graph_kt
 

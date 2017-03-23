@@ -1262,53 +1262,30 @@ let create_adjacents_arr g aindex offset posarr bounds =
     pensr := Some edge_node_set;
     {edge_node_set; seen_alleles})
 
-type construct_which_args =
-  | NumberOfAlts of int
-  | Alleles of { specific : string list
-               ; regex    : string list
-               ; without  : string list
-               }
+type construction_arg =
+  { selectors           : Alleles.Selection.t list
+  ; join_same_sequence  : bool
+  ; remove_reference    : bool
+  }
 
-let construct_which_args_to_string = function
-  | NumberOfAlts n                          -> sprintf "N%d" n
-  | Alleles { specific
-            ; regex = []
-            ; without = []
-            } when List.length specific < 5 -> sprintf "S%s" (String.concat ~sep:"_" specific)
-  | Alleles { specific; regex; without }    -> String.concat (specific @ regex @ without)
-                                               |> Digest.string
-                                               |> Digest.to_hex
-                                               |> sprintf "R%s"
+let default_construction_arg =
+  { selectors          = []
+  ; join_same_sequence = true
+  ; remove_reference   = false
+  }
 
-let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
-  ?(remove_reference=false) r =
+let construction_arg_to_string
+  { selectors; join_same_sequence; remove_reference } =
+    sprintf "%s_%b_%b"
+      (Alleles.Selection.list_to_string selectors)
+      join_same_sequence remove_reference
+
+let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let open Mas_parser in
+  let { selectors ; join_same_sequence; remove_reference; } = arg in
   let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
-  let alt_alleles =
-    match which with
-    | None ->
-        alt_elems
-    | Some (NumberOfAlts num_alt_to_add) ->
-        List.take alt_elems num_alt_to_add
-    | Some (Alleles {specific; regex; without })   ->
-        let assoc_wrap name =
-          if name = reference then None else
-            try Some (name, List.assoc name alt_elems)
-            with Not_found ->
-              eprintf "Ignoring Not_found requested allele %s in graph construction."
-                name;
-              None
-        in
-        let from_specific = List.filter_map specific ~f:assoc_wrap in
-        let from_regex =
-          let regexes = List.map regex ~f:(Re_posix.compile_pat) in
-          List.filter alt_elems ~f:(fun (alt, alt_seq) ->
-            List.exists regexes ~f:(fun r -> Re.execp r alt))
-        in
-        List.filter ~f:(fun (a, _) -> not (List.mem a ~set:without))
-          (from_specific @ from_regex)
-  in
+  let alt_alleles = Alleles.Selection.apply_to_assoc selectors alt_elems in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
@@ -1353,20 +1330,19 @@ type input =
   | MergeFromPrefix of (string * Distances.logic)
 
 let input_to_string = function
-  | AlignmentFile path        -> Filename.basename path
-  | MergeFromPrefix (pp, dl)  -> sprintf "%s-%s_mgd"
-                                  (Distances.show_logic dl)
+  | AlignmentFile path        -> sprintf "AF_%s"
+                                  (Filename.chop_extension
+                                    (Filename.basename path))
+  | MergeFromPrefix (pp, dl)  -> sprintf "MGD_%s_%s"
                                   (Filename.basename pp)
+                                  (Distances.show_logic dl)
 
-let construct_from_file ~join_same_sequence ~remove_reference ?which = function
+let construct_from_file ?arg = function
   | AlignmentFile file ->
-      Ok (construct_from_parsed
-            ~join_same_sequence ~remove_reference ?which
-            (Mas_parser.from_file file))
+      Ok (construct_from_parsed ?arg (Mas_parser.from_file file))
   | MergeFromPrefix (prefix, dl) ->
       Merge_mas.do_it prefix dl >>= fun (alignment, merge_map) ->
-        Ok (construct_from_parsed ~merge_map
-            ~join_same_sequence ~remove_reference ?which alignment)
+        Ok (construct_from_parsed ~merge_map ?arg alignment)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =

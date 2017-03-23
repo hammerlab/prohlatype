@@ -9,7 +9,8 @@ let to_input prefix = function
   | `Nuclear        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
 
 let load prefix t =
-  Cache.(graph (graph_args ~input:(to_input prefix t) ()))
+  let arg = Ref_graph.default_construction_arg in
+  Cache.(graph (graph_args ~input:(to_input prefix t) ~arg))
 
 let split_into_xons = String.split ~on:(`Character '|')
 

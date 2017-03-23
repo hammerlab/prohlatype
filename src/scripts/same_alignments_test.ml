@@ -49,12 +49,15 @@ open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
   let input = Ref_graph.AlignmentFile file in
-  let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
+  let default = Ref_graph.default_construction_arg in
+  let arg = Option.value_map gi ~default
+    ~f:(fun n -> { default with selectors = [Alleles.Selection.Number n] })
+  in
   if cache then
-    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ?n () })
+    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ~arg })
   else
     Cache.((invalid_arg_on_error "construct graph and index"
-            graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ?n () })
+            graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ~arg })
 
 let unwrap_sf = function | Stopped r | Finished r -> r
 

@@ -274,3 +274,40 @@ module Map = struct
     m.(0)
 
 end (* Map *)
+
+(* Different logic of how we choose which alleles to include in the analysis. *)
+module Selection = struct
+
+  (* Defined in this order to so that to apply multiple selections, we can sort
+     the list and apply Regex's first to generate possibilities and then use
+     reducing selectors like Without and Number afterwards. *)
+  type t =
+    | Regex of string
+    | Specific of string
+    | Without of string
+    | Number of int
+    [@@ deriving eq, ord, show ]
+    (* When ppx_deriving >4.1 hits:
+    [@@ deriving eq, ord, show { with_path = false }] *)
+
+  (* A bit more concise than show and easier for filenames.*)
+  let to_string = function
+    | Regex r     -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
+    | Specific s  -> sprintf "S%s" s
+    | Without e   -> sprintf "W%s" e
+    | Number n    -> sprintf "N%d" n
+
+  let list_to_string l =
+    String.concat ~sep:"_" (List.map l ~f:(to_string))
+
+  let apply_to_assoc lst =
+    let sorted = List.sort ~cmp:compare lst in
+    fun assoc ->
+      List.fold_left sorted ~init:assoc ~f:(fun acc -> function
+        | Regex r    -> let p = Re_posix.compile_pat r in
+                        List.filter acc ~f:(fun (allele, _) -> Re.execp p allele)
+        | Specific s -> List.filter acc ~f:(fun (allele, _) -> allele = s)
+        | Without e  -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
+        | Number n   -> List.take acc n)
+
+end (* Selection. *)

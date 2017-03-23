@@ -5,37 +5,46 @@ open Cmdliner
 
 let repo = "prohlatype"
 
-let positive_int_parser =
+(*** Basic command line parsers and printers. ***)
+let positive_int_parser w =
   fun s ->
     try
       let d = Scanf.sscanf s "%d" (fun x -> x) in
       if d <= 0 then
-        `Error (s ^ " is not a positive integer")
+        Error (`Msg (s ^ " is not a positive integer"))
       else
-        `Ok d
+        Ok (w d)
     with Scanf.Scan_failure msg ->
-      `Error msg
+      Error (`Msg msg)
+
+let int_fprinter frmt =
+  Format.fprintf frmt "%d"
 
 let positive_int =
-  positive_int_parser, (fun frmt -> Format.fprintf frmt "%d")
+  Arg.conv ~docv:"POSITIVE INTEGER"
+    ((positive_int_parser (fun n -> n)), int_fprinter)
 
 let non_negative_int_parser =
   fun s ->
     try
       let d = Scanf.sscanf s "%d" (fun x -> x) in
       if d < 0 then
-        `Error (s ^ " is negative")
+        Error (`Msg (s ^ " is negative"))
       else
-        `Ok d
+        Ok d
     with Scanf.Scan_failure msg ->
-      `Error msg
+      Error (`Msg msg)
 
 let non_negative_int =
-  non_negative_int_parser, (fun frmt -> Format.fprintf frmt "%d")
+  Arg.conv ~docv:"NON-NEGATIVE INTEGER"
+    (non_negative_int_parser, int_fprinter)
 
+(*** Graph source arguments. ***)
 let file_arg =
   let docv = "FILE" in
-  let doc  = sprintf "File to lookup IMGT allele alignments." in
+  let doc  = "File to lookup IMGT allele alignments. The alleles found in this\
+              file will initially define the set of alleles to be used. Use an\
+              allele selector to modify this set." in
   Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
 
 let merge_arg =
@@ -58,44 +67,97 @@ let merge_arg =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
              prefix path. Currently only supports %s genes. The argument must \
              be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
-             Overrides file arguments."
+             Overrides the file arguments. The set of alleles is defined by the
+             ones in the nuc file."
       (String.concat ~sep:", " Merge_mas.supported_genes)
   in
   Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
 
-let num_alt_arg =
-  let docv = "POSITIVE INTEGER" in
-  let doc  = "Number of alternate alleles to add to the graph. \
-              If not specified, all of the alternate alleles in the alignment \
-              file are added."
+(*** Allele selector arguments. ***)
+let regex_command_line_args = ["allele-regex"]
+let allele_command_line_args = ["a"; "allele"]
+let without_command_line_args = ["without-allele"]
+let num_command_line_args = ["n"; "num-alt"]
+
+let args_to_string lst =
+  List.map lst ~f:(fun s -> (if String.length s = 1 then "-" else "--") ^ s)
+  |> String.concat ~sep:", "
+
+let regex_arg =
+  let docv = "REGEX" in
+  let doc  = "Specify alleles to add to the graph via a regex. This option is \
+              similar to allele, but lets the user specify a wider range \
+              (specifically those alleles matching a POSIX regex) of alleles \
+              to include. The '*' used in HLA allele names must be properly \
+              escaped from the command line: ex. -ar \"A\\*02:03\". This \
+              \"allele selector\" has the highest precedence, and is applied \
+              to all of the alleles from the working set"
   in
-  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["n"; "num-alt"])
+  let open Arg in
+  let parser_ = parser_of_kind_of_string ~kind:docv
+    (fun s -> Some (Alleles.Selection.Regex s))
+  in
+  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+        & info ~doc ~docv regex_command_line_args
 
 let allele_arg =
   let docv = "STRING" in
-  let doc  = "Specify specfic alternate alleles to add to the graph. \
-              By default the behavior is to add all (or [num-alt] if \
-              specified) alleles (in alphabetical order) to the graph. Use \
-              this option to construct a graph with specific alleles (ex. \
-              A*01:02). One can repeat this argument to specify multiple \
-              alleles. This argument will override the [num-alt] argument \
-              but may be used in tandem with the allele-regex arguments."
+  let doc  =
+    sprintf "Specify specfic alleles to add to the graph. \
+             This \"allele selector\" is applied after regex (%s) \
+             but before the without (%s). \
+             Use this option to construct a graph with specific alleles (ex. \
+             A*01:02). One can repeat this argument to specify multiple \
+             alleles."
+      (args_to_string regex_command_line_args)
+      (args_to_string without_command_line_args)
   in
-  Arg.(value & opt_all string [] & info ~doc ~docv ["a"; "allele"])
-
-let allele_regex_arg =
-  let docv = "REGEX" in
-  let doc  = "Specify specfic alternate alleles to add to the graph via a \
-              regex. This option is similar to allele, but lets the user \
-              specify a class (specifically a pattern) of alleles to include \
-              in the graph, without having to add them individually via the \
-              allele argument. This argument will override [num-alt] but may be \
-              used in tandem with allele flag. The regex format is POSIX, and \
-              the '*' used in HLA allele names must be properly escaped from \
-              the command line: ex. -ar \"A\\*02:03\""
+  let open Arg in
+  let parser_ =
+    parser_of_kind_of_string ~kind:docv
+      (fun s -> Some (Alleles.Selection.Specific s))
   in
-  Arg.(value & opt_all string [] & info ~doc ~docv ["ar"; "allele-regex"])
+  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+        & info ~doc ~docv allele_command_line_args
 
+let without_arg =
+  let docv = "STRING" in
+  let doc  =
+    sprintf "Alleles to remove from the working set. \
+             This \"allele selector\" is applied before the execlude (%s)
+             selector but after specific (%s) one.
+             Use this option to construct a graph without alleles (ex. \
+             A*01:02). One can repeat this argument to specify multiple \
+             alleles to exclude."
+      (args_to_string allele_command_line_args)
+      (args_to_string num_command_line_args)
+  in
+  let open Arg in
+  let parser_ =
+    parser_of_kind_of_string ~kind:docv
+      (fun s -> Some (Alleles.Selection.Without s))
+  in
+  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+        & info ~doc ~docv without_command_line_args
+
+let num_alt_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc  =
+    sprintf "Number of alternate alleles to add to the graph. \
+             If not specified, all of the alternate alleles in the alignment \
+             file are added. This \"allele selector\" is applied last to the
+             working set of alleles derived from the alignment file \
+             (ex. A_gen, DRB_nuc) or merge request (ex. B) after the without
+             argument (%s)"
+             (args_to_string without_command_line_args)
+
+  in
+  let open Arg in
+  let parser_ = (positive_int_parser (fun d -> Alleles.Selection.Number d)) in
+  let nconv = conv ~docv (parser_, Alleles.Selection.pp) in
+  (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
+
+(*** Other args. ***)
 let remove_reference_flag =
   let doc  = "Remove the reference allele from the graph. The reference \
               allele is the one that is listed first in the alignments file. \
@@ -103,7 +165,7 @@ let remove_reference_flag =
               the reference as represented in the alignments file. Therefore, \
               the original reference sequence must be a part of the graph \
               during construction. Specifying this flag will remove it from \
-              the graph."
+              the graph after the other alleles are added."
   in
   Arg.(value & flag & info ~doc ["no-reference"])
 
@@ -117,51 +179,36 @@ let no_cache_flag =
   Arg.(value & flag & info ~doc ["no-cache"])
 
 let do_not_join_same_sequence_paths_flag =
-  let doc = "Do not join same sequence paths; remove overlapping nodes at the same position, \
-             in the string graph."
+  let doc = "Do not join same sequence paths; remove overlapping nodes at the \
+             same position, in the string graph."
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_filename_and_graph_args ?alignment_file ?merge_file ~distance num_alt_to_add
-  ~allele_list ~allele_regex_list ~join_same_sequence ~remove_reference =
-  let open Ref_graph in
-  let to_ofname_and_cache_args base input =
-    let option_based_fname, which =
-      match allele_list, allele_regex_list with
-      | [], [] ->
-          begin
-            match num_alt_to_add with
-            | None      -> sprintf "%s_%b_%b_all" base join_same_sequence remove_reference
-                          , None
-            | Some n    -> sprintf "%s_%b_%b_%d" base join_same_sequence remove_reference n
-                          , (Some (NumberOfAlts n))
-          end
-      | specific, regex -> let sr_dig =
-                              String.concat (specific @ regex)
-                              |> Digest.string
-                              |> Digest.to_hex
-                          in
-                          sprintf "%s_spec_%s_%b" base sr_dig remove_reference
-                          , (Some (Alleles { specific; regex; without = [] }))
-    in
-    option_based_fname
-    , { Cache.input
-      ; Cache.which
-      ; Cache.join_same_sequence
-      ; Cache.remove_reference
-      }
-  in
+let to_input ?alignment_file ?merge_file ~distance () =
   match alignment_file, merge_file with
-  | _, (Some prefix)          ->
-      let base =
-        sprintf "%s_%s_mgd" (Distances.show_logic distance) (Filename.basename prefix)
+  | _,          (Some prefix) -> Ok (Ref_graph.MergeFromPrefix (prefix, distance))
+  | (Some alignment_file), _  -> Ok (Ref_graph.AlignmentFile alignment_file)
+  | None,                None -> Error "Either a file or merge argument must be specified"
+
+let to_filename_and_graph_args
+  (* Allele information source *)
+  ?alignment_file ?merge_file ~distance
+  (* Allele selectors *)
+    ~regex_list
+    ~specific_list
+    ~without_list
+    ?number_alleles
+  (* Graph modifiers. *)
+  ~join_same_sequence ~remove_reference =
+    to_input ?alignment_file ?merge_file ~distance () >>= fun input ->
+      let selectors =
+        regex_list @ specific_list @ without_list @
+          (match number_alleles with | None -> [] | Some s -> [s])
       in
-      Ok (to_ofname_and_cache_args base (MergeFromPrefix (prefix, distance)))
-  | (Some alignment_file), _  ->
-      let base = Filename.basename alignment_file |> Filename.chop_extension in
-      Ok (to_ofname_and_cache_args base (AlignmentFile alignment_file))
-  | None, None                ->
-      Error "Either a file or merge argument must be specified"
+      let arg = {Ref_graph.selectors; join_same_sequence; remove_reference} in
+      let graph_arg = Cache.graph_args ~arg ~input in
+      let option_based_fname = Cache.graph_args_to_string graph_arg in
+      Ok (option_based_fname, graph_arg)
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in
@@ -194,6 +241,57 @@ let distance_flag =
     ; AverageExon, info ~doc:(d ^ "smallest shared exon distance.") ["ave-exon"]
     ])
 
+let print_top_flag =
+  let doc = "Print only the specified number (positive integer) of alleles" in
+  Arg.(value & opt (some int) None & info ~doc ["print-top"])
+
+let specific_read_args =
+  let docv = "STRING" in
+  let doc  = "Read name string (to be found in fastq) to type. Add multiple \
+              to create a custom set of reads." in
+  Arg.(value
+      & opt_all string []
+      & info ~doc ~docv ["sr"; "specific-read"])
+
+let default_error_fname =
+  "typing_errors.log"
+
+let error_output_flag =
+  let doc dest =
+    sprintf "Output errors such as sequences that don't match to %s. \
+              By default output is written to %s." dest default_error_fname
+  in
+  Arg.(value & vflag `InputPrefixed
+    [ `Stdout,        info ~doc:(doc "standard output") ["error-stdout"]
+    ; `Stderr,        info ~doc:(doc "standard error") ["error-stderr"]
+    ; `DefaultFile,   info ~doc:(doc "default filename") ["error-default"]
+    ; `InputPrefixed, info ~doc:(doc "input prefixed") ["error-input-prefixed"]
+    ])
+
+let reduce_resolution_arg =
+  let doc  = "Reduce the resolution of the PDF, to a lower number of \
+              \"digits\". The general HLA allele nomenclature \
+              has 4 levels of specificity depending on the number of colons \
+              in the name. For example A*01:01:01:01 has 4 and A*01:95 \
+              has 2. This argument specifies the number (1,2,or 3) of \
+              digits to reduce results to. For example, specifying 2 will \
+              choose the best (depending on metric) allele out of \
+              A*02:01:01:01, A*02:01:01:03, ...  A*02:01:02, ... \
+              A*02:01:100 for A*02:01. The resulting set will have at most \
+              the specified number of digit groups, but may have less."
+  in
+  let one_to_three_parser s =
+    match positive_int_parser (fun x -> x) s with
+    | Ok x when x = 1 || x = 2 || x = 3 -> Ok x
+    | Ok x                              -> Error (`Msg (sprintf  "not 1 to 3: %d" x))
+    | Error e                           -> Error e
+  in
+  let open Arg in
+  let one_to_three = conv ~docv:"ONE,TWO or THREE"
+    (one_to_three_parser , (fun frmt -> Format.fprintf frmt "%d"))
+  in
+  value & opt (some one_to_three) None & info ~doc ["reduce-resolution"]
+
 let to_distance_targets_and_candidates alignment_file_opt merge_opt =
   let open Mas_parser in
   match alignment_file_opt, merge_opt with
@@ -211,3 +309,4 @@ let to_distance_targets_and_candidates alignment_file_opt merge_opt =
       Ok (mp.reference, mp.ref_elems, targets, targets)
   | None, None  ->
       Error "Either a file or merge argument must be specified"
+

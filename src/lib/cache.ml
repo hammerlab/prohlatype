@@ -60,36 +60,24 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
       end
 
 type graph_args =
-  { input               : Ref_graph.input
-  ; which               : Ref_graph.construct_which_args option
-  ; join_same_sequence  : bool
-  ; remove_reference    : bool
+  { input   : Ref_graph.input
+  ; arg     : Ref_graph.construction_arg
   }
 
-let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~input () =
-  { input
-  ; which = n
-  ; join_same_sequence
-  ; remove_reference
-  }
+let graph_args ~arg ~input =
+  { input; arg }
 
-let graph_args_to_string ga =
-  sprintf "%s_%s_%b_%b"
-    (Ref_graph.input_to_string ga.input)
-    (match ga.which with
-      | None -> "All"
-      | Some w -> Ref_graph.construct_which_args_to_string w)
-    ga.join_same_sequence
-    ga.remove_reference
+let graph_args_to_string {arg; input} =
+  sprintf "%s_%s"
+    (Ref_graph.input_to_string input)
+    (Ref_graph.construction_arg_to_string arg)
 
 let dir = ".cache"
 
 let graph_cache_dir = Filename.concat dir "graphs"
 
-let graph_no_cache
-  { input; which; join_same_sequence; remove_reference; _ } =
-  Ref_graph.construct_from_file ~join_same_sequence ~remove_reference ?which
-    input
+let graph_no_cache { input; arg } =
+  Ref_graph.construct_from_file ~arg input
 
 (* TODO: We should add date parsing, so that we can distinguish different
    graphs, and make sure that we can type against the most recent. Or compare
