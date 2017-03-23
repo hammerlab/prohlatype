@@ -186,8 +186,8 @@ let do_not_join_same_sequence_paths_flag =
 
 let to_input ?alignment_file ?merge_file ~distance () =
   match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (Ref_graph.MergeFromPrefix (prefix, distance))
-  | (Some alignment_file), _  -> Ok (Ref_graph.AlignmentFile alignment_file)
+  | _,          (Some prefix) -> Ok (Alleles.Input.MergeFromPrefix (prefix, distance))
+  | (Some alignment_file), _  -> Ok (Alleles.Input.AlignmentFile alignment_file)
   | None,                None -> Error "Either a file or merge argument must be specified"
 
 let to_filename_and_graph_args

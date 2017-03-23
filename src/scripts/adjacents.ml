@@ -18,7 +18,7 @@ let test_graph_fail file g pos =
 
 let test_file file =
   let open Ref_graph in
-  let input = AlignmentFile (to_alignment_file file)  in
+  let input = Alleles.Input.AlignmentFile (to_alignment_file file)  in
   let arg = default_construction_arg in
   let all_args = Cache.graph_args ~input ~arg in
   let g = Cache.graph all_args in

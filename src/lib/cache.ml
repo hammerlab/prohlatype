@@ -60,7 +60,7 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
       end
 
 type graph_args =
-  { input   : Ref_graph.input
+  { input   : Alleles.Input.t
   ; arg     : Ref_graph.construction_arg
   }
 
@@ -69,7 +69,7 @@ let graph_args ~arg ~input =
 
 let graph_args_to_string {arg; input} =
   sprintf "%s_%s"
-    (Ref_graph.input_to_string input)
+    (Alleles.Input.to_string input)
     (Ref_graph.construction_arg_to_string arg)
 
 let dir = ".cache"
@@ -77,7 +77,7 @@ let dir = ".cache"
 let graph_cache_dir = Filename.concat dir "graphs"
 
 let graph_no_cache { input; arg } =
-  Ref_graph.construct_from_file ~arg input
+  Ref_graph.construct ~arg input
 
 (* TODO: We should add date parsing, so that we can distinguish different
    graphs, and make sure that we can type against the most recent. Or compare
@@ -85,8 +85,8 @@ let graph_no_cache { input; arg } =
 let recent_check arg graph =
   let file =
     match arg.input with
-    | Ref_graph.AlignmentFile f -> f
-    | Ref_graph.MergeFromPrefix (p,_) -> p ^ "_nuc.txt"
+    | Alleles.Input.AlignmentFile f -> f
+    | Alleles.Input.MergeFromPrefix (p,_) -> p ^ "_nuc.txt"
   in
   if Sys.file_exists file then begin
     let ic = open_in file in
@@ -138,3 +138,4 @@ let graph_and_two_index =
   let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
   disk_memoize ~dir index_args_to_string
     (invalid_arg_on_error "construct graph and index" graph_and_two_index_no_cache)
+

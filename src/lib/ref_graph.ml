@@ -1323,26 +1323,9 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   ; adjacents_arr
   }
 
-type input =
-  (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
-  | AlignmentFile of string
-  (* Ex. A, B, full path to prefix *)
-  | MergeFromPrefix of (string * Distances.logic)
-
-let input_to_string = function
-  | AlignmentFile path        -> sprintf "AF_%s"
-                                  (Filename.chop_extension
-                                    (Filename.basename path))
-  | MergeFromPrefix (pp, dl)  -> sprintf "MGD_%s_%s"
-                                  (Filename.basename pp)
-                                  (Distances.show_logic dl)
-
-let construct_from_file ?arg = function
-  | AlignmentFile file ->
-      Ok (construct_from_parsed ?arg (Mas_parser.from_file file))
-  | MergeFromPrefix (prefix, dl) ->
-      Merge_mas.do_it prefix dl >>= fun (alignment, merge_map) ->
-        Ok (construct_from_parsed ~merge_map ?arg alignment)
+let construct ?arg input =
+  Alleles.Input.construct input >>= fun (mp, merge_map) ->
+      Ok (construct_from_parsed ~merge_map ?arg mp)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =

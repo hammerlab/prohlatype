@@ -156,17 +156,30 @@ module Map : sig
 end (* Map *)
 
 module Selection :
-  sig
-    type t =
-      | Regex of string
-      | Specific of string
-      | Without of string
-      | Number of int
-    val equal : t -> t -> Ppx_deriving_runtime.bool
-    val compare : t -> t -> Ppx_deriving_runtime.int
-    val show : t -> string
-    val pp : Format.formatter -> t -> unit
-    val to_string : t -> string
-    val list_to_string : t list -> string
-    val apply_to_assoc : t list -> (string * 'a) list -> (string * 'a) list
-  end
+sig
+  type t =
+    | Regex of string
+    | Specific of string
+    | Without of string
+    | Number of int
+  val equal : t -> t -> Ppx_deriving_runtime.bool
+  val compare : t -> t -> Ppx_deriving_runtime.int
+  val show : t -> string
+  val pp : Format.formatter -> t -> unit
+  val to_string : t -> string
+  val list_to_string : t list -> string
+  val apply_to_assoc : t list -> (string * 'a) list -> (string * 'a) list
+end (* Selection *)
+
+module Input :
+sig
+  type t =
+      AlignmentFile of string
+    | MergeFromPrefix of (string * Distances.logic)
+  val to_string : t -> string
+  val construct :
+    t ->
+    (Mas_parser.result * (Util.StringMap.key * Util.StringMap.key) list,
+      string)
+    result
+end (* Input *)

@@ -311,3 +311,29 @@ module Selection = struct
         | Number n   -> List.take acc n)
 
 end (* Selection. *)
+
+(* Where do we get the allele information? *)
+module Input = struct
+
+  type t =
+    (** For example A_nuc.txt, B_gen.txt, full path to file. *)
+    | AlignmentFile of string
+    (** For exampleEx. A, B, full path to prefix *)
+    | MergeFromPrefix of (string * Distances.logic)
+
+  let to_string = function
+    | AlignmentFile path        -> sprintf "AF_%s"
+                                    (Filename.chop_extension
+                                      (Filename.basename path))
+    | MergeFromPrefix (pp, dl)  -> sprintf "MGD_%s_%s"
+                                    (Filename.basename pp)
+                                    (Distances.show_logic dl)
+
+  let construct = function
+    | AlignmentFile file                       ->
+        let mp = Mas_parser.from_file file in
+        Ok (mp, []) (* empty merge_map *)
+    | MergeFromPrefix (prefix, distance_logic) ->
+        Merge_mas.do_it prefix distance_logic
+
+end (* Input *)

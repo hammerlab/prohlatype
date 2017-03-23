@@ -2,11 +2,12 @@
 open Common
 open Util
 
-let to_input prefix = function
-  | `MergeTrie      -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
-  | `MergeAveExon   -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon)
-  | `Genetic        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_gen"))
-  | `Nuclear        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
+let to_input prefix =
+  let open Alleles.Input in function
+  | `MergeTrie      -> MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
+  | `MergeAveExon   -> MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon)
+  | `Genetic        -> AlignmentFile (to_alignment_file (prefix ^ "_gen"))
+  | `Nuclear        -> AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
 
 let load prefix t =
   let arg = Ref_graph.default_construction_arg in

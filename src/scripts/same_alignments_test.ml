@@ -48,10 +48,10 @@ open Common
 open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
-  let input = Ref_graph.AlignmentFile file in
+  let input = Alleles.Input.AlignmentFile file in
   let default = Ref_graph.default_construction_arg in
   let arg = Option.value_map gi ~default
-    ~f:(fun n -> { default with selectors = [Alleles.Selection.Number n] })
+    ~f:(fun n -> { default with Ref_graph.selectors = [Alleles.Selection.Number n] })
   in
   if cache then
     Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ~arg })
