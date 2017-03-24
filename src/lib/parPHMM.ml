@@ -696,6 +696,26 @@ let forward_recurrences tm ~insert_prob max_transition_size read_size =
               end
   }
 
+type t =
+  { conf        : conf
+  ; align_date  : string
+  ; alleles     : string list
+  ; merge_map   : (string * string) list
+  }
+
+let construct input selectors read_size =
+  Alleles.Input.construct input >>= fun (mp, merge_map) ->
+    let nalt_elems = 
+      mp.Mas_parser.alt_elems 
+      |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2) 
+      |> Alleles.Selection.apply_to_assoc selectors
+    in
+    let alleles, rlarr =
+      build_allele_and_rls { mp with Mas_parser.alt_elems = nalt_elems}
+    in
+    let conf, tlr = build_matrix ~read_size rlarr in
+    Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
+
 let forward_pass conf read read_prob =
   if conf.read_size <> String.length read then
     invalid_argf "read length %d doesn't match configuration read_size %d"
@@ -736,5 +756,5 @@ let to_allele_arr fe rtl =
       (* value is an index into match/insert probs. *)
       Rlel.fill_array ret rtl ~f:(function
         | Regular i -> fe.(k).match_.(i) +. fe.(k).insert.(i)
-        | Gapped _  -> 0. (* an allele can end in a gap read_length in *)));
+        | Gapped _  -> 0. (* an allele can end in a gap after read_length. *)));
   ret
