@@ -143,7 +143,7 @@ let graph_and_two_index =
     (invalid_arg_on_error "construct graph and index" graph_and_two_index_no_cache)
 
 type par_phmm_args =
-  { pinput     : Alleles.Input.t
+  { pinput    : Alleles.Input.t
   ; selectors : Alleles.Selection.t list
   ; read_size : int
   }

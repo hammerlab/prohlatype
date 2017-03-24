@@ -746,8 +746,7 @@ let forward_pass conf read read_prob =
             base base_prob ~i k
       done;
     done;
-    let final = Array.init bigK ~f:(recurrences.end_ fm) in
-    fm, final
+    Array.init bigK ~f:(recurrences.end_ fm)
 
 let to_allele_arr fe rtl =
   let len = Rlel.total_length rtl.(0) in

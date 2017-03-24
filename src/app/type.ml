@@ -174,13 +174,13 @@ let display_datums cmp ref_of_amap min_of_amap value_to_string dlst =
 
 let type_
   (* Graph construction args. *)
-  alignment_file
-  merge_file
-  distance
+    alignment_file
+    merge_file
+    distance
   (* allele selection. *)
-  regex_list specific_list without_list number_alleles
+    regex_list specific_list without_list number_alleles
   (* construction args. *)
-  remove_reference
+    remove_reference
   (* Index *)
     k
   (* Process *)
