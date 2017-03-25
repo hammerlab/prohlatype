@@ -2,10 +2,11 @@
 open Util
 
 let app_name = "par_type"
+
 let time s f =
   let n = Sys.time () in
   let r = f () in
-  Printf.printf "%-10s:%f\n" s (Sys.time () -. n);
+  Printf.printf "%-10s:%f\n%!" s (Sys.time () -. n);
   r
 
 let to_read_size_dependent 
@@ -35,20 +36,24 @@ let across_fastq ?number_of_reads ~specific_reads file read_size_dep =
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let pt = rp read_size in (* Invalid_args on error. *)
+                (* Invalid_args on error. *)
+                let pt = time "Setting up ParPHMM transitions"
+                          (fun () -> rp read_size)
+                in
                 let n = List.length pt.ParPHMM.alleles in
                 let update_me = Array.make n 1. in
                 let update update_me fqi =
-                  match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
-                  | Core_kernel.Std.Result.Error e -> raise (E.E (Core_kernel.Std.Error.to_string_hum e))
-                  | Core_kernel.Std.Result.Ok read_probs ->
-                    let fp =
-                      ParPHMM.forward_pass pt.ParPHMM.conf
-                        fqi.Biocaml_unix.Fastq.sequence read_probs
-                    in
-                    let likelihoods = ParPHMM.to_allele_arr fp pt.ParPHMM.conf.ParPHMM.final_run_len in
-                    Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- update_me.(i) *. l);
-                    update_me
+                  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
+                    match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
+                    | Core_kernel.Std.Result.Error e -> raise (E.E (Core_kernel.Std.Error.to_string_hum e))
+                    | Core_kernel.Std.Result.Ok read_probs ->
+                      let fp =
+                        ParPHMM.forward_pass pt.ParPHMM.conf
+                          fqi.Biocaml_unix.Fastq.sequence read_probs
+                      in
+                      let likelihoods = ParPHMM.to_allele_arr fp pt.ParPHMM.conf.ParPHMM.final_run_len in
+                      Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- update_me.(i) *. l);
+                      update_me)
                 in
                 `Set (pt.ParPHMM.alleles, update, update update_me fqi)
             | `Set (alelles, update, ret) ->
@@ -62,7 +67,6 @@ let across_fastq ?number_of_reads ~specific_reads file read_size_dep =
   with E.E e ->
     eprintf "%s" e
               
-
 let type_
   (* Allele information source *)
   alignment_file merge_file distance
