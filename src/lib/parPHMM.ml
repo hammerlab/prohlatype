@@ -705,9 +705,9 @@ type t =
 
 let construct input selectors read_size =
   Alleles.Input.construct input >>= fun (mp, merge_map) ->
-    let nalt_elems = 
-      mp.Mas_parser.alt_elems 
-      |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2) 
+    let nalt_elems =
+      mp.Mas_parser.alt_elems
+      |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2)
       |> Alleles.Selection.apply_to_assoc selectors
     in
     let alleles, rlarr =
@@ -717,36 +717,43 @@ let construct input selectors read_size =
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
 let forward_pass conf read read_prob =
-  if conf.read_size <> String.length read then
-    invalid_argf "read length %d doesn't match configuration read_size %d"
-      (String.length read) conf.read_size
-  else if conf.read_size <> Array.length read_prob then
-    invalid_argf "read probability length %d doesn't match configuration read_size %d"
-      (Array.length read_prob) conf.read_size
+  let read_length = String.length read in
+  let read_prob_length = Array.length read_prob in
+  if read_length <> read_prob_length then
+    invalid_argf "read length %d does not equal read qualities array %d"
+      read_length read_prob_length
   else
-    let bigK = Array.length conf.transitions_m in
-    let ecell = { match_ = [||]; insert = [||]; delete = [||] } in
-    let fm = Array.make_matrix ~dimx:bigK  ~dimy:conf.read_size ecell in
-    let tm = Phmm.TransitionMatrix.init ~ref_length:bigK conf.read_size in
-    let insert_prob = 0.25 in
-    let recurrences = forward_recurrences tm ~insert_prob conf.max_transition conf.read_size in
-    (* Fill in start. *)
+  let read_size =
+    if read_length > conf.read_size then begin
+      eprintf "read length %d greater than configuration %d, will use configured"
+        read_length conf.read_size;
+        conf.read_size
+    end else
+      read_length
+  in
+  let bigK = Array.length conf.transitions_m in
+  let ecell = { match_ = [||]; insert = [||]; delete = [||] } in
+  let fm = Array.make_matrix ~dimx:bigK  ~dimy:read_size ecell in
+  let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
+  let insert_prob = 0.25 in
+  let recurrences = forward_recurrences tm ~insert_prob conf.max_transition read_size in
+  (* Fill in start. *)
+  for k = 0 to bigK - 1 do
+    fm.(k).(0) <-
+      recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
+        (String.get_exn read 0) read_prob.(0)
+  done;
+  (* Fill in middle  *)
+  for i = 1 to read_size - 1 do
+    let base = String.get_exn read i in
+    let base_prob = read_prob.(i) in
     for k = 0 to bigK - 1 do
-      fm.(k).(0) <-
-        recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
-          (String.get_exn read 0) read_prob.(0)
+      fm.(k).(i) <-
+        recurrences.middle fm conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
+          base base_prob ~i k
     done;
-    (* Fill in middle  *)
-    for i = 1 to conf.read_size - 1 do
-      let base = String.get_exn read i in
-      let base_prob = read_prob.(i) in
-      for k = 0 to bigK - 1 do
-        fm.(k).(i) <-
-          recurrences.middle fm conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
-            base base_prob ~i k
-      done;
-    done;
-    Array.init bigK ~f:(recurrences.end_ fm)
+  done;
+  Array.init bigK ~f:(recurrences.end_ fm)
 
 let to_allele_arr fe rtl =
   let len = Rlel.total_length rtl.(0) in
