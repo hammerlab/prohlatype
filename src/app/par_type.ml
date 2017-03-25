@@ -93,7 +93,8 @@ let () =
   let open Common_options in
   let type_ =
     let version = "0.0.0" in
-    let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to type fastq samples." in
+    let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
+               type fastq samples." in
     let bug =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
         repo

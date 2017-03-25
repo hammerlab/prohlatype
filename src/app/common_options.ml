@@ -89,7 +89,7 @@ let regex_arg =
               similar to allele, but lets the user specify a wider range \
               (specifically those alleles matching a POSIX regex) of alleles \
               to include. The '*' used in HLA allele names must be properly \
-              escaped from the command line: ex. -ar \"A\\*02:03\". This \
+              escaped from the command line: ex. -ar \"A*02:03\". This \
               \"allele selector\" has the highest precedence, and is applied \
               to all of the alleles from the working set"
   in
@@ -224,8 +224,9 @@ let kmer_size_arg =
   Arg.(value & opt positive_int default & info ~doc ~docv ["k"; "kmer-size"])
 
 let fastq_file_arg =
-  let docv = "FILE" in
-  let doc = "Fastq formatted DNA reads file." in
+  let docv = "FASTQ FILE" in
+  let doc = "Fastq formatted DNA reads file, only one file per sample. \
+             List paired end reads as 2 sequential files." in
   Arg.(non_empty & pos_all file [] & info ~doc ~docv [])
 
 let num_reads_arg =
