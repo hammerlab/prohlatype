@@ -494,7 +494,9 @@ let build_matrix ?(read_size=100) rlarr =
   let bigK = Array.length rlarr in
   let transitions_m = Array.make_matrix ~dimx:bigK ~dimy:(read_size - 1) [||] in
   let etrl = Rlel.init (Regular 1) in
-  let trans_rtl_m = Array.make_matrix ~dimx:bigK ~dimy:(read_size - 1) etrl in
+  let first_run_len = Array.make bigK etrl in
+  let final_run_len = Array.make bigK etrl in
+  let trans_rtl_a = Array.make (read_size - 1) etrl in
   let max_transitions_ref = ref 0 in
   let update_max_transitions trans_arr =
     max_transitions_ref := max !max_transitions_ref (Array.length trans_arr);
@@ -509,37 +511,47 @@ let build_matrix ?(read_size=100) rlarr =
         let id_start i = { previous = None; current = i} in
         transitions_m.(0).(0) <- Array.init (Array.length em) ~f:id_start;
         (*printf "k: %d start  rtl total length: %d\n" k (total_length trl); *)
-        trans_rtl_m.(0).(0) <- trl;
+        first_run_len.(0) <- trl;
         let _k, _ftrl, emlst =
           List.fold_left t ~init:(1, trl, [em]) ~f:(fun (k, trl, acc) brl ->
             let em, ntrl, ti = merge_start_positions trl brl in
-            trans_rtl_m.(k).(0) <- ntrl;
+            first_run_len.(k) <- ntrl;
             update_max_transitions ti;
             transitions_m.(k).(0) <- ti;
             (k + 1, ntrl, em ::acc))
         in
         Array.of_list (List.rev emlst)
   in
+  (* The first transitions row is special, since it has no input. *)
+  final_run_len.(0) <- first_run_len.(0) ;
   for i = 1 to read_size - 2 do
     transitions_m.(0).(i) <- transitions_m.(0).(0);
-    trans_rtl_m.(0).(i) <- trans_rtl_m.(0).(0)
+    trans_rtl_a.(i) <- first_run_len.(0);
   done;
+  let trans_rtl_b = Array.copy trans_rtl_a in
   let merge_fill k =
     let base_rls = rlarr.(k) in
     let ems = emissions_a.(k) in
+    let source, dest =
+      if k mod 2 = 1 then
+        trans_rtl_a, trans_rtl_b
+      else
+        trans_rtl_b, trans_rtl_a
+    in
+    source.(0) <- first_run_len.(k-1);
     let rec loop i =
-      if i = read_size - 1 then
+      if i = read_size - 1 then begin
+        final_run_len.(k) <- dest.(i-1);
         ()
-      else begin
-        (* The trans_rtl_m is off by one wrt transitions. *)
-        let trl = trans_rtl_m.(k-1).(i-1) in
+      end else begin
+        let trl = source.(i-1) in
         (*printf "k: %d i: %d base length: %d rtl total length: %d\n" k i
           (total_length base_rls) (total_length trl); *)
         let ntrl, ti = merge trl base_rls ems in
         (*printf "k: %d i: %d after: %d\n" k i (total_length ntrl); *)
         update_max_transitions ti;
         transitions_m.(k).(i) <- ti;
-        trans_rtl_m.(k).(i) <- ntrl;
+        dest.(i) <- ntrl;
         loop (i + 1)
       end
     in
@@ -551,16 +563,12 @@ let build_matrix ?(read_size=100) rlarr =
      The forward pass should special case this code to return 0's or the
      rescaled insert values. *)
   for k = 1 to bigK - 1 do merge_fill k done;
-  let final_run_len =
-    Array.mapi trans_rtl_m
-      ~f:(fun k rtl_row -> rtl_row.(read_size - 2))
-  in
   { read_size
   ; emissions_a
   ; transitions_m
   ; final_run_len
   ; max_transition = !max_transitions_ref
-  }, trans_rtl_m
+  }
 
 (* Fill a configuration with the actual paths that we encounter along the
    transitions. This is a debug method to help understand the actual paths
@@ -713,7 +721,7 @@ let construct input selectors read_size =
     let alleles, rlarr =
       build_allele_and_rls { mp with Mas_parser.alt_elems = nalt_elems}
     in
-    let conf, tlr = build_matrix ~read_size rlarr in
+    let conf = build_matrix ~read_size rlarr in
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
 let forward_pass conf read read_prob =
@@ -725,7 +733,7 @@ let forward_pass conf read read_prob =
   else
   let read_size =
     if read_length > conf.read_size then begin
-      eprintf "read length %d greater than configuration %d, will use configured"
+      eprintf "read length %d greater than configuration %d, will use configured\n"
         read_length conf.read_size;
         conf.read_size
     end else
