@@ -608,10 +608,14 @@ type cell =
 
 type workspace = cell array array
 
+(* The actual workspace is large. Repeatedly allocating a new one for each read
+   is wasteful. It would be better to recycle it between reads. Therefore,
+   these methods operate by mutating the last cell. *)
 type fwd_recurrences =
-  { start   : emissions -> transitions -> char -> float -> cell
-  ; middle  : workspace -> emissions -> transitions -> char -> float -> i:int -> int -> cell
-  ; end_    : workspace -> int -> cell  (* Doesn't use the delete section. *)
+  { start   : emissions -> transitions -> char -> float -> cell -> unit
+  ; middle  : workspace -> emissions -> transitions -> char -> float
+                          -> i:int -> int -> cell  -> unit
+  ; end_    : workspace -> int -> cell -> unit  (* Doesn't use the delete section. *)
   }
 
 let to_match_prob reference_state_arr base base_error =
@@ -628,17 +632,41 @@ let to_match_prob reference_state_arr base base_error =
     | T       -> compare_against 'T'
     | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
 
+(*
 let make_constants size v =
   let arr = Array.init size ~f:(fun i -> lazy (Array.make (i + 1) v)) in
   fun i -> Lazy.force arr.(i-1)
 
-let wrap_array f arr = f (Array.length arr)
+let wrap_array f arr = f (Array.length arr) *)
 
-let forward_recurrences tm ~insert_prob max_transition_size read_size =
+let generate_workspace conf read_size =
+  let just_zeros n = Array.make n 0. in
+  Array.mapi conf.transitions_m ~f:(fun k trans_row ->
+    Array.init read_size ~f:(fun i ->
+      let n =
+        if i = 0 then
+          Array.length trans_row.(0)
+        else
+          Array.length trans_row.(i-1)
+      in
+      { match_ = just_zeros n
+      ; insert = just_zeros n
+      ; delete = just_zeros n
+      })),
+  (* The final emissions should have the same size as the last transition
+     column. Don't bother allocating the delete *)
+  Array.map conf.transitions_m ~f:(fun trans_row ->
+    let n = Array.length trans_row.(read_size-2) in
+    { match_ = just_zeros n
+    ; insert = just_zeros n
+    ; delete = [||]
+    })
+
+let forward_recurrences tm ~insert_prob read_size =
 
   let t_s_m = tm `StartOrEnd `Match in
   let t_s_i = tm `StartOrEnd `Insert in
-
+  let start_i = t_s_i *. insert_prob in
   let t_m_m = tm `Match `Match in
   let t_i_m = tm `Insert `Match in
   let t_d_m = tm `Delete `Match in
@@ -652,55 +680,40 @@ let forward_recurrences tm ~insert_prob max_transition_size read_size =
   let t_m_s = tm `Match `StartOrEnd in
   let t_i_s = tm `Insert `StartOrEnd in
 
-  let just_zeros a = wrap_array (make_constants max_transition_size 0.) a in
-  let init_deletes a = just_zeros a in
-  let init_inserts a = wrap_array (make_constants max_transition_size (t_s_i *. insert_prob)) a in
-  { start   = begin fun emissions transitions base base_error ->
+  { start   = begin fun emissions transitions base base_error cell ->
                 let ce = to_match_prob emissions base base_error in
-                { match_ = Array.map transitions ~f:(fun { current; _} -> ce.(current) *. t_s_m)
-                ; insert = init_inserts transitions
-                ; delete = init_deletes transitions
-                }
+                Array.iteri transitions ~f:(fun j { current; _} ->
+                  cell.match_.(j) <- ce.(current) *. t_s_m;
+                  cell.insert.(j) <- start_i;
+                  cell.delete.(j) <- 0.);
               end
-  ; middle  = begin fun fm emissions transitions base base_error ~i k ->
+  ; middle  = begin fun fm emissions transitions base base_error ~i k cell ->
                 let ce = to_match_prob emissions base base_error in
-                let match_ =
-                  Array.map transitions
-                      ~f:(fun { previous ; current } ->
-                            match previous with
-                            | None                  -> (* at k = 0 -> mirror emissions. *)
-                                ce.(current) *. t_s_m
-                            | Some { state; index } ->
-                                let pm = fm.(k + state).(i-1).match_.(index) in
-                                let pi = fm.(k + state).(i-1).insert.(index) in
-                                let pd = fm.(k + state).(i-1).delete.(index) in
-                                ce.(current) *. (t_m_m *. pm +. t_i_m *. pi +. t_d_m *. pd))
-                in
-                let insert =
-                  Array.map transitions
-                      ~f:(fun { current; _ } ->
-                            let pm = fm.(k).(i-1).match_.(current) in
-                            let pi = fm.(k).(i-1).insert.(current) in
-                            insert_prob *. (t_m_i *. pm +. t_i_i *. pi  ))
-                in
-                let delete =
-                  Array.map transitions
-                      ~f:(function
-                            | { previous = None; _ } -> (* A gap start -> mirror emissions *)
-                                0.
-                            | { previous = Some { state; index } ; _} ->
-                                let pm = fm.(k + state).(i).match_.(index) in
-                                let pd = fm.(k + state).(i).insert.(index) in
-                                (t_m_d *. pm +. t_d_d *. pd))
-                in
-                { match_; insert; delete }
+                Array.iteri transitions
+                    ~f:(fun j { previous ; current } ->
+                          let pm_i = fm.(k).(i-1).match_.(current) in
+                          let pi_i = fm.(k).(i-1).insert.(current) in
+                          cell.insert.(j) <- insert_prob *. (t_m_i *. pm_i +. t_i_i *. pi_i);
+                          match previous with
+                          | None                  -> (* at k = 0 -> mirror emissions. *)
+                              cell.match_.(j) <- ce.(current) *. t_s_m;
+                              cell.delete.(j) <- 0.
+                          | Some { state; index } ->
+                              let ks = k + state in
+                              let pm_m = fm.(ks).(i-1).match_.(index) in
+                              let pi_m = fm.(ks).(i-1).insert.(index) in
+                              let pd_m = fm.(ks).(i-1).delete.(index) in
+                              cell.match_.(j) <- ce.(current) *. (t_m_m *. pm_m +. t_i_m *. pi_m +. t_d_m *. pd_m);
+                              let pm_d = fm.(ks).(i).match_.(index) in
+                              let pd_d = fm.(ks).(i).insert.(index) in
+                              cell.delete.(j) <- (t_m_d *. pm_d +. t_d_d *. pd_d));
               end
-  ; end_    = begin fun fm k ->
-                let c =  fm.(k).(read_size-1) in
-                { match_ = Array.map ~f:(( *.) t_m_s) c.match_
-                ; insert = Array.map ~f:(( *.) t_i_s) c.insert
-                ; delete = [||]
-                }
+  ; end_    = begin fun fm k cell ->
+                let fc = fm.(k).(read_size-2) in
+                Array.iteri fc.match_ ~f:(fun j m ->
+                  cell.match_.(j) <- m *. t_m_s;
+                  cell.insert.(j) <- fc.insert.(j) *. t_i_s;
+                  (* delete is empty!*))
               end
   }
 
@@ -724,44 +737,39 @@ let construct input selectors read_size =
     let conf = build_matrix ~read_size rlarr in
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
-let forward_pass conf read read_prob =
-  let read_length = String.length read in
-  let read_prob_length = Array.length read_prob in
-  if read_length <> read_prob_length then
-    invalid_argf "read length %d does not equal read qualities array %d"
-      read_length read_prob_length
-  else
+let forward_pass conf read_size =
   let read_size =
-    if read_length > conf.read_size then begin
-      eprintf "read length %d greater than configuration %d, will use configured\n"
-        read_length conf.read_size;
+    if read_size > conf.read_size then begin
+      eprintf "requested read size %d greater than configuration %d, will use smaller\n"
+        read_size conf.read_size;
         conf.read_size
     end else
-      read_length
+      read_size
   in
+  let sm, e = generate_workspace conf read_size in
   let bigK = Array.length conf.transitions_m in
-  let ecell = { match_ = [||]; insert = [||]; delete = [||] } in
-  let fm = Array.make_matrix ~dimx:bigK  ~dimy:read_size ecell in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_prob = 0.25 in
-  let recurrences = forward_recurrences tm ~insert_prob conf.max_transition read_size in
-  (* Fill in start. *)
-  for k = 0 to bigK - 1 do
-    fm.(k).(0) <-
-      recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
-        (String.get_exn read 0) read_prob.(0)
-  done;
-  (* Fill in middle  *)
-  for i = 1 to read_size - 1 do
-    let base = String.get_exn read i in
-    let base_prob = read_prob.(i) in
+  let recurrences = forward_recurrences tm ~insert_prob read_size in
+  fun read read_prob ->
+    (* Fill in start. *)
     for k = 0 to bigK - 1 do
-      fm.(k).(i) <-
-        recurrences.middle fm conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
-          base base_prob ~i k
+      recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
+        (String.get_exn read 0) read_prob.(0) sm.(k).(0);
     done;
-  done;
-  Array.init bigK ~f:(recurrences.end_ fm)
+    (* Fill in middle  *)
+    for i = 1 to read_size - 1 do
+      let base = String.get_exn read i in
+      let base_prob = read_prob.(i) in
+      for k = 0 to bigK - 1 do
+        recurrences.middle sm conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
+          base base_prob ~i k sm.(k).(i)
+      done;
+    done;
+    for k = 0 to bigK - 1 do
+      recurrences.end_ sm k e.(k)
+    done;
+    e
 
 let to_allele_arr fe rtl =
   let len = Rlel.total_length rtl.(0) in

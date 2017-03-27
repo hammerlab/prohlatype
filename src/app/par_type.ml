@@ -16,9 +16,9 @@ let to_read_size_dependent
     ~regex_list
     ~specific_list
     ~without_list
-    ?number_alleles 
+    ?number_alleles
     ~skip_disk_cache
-    = 
+    =
     Common_options.to_input ?alignment_file ?merge_file ~distance () >>= fun input ->
       let selectors =
         regex_list @ specific_list @ without_list @
@@ -30,17 +30,14 @@ let to_read_size_dependent
 
 exception PPE of string
 
-let to_update_f pt update_me fqi =
+let to_update_f final_run_len fp update_me fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
     match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
     | Result.Error e       -> raise (PPE (Error.to_string_hum e))
     | Result.Ok read_probs ->
-      let fp =
-        ParPHMM.forward_pass pt.ParPHMM.conf
-          fqi.Biocaml_unix.Fastq.sequence read_probs
-      in
-      let likelihoods = ParPHMM.to_allele_arr fp pt.ParPHMM.conf.ParPHMM.final_run_len in
+      let fe = fp fqi.Biocaml_unix.Fastq.sequence read_probs in
+      let likelihoods = ParPHMM.to_allele_arr fe final_run_len in
       Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- update_me.(i) *. l);
       update_me)
 
@@ -52,7 +49,10 @@ let to_set rp read_size =
   let alleles = pt.ParPHMM.alleles in
   let n = List.length alleles in
   let update_me = Array.make n 1. in
-  let update = to_update_f pt in
+  let fp = time (sprintf "Allocating forward pass workspace")
+    (fun () -> ParPHMM.forward_pass pt.ParPHMM.conf read_size)
+  in
+  let update = to_update_f pt.ParPHMM.conf.ParPHMM.final_run_len fp in
   `Set (alleles, update, update_me)
 
 let across_fastq ?number_of_reads ~specific_reads file init =
@@ -76,19 +76,19 @@ let across_fastq ?number_of_reads ~specific_reads file init =
             |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.6f\n" a l)
   with PPE e ->
     eprintf "%s" e
-              
+
 let type_
   (* Allele information source *)
   alignment_file merge_file distance
   (* Allele selectors *)
-    regex_list specific_list without_list number_alleles 
+    regex_list specific_list without_list number_alleles
   (* Process *)
     skip_disk_cache
   (* What to do? *)
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     read_size_override
-    = 
+    =
   let need_read_size_r =
     to_read_size_dependent ?alignment_file ?merge_file ~distance
       ~regex_list ~specific_list ~without_list ?number_alleles
@@ -108,7 +108,7 @@ let type_
     | [fastq]         -> across_fastq ?number_of_reads ~specific_reads fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
-  
+
 let () =
   let open Cmdliner in
   let open Common_options in
@@ -145,7 +145,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ read_size_override_arg
-            (* How are we typing 
+            (* How are we typing
             $ map_arg $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
