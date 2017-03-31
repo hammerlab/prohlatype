@@ -215,18 +215,18 @@ let viterbi_recurrences =
                 | 0 -> 0.
                 | k -> (emission_prob i k) *.
                           (max3
-                            ((tm `Match `Match)      *. dm.(i-1).(mi (k - 1)))
+                            ((tm `Match `Match)   *. dm.(i-1).(mi (k - 1)))
                             ((tm `Insert `Match)  *. dm.(i-1).(ii (k - 1)))
-                            ((tm `Delete `Match)   *. dm.(i-1).(di (k - 1))))
+                            ((tm `Delete `Match)  *. dm.(i-1).(di (k - 1))))
               end
   ; insert  = begin fun ~insert_prob tm dm ~i k ->
                 insert_prob *.
-                  (max ((tm `Match `Insert)      *. dm.(i-1).(mi k))
+                  (max ((tm `Match `Insert)   *. dm.(i-1).(mi k))
                        ((tm `Insert `Insert)  *. dm.(i-1).(ii k)))
               end
   ; delete  = begin fun tm dm ~i -> function
                 | 0 -> 0.
-                | k -> max ((tm `Match `Delete)     *. dm.(i).(mi (k - 1)))
+                | k -> max ((tm `Match `Delete)   *. dm.(i).(mi (k - 1)))
                            ((tm `Delete `Delete)  *. dm.(i).(di (k - 1)))
               end
   }
