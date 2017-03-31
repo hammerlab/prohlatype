@@ -632,6 +632,117 @@ let to_match_prob reference_state_arr base base_error =
     | T       -> compare_against 'T'
     | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
 
+(** Need a better name and destination for this module. *)
+module L = struct
+
+  let is_nan (x : float) = x <> x
+
+  let log_z = nan
+
+  let exp10 x = if is_nan x then 0. else 10. ** x
+  let log10 = function | 0. -> nan | x -> log10 x
+
+  (* in_lsp -> in log space *)
+  let log10sum_in_lsp lx ly =
+    if is_nan lx then
+      ly
+    else if is_nan ly then
+      lx
+    else if lx > ly then
+      lx +. log10 (1. +. exp10 (ly -. lx))
+    else
+      ly +. log10 (1. +. exp10 (lx -. ly))
+
+  let log10prod_in_lsp lx ly =
+    if is_nan lx || is_nan ly then
+      nan
+    else
+      lx +. ly
+
+  let log10_one_minus_l lq =
+    let p = 10. ** (-.lq) in
+    log10 (1. -. p)
+
+  (* The base error (qualities) are generally know. To avoid repeating the manual
+    calculation (as described above) of the log quality to log (1. -. base error)
+    we precompute these values.
+
+  Weird. this seems to be slower! TODO: Why? )
+  let log10_one_minus_l = function
+    | -0.0 -> log_z
+    | -0.1 -> -0.686825324380115454
+    | -0.2 -> -0.432923433336248276
+    | -0.3 -> -0.302062439928300397
+    | -0.4 -> -0.220480830541908562
+    | -0.5 -> -0.165088538626769726
+    | -0.6 -> -0.125627577491815079
+    | -0.7 -> -0.0966528953262047186
+    | -0.8 -> -0.07494036743261491
+    | -0.9 -> -0.058435173882679825
+    | -1.0 -> -0.0457574905606751153
+    | -1.1 -> -0.035944514242268806
+    | -1.2 -> -0.0283047837831196247
+    | -1.3 -> -0.0223306727357915694
+    | -1.4 -> -0.0176431456736382448
+    | -1.5 -> -0.0139554338820558448
+    | -1.6 -> -0.0110483332892353306
+    | -1.7 -> -0.00875292940206854816
+    | -1.8 -> -0.0069382318574496421
+    | -1.9 -> -0.00550215071190342936
+    | -2.0 -> -0.00436480540245008826
+    | -2.1 -> -0.00346349774554599588
+    | -2.2 -> -0.00274889425384098815
+    | -2.3 -> -0.00218210128532180967
+    | -2.4 -> -0.0017324081870171721
+    | -2.5 -> -0.00137553579921727916
+    | -2.6 -> -0.00109227082153636758
+    | -2.7 -> -0.000867397043708781281
+    | -2.8 -> -0.000688856394105166097
+    | -2.9 -> -0.000547088803770739681
+    | -3.0 -> -0.000434511774017691684
+    | -3.1 -> -0.000345109452404739883
+    | -3.2 -> -0.000274107777278245887
+    | -3.3 -> -0.000217717413117151276
+    | -3.4 -> -0.000172930172032690271
+    | -3.5 -> -0.000137357693108739246
+    | -3.6 -> -0.000109103544996691523
+    | -3.7 -> -8.66617872714958135e-05
+    | -3.8 -> -6.88364918576594357e-05
+    | -3.9 -> -5.46778777877239756e-05
+    | -4.0 -> -4.34316198075056039e-05
+    | -4.1 -> -3.44986070951026853e-05
+    | -4.2 -> -2.7402993817532012e-0
+    |    x -> (*eprintf "asked to compute log10_one_minus_l of %f\n" x; *)
+              log10_one_minus_l_manual x
+ *)
+
+end (* L *)
+
+let log10_1_3 =
+  L.log10 (1. /. 3.)
+
+(* TODO. Avoid the `float_of_int (Phred_score.to_int c) /. -10.` round trip
+         and just use char's instead. *)
+let to_match_prob_log reference_state_arr base base_error =
+  let compare_against c =
+    if base = c then
+      L.log10_one_minus_l base_error
+    else
+      L.log10prod_in_lsp base_error log10_1_3
+  in
+  let open BaseState in
+  Array.map reference_state_arr ~f:(function
+    | Unknown -> 0.   (* Treat like an 'N', anything goes.
+                         TODO: But need to figure out a way to not reward this.
+                               Specifically the probability shouldn't be higher than actual matches,
+                               so perhaps 1-. base_error is better? .*)
+    | A       -> compare_against 'A'
+    | C       -> compare_against 'C'
+    | G       -> compare_against 'G'
+    | T       -> compare_against 'T'
+    | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
+
+
 (*
 let make_constants size v =
   let arr = Array.init size ~f:(fun i -> lazy (Array.make (i + 1) v)) in
@@ -717,6 +828,78 @@ let forward_recurrences tm ~insert_prob read_size =
               end
   }
 
+let forward_recurrences_log tm ~insert_prob read_size =
+
+  let open L in
+  let t_s_m = log10 (tm `StartOrEnd `Match) in
+  let t_s_i = log10 (tm `StartOrEnd `Insert) in
+  let t_m_m = log10 (tm `Match `Match) in
+  let t_i_m = log10 (tm `Insert `Match) in
+  let t_d_m = log10 (tm `Delete `Match) in
+
+  let t_m_i = log10 (tm `Match `Insert) in
+  let t_i_i = log10 (tm `Insert `Insert) in
+
+  let t_m_d = log10 (tm `Match `Delete) in
+  let t_d_d = log10 (tm `Delete `Delete) in
+
+  let t_m_s = log10 (tm `Match `StartOrEnd) in
+  let t_i_s = log10 (tm `Insert `StartOrEnd) in
+
+  let linsert_prob = log10 insert_prob in
+  let start_i = log10prod_in_lsp t_s_i linsert_prob in
+
+  { start   = begin fun emissions transitions base base_error cell ->
+                let ce = to_match_prob_log emissions base base_error in
+                Array.iteri transitions ~f:(fun j { current; _} ->
+                  cell.match_.(j) <- log10prod_in_lsp ce.(current) t_s_m;
+                  cell.insert.(j) <- start_i;
+                  cell.delete.(j) <- log_z);
+              end
+  ; middle  = begin fun fm emissions transitions base base_error ~i k cell ->
+                let ce = to_match_prob_log emissions base base_error in
+                Array.iteri transitions
+                    ~f:(fun j { previous ; current } ->
+                          let pm_i = fm.(k).(i-1).match_.(current) in
+                          let pi_i = fm.(k).(i-1).insert.(current) in
+                          cell.insert.(j) <-
+                            log10prod_in_lsp linsert_prob
+                              (log10sum_in_lsp
+                                (log10prod_in_lsp t_m_i pm_i)
+                                (log10prod_in_lsp t_i_i pi_i));
+                          match previous with
+                          | None                  -> (* at k = 0 -> mirror emissions. *)
+                              cell.match_.(j) <- log10prod_in_lsp ce.(current) t_s_m;
+                              cell.delete.(j) <- log_z
+                          | Some { state; index } ->
+                              let ks = k + state in
+                              let pm_m = fm.(ks).(i-1).match_.(index) in
+                              let pi_m = fm.(ks).(i-1).insert.(index) in
+                              let pd_m = fm.(ks).(i-1).delete.(index) in
+                              cell.match_.(j) <-
+                                log10prod_in_lsp ce.(current)
+                                  (log10sum_in_lsp
+                                    (log10sum_in_lsp
+                                      (log10prod_in_lsp t_m_m pm_m)
+                                      (log10prod_in_lsp t_i_m pi_m))
+                                    (log10prod_in_lsp t_d_m pd_m));
+                              let pm_d = fm.(ks).(i).match_.(index) in
+                              let pd_d = fm.(ks).(i).insert.(index) in
+                              cell.delete.(j) <-
+                                log10sum_in_lsp
+                                  (log10prod_in_lsp t_m_d pm_d)
+                                  (log10prod_in_lsp t_d_d pd_d))
+              end
+  ; end_    = begin fun fm k cell ->
+                let fc = fm.(k).(read_size-2) in
+                Array.iteri fc.match_ ~f:(fun j m ->
+                  cell.match_.(j) <- log10prod_in_lsp m t_m_s;
+                  cell.insert.(j) <- log10prod_in_lsp fc.insert.(j) t_i_s;
+                  (* delete is empty!*))
+              end
+  }
+
+
 type t =
   { conf        : conf
   ; align_date  : string
@@ -737,7 +920,7 @@ let construct input selectors read_size =
     let conf = build_matrix ~read_size rlarr in
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
-let forward_pass conf read_size =
+let forward_pass ?(logspace=true) conf read_size =
   let read_size =
     if read_size > conf.read_size then begin
       eprintf "requested read size %d greater than configuration %d, will use smaller\n"
@@ -750,7 +933,10 @@ let forward_pass conf read_size =
   let bigK = Array.length conf.transitions_m in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_prob = 0.25 in
-  let recurrences = forward_recurrences tm ~insert_prob read_size in
+  let recurrences =
+    (if logspace then forward_recurrences_log else forward_recurrences)
+      tm ~insert_prob read_size
+  in
   fun read read_prob ->
     (* Fill in start. *)
     for k = 0 to bigK - 1 do
@@ -771,12 +957,16 @@ let forward_pass conf read_size =
     done;
     e
 
-let to_allele_arr fe rtl =
+let to_allele_arr ~logspace fe rtl =
   let len = Rlel.total_length rtl.(0) in
   let ret = Array.make len 0. in
   Array.iteri rtl ~f:(fun k rtl ->
       (* value is an index into match/insert probs. *)
       Rlel.fill_array ret rtl ~f:(function
-        | Regular i -> fe.(k).match_.(i) +. fe.(k).insert.(i)
+        | Regular i ->
+            if logspace then
+              L.log10sum_in_lsp fe.(k).match_.(i) fe.(k).insert.(i)
+            else
+              fe.(k).match_.(i) +. fe.(k).insert.(i)
         | Gapped _  -> 0. (* an allele can end in a gap after read_length. *)));
   ret

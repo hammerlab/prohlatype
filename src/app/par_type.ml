@@ -30,18 +30,20 @@ let to_read_size_dependent
 
 exception PPE of string
 
-let to_update_f final_run_len fp update_me fqi =
+let to_update_f ~logspace final_run_len fp update_me fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
-    match Fastq.phred_probabilities fqi.Biocaml_unix.Fastq.qualities with
+    let p = if logspace then Fastq.phred_log_probs else Fastq.phred_probabilities in
+    match p fqi.Biocaml_unix.Fastq.qualities with
     | Result.Error e       -> raise (PPE (Error.to_string_hum e))
     | Result.Ok read_probs ->
       let fe = fp fqi.Biocaml_unix.Fastq.sequence read_probs in
-      let likelihoods = ParPHMM.to_allele_arr fe final_run_len in
-      Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- update_me.(i) *. l);
+      let likelihoods = ParPHMM.to_allele_arr ~logspace fe final_run_len in
+      let c = if logspace then ( +. ) else ( *. ) in
+      Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- c update_me.(i) l);
       update_me)
 
-let to_set rp read_size =
+let to_set ~logspace rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -50,12 +52,12 @@ let to_set rp read_size =
   let n = List.length alleles in
   let update_me = Array.make n 1. in
   let fp = time (sprintf "Allocating forward pass workspace")
-    (fun () -> ParPHMM.forward_pass pt.ParPHMM.conf read_size)
+    (fun () -> ParPHMM.forward_pass ~logspace pt.ParPHMM.conf read_size)
   in
-  let update = to_update_f pt.ParPHMM.conf.ParPHMM.final_run_len fp in
+  let update = to_update_f ~logspace pt.ParPHMM.conf.ParPHMM.final_run_len fp in
   `Set (alleles, update, update_me)
 
-let across_fastq ?number_of_reads ~specific_reads file init =
+let across_fastq ?number_of_reads ~specific_reads ~logspace file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
@@ -63,7 +65,7 @@ let across_fastq ?number_of_reads ~specific_reads file init =
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
                 let `Set (alleles, update, update_me) =
-                  to_set rp read_size
+                  to_set ~logspace rp read_size
                 in
                 `Set (alleles, update, update update_me fqi)
             | `Set (alelles, update, ret) ->
@@ -73,7 +75,7 @@ let across_fastq ?number_of_reads ~specific_reads file init =
         | `Set (alleles, _, final_likelihoods) ->
             List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
             |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-            |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.6f\n" a l)
+            |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
   with PPE e ->
     eprintf "%s" e
 
@@ -88,7 +90,9 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     read_size_override
+    not_logspace
     =
+  let logspace = not not_logspace in
   let need_read_size_r =
     to_read_size_dependent ?alignment_file ?merge_file ~distance
       ~regex_list ~specific_list ~without_list ?number_alleles
@@ -100,12 +104,12 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set need_read_size r
+      | Some r -> to_set ~logspace need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads fastq init
+    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~logspace fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
 
@@ -117,6 +121,10 @@ let () =
     let doc = "Override the number of bases to calculate the likelihood over, \
                instead of using the number of bases in the FASTQ." in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
+  in
+  let not_logspace_flag =
+    let doc = "Do not perform the calculation in \"log space\"." in
+    Arg.(value & flag & info ~doc ["not-logspace"])
   in
   let type_ =
     let version = "0.0.0" in
@@ -145,6 +153,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ read_size_override_arg
+            $ not_logspace_flag
             (* How are we typing
             $ map_arg $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
