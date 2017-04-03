@@ -148,19 +148,18 @@ module Rlel = struct
     in
     loop [] nacc (nl1, nl2)
 
-  let fill_array ~f ret rl =
-    let rec fill_value v i length =
-      for j = i to i + length - 1 do ret.(j) <- v done
+
+  let expand_into_array ~f ~update ret rl =
+    let rec fill_value i length v =
+      for j = i to i + length - 1 do ret.(j) <- update ret.(i) v done
     in
     let rec loop i = function
       | []                    -> ()
-      | { value; length} :: t -> fill_value (f value) i length;
+      | { value; length} :: t -> fill_value i length (f value);
                                  loop (i + length) t
     in
-    fill_value (f rl.hd.value) 0 rl.hd.length;
+    fill_value 0 rl.hd.length (f rl.hd.value);
     loop rl.hd.length rl.tl
-
-
 
 end (* Rlel *)
 
@@ -595,73 +594,241 @@ let fill_possibilities conf =
       Array.map r2 ~f:(fun l ->
         String.of_character_list (List.rev l))))
 
-
 (***** Forward Pass ***)
 
 (* For every k there are 3 possible states. The cell stores values for each of
    those states based upon the transitions into this k. *)
-type cell =
-  { match_  : float array
-  ; insert  : float array
-  ; delete  : float array
+type 'a cell =
+  { match_  : 'a array
+  ; insert  : 'a array
+  ; delete  : 'a array
   }
 
-type workspace = cell array array
+type 'a workspace = 'a cell array array
+
+(* The initial value of the workspace should not matter as the forward pass
+   mutates all of the elements. Therefore this method is currently, not,
+   parameterized by the computation ring.*)
+let generate_workspace conf read_size =
+  let just_zeros n = Array.make n 0. in
+  Array.mapi conf.transitions_m ~f:(fun k trans_row ->
+    Array.init read_size ~f:(fun i ->
+      let n =
+        if i = 0 then
+          Array.length trans_row.(0)
+        else
+          Array.length trans_row.(i-1)
+      in
+      { match_ = just_zeros n
+      ; insert = just_zeros n
+      ; delete = just_zeros n
+      })),
+  (* The final emissions should have the same size as the last transition
+     column. Don't bother allocating the delete *)
+  Array.map conf.transitions_m ~f:(fun trans_row ->
+    let n = Array.length trans_row.(read_size-2) in
+    { match_ = just_zeros n
+    ; insert = just_zeros n
+    ; delete = [||]
+    })
+
+module type Ring = sig
+
+  type t
+  val to_string : t -> string
+  val zero : t
+  val one  : t
+
+  val ( + ) : t -> t -> t
+  val ( * ) : t -> t -> t
+
+  (* Special constructs necessary for the probabilistic logic. *)
+  (* Convert constant probabilities. *)
+  val constant : float -> t
+
+  (* Scale a probability be a third. *)
+  val times_one_third : float -> t
+
+  (* Complement probability. *)
+  val complement_probability : float -> t
+
+end (* Ring *)
 
 (* The actual workspace is large. Repeatedly allocating a new one for each read
    is wasteful. It would be better to recycle it between reads. Therefore,
    these methods operate by mutating the last cell. *)
-type fwd_recurrences =
-  { start   : emissions -> transitions -> char -> float -> cell -> unit
-  ; middle  : workspace -> emissions -> transitions -> char -> float
-                          -> i:int -> int -> cell  -> unit
-  ; end_    : workspace -> int -> cell -> unit  (* Doesn't use the delete section. *)
+type 'a fwd_recurrences =
+  { start     : emissions -> transitions -> char -> float -> 'a cell -> unit
+  ; middle    : 'a workspace -> emissions -> transitions -> char -> float
+                              -> i:int -> int -> 'a cell  -> unit
+  (* Doesn't use the delete section. *)
+  ; end_      : 'a workspace -> int -> 'a cell -> unit
+
+(* Given the workspace and an array of the final run-length encoded
+   transitions, return an array of per-allele final emission values.
+   Specifically, the first element will have the total emission likelihood for
+   the first allele, as represented by the final run-length encoded list.
+   The passed array is modified. *)
+  ; emission  : 'a cell array -> transition_state Rlel.t array -> 'a array
+                              -> unit
+
+(* Combine emission results *)
+  ; combine   : into:'a array -> 'a array -> unit
   }
 
-let to_match_prob reference_state_arr base base_error =
-  let compare_against c = if base = c then 1. -. base_error else base_error /. 3. in
-  let open BaseState in
-  Array.map reference_state_arr ~f:(function
-    | Unknown -> 1.   (* Treat like an 'N', anything goes.
-                         TODO: But need to figure out a way to not reward this.
-                               Specifically the probability shouldn't be higher than actual matches,
-                               so perhaps 1-. base_error is better? .*)
-    | A       -> compare_against 'A'
-    | C       -> compare_against 'C'
-    | G       -> compare_against 'G'
-    | T       -> compare_against 'T'
-    | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
+module ForwardGen (R : Ring) = struct
 
-(** Need a better name and destination for this module. *)
-module L = struct
+  (* TODO. Avoid the `float_of_int (Phred_score.to_int c) /. -10.` round trip
+          and just use char's instead. *)
+  let to_match_prob reference_state_arr base base_error =
+    let compare_against c =
+      if base = c then
+        R.complement_probability base_error
+      else
+        R.times_one_third base_error
+    in
+    let open BaseState in
+    Array.map reference_state_arr ~f:(function
+      (* Treat like an 'N', anything goes. TODO: Is this the right way.
+         Specifically the probability shouldn't be higher than actual matches.*)
+      | Unknown -> R.complement_probability base_error
+      | A       -> compare_against 'A'
+      | C       -> compare_against 'C'
+      | G       -> compare_against 'G'
+      | T       -> compare_against 'T'
+      | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
 
-  let is_nan (x : float) = x <> x
+  let per_allele_emission_arr len =
+    Array.make len R.one
 
-  let log_z = nan
+  let recurrences tm ~insert_prob read_size num_alleles =
 
-  let exp10 x = if is_nan x then 0. else 10. ** x
-  let log10 = function | 0. -> nan | x -> log10 x
+    let open R in                       (* Opening R shadows '+' and '*' below*)
+    let t_s_m = constant (tm `StartOrEnd `Match) in
+    let t_s_i = constant (tm `StartOrEnd `Insert) in
+    let t_m_m = constant (tm `Match `Match) in
+    let t_i_m = constant (tm `Insert `Match) in
+    let t_d_m = constant (tm `Delete `Match) in
 
-  (* in_lsp -> in log space *)
-  let log10sum_in_lsp lx ly =
-    if is_nan lx then
-      ly
-    else if is_nan ly then
-      lx
-    else if lx > ly then
-      lx +. log10 (1. +. exp10 (ly -. lx))
-    else
-      ly +. log10 (1. +. exp10 (lx -. ly))
+    let t_m_i = constant (tm `Match `Insert) in
+    let t_i_i = constant (tm `Insert `Insert) in
 
-  let log10prod_in_lsp lx ly =
-    if is_nan lx || is_nan ly then
-      nan
-    else
-      lx +. ly
+    let t_m_d = constant (tm `Match `Delete) in
+    let t_d_d = constant (tm `Delete `Delete) in
 
-  let log10_one_minus_l lq =
-    let p = 10. ** (-.lq) in
-    log10 (1. -. p)
+    let t_m_s = constant (tm `Match `StartOrEnd) in
+    let t_i_s = constant (tm `Insert `StartOrEnd) in
+
+    let start_i = t_s_i * insert_prob in
+    { start   = begin fun emissions transitions base base_error cell ->
+                  let ce = to_match_prob emissions base base_error in
+                  Array.iteri transitions ~f:(fun j { current; _} ->
+                    cell.match_.(j) <- ce.(current) * t_s_m;
+                    cell.insert.(j) <- start_i;
+                    cell.delete.(j) <- zero)
+                end
+    ; middle  = begin fun fm emissions transitions base base_error ~i k cell ->
+                  let ce = to_match_prob emissions base base_error in
+                  Array.iteri transitions
+                      ~f:(fun j { previous ; current } ->
+                            let pm_i = fm.(k).(i-1).match_.(current) in
+                            let pi_i = fm.(k).(i-1).insert.(current) in
+                            cell.insert.(j) <-
+                              insert_prob * (t_m_i * pm_i + t_i_i * pi_i);
+                            match previous with
+                            | None                  -> (* mirror emissions. *)
+                                cell.match_.(j) <- ce.(current) * t_s_m;
+                                cell.delete.(j) <- zero
+                            | Some { state; index } ->
+                                let ks = Pervasives.(+) k state in
+                                let pm_m = fm.(ks).(i-1).match_.(index) in
+                                let pi_m = fm.(ks).(i-1).insert.(index) in
+                                let pd_m = fm.(ks).(i-1).delete.(index) in
+                                cell.match_.(j) <-
+                                  ce.(current) * (t_m_m * pm_m
+                                                + t_i_m * pi_m
+                                                + t_d_m * pd_m);
+                                let pm_d = fm.(ks).(i).match_.(index) in
+                                let pd_d = fm.(ks).(i).insert.(index) in
+                                cell.delete.(j) <- t_m_d * pm_d + t_d_d * pd_d);
+                end
+    ; end_    = begin fun fm k cell ->
+                  let fc = fm.(k).(read_size-2) in
+                  Array.iteri fc.match_ ~f:(fun j m ->
+                    cell.match_.(j) <- m * t_m_s;
+                    cell.insert.(j) <- fc.insert.(j) * t_i_s;
+                    (* delete is empty!*))
+                end
+    ; emission  = begin fun final rtl ret ->
+                    Array.fill ret ~pos:0 ~len:num_alleles zero;
+                    let update = (+) in
+                    Array.iteri rtl ~f:(fun k rtl ->
+                      let cell = final.(k) in
+                      Rlel.expand_into_array ret rtl ~update ~f:(function
+                        (* value is an index into match/insert probs. *)
+                        | Regular i -> cell.match_.(i) + cell.insert.(i)
+                        | Gapped _  -> zero (* an allele can end in a gap after read_length. *)))
+                  end
+    ; combine   = begin fun ~into em ->
+                    for i = 0 to num_alleles - 1 do
+                      into.(i) <- into.(i) * em.(i)
+                    done
+                  end
+    }
+
+end (* ForwardGen *)
+
+module Forward = ForwardGen (struct
+  type t = float
+  let zero  = 0.
+  let one   = 1.
+  let ( + ) = ( +. )
+  let ( * ) = ( *. )
+
+  let constant x = x
+
+  let complement_probability p =
+    1. -. p
+
+  let times_one_third p =
+    p /. 3.
+
+  let to_string = sprintf "%f"
+
+end)
+
+module LogSpace = struct
+
+  let zero  = neg_infinity
+
+  let one   = 0.  (* log10 1. *)
+
+  let exp10 x = 10. ** x
+
+  let ( * ) lx ly = lx +. ly
+
+  let ( + ) lx ly =
+         if lx = neg_infinity then ly
+    else if ly = neg_infinity then lx
+    else if lx > ly           then lx +. log10 (1. +. exp10 (ly -. lx))
+    else (* lx < ly *)             ly +. log10 (1. +. exp10 (lx -. ly))
+
+end
+
+module ForwardLogSpace = ForwardGen (struct
+  include LogSpace
+
+  type t = float
+
+  let to_string = sprintf "%f"
+  let constant = log10
+
+  let l13 = constant (1. /. 3.)
+
+  let times_one_third = ( * ) l13
+
+  let complement_probability lq =
+    log10 (1. -. (exp10 lq))
 
   (* The base error (qualities) are generally know. To avoid repeating the manual
     calculation (as described above) of the log quality to log (1. -. base error)
@@ -716,189 +883,7 @@ module L = struct
               log10_one_minus_l_manual x
  *)
 
-end (* L *)
-
-let log10_1_3 =
-  L.log10 (1. /. 3.)
-
-(* TODO. Avoid the `float_of_int (Phred_score.to_int c) /. -10.` round trip
-         and just use char's instead. *)
-let to_match_prob_log reference_state_arr base base_error =
-  let compare_against c =
-    if base = c then
-      L.log10_one_minus_l base_error
-    else
-      L.log10prod_in_lsp base_error log10_1_3
-  in
-  let open BaseState in
-  Array.map reference_state_arr ~f:(function
-    | Unknown -> 0.   (* Treat like an 'N', anything goes.
-                         TODO: But need to figure out a way to not reward this.
-                               Specifically the probability shouldn't be higher than actual matches,
-                               so perhaps 1-. base_error is better? .*)
-    | A       -> compare_against 'A'
-    | C       -> compare_against 'C'
-    | G       -> compare_against 'G'
-    | T       -> compare_against 'T'
-    | Gap_    -> invalid_argf "Asked to match against a Gap_ state!")
-
-
-(*
-let make_constants size v =
-  let arr = Array.init size ~f:(fun i -> lazy (Array.make (i + 1) v)) in
-  fun i -> Lazy.force arr.(i-1)
-
-let wrap_array f arr = f (Array.length arr) *)
-
-let generate_workspace conf read_size =
-  let just_zeros n = Array.make n 0. in
-  Array.mapi conf.transitions_m ~f:(fun k trans_row ->
-    Array.init read_size ~f:(fun i ->
-      let n =
-        if i = 0 then
-          Array.length trans_row.(0)
-        else
-          Array.length trans_row.(i-1)
-      in
-      { match_ = just_zeros n
-      ; insert = just_zeros n
-      ; delete = just_zeros n
-      })),
-  (* The final emissions should have the same size as the last transition
-     column. Don't bother allocating the delete *)
-  Array.map conf.transitions_m ~f:(fun trans_row ->
-    let n = Array.length trans_row.(read_size-2) in
-    { match_ = just_zeros n
-    ; insert = just_zeros n
-    ; delete = [||]
-    })
-
-let forward_recurrences tm ~insert_prob read_size =
-
-  let t_s_m = tm `StartOrEnd `Match in
-  let t_s_i = tm `StartOrEnd `Insert in
-  let start_i = t_s_i *. insert_prob in
-  let t_m_m = tm `Match `Match in
-  let t_i_m = tm `Insert `Match in
-  let t_d_m = tm `Delete `Match in
-
-  let t_m_i = tm `Match `Insert in
-  let t_i_i = tm `Insert `Insert in
-
-  let t_m_d = tm `Match `Delete in
-  let t_d_d = tm `Delete `Delete in
-
-  let t_m_s = tm `Match `StartOrEnd in
-  let t_i_s = tm `Insert `StartOrEnd in
-
-  { start   = begin fun emissions transitions base base_error cell ->
-                let ce = to_match_prob emissions base base_error in
-                Array.iteri transitions ~f:(fun j { current; _} ->
-                  cell.match_.(j) <- ce.(current) *. t_s_m;
-                  cell.insert.(j) <- start_i;
-                  cell.delete.(j) <- 0.);
-              end
-  ; middle  = begin fun fm emissions transitions base base_error ~i k cell ->
-                let ce = to_match_prob emissions base base_error in
-                Array.iteri transitions
-                    ~f:(fun j { previous ; current } ->
-                          let pm_i = fm.(k).(i-1).match_.(current) in
-                          let pi_i = fm.(k).(i-1).insert.(current) in
-                          cell.insert.(j) <- insert_prob *. (t_m_i *. pm_i +. t_i_i *. pi_i);
-                          match previous with
-                          | None                  -> (* at k = 0 -> mirror emissions. *)
-                              cell.match_.(j) <- ce.(current) *. t_s_m;
-                              cell.delete.(j) <- 0.
-                          | Some { state; index } ->
-                              let ks = k + state in
-                              let pm_m = fm.(ks).(i-1).match_.(index) in
-                              let pi_m = fm.(ks).(i-1).insert.(index) in
-                              let pd_m = fm.(ks).(i-1).delete.(index) in
-                              cell.match_.(j) <- ce.(current) *. (t_m_m *. pm_m +. t_i_m *. pi_m +. t_d_m *. pd_m);
-                              let pm_d = fm.(ks).(i).match_.(index) in
-                              let pd_d = fm.(ks).(i).insert.(index) in
-                              cell.delete.(j) <- (t_m_d *. pm_d +. t_d_d *. pd_d));
-              end
-  ; end_    = begin fun fm k cell ->
-                let fc = fm.(k).(read_size-2) in
-                Array.iteri fc.match_ ~f:(fun j m ->
-                  cell.match_.(j) <- m *. t_m_s;
-                  cell.insert.(j) <- fc.insert.(j) *. t_i_s;
-                  (* delete is empty!*))
-              end
-  }
-
-let forward_recurrences_log tm ~insert_prob read_size =
-
-  let open L in
-  let t_s_m = log10 (tm `StartOrEnd `Match) in
-  let t_s_i = log10 (tm `StartOrEnd `Insert) in
-  let t_m_m = log10 (tm `Match `Match) in
-  let t_i_m = log10 (tm `Insert `Match) in
-  let t_d_m = log10 (tm `Delete `Match) in
-
-  let t_m_i = log10 (tm `Match `Insert) in
-  let t_i_i = log10 (tm `Insert `Insert) in
-
-  let t_m_d = log10 (tm `Match `Delete) in
-  let t_d_d = log10 (tm `Delete `Delete) in
-
-  let t_m_s = log10 (tm `Match `StartOrEnd) in
-  let t_i_s = log10 (tm `Insert `StartOrEnd) in
-
-  let linsert_prob = log10 insert_prob in
-  let start_i = log10prod_in_lsp t_s_i linsert_prob in
-
-  { start   = begin fun emissions transitions base base_error cell ->
-                let ce = to_match_prob_log emissions base base_error in
-                Array.iteri transitions ~f:(fun j { current; _} ->
-                  cell.match_.(j) <- log10prod_in_lsp ce.(current) t_s_m;
-                  cell.insert.(j) <- start_i;
-                  cell.delete.(j) <- log_z);
-              end
-  ; middle  = begin fun fm emissions transitions base base_error ~i k cell ->
-                let ce = to_match_prob_log emissions base base_error in
-                Array.iteri transitions
-                    ~f:(fun j { previous ; current } ->
-                          let pm_i = fm.(k).(i-1).match_.(current) in
-                          let pi_i = fm.(k).(i-1).insert.(current) in
-                          cell.insert.(j) <-
-                            log10prod_in_lsp linsert_prob
-                              (log10sum_in_lsp
-                                (log10prod_in_lsp t_m_i pm_i)
-                                (log10prod_in_lsp t_i_i pi_i));
-                          match previous with
-                          | None                  -> (* at k = 0 -> mirror emissions. *)
-                              cell.match_.(j) <- log10prod_in_lsp ce.(current) t_s_m;
-                              cell.delete.(j) <- log_z
-                          | Some { state; index } ->
-                              let ks = k + state in
-                              let pm_m = fm.(ks).(i-1).match_.(index) in
-                              let pi_m = fm.(ks).(i-1).insert.(index) in
-                              let pd_m = fm.(ks).(i-1).delete.(index) in
-                              cell.match_.(j) <-
-                                log10prod_in_lsp ce.(current)
-                                  (log10sum_in_lsp
-                                    (log10sum_in_lsp
-                                      (log10prod_in_lsp t_m_m pm_m)
-                                      (log10prod_in_lsp t_i_m pi_m))
-                                    (log10prod_in_lsp t_d_m pd_m));
-                              let pm_d = fm.(ks).(i).match_.(index) in
-                              let pd_d = fm.(ks).(i).insert.(index) in
-                              cell.delete.(j) <-
-                                log10sum_in_lsp
-                                  (log10prod_in_lsp t_m_d pm_d)
-                                  (log10prod_in_lsp t_d_d pd_d))
-              end
-  ; end_    = begin fun fm k cell ->
-                let fc = fm.(k).(read_size-2) in
-                Array.iteri fc.match_ ~f:(fun j m ->
-                  cell.match_.(j) <- log10prod_in_lsp m t_m_s;
-                  cell.insert.(j) <- log10prod_in_lsp fc.insert.(j) t_i_s;
-                  (* delete is empty!*))
-              end
-  }
-
+end) (* ForwardLogSpace *)
 
 type t =
   { conf        : conf
@@ -920,24 +905,26 @@ let construct input selectors read_size =
     let conf = build_matrix ~read_size rlarr in
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
-let forward_pass ?(logspace=true) conf read_size =
+let forward_pass ?(logspace=true) { conf; alleles; _} read_size =
   let read_size =
     if read_size > conf.read_size then begin
-      eprintf "requested read size %d greater than configuration %d, will use smaller\n"
-        read_size conf.read_size;
+      eprintf "requested read size %d greater than configuration %d, will use \
+          smaller\n" read_size conf.read_size;
         conf.read_size
     end else
       read_size
   in
   let sm, e = generate_workspace conf read_size in
+  let number_alleles = List.length alleles in
+  let emission_arr = Array.make number_alleles 0. in
   let bigK = Array.length conf.transitions_m in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_prob = 0.25 in
   let recurrences =
-    (if logspace then forward_recurrences_log else forward_recurrences)
-      tm ~insert_prob read_size
+    (if logspace then ForwardLogSpace.recurrences else Forward.recurrences)
+      tm ~insert_prob read_size number_alleles
   in
-  fun read read_prob ->
+  fun ~into read read_prob ->
     (* Fill in start. *)
     for k = 0 to bigK - 1 do
       recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
@@ -955,18 +942,18 @@ let forward_pass ?(logspace=true) conf read_size =
     for k = 0 to bigK - 1 do
       recurrences.end_ sm k e.(k)
     done;
-    e
+    recurrences.emission e conf.final_run_len emission_arr;
+    recurrences.combine ~into emission_arr;
+    into
 
-let to_allele_arr ~logspace fe rtl =
-  let len = Rlel.total_length rtl.(0) in
-  let ret = Array.make len 0. in
-  Array.iteri rtl ~f:(fun k rtl ->
-      (* value is an index into match/insert probs. *)
-      Rlel.fill_array ret rtl ~f:(function
-        | Regular i ->
-            if logspace then
-              L.log10sum_in_lsp fe.(k).match_.(i) fe.(k).insert.(i)
-            else
-              fe.(k).match_.(i) +. fe.(k).insert.(i)
-        | Gapped _  -> 0. (* an allele can end in a gap after read_length. *)));
-  ret
+let setup ~logspace t read_size =
+  let perform_forward_pass = forward_pass ~logspace t read_size in
+  let output_array =
+    let number_alleles = List.length t.alleles in
+    if logspace then
+      ForwardLogSpace.per_allele_emission_arr number_alleles
+    else
+      Forward.per_allele_emission_arr number_alleles
+  in
+  perform_forward_pass, output_array
+

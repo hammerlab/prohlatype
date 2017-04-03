@@ -30,32 +30,26 @@ let to_read_size_dependent
 
 exception PPE of string
 
-let to_update_f ~logspace final_run_len fp update_me fqi =
+let to_update_f ~logspace perform_forward_pass update_me fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
     let p = if logspace then Fastq.phred_log_probs else Fastq.phred_probabilities in
     match p fqi.Biocaml_unix.Fastq.qualities with
     | Result.Error e       -> raise (PPE (Error.to_string_hum e))
     | Result.Ok read_probs ->
-      let fe = fp fqi.Biocaml_unix.Fastq.sequence read_probs in
-      let likelihoods = ParPHMM.to_allele_arr ~logspace fe final_run_len in
-      let c = if logspace then ( +. ) else ( *. ) in
-      Array.iteri likelihoods ~f:(fun i l -> update_me.(i) <- c update_me.(i) l);
-      update_me)
+      perform_forward_pass ~into:update_me fqi.Biocaml_unix.Fastq.sequence read_probs)
 
 let to_set ~logspace rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
   in
-  let alleles = pt.ParPHMM.alleles in
-  let n = List.length alleles in
-  let update_me = Array.make n 1. in
-  let fp = time (sprintf "Allocating forward pass workspace")
-    (fun () -> ParPHMM.forward_pass ~logspace pt.ParPHMM.conf read_size)
+  let perform_forward_pass, update_me =
+    time (sprintf "Allocating forward pass workspaces")
+      (fun () -> ParPHMM.setup ~logspace pt read_size)
   in
-  let update = to_update_f ~logspace pt.ParPHMM.conf.ParPHMM.final_run_len fp in
-  `Set (alleles, update, update_me)
+  let update = to_update_f ~logspace perform_forward_pass in
+  `Set (pt.ParPHMM.alleles, update, update_me)
 
 let across_fastq ?number_of_reads ~specific_reads ~logspace file init =
   try
@@ -75,7 +69,9 @@ let across_fastq ?number_of_reads ~specific_reads ~logspace file init =
         | `Set (alleles, _, final_likelihoods) ->
             List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
             |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-            |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
+            |> List.iter ~f:(fun (l,a) ->
+                let v = (*if logspace then 10. ** l else*) l in
+                printf "%10s\t%0.20f\n" a v)
   with PPE e ->
     eprintf "%s" e
 
