@@ -26,15 +26,15 @@ end
 module AverageExon = struct
 
   let against_mask ~init ~f =
-    List.fold_left ~init ~f:(fun a o ->
-      match o with | None -> a | Some (mismatches, ref_len) ->
-        f a ~mismatches ~ref_len)
+    List.fold_left ~init ~f:(fun a -> function
+      | None -> a
+      | Some (mismatches, ref_len) -> f a ~mismatches ~ref_len)
 
   let apply_mask ~init ~f =
     let open Option in
     List.fold_left2 ~init:(Some init) ~f:(fun aopt b c ->
       aopt >>= fun a ->
-        match b,c  with
+        match b, c with
         | None,   None   -> Some a
         | None,   _
         | _,      None   -> None
@@ -50,39 +50,42 @@ module AverageExon = struct
       else
         a +. mismatches)
 
-  let f ref_allele reference ~targets ~candidates =
+  let one ref_allele reference ~candidates ~allele =
     let open Mas_parser in
-    StringMap.mapi targets ~f:(fun al1 allele1 ->
-      let dist_to_ref = allele_distances ~reference ~allele:allele1 in
-      let ref_mask =
-        List.map dist_to_ref ~f:(fun s ->
-          match s.allele_relationships with
-          | Full _ -> Some (float s.mismatches, float s.reference_seq_length)
-          | _      -> None)
-      in
-      let tlen = against_mask ref_mask ~init:0.
-          ~f:(fun a ~mismatches ~ref_len -> a +. ref_len)
-      in
-      let dist_init, dist_f = dist ~normalize:true tlen in
-      let ref_diff = against_mask ~init:dist_init ~f:dist_f ref_mask in
-      let all_distances =
-        StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
-          let dlst =
-            Mas_parser.allele_distances_between
-              ~reference ~allele1 ~allele2
-            |> List.map ~f:(fun s ->
-                match s.allele_relationships with
-                | (Full _), (Full _) ->
-                    Some (float s.mismatches, float s.reference_seq_length)
-                | _                  ->
-                    None)
-          in
-          match apply_mask ~init:dist_init ~f:dist_f ref_mask dlst with
-          | None      -> acc
-          | Some dist -> (al2, dist) :: acc)
-      in
-      let with_reference = (ref_allele, ref_diff) :: all_distances in
-      List.sort with_reference ~cmp:(fun (_,d1) (_,(d2:float)) -> compare d1 d2))
+    let dist_to_ref = allele_distances ~reference ~allele in
+    let ref_mask =
+      List.map dist_to_ref ~f:(fun s ->
+        match s.allele_relationships with
+        | Full _ -> Some (float s.mismatches, float s.reference_seq_length)
+        | _      -> None)
+    in
+    let tlen = against_mask ref_mask ~init:0.
+        ~f:(fun a ~mismatches ~ref_len -> a +. ref_len)
+    in
+    let dist_init, dist_f = dist ~normalize:true tlen in
+    let ref_diff = against_mask ~init:dist_init ~f:dist_f ref_mask in
+    let all_distances =
+      StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
+        let dlst =
+          Mas_parser.allele_distances_between
+            ~reference ~allele1:allele ~allele2
+          |> List.map ~f:(fun s ->
+              match s.allele_relationships with
+              | (Full _), (Full _) ->
+                  Some (float s.mismatches, float s.reference_seq_length)
+              | _                  ->
+                  None)
+        in
+        match apply_mask ~init:dist_init ~f:dist_f ref_mask dlst with
+        | None      -> acc
+        | Some dist -> (al2, dist) :: acc)
+    in
+    let with_reference = (ref_allele, ref_diff) :: all_distances in
+    List.sort with_reference ~cmp:(fun (_,d1) (_,(d2:float)) -> compare d1 d2)
+
+  let f ref_allele reference ~targets ~candidates =
+    let c = one ref_allele reference ~candidates in
+    StringMap.mapi targets ~f:(fun _al1 allele -> c allele)
 
 end
 
@@ -90,6 +93,10 @@ type logic =
   | Trie
   | AverageExon
   [@@deriving show]
+
+let one ref_allele reference ~allele ~candidates = function
+  | Trie        -> Error "Distance for one allele using Trie not implemented."
+  | AverageExon -> Ok (AverageExon.one ref_allele reference ~candidates ~allele)
 
 let compute ref_allele reference ~targets ~candidates = function
   | Trie        -> TrieDistances.f ~targets ~candidates

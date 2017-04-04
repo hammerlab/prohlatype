@@ -37,16 +37,16 @@ At a lower level:
 
   3. Before merging the other alleles we separate them into 3 cases using
       [same_and_diff]:
-      - Alleles where we have both nucleic and genetic data.
-      - Alleles where we have only genetic data.
-      - Alleles where we have only nucleic data.
+      - Alleles where we have both nucleic and genetic data (4).
+      - Alleles where we have only genetic data (5).
+      - Alleles where we have only nucleic data (6).
 
   4. Merging the alleles where we have both genetic and nucleic data
      [same_alts]. We take the instructions formed from the reference and
      replace sequence elements with those of from the genetic and nucleic data
      ([map_instr_to_alignments]). And similarly to the reference, we also
      execute them  with [align_same]. [align_same] is much more complicated
-     than [align_reference] because it has:
+     than [align_reference] because it has to:
       - Actually deal with different merging sequences.
       - Maintain graph invariants such as start and end differences.
       - Deal with potential splice variants.
@@ -704,8 +704,9 @@ let same_and_diff ~gen_assoc ~nuc_assoc =
   in
   loop [] [] [] nuc_sort gen_sort
 
+let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
+
 let reference_as_diff lst =
-  let no_sequences = List.filter ~f:(fun a -> not (is_sequence a)) in
   List.map lst ~f:(function
     | FillFromGenetic f ->
         FillFromGenetic { f with sequence = no_sequences f.sequence }
@@ -779,3 +780,94 @@ let do_it ?verbose prefix dl =
                           ; alt_elems  = alt_als @ diff_alt_lst
                           } ,
                           map_lst @ diff_map_lst)
+
+let split_al_els pos e =
+  let open Mas_parser in
+  match e with
+  | Start p
+  | End p        -> if p < pos then
+                      `Later
+                    else (* p => pos*)
+                      `Before e
+  | Boundary b   -> if b.pos < pos then
+                      `Later
+                    else (* b.pos => pos*)
+                      `Before e
+  | Sequence seq -> if pos < seq.start then
+                      `Later
+                    else if pos >= seq.start + String.length seq.s then
+                      `Before e
+                    else
+                      let b, a = split_sequence seq ~pos in
+                      `Split (Sequence b, Sequence a)
+  | Gap gap      -> if pos < gap.gstart then
+                      `Later
+                    else if pos >= gap.gstart + gap.length then
+                      `Before e
+                    else
+                      let b, a = split_gap gap ~pos in
+                      `Split (Gap b, Gap a)
+
+let impute_seq ~bigger ~smaller =
+  let at_start e = match e with
+    | Start _ -> `After e
+    | _       -> `Later
+  in
+  let at_end e = match e with
+    | End _   -> `After e
+    | _       -> `Later
+  in
+  let rec split_at ~f ~acc = function
+    | []     -> acc, []
+    | h :: t ->
+        match f h with
+        | `Split (before, after)  -> (before :: acc), (after :: t)
+        | `Before before          -> (before :: acc), t
+        | `After after            -> acc,             (after :: t)
+        | `Later                  -> split_at ~f ~acc:(h :: acc) t
+  in
+  let rec merge_until_end merged smaller_start_pos bigger ~rest_smaller =
+    let start_with, rest_b = split_at ~acc:merged bigger ~f:(split_al_els smaller_start_pos) in
+    let without_end, rest_s = split_at ~acc:start_with rest_smaller ~f:at_end in
+    let smaller_end_pos = start_position (List.hd_exn rest_s) in
+    let _ignore_me, rest_b = split_at ~acc:[] rest_b ~f:(split_al_els smaller_end_pos) in
+    let _before_another_start, smaller_maybe_at_start = split_at ~acc:[] rest_s ~f:at_start in
+    start_merging without_end ~smaller:smaller_maybe_at_start ~bigger:rest_b
+  and start_merging acc ~smaller ~bigger =
+    match smaller with
+    | []           -> let ep = end_position (List.hd_exn acc) in
+                      List.rev (End ep :: acc)
+    | Start p :: t -> merge_until_end acc p bigger ~rest_smaller:t
+    | _            -> assert false
+  in
+  let _before_smaller_start, at_smaller_start = split_at smaller ~acc:[] ~f:at_start in
+  start_merging [] ~smaller:at_smaller_start ~bigger
+
+let naive_impute mp =
+  let open Mas_parser in
+  let reflength = sequence_length mp.ref_elems in
+  let to_fill, full = List.partition_map mp.alt_elems ~f:(fun (a, s) ->
+    let l = sequence_length s in
+    if l < reflength then `Fst (l, a, s) else `Snd (a, s))
+  in
+  let init = StringMap.singleton mp.reference (no_sequences mp.ref_elems) in
+  let candidates =
+    List.fold_left full ~init ~f:(fun m (key, data) ->
+      StringMap.add ~key ~data m)
+  in
+  let to_distances = Distances.one mp.reference mp.ref_elems Distances.AverageExon in
+  List.sort to_fill ~cmp:(fun (l1,_,_) (l2,_,_) -> compare l1 l2)
+  |> list_fold_ok ~init:candidates
+    ~f:(fun candidates (_length, a_name, a_seq) ->
+          to_distances ~candidates ~allele:a_seq >>= function
+            | []            -> error "Did not return _any_ distances to %s allele" a_name
+            | (key, d) :: _ -> (*printf "for %s merging %s\n" a_name key; *)
+                               let bigger = StringMap.find key candidates in
+                               let merged = impute_seq ~smaller:a_seq ~bigger in
+                               let allele_name = sprintf "%s - %s %f" a_name key d in
+                               Ok (StringMap.add ~key:allele_name ~data:merged candidates))
+    >>= fun merged_alleles ->
+      Ok { mp with alt_elems =
+                StringMap.bindings
+                (StringMap.remove mp.reference merged_alleles)}
+
