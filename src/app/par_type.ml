@@ -11,7 +11,7 @@ let time s f =
 
 let to_read_size_dependent
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance
+  ?alignment_file ?merge_file ~distance ~impute
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -19,14 +19,15 @@ let to_read_size_dependent
     ?number_alleles
     ~skip_disk_cache
     =
-    Common_options.to_input ?alignment_file ?merge_file ~distance () >>= fun input ->
-      let selectors =
-        regex_list @ specific_list @ without_list @
-          (match number_alleles with | None -> [] | Some s -> [s])
-      in
-      Ok (fun read_size ->
-          let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
-          Cache.par_phmm ~skip_disk_cache par_phmm_args)
+    Common_options.to_input ?alignment_file ?merge_file ~distance ~impute ()
+      >>= fun input ->
+        let selectors =
+          regex_list @ specific_list @ without_list @
+            (match number_alleles with | None -> [] | Some s -> [s])
+        in
+        Ok (fun read_size ->
+            let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
+            Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
 exception PPE of string
 
@@ -77,7 +78,7 @@ let across_fastq ?number_of_reads ~specific_reads ~logspace file init =
 
 let type_
   (* Allele information source *)
-  alignment_file merge_file distance
+  alignment_file merge_file distance not_impute
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
   (* Process *)
@@ -89,8 +90,10 @@ let type_
     not_logspace
     =
   let logspace = not not_logspace in
+  let impute   = not not_impute in
   let need_read_size_r =
-    to_read_size_dependent ?alignment_file ?merge_file ~distance
+    to_read_size_dependent
+      ?alignment_file ?merge_file ~distance ~impute
       ~regex_list ~specific_list ~without_list ?number_alleles
       ~skip_disk_cache
   in
@@ -122,6 +125,17 @@ let () =
     let doc = "Do not perform the calculation in \"log space\"." in
     Arg.(value & flag & info ~doc ["not-logspace"])
   in
+  let do_not_impute_flag =
+    let doc  = "Do NOT fill in the missing segments of alleles with an \
+                iterative algorithm that picks the closest allele with full \
+                length. The default behavior is to impute the sequences, \
+                so that (1) the per-allele likelihoods are comparable \
+                (the default behavior of unknown sequences biases reads \
+                to map correctly in that region) and (2) this limits the \
+                actual branching of transitions inside the PPHMM."
+    in
+    Arg.(value & flag & info ~doc ["do-not-impute"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -140,7 +154,7 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
-            $ file_arg $ merge_arg $ distance_flag
+            $ file_arg $ merge_arg $ distance_flag $ do_not_impute_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
             (* What to do ? *)

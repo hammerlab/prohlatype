@@ -174,8 +174,8 @@ end (* Selection *)
 module Input :
 sig
   type t =
-      AlignmentFile of string
-    | MergeFromPrefix of (string * Distances.logic)
+    | AlignmentFile of (string * bool)
+    | MergeFromPrefix of (string * Distances.logic * bool)
   val to_string : t -> string
   val construct :
     t ->

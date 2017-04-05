@@ -177,6 +177,7 @@ let type_
     alignment_file
     merge_file
     distance
+    impute
   (* allele selection. *)
     regex_list specific_list without_list number_alleles
   (* construction args. *)
@@ -197,7 +198,8 @@ let type_
     print_top do_not_normalize bucket error_output reduce_resolution =
   (* Not exposing this command line arg. *)
   let join_same_sequence = true in
-  Common_options.to_filename_and_graph_args ?alignment_file ?merge_file ~distance
+  Common_options.to_filename_and_graph_args
+      ?alignment_file ?merge_file ~distance ~impute
       ~specific_list ~regex_list ~without_list ?number_alleles
       ~join_same_sequence ~remove_reference
     >>= begin fun (option_based_fname, cargs) ->
@@ -413,7 +415,7 @@ let () =
     in
     Term.(const type_
             (* Graph construction args *)
-            $ file_arg $ merge_arg $ distance_flag
+            $ file_arg $ merge_arg $ distance_flag $ impute_flag
             (* allele selection. *)
             $ regex_arg
             $ allele_arg

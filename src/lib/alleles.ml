@@ -316,24 +316,35 @@ end (* Selection. *)
 module Input = struct
 
   type t =
-    (** For example A_nuc.txt, B_gen.txt, full path to file. *)
-    | AlignmentFile of string
-    (** For exampleEx. A, B, full path to prefix *)
-    | MergeFromPrefix of (string * Distances.logic)
+    | AlignmentFile
+          of (string            (* path to file (ex. ../alignments/A_nuc.txt) *)
+             * bool)                                               (* impute? *)
+    | MergeFromPrefix
+          of (string                   (* path to prefix (ex ../alignments/A) *)
+             * Distances.logic                   (* how to measure distances. *)
+             * bool)                                               (* impute? *)
 
   let to_string = function
-    | AlignmentFile path        -> sprintf "AF_%s"
+    | AlignmentFile (path, i)   -> sprintf "AF_%s_%b"
                                     (Filename.chop_extension
                                       (Filename.basename path))
-    | MergeFromPrefix (pp, dl)  -> sprintf "MGD_%s_%s"
-                                    (Filename.basename pp)
-                                    (Distances.show_logic dl)
+                                      i
+    | MergeFromPrefix (p, d, i) -> sprintf "MGD_%s_%s_%b"
+                                    (Filename.basename p)
+                                    (Distances.show_logic d)
+                                    i
 
   let construct = function
-    | AlignmentFile file                       ->
+    | AlignmentFile (file, impute) ->
         let mp = Mas_parser.from_file file in
-        Ok (mp, []) (* empty merge_map *)
-    | MergeFromPrefix (prefix, distance_logic) ->
-        Merge_mas.do_it prefix distance_logic
+        if impute then
+          Merge_mas.naive_impute mp
+        else
+          Ok (mp, []) (* empty merge_map *)
+    | MergeFromPrefix (prefix, distance_logic, impute) ->
+        if impute then
+          failwith "Imputation and merging not implemented!"
+        else
+          Merge_mas.do_it prefix distance_logic
 
 end (* Input *)

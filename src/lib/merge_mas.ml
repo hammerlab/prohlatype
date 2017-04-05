@@ -781,68 +781,69 @@ let do_it ?verbose prefix dl =
                           } ,
                           map_lst @ diff_map_lst)
 
-let split_al_els pos e =
+let split_al_els pos including e =
   let open Mas_parser in
   match e with
   | Start p
-  | End p        -> if p < pos then
+  | End p        -> if including && pos = p then
+                      `After
+                    else if pos >= p then
                       `Later
-                    else (* p => pos*)
-                      `Before e
-  | Boundary b   -> if b.pos < pos then
+                    else (* pos < p*)
+                      `After
+  | Boundary b   -> if pos >= b.pos then
                       `Later
-                    else (* b.pos => pos*)
-                      `Before e
-  | Sequence seq -> if pos < seq.start then
+                    else (* pos < b.pos *)
+                      `After
+  | Sequence seq -> if pos >= seq.start + String.length seq.s then
                       `Later
-                    else if pos >= seq.start + String.length seq.s then
-                      `Before e
-                    else
-                      let b, a = split_sequence seq ~pos in
+                    else if pos <= seq.start then
+                      `After
+                    else let b, a = split_sequence seq ~pos in
                       `Split (Sequence b, Sequence a)
-  | Gap gap      -> if pos < gap.gstart then
+  | Gap gap      -> if pos >= gap.gstart + gap.length then
                       `Later
-                    else if pos >= gap.gstart + gap.length then
-                      `Before e
-                    else
-                      let b, a = split_gap gap ~pos in
+                    else if pos <= gap.gstart then
+                      `After
+                    else let b, a = split_gap gap ~pos in
                       `Split (Gap b, Gap a)
 
 let impute_seq ~bigger ~smaller =
-  let at_start e = match e with
-    | Start _ -> `After e
+  let at_start = function
+    | Start _ -> `After
     | _       -> `Later
   in
-  let at_end e = match e with
-    | End _   -> `After e
+  let at_end = function
+    | End _   -> `After
     | _       -> `Later
   in
   let rec split_at ~f ~acc = function
     | []     -> acc, []
     | h :: t ->
         match f h with
-        | `Split (before, after)  -> (before :: acc), (after :: t)
-        | `Before before          -> (before :: acc), t
-        | `After after            -> acc,             (after :: t)
-        | `Later                  -> split_at ~f ~acc:(h :: acc) t
+        | `Split (b, a) -> (b :: acc), (a :: t)
+        | `Before       -> (h :: acc), t
+        | `After        -> acc,        (h :: t)
+        | `Later        -> split_at ~f ~acc:(h :: acc) t
   in
   let rec merge_until_end merged smaller_start_pos bigger ~rest_smaller =
-    let start_with, rest_b = split_at ~acc:merged bigger ~f:(split_al_els smaller_start_pos) in
+    let start_with, rest_b = split_at ~acc:merged bigger ~f:(split_al_els smaller_start_pos false) in
     let without_end, rest_s = split_at ~acc:start_with rest_smaller ~f:at_end in
-    let smaller_end_pos = start_position (List.hd_exn rest_s) in
-    let _ignore_me, rest_b = split_at ~acc:[] rest_b ~f:(split_al_els smaller_end_pos) in
+    let smaller_end_pos = end_position (List.hd_exn rest_s) in
+    let _ignore_me, b_after_s_end = split_at ~acc:[] rest_b ~f:(split_al_els smaller_end_pos true) in
     let _before_another_start, smaller_maybe_at_start = split_at ~acc:[] rest_s ~f:at_start in
-    start_merging without_end ~smaller:smaller_maybe_at_start ~bigger:rest_b
+    start_merging without_end ~smaller:smaller_maybe_at_start ~bigger:b_after_s_end
   and start_merging acc ~smaller ~bigger =
     match smaller with
-    | []           -> let ep = end_position (List.hd_exn acc) in
-                      List.rev (End ep :: acc)
+    | []           -> List.rev (List.rev_append bigger acc)
     | Start p :: t -> merge_until_end acc p bigger ~rest_smaller:t
     | _            -> assert false
   in
   let _before_smaller_start, at_smaller_start = split_at smaller ~acc:[] ~f:at_start in
   start_merging [] ~smaller:at_smaller_start ~bigger
 
+(* TODO: Implement Distances Logic via the name-Trie and expose the distance
+         logic argument. *)
 let naive_impute mp =
   let open Mas_parser in
   let reflength = sequence_length mp.ref_elems in
@@ -855,19 +856,23 @@ let naive_impute mp =
     List.fold_left full ~init ~f:(fun m (key, data) ->
       StringMap.add ~key ~data m)
   in
+  let merge_assoc = List.map full ~f:(fun (a, _) -> (a, a)) in
   let to_distances = Distances.one mp.reference mp.ref_elems Distances.AverageExon in
   List.sort to_fill ~cmp:(fun (l1,_,_) (l2,_,_) -> compare l1 l2)
-  |> list_fold_ok ~init:candidates
-    ~f:(fun candidates (_length, a_name, a_seq) ->
+  |> list_fold_ok ~init:(candidates, merge_assoc)
+    ~f:(fun (candidates, ma) (_length, a_name, a_seq) ->
           to_distances ~candidates ~allele:a_seq >>= function
             | []            -> error "Did not return _any_ distances to %s allele" a_name
             | (key, d) :: _ -> (*printf "for %s merging %s\n" a_name key; *)
                                let bigger = StringMap.find key candidates in
                                let merged = impute_seq ~smaller:a_seq ~bigger in
-                               let allele_name = sprintf "%s - %s %f" a_name key d in
-                               Ok (StringMap.add ~key:allele_name ~data:merged candidates))
-    >>= fun merged_alleles ->
-      Ok { mp with alt_elems =
+                               let merge_name = sprintf "%s %f" key d in
+                               let nma = (a_name, merge_name) :: ma in
+                               Ok (StringMap.add ~key:a_name ~data:merged candidates
+                                  , nma))
+    >>= fun (merged_alleles, merge_assoc) ->
+      Ok ({ mp with alt_elems =
                 StringMap.bindings
                 (StringMap.remove mp.reference merged_alleles)}
+          , merge_assoc)
 

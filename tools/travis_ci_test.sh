@@ -67,6 +67,14 @@ case "$TEST" in
     cp src/scripts/biological_kmer_tests.sh .
     time ./biological_kmer_tests.sh
     ;;
+  impute)
+    echo imputing A
+    time ./mhc2gpdf $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf
+    echo imputing B
+    time ./mhc2gpdf $IMGTHLA_DIR/alignments/B_gen.txt --no-pdf
+    echo imputing C
+    time ./mhc2gpdf $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
+    ;;
   *)
     ;;
 esac

@@ -169,6 +169,12 @@ let remove_reference_flag =
   in
   Arg.(value & flag & info ~doc ["no-reference"])
 
+let impute_flag =
+  let doc  = "Fill in the missing segments of alleles with an iterative \
+              algorithm that picks the closest allele with full length."
+  in
+  Arg.(value & flag & info ~doc ["impute"])
+
 let no_cache_flag =
   let doc =
     sprintf "Do not use a disk cache (in %s sub directory of the current \
@@ -184,15 +190,15 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_input ?alignment_file ?merge_file ~distance () =
+let to_input ?alignment_file ?merge_file ~distance ~impute () =
   match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (Alleles.Input.MergeFromPrefix (prefix, distance))
-  | (Some alignment_file), _  -> Ok (Alleles.Input.AlignmentFile alignment_file)
+  | _,          (Some prefix) -> Ok (Alleles.Input.MergeFromPrefix (prefix, distance, impute))
+  | (Some alignment_file), _  -> Ok (Alleles.Input.AlignmentFile (alignment_file, impute))
   | None,                None -> Error "Either a file or merge argument must be specified"
 
 let to_filename_and_graph_args
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance
+  ?alignment_file ?merge_file ~distance ~impute
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -200,7 +206,7 @@ let to_filename_and_graph_args
     ?number_alleles
   (* Graph modifiers. *)
   ~join_same_sequence ~remove_reference =
-    to_input ?alignment_file ?merge_file ~distance () >>= fun input ->
+    to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
       let selectors =
         regex_list @ specific_list @ without_list @
           (match number_alleles with | None -> [] | Some s -> [s])

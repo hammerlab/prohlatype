@@ -85,8 +85,8 @@ let graph_no_cache { input; arg } =
 let recent_check to_input to_date arg dateable =
   let file =
     match to_input arg with
-    | Alleles.Input.AlignmentFile f -> f
-    | Alleles.Input.MergeFromPrefix (p,_) -> p ^ "_nuc.txt"
+    | Alleles.Input.AlignmentFile (f,_)     -> f
+    | Alleles.Input.MergeFromPrefix (p,_,_) -> p ^ "_nuc.txt"
   in
   if Sys.file_exists file then begin
     let ic = open_in file in

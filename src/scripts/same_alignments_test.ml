@@ -48,7 +48,7 @@ open Common
 open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
-  let input = Alleles.Input.AlignmentFile file in
+  let input = Alleles.Input.AlignmentFile (file, false) in
   let default = Ref_graph.default_construction_arg in
   let arg = Option.value_map gi ~default
     ~f:(fun n -> { default with Ref_graph.selectors = [Alleles.Selection.Number n] })

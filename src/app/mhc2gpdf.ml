@@ -3,7 +3,7 @@ open Util
 
 let construct
   (* input *)
-  alignment_file merge_file distance
+  alignment_file merge_file distance impute
   (* output *)
   ofile
   (* allele selection. *)
@@ -18,9 +18,11 @@ let construct
   let open Cache in
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
-    Common_options.to_filename_and_graph_args ?alignment_file ?merge_file ~distance
+    Common_options.to_filename_and_graph_args
+      ?alignment_file ?merge_file ~distance ~impute
       ~specific_list ~regex_list ~without_list ?number_alleles
       ~join_same_sequence ~remove_reference
+
   in
   match fname_cargs_result with
   | Error msg ->
@@ -115,7 +117,7 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg $ distance_flag
+            $ file_arg $ merge_arg $ distance_flag $ impute_flag
             (* output file *)
             $ output_fname_arg
             (* allele selection. *)
