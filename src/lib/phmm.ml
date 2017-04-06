@@ -27,7 +27,7 @@ module TransitionMatrix = struct
   let deletion_idx  = 2
   let start_end_idx = 3 (* Compress the two nodes ala the Samtools note. *)
 
-  let init ?(model_probs=`Default) ~ref_length read_length =
+  let init_m ?(model_probs=`Default) ~ref_length read_length =
     let mp =
       match model_probs with
       | `Default                 -> default_probabilities ~read_length ()
@@ -62,6 +62,10 @@ module TransitionMatrix = struct
     tm.(start_end_idx).(insertion_idx)    <- alpha / ll;
     (*tm.(start_end_idx).(deletion_idx)   <- 0.; *)
     (*tm.(start_end_idx).(start_end_idx)  <- 0.; *)
+    tm
+
+  let init ?(model_probs=`Default) ~ref_length read_length =
+    let tm = init_m ~model_probs ~ref_length read_length in
     let to_index = function
       | `Match      -> match_idx
       | `Insert     -> insertion_idx
