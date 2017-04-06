@@ -604,33 +604,43 @@ type 'a cell =
   ; delete  : 'a array
   }
 
-type 'a workspace = 'a cell array array
+type 'a forward_pass_workspace = 'a cell array array
+
+type 'a workspace =
+  { forward             : 'a forward_pass_workspace
+  ; final               : 'a cell array
+  ; per_allele_emission : float array
+  }
 
 (* The initial value of the workspace should not matter as the forward pass
    mutates all of the elements. Therefore this method is currently, not,
    parameterized by the computation ring.*)
-let generate_workspace conf read_size =
+let generate_workspace conf read_size ~number_alleles =
   let just_zeros n = Array.make n 0. in
-  Array.mapi conf.transitions_m ~f:(fun k trans_row ->
-    Array.init read_size ~f:(fun i ->
-      let n =
-        if i = 0 then
-          Array.length trans_row.(0)
-        else
-          Array.length trans_row.(i-1)
-      in
+  { forward =
+      Array.mapi conf.transitions_m ~f:(fun k trans_row ->
+        Array.init read_size ~f:(fun i ->
+          let n =
+            if i = 0 then
+              Array.length trans_row.(0)
+            else
+              Array.length trans_row.(i-1)
+          in
+          { match_ = just_zeros n
+          ; insert = just_zeros n
+          ; delete = just_zeros n
+          }))
+  ; final =
+    (* The final emissions should have the same size as the last transition
+      column. Don't bother allocating the delete *)
+    Array.map conf.transitions_m ~f:(fun trans_row ->
+      let n = Array.length trans_row.(read_size-2) in
       { match_ = just_zeros n
       ; insert = just_zeros n
-      ; delete = just_zeros n
-      })),
-  (* The final emissions should have the same size as the last transition
-     column. Don't bother allocating the delete *)
-  Array.map conf.transitions_m ~f:(fun trans_row ->
-    let n = Array.length trans_row.(read_size-2) in
-    { match_ = just_zeros n
-    ; insert = just_zeros n
-    ; delete = [||]
-    })
+      ; delete = [||]
+      })
+  ; per_allele_emission = just_zeros number_alleles
+  }
 
 module type Ring = sig
 
@@ -659,12 +669,12 @@ end (* Ring *)
    these methods operate by mutating the last cell. *)
 type 'a fwd_recurrences =
   { start     : emissions -> transitions -> char -> float -> 'a cell -> unit
-  ; middle    : 'a workspace -> emissions -> transitions -> char -> float
+  ; middle    : 'a forward_pass_workspace -> emissions -> transitions -> char -> float
                               -> i:int -> int -> 'a cell  -> unit
   (* Doesn't use the delete section. *)
-  ; end_      : 'a workspace -> int -> 'a cell -> unit
+  ; end_      : 'a forward_pass_workspace -> int -> 'a cell -> unit
 
-(* Given the workspace and an array of the final run-length encoded
+(* Given the forward_pass_workspace and an array of the final run-length encoded
    transitions, return an array of per-allele final emission values.
    Specifically, the first element will have the total emission likelihood for
    the first allele, as represented by the final run-length encoded list.
@@ -735,22 +745,25 @@ module ForwardGen (R : Ring) = struct
                             let pi_i = fm.(k).(i-1).insert.(current) in
                             cell.insert.(j) <-
                               insert_prob * (t_m_i * pm_i + t_i_i * pi_i);
-                            match previous with
-                            | None                  -> (* mirror emissions. *)
-                                cell.match_.(j) <- ce.(current) * t_s_m;
-                                cell.delete.(j) <- zero
-                            | Some { state; index } ->
+                            let pm_m, pi_m, pd_m, pm_d, pd_d =
+                              match previous with
+                              | None                  -> (* mirror emissions. *)
+                                  zero, zero, zero, zero, zero
+                                  (*cell.match_.(j) <- ce.(current) * t_s_m;
+                                  cell.delete.(j) <- zero *)
+                              | Some { state; index } ->
                                 let ks = Pervasives.(+) k state in
-                                let pm_m = fm.(ks).(i-1).match_.(index) in
-                                let pi_m = fm.(ks).(i-1).insert.(index) in
-                                let pd_m = fm.(ks).(i-1).delete.(index) in
-                                cell.match_.(j) <-
-                                  ce.(current) * (t_m_m * pm_m
-                                                + t_i_m * pi_m
-                                                + t_d_m * pd_m);
-                                let pm_d = fm.(ks).(i).match_.(index) in
-                                let pd_d = fm.(ks).(i).insert.(index) in
-                                cell.delete.(j) <- t_m_d * pm_d + t_d_d * pd_d);
+                                fm.(ks).(i-1).match_.(index)
+                                , fm.(ks).(i-1).insert.(index)
+                                , fm.(ks).(i-1).delete.(index)
+                                , fm.(ks).(i).match_.(index)
+                                , fm.(ks).(i).insert.(index)
+                            in
+                            cell.match_.(j) <-
+                              ce.(current) * ( t_m_m * pm_m
+                                             + t_i_m * pi_m
+                                             + t_d_m * pd_m);
+                            cell.delete.(j) <- t_m_d * pm_d + t_d_d * pd_d);
                 end
     ; end_    = begin fun fm k cell ->
                   let fc = fm.(k).(read_size-2) in
@@ -778,7 +791,7 @@ module ForwardGen (R : Ring) = struct
 
 end (* ForwardGen *)
 
-module Forward = ForwardGen (struct
+module MutliplicativeProbability = struct
   type t = float
   let zero  = 0.
   let one   = 1.
@@ -795,9 +808,11 @@ module Forward = ForwardGen (struct
 
   let to_string = sprintf "%f"
 
-end)
+end (* MutliplicativeProbability *)
 
-module LogSpace = struct
+module Forward = ForwardGen(MutliplicativeProbability)
+
+module LogProbabilities = struct
 
   let zero  = neg_infinity
 
@@ -812,11 +827,6 @@ module LogSpace = struct
     else if ly = neg_infinity then lx
     else if lx > ly           then lx +. log10 (1. +. exp10 (ly -. lx))
     else (* lx < ly *)             ly +. log10 (1. +. exp10 (lx -. ly))
-
-end
-
-module ForwardLogSpace = ForwardGen (struct
-  include LogSpace
 
   type t = float
 
@@ -883,7 +893,9 @@ module ForwardLogSpace = ForwardGen (struct
               log10_one_minus_l_manual x
  *)
 
-end) (* ForwardLogSpace *)
+end (* LogProbabilities *)
+
+module ForwardLogSpace = ForwardGen (LogProbabilities)
 
 type t =
   { conf        : conf
@@ -905,7 +917,22 @@ let construct input selectors read_size =
     let conf = build_matrix ~read_size rlarr in
     Ok { conf ; align_date = mp.Mas_parser.align_date ; alleles ; merge_map }
 
-let forward_pass ?(logspace=true) { conf; alleles; _} read_size =
+let debug_ref = ref false
+
+let save_workspace ws =
+  let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
+  let oc = open_out fname in
+  Marshal.to_channel oc ws [];
+  close_out oc;
+  printf "Saved workspace to %s\n" fname
+
+let load_workspace fname =
+  let ic = open_in fname in
+  let ws : float workspace = Marshal.from_channel ic in
+  close_in ic;
+  ws
+
+let forward_pass ?(logspace=true) ?ws { conf; alleles; _} read_size =
   let read_size =
     if read_size > conf.read_size then begin
       eprintf "requested read size %d greater than configuration %d, will use \
@@ -914,9 +941,12 @@ let forward_pass ?(logspace=true) { conf; alleles; _} read_size =
     end else
       read_size
   in
-  let sm, e = generate_workspace conf read_size in
   let number_alleles = List.length alleles in
-  let emission_arr = Array.make number_alleles 0. in
+  let ws =
+    match ws with
+    | None   -> generate_workspace conf read_size ~number_alleles
+    | Some w -> w
+  in
   let bigK = Array.length conf.transitions_m in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_prob = 0.25 in
@@ -928,26 +958,27 @@ let forward_pass ?(logspace=true) { conf; alleles; _} read_size =
     (* Fill in start. *)
     for k = 0 to bigK - 1 do
       recurrences.start conf.emissions_a.(k) conf.transitions_m.(k).(0)
-        (String.get_exn read 0) read_prob.(0) sm.(k).(0);
+        (String.get_exn read 0) read_prob.(0) ws.forward.(k).(0);
     done;
     (* Fill in middle  *)
     for i = 1 to read_size - 1 do
       let base = String.get_exn read i in
       let base_prob = read_prob.(i) in
       for k = 0 to bigK - 1 do
-        recurrences.middle sm conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
-          base base_prob ~i k sm.(k).(i)
+        recurrences.middle ws.forward conf.emissions_a.(k) conf.transitions_m.(k).(i-1)
+          base base_prob ~i k ws.forward.(k).(i)
       done;
     done;
     for k = 0 to bigK - 1 do
-      recurrences.end_ sm k e.(k)
+      recurrences.end_ ws.forward k ws.final.(k)
     done;
-    recurrences.emission e conf.final_run_len emission_arr;
-    recurrences.combine ~into emission_arr;
+    recurrences.emission ws.final conf.final_run_len ws.per_allele_emission;
+    recurrences.combine ~into ws.per_allele_emission;
+    if !debug_ref then save_workspace ws;
     into
 
-let setup ~logspace t read_size =
-  let perform_forward_pass = forward_pass ~logspace t read_size in
+let setup ?ws ~logspace t read_size =
+  let perform_forward_pass = forward_pass ?ws ~logspace t read_size in
   let output_array =
     let number_alleles = List.length t.alleles in
     if logspace then
