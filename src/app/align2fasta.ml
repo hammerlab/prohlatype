@@ -21,10 +21,9 @@ let against_mp ?merge_assoc mp out =
   | Some ma ->
     List.iter all ~f:(fun (r,s) ->
       let mg =
-        try
-          let i = List.assoc r ma in
-          if i = r then "" else sprintf " %s introns" i
-        with Not_found -> ""
+        match List.Assoc.get r ma with
+        | None -> ""
+        | Some i -> if i = r then "" else sprintf " %s introns" i
       in
       fprintf oc ">%s%s %d bp\n%s\n" r mg (String.length s) s);
   end;

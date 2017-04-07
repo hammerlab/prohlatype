@@ -13,7 +13,12 @@ open Common
 
 let apply_allele a r =
   let open Mas_parser in
-  allele_sequence ~reference:r.ref_elems ~allele:(List.assoc a r.alt_elems) ()
+  let allele =
+    match List.Assoc.get a r.alt_elems with
+    | None -> invalid_argf "missing allele %s" a
+    | Some a -> a
+  in
+  allele_sequence ~reference:r.ref_elems ~allele ()
 
 let test f =
   let r = Mas_parser.from_file f in

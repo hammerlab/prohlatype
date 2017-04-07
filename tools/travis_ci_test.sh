@@ -4,9 +4,11 @@ set -e
 # TODO: pin this to a specific version!
 git clone https://github.com/ANHIG/IMGTHLA.git
 
+
 eval `opam config env`
 export OPAMYES="true"
 
+opam pin add -k git nonstd https://bitbucket.org/smondet/nonstd
 make setup
 
 # for test coverage

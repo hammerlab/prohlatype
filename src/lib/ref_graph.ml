@@ -394,8 +394,9 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   let next_reference ~msg from =
     match next_node_along g aindex reference ~from with
     | Some n -> n
-    | None   -> try List.assoc from end_to_start_nodes
-                with Not_found -> invalid_arg msg
+    | None   -> match List.Assoc.get from end_to_start_nodes with
+                | Some n -> n
+                | None   -> invalid_arg msg
   in
   let add_allele_edge pv nv = add_allele_edge g aindex pv nv allele in
   let do_nothing _ _ = () in
@@ -1299,7 +1300,10 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
             (allele, start_and_stops) :: acc)
   in
   let bounds =
-    A.Map.init aindex (fun allele -> List.rev (List.assoc allele start_and_stop_assoc))
+    A.Map.init aindex (fun allele ->
+      match List.Assoc.get allele start_and_stop_assoc with
+      | Some alst -> List.rev alst
+      | None      -> assert false)
   in
   if join_same_sequence then
     JoinSameSequencePaths.do_it g aindex bounds; (* mutates g *)

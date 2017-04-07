@@ -128,8 +128,12 @@ let find_bad ?cache ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
             let (pos_new, lal_new) = just_lal ~compare_pos ~length gsidx read in
             let diff_opt =
               List.fold_left prev_lal ~init:[] ~f:(fun acc (a, c) ->
-                let new_c = List.assoc a lal_new in
-                if new_c <> c then (a, c) :: acc else acc)
+                  match List.Assoc.get a lal_new with
+                  | None -> assert false
+                  | Some new_c ->
+                      if new_c <> c then
+                        (a, c) :: acc
+                      else acc)
             in
             match diff_opt with
             | [] -> ((read, (pos_new, lal_new)) :: nacc), wacc
