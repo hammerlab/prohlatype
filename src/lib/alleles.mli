@@ -11,6 +11,8 @@ val equal : allele -> allele -> bool
 
 type index
 
+val length : index -> int
+
 (** [index list_of_alleles] will create an [index]. *)
 val index : allele list -> index
 
@@ -27,14 +29,15 @@ module Set : sig
   val singleton : index -> allele -> t
 
   (** [set index t allele] will make sure that [allele] is
-      in [t], specifically [is_set index t allele] will be [true]. *)
+      in [t], specifically [is_set index t allele] will be [true].
+      [t] is mutated. *)
   val set : index -> t -> allele -> t
 
   val unite : into:t -> t -> unit
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
-      [false]. *)
+      [false]. [t] is mutated. *)
   val clear : index -> t -> allele -> t
 
   (** [is_set index t allele] is [allele] in [t]. *)
@@ -101,6 +104,8 @@ module Map : sig
 
   type 'a t
 
+  val to_array : 'a t -> 'a array
+
   (** [make index default_value]. *)
   val make : index -> 'a -> 'a t
 
@@ -146,6 +151,8 @@ module Map : sig
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
+  val update_from : Set.t -> f:('a -> 'a) -> 'a t -> unit
+  
   (** [update_from_and_fold set f init map] updates and folds over the [set]
       elements of [map].*)
   val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
@@ -176,6 +183,7 @@ sig
   type t =
     | AlignmentFile of (string * bool)
     | MergeFromPrefix of (string * Distances.logic * bool)
+  val imputed : t -> bool
   val to_string : t -> string
   val construct :
     t ->

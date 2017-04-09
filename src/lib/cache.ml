@@ -161,12 +161,12 @@ let par_phmm_cache_dir =
   Filename.concat dir "parhmm"
 
 let par_phmm_no_cache { pinput; selectors ; read_size } =
-  ParPHMM.construct pinput selectors read_size
+  ParPHMM2.construct pinput selectors
 
 let par_phmm =
   let dir = Filename.concat (Sys.getcwd ()) par_phmm_cache_dir in
   let up_to_date =
-    recent_check (fun i -> i.pinput) (fun p -> p.ParPHMM.align_date)
+    recent_check (fun i -> i.pinput) (fun p -> p.ParPHMM2.align_date)
   in
   disk_memoize ~dir ~up_to_date par_phmm_args_to_string
     (invalid_arg_on_error "construct parphmm" par_phmm_no_cache)

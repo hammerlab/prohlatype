@@ -13,6 +13,8 @@ type index =
   ; to_allele : string array
   }
 
+let length { size; _} = size
+
 let index lst =
   let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
   let size, to_index =
@@ -214,6 +216,8 @@ module Map = struct
 
   type 'a t = 'a array
 
+  let to_array a = a
+
   let make { size; _} e =
     Array.make size e
 
@@ -263,6 +267,10 @@ module Map = struct
       with Not_found ->
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd
+
+  let update_from s ~f m =
+    Enum.iter (fun i -> m.(i) <- f m.(i))
+      (BitSet.enum s)
 
   let update_from_and_fold s ~f ~init m =
     Enum.fold (fun acc i ->
@@ -323,6 +331,10 @@ module Input = struct
           of (string                   (* path to prefix (ex ../alignments/A) *)
              * Distances.logic                   (* how to measure distances. *)
              * bool)                                               (* impute? *)
+
+  let imputed = function
+    | AlignmentFile (_, i)      -> i
+    | MergeFromPrefix (_, _, i) -> i
 
   let to_string = function
     | AlignmentFile (path, i)   -> sprintf "AF_%s_%b"

@@ -47,10 +47,11 @@ let to_set ~logspace rp read_size =
   in
   let perform_forward_pass, update_me =
     time (sprintf "Allocating forward pass workspaces")
-      (fun () -> ParPHMM.setup ~logspace pt read_size)
+      (fun () -> ParPHMM2.setup ~logspace pt read_size)
   in
   let update = to_update_f ~logspace perform_forward_pass in
-  `Set (pt.ParPHMM.alleles, update, update_me)
+  let alleles = Alleles.to_alleles pt.ParPHMM2.allele_index in
+  `Set (alleles, update, update_me)
 
 let across_fastq ?number_of_reads ~specific_reads ~logspace file init =
   try
