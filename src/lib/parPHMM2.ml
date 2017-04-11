@@ -375,10 +375,10 @@ let generate_workspace number_alleles bigK read_size =
 
 type 'a fwd_recurrences =
   { start     :  char -> float -> emissions -> 'a entry
-  ; first_row : 'a entry array array -> Alleles.index -> char -> float -> emissions -> 
-                              i:int -> 'a entry
-  ; middle    : 'a entry array array -> Alleles.index -> char -> float -> emissions -> 
-                              i:int -> k:int -> 'a entry
+  ; first_row : 'a entry array array -> Alleles.index -> char -> float ->
+                  emissions -> i:int -> 'a entry
+  ; middle    : 'a entry array array -> Alleles.index -> char -> float ->
+                  emissions -> i:int -> k:int -> 'a entry
   (* Doesn't use the delete section. *)
   ; end_      : 'a entry array array -> int -> 'a final_entry
 
@@ -389,21 +389,25 @@ type 'a fwd_recurrences =
   }
 
 let mutate_or_add value new_allele_set assoc =
-  let found =
-    List.fold assoc ~init:false ~f:(fun b (into, v) ->
-      if v = value then begin
+  let added =
+    List.fold assoc ~init:false ~f:(fun added (into, v) ->
+      if added then
+        added
+      else if v = value then begin
         Alleles.Set.unite ~into new_allele_set;
         true
       end else
         false)
   in
-  if found then
+  if added then
     assoc
   else
-    (new_allele_set, value) :: assoc
+    (Alleles.Set.copy new_allele_set, value) :: assoc
+
+let debug_set_assoc = ref false
 
 let set_assoc ali to_find slst =
-  (*printf "set_assoc %d\n" (List.length slst); *)
+  if !debug_set_assoc then printf "set_assoc %d\n" (List.length slst);
   let to_s = Alleles.Set.to_string ali in
   let rec loop to_find acc = function
     | []          -> invalid_argf "Still missing! %s after looking in: %s"
@@ -411,15 +415,15 @@ let set_assoc ali to_find slst =
     | (s, v) :: t ->
         let inter = Alleles.Set.inter s to_find in
         let still_to_find = Alleles.Set.diff to_find s in
-        (*printf "For\t%s\n\
-                in\t%s\n\
-                found\t%s\n\
-                butnot\t%s\n"
-          (to_s to_find) 
-          (to_s s) 
-          (to_s inter) 
-          (to_s still_to_find);
-          *)
+        if !debug_set_assoc then
+          printf "For\t%s\n\
+                  in\t%s\n\
+                  found\t%s\n\
+                  butnot\t%s\n"
+            (to_s to_find)
+            (to_s s)
+            (to_s inter)
+            (to_s still_to_find);
         if inter = to_find then                         (* Found everything *)
           (to_find, v) :: acc
         else if Alleles.Set.cardinal inter = 0 then       (* Found nothing. *)
@@ -474,7 +478,8 @@ module ForwardGen (R : Ring) = struct
                   List.fold_left emissions ~init:[]
                     ~f:(fun acc ((b, offset), allele_set) ->
                           let emp = to_match_prob base base_error b in
-                          mutate_or_add (offset, emp) allele_set acc)
+                          mutate_or_add (offset, emp)
+                          allele_set acc)
                   |> List.map ~f:(fun (allele_set, (_offset, emissionp)) ->
                         allele_set,
                         { match_ = emissionp * t_s_m
@@ -492,7 +497,7 @@ module ForwardGen (R : Ring) = struct
                         let inserts = set_assoc allele_set fm.(0).(i-1) in
                         (*printf "at k: %d i: %d offset:%d %d \n%!" 0 i offset j; *)
                           List.fold_left inserts ~init:acc ~f:(fun acc (als, c) ->
-                            mutate_or_add 
+                            mutate_or_add
                               { match_ = emp * ( t_m_m * zero
                                               + t_i_m * zero
                                               + t_d_m * zero)
@@ -520,12 +525,12 @@ module ForwardGen (R : Ring) = struct
                                     ~f:(fun acc (delete_s, delete_c) -> (* at delete_s intersects all 3!*)
                                           mutate_or_add
                                             { match_ = emp * ( t_m_m * match_c.match_
-                                                              + t_i_m * match_c.insert
-                                                              + t_d_m * match_c.delete)
-                                            ; insert = insert_prob * ( t_m_i * insert_c.match_ 
-                                                                      + t_i_i * insert_c.insert)
-                                            ; delete = t_m_d * delete_c.match_ 
-                                                      + t_d_d * delete_c.delete
+                                                             + t_i_m * match_c.insert
+                                                             + t_d_m * match_c.delete)
+                                            ; insert = insert_prob * ( t_m_i * insert_c.match_
+                                                                     + t_i_i * insert_c.insert)
+                                            ; delete = t_m_d * delete_c.match_
+                                                     + t_d_d * delete_c.delete
                                             } delete_s acc))))
                 end
     ; end_    = begin fun fm k ->
@@ -680,7 +685,7 @@ let construct input selectors =
       List.iter ~f:(fun (allele, altseq) -> aaa allele altseq ems) nalt_elems;
       Ok { align_date = mp.align_date
          ; allele_index
-         ; merge_map 
+         ; merge_map
          ; emissions_a = ems
          }
 
@@ -715,7 +720,7 @@ let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
   in
   let ws =
     match ws with
-    | Some w -> w 
+    | Some w -> w
     | None   -> generate_workspace number_alleles bigK read_size
   in
   fun ~into read read_prob ->
@@ -730,14 +735,14 @@ let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
     done;
     (* All other rows. *)
     for k = 1 to bigK - 1 do
+      let ek = emissions_a.(k) in
       ws.forward.(k).(0) <-
-        recurrences.start (String.get_exn read 0) read_prob.(0) emissions_a.(k);
+        recurrences.start (String.get_exn read 0) read_prob.(0) ek;
       for i = 1 to read_size - 1 do
         let base = String.get_exn read i in
         let base_prob = read_prob.(i) in
         ws.forward.(k).(i) <-
-          recurrences.middle ws.forward allele_index 
-            base base_prob ~i ~k emissions_a.(k)
+          recurrences.middle ws.forward allele_index base base_prob ~i ~k ek
       done
     done;
     for k = 0 to bigK - 1 do

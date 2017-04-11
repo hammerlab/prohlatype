@@ -130,6 +130,8 @@ module Set = struct
 
   type t = BitSet.t
 
+  let copy = BitSet.copy
+
   let init {size; _} =
     BitSet.create size
 

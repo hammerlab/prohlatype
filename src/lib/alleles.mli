@@ -22,6 +22,8 @@ module Set : sig
 
   type t
 
+  val copy : t -> t
+
   (** [init index] create an empty set. *)
   val init : index -> t
 
