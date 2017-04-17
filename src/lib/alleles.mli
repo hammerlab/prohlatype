@@ -35,7 +35,7 @@ module Set : sig
       [t] is mutated. *)
   val set : index -> t -> allele -> t
 
-  val unite : into:t -> t -> unit
+  (*val unite : into:t -> t -> unit *)
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
@@ -69,8 +69,8 @@ module Set : sig
       in [e2]. *)
   val diff : t -> t -> t
 
-  (** [complement index t] returns a set of all the alleles not in [t].*)
-  val complement : index -> t -> t
+  (** [complement t] returns a set of all the alleles not in [t].*)
+  val complement : t -> t
 
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : ?compress:bool -> index -> t -> string

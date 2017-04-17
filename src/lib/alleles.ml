@@ -1,7 +1,5 @@
 
 open Util
-module BitSet = Batteries.BitSet
-module Enum = Batteries.Enum
 
 type allele = string [@@deriving eq, ord]
 let compare = compare_allele
@@ -128,52 +126,54 @@ let to_alleles { to_allele; _ } = Array.to_list to_allele
 
 module Set = struct
 
-  type t = BitSet.t
+  type t = Bitv.t
 
-  let copy = BitSet.copy
+  let copy = Bitv.copy
 
   let init {size; _} =
-    BitSet.create size
+    Bitv.create size false
+
+  (* This is necessary for graph construction. *)
+  let empty () = Bitv.create 0 false
 
   let set { to_index; _ } s allele =
-    BitSet.set s (StringMap.find allele to_index);
+    Bitv.set s (StringMap.find allele to_index) true;
     s
 
-  let unite ~into from = BitSet.unite into from
+  (*let unite ~into from = CCBV.union_into ~into from *)
 
   let singleton index allele =
     let s = init index in
     set index s allele
 
   let clear { to_index; _ } s allele =
-    BitSet.unset s (StringMap.find allele to_index);
+    Bitv.set s (StringMap.find allele to_index) false;
     s
 
   let is_set { to_index; _ } s allele =
-    BitSet.mem s (StringMap.find allele to_index)
+    Bitv.get s (StringMap.find allele to_index)
 
   let fold { to_allele; } ~f ~init s =
-    Enum.fold (fun a i -> f a to_allele.(i)) init (BitSet.enum s)
+    let r = ref init in
+    Bitv.iteri_true (fun i -> r := f !r to_allele.(i)) s;
+    !r
 
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
 
-  let cardinal = BitSet.count
+  let cardinal = Bitv.pop
 
-  let empty = BitSet.empty
-  let compare = BitSet.compare
-  let equals = BitSet.equal
+  let compare = Pervasives.compare  (*?*)
 
-  let union = BitSet.union
+  let equals = (=) (*?*)
 
-  let inter = BitSet.inter
+  let union = Bitv.bw_or
 
-  let diff = BitSet.diff
+  let inter = Bitv.bw_and
 
-  let complement {size; _} t =
-    let c = BitSet.copy t in
-    for i = 0 to size - 1 do BitSet.toggle c i done;
-    c
+  let diff x y = Bitv.bw_and x (Bitv.bw_not  y)
+
+  let complement = Bitv.bw_not
 
   let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
@@ -183,7 +183,7 @@ module Set = struct
 
   let complement_string ?(compress=false) ?prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
-        ~f:(fun (i, acc) a -> if BitSet.mem s i
+        ~f:(fun (i, acc) a -> if Bitv.get s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
@@ -198,11 +198,12 @@ module Set = struct
 
   let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) t s =
     let make_shorter =
-      if BitSet.count s = t.size then
+      let p = Bitv.pop s in
+      if p = t.size then
         "Everything"
-      else if BitSet.count s = 0 then
+      else if p = 0 then
         "Nothing"
-      else if BitSet.count s <= t.size / 2 then
+      else if p <= t.size / 2 then
         to_string ~compress t s
       else
         match complement with
@@ -271,14 +272,15 @@ module Map = struct
     |> snd
 
   let update_from s ~f m =
-    Enum.iter (fun i -> m.(i) <- f m.(i))
-      (BitSet.enum s)
+    Bitv.iteri_true (fun i -> m.(i) <- f m.(i)) s
 
   let update_from_and_fold s ~f ~init m =
-    Enum.fold (fun acc i ->
-      let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
-      m.(i) <- nm;
-      nacc) init (BitSet.enum s)
+    let r = ref init in
+    Bitv.iteri_true (fun i ->
+      let nm, nacc = f !r m.(i) in (* Use in 1st position ala fold_left. *)
+      r := nacc;
+      m.(i) <- nm) s;
+    !r
 
   let choose m =
     m.(0)

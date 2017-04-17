@@ -810,9 +810,12 @@ module JoinSameSequencePaths = struct
       try
         let ecur = G.find_edge g pv nv in
         let into = G.E.label ecur in
-        A.Set.unite ~into e;
+        (*A.Set.unite ~into e; *)
+        G.remove_edge_e g ecur;
+        let u = A.Set.union into e in
+        G.add_edge_e g (G.E.create pv u nv);
       with Not_found ->
-          G.add_edge_e g (G.E.create pv e nv)
+        G.add_edge_e g (G.E.create pv e nv)
     in
     let split_and_rejoin ~index q p s =
       let node = N (p, s) in

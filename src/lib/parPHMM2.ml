@@ -388,7 +388,16 @@ type 'a fwd_recurrences =
   ; combine   : into:'a array -> 'a array -> unit
   }
 
-let mutate_or_add value new_allele_set assoc =
+(* Union, tail recursive. *)
+let mutate_or_add value allele_set lst =
+  let rec loop acc = function
+    | (s, v) :: t when v = value -> acc @ (Alleles.Set.union s allele_set, v) :: t
+    | h :: t                     -> loop (h :: acc) t
+    | []                         -> (allele_set, value) :: acc
+  in
+  loop [] lst
+
+(* let mutate_or_add value new_allele_set assoc =
   let added =
     List.fold assoc ~init:false ~f:(fun added (into, v) ->
       if added then
@@ -402,7 +411,7 @@ let mutate_or_add value new_allele_set assoc =
   if added then
     assoc
   else
-    (Alleles.Set.copy new_allele_set, value) :: assoc
+    (Alleles.Set.copy new_allele_set, value) :: assoc *)
 
 let debug_set_assoc = ref false
 
