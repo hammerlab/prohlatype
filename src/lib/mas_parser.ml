@@ -369,6 +369,14 @@ let from_file f =
     close_in ic;
     raise e
 
+let sequence_length l =
+  List.fold_left l ~init:(None, 0) ~f:(fun (spo, sum) m ->
+      match spo, m with
+      | None,   Start s -> (Some s), sum
+      | Some p, End e   -> None, (e - p + sum)
+      | _,      _       -> spo, sum)
+    |> snd
+
 module Boundaries = struct
 
   type marker =

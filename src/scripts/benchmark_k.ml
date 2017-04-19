@@ -6,8 +6,9 @@ open Common
 let () =
   let kmers_to_test = [ 5;6;7;8;9;10;11;12] in
   let doit k file =
-    let input = Ref_graph.AlignmentFile (to_alignment_file file) in
-    let carg = Cache.graph_args ~input () in
+    let input = Alleles.Input.AlignmentFile (to_alignment_file file, false) in
+    let arg = Ref_graph.default_construction_arg in
+    let carg = Cache.graph_args ~input ~arg in
     let g = Cache.graph carg in
     let kt = Index.kmer_counts g ~biological:true ~k in
     let dst = Kmer_table.distr kt in

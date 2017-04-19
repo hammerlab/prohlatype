@@ -156,15 +156,17 @@ type adjacent_info =
   }
 
 type t =
-  { align_date    : string                  (* When the alignment was created by IMGT. *)
+  { align_date    : string                   (* When the alignment was created by IMGT. *)
   ; reference     : string
-  ; g             : G.t                     (* The actual graph. *)
-  ; aindex        : A.index                 (* The allele index, for Sets and Maps. *)
+  ; g             : G.t                                            (* The actual graph. *)
+  ; aindex        : A.index                     (* The allele index, for Sets and Maps. *)
   ; bounds        : sep list A.Map.t        (* Map of where the alleles start and stop. *)
   ; posarr        : by_position_array
   ; adjacents_arr : adjacent_info array
   ; offset        : int
-  ; merge_map     : (string * string) list  (* Left empty if not a merged graph *)
+  ; merge_map     : (string * string) list  (* Left empty if not a merged|imputed graph *)
+  (* TODO: Type the merge_map logic. Strings are too loose and the impute -> merge logic
+           isn't uniform. *)
   }
 
 let number_of_alleles g =
@@ -256,16 +258,14 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
 let output ?human_edges ?compress_edges ?compress_start ?insert_newlines
   ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
   output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short (fname ^ ".dot") t;
-  let r =
-    if pdf then
-      Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname)
+  if pdf then begin
+    let r = Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname) in
+    if r = 0 && open_ then
+      Sys.command (sprintf "open %s.pdf" fname)
     else
-      -1
-  in
-  if r = 0 && open_ then
-    Sys.command (sprintf "open %s.pdf" fname)
-  else
-    r
+      r
+  end else
+    0
 
 let save fname g =
   let oc = open_out fname in
@@ -350,39 +350,39 @@ let add_reference_elems g aindex allele ref_elems =
       | `Ended (start, end_) -> { start; end_})
   |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
-let test_consecutive_elements =
+let test_consecutive_elements allele =
   let open Mas_parser in
   let open Nodes in
   function
   | `Gap close_pos      ->
       begin function
-      | (End end_pos) :: tl when end_pos = close_pos      -> `End (close_pos, tl)
-      | Sequence {start; s} :: tl when start = close_pos  ->
+      | (End end_pos) :: tl when end_pos = close_pos        -> `End (close_pos, tl)
+      | Sequence {start; s} :: tl when start = close_pos    ->
           let new_close = start + String.length s in
           `Continue (Some (N (start, s)), (`Sequence new_close), tl)
-      | Start _ :: _                                      ->
-          invalid_argf "Another start after a Gap close %d." close_pos
-      | []  ->
-          invalid_argf "Empty list after Gap close %d." close_pos
+      | Start _ :: _                                        ->
+          invalid_argf "For %s another start after a Gap closes %d." allele close_pos
+      | []                                                  ->
+          invalid_argf "For %s Empty list after Gap close %d." allele close_pos
       | Boundary _ :: _
       | Sequence _ :: _
       | Gap _ :: _
-      | End _ :: _                                        -> `Close close_pos
+      | End _ :: _                                          -> `Close close_pos
       end
   | `Sequence close_pos ->
       begin function
-      | End end_pos :: tl when end_pos = close_pos        -> `End (close_pos, tl)
+      | End end_pos :: tl when end_pos = close_pos          -> `End (close_pos, tl)
       | Gap { gstart; length} :: tl when gstart = close_pos ->
           let new_close = gstart + length in
           `Continue (None, (`Gap new_close), tl)
-      | Start _ :: _                                      ->
-          invalid_argf "Another start after a Sequence close %d." close_pos
-      | []  ->
-          invalid_argf "Empty list after Sequence close %d." close_pos
+      | Start _ :: _                                        ->
+          invalid_argf "For %s another start after a Sequence close %d." allele close_pos
+      | []                                                  ->
+          invalid_argf "For %s empty list after Sequence close %d." allele close_pos
       | Boundary _ :: _
       | Sequence _ :: _
       | Gap _ :: _
-      | End _ :: _                                        -> `Close close_pos
+      | End _ :: _                                          -> `Close close_pos
       end
 
 let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
@@ -394,8 +394,9 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
   let next_reference ~msg from =
     match next_node_along g aindex reference ~from with
     | Some n -> n
-    | None   -> try List.assoc from end_to_start_nodes
-                with Not_found -> invalid_arg msg
+    | None   -> match List.Assoc.get from end_to_start_nodes with
+                | Some n -> n
+                | None   -> invalid_arg msg
   in
   let add_allele_edge pv nv = add_allele_edge g aindex pv nv allele in
   let do_nothing _ _ = () in
@@ -582,7 +583,7 @@ let add_non_ref g reference aindex (first_start, last_end, end_to_next_start_ass
      to link to the next sequence element iff they are consecutive
      (ex. "A..C", "...A..C" ) as opposed to linking back to the reference! *)
   and close_position_loop state ~prev ~next ~allele_node pe lst =
-    match test_consecutive_elements pe lst with
+    match test_consecutive_elements allele pe lst with
     | `End (end_pos, tl)                    ->
         add_end state end_pos allele_node  tl
     | `Close pos                            ->
@@ -809,9 +810,12 @@ module JoinSameSequencePaths = struct
       try
         let ecur = G.find_edge g pv nv in
         let into = G.E.label ecur in
-        A.Set.unite ~into e;
+        (*A.Set.unite ~into e; *)
+        G.remove_edge_e g ecur;
+        let u = A.Set.union into e in
+        G.add_edge_e g (G.E.create pv u nv);
       with Not_found ->
-          G.add_edge_e g (G.E.create pv e nv)
+        G.add_edge_e g (G.E.create pv e nv)
     in
     let split_and_rejoin ~index q p s =
       let node = N (p, s) in
@@ -1262,53 +1266,30 @@ let create_adjacents_arr g aindex offset posarr bounds =
     pensr := Some edge_node_set;
     {edge_node_set; seen_alleles})
 
-type construct_which_args =
-  | NumberOfAlts of int
-  | Alleles of { specific : string list
-               ; regex    : string list
-               ; without  : string list
-               }
+type construction_arg =
+  { selectors           : Alleles.Selection.t list
+  ; join_same_sequence  : bool
+  ; remove_reference    : bool
+  }
 
-let construct_which_args_to_string = function
-  | NumberOfAlts n                          -> sprintf "N%d" n
-  | Alleles { specific
-            ; regex = []
-            ; without = []
-            } when List.length specific < 5 -> sprintf "S%s" (String.concat ~sep:"_" specific)
-  | Alleles { specific; regex; without }    -> String.concat (specific @ regex @ without)
-                                               |> Digest.string
-                                               |> Digest.to_hex
-                                               |> sprintf "R%s"
+let default_construction_arg =
+  { selectors          = []
+  ; join_same_sequence = true
+  ; remove_reference   = false
+  }
 
-let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
-  ?(remove_reference=false) r =
+let construction_arg_to_string
+  { selectors; join_same_sequence; remove_reference } =
+    sprintf "%s_%b_%b"
+      (Alleles.Selection.list_to_string selectors)
+      join_same_sequence remove_reference
+
+let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let open Mas_parser in
+  let { selectors ; join_same_sequence; remove_reference; } = arg in
   let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> A.compare n1 n2) alt_elems in
-  let alt_alleles =
-    match which with
-    | None ->
-        alt_elems
-    | Some (NumberOfAlts num_alt_to_add) ->
-        List.take alt_elems num_alt_to_add
-    | Some (Alleles {specific; regex; without })   ->
-        let assoc_wrap name =
-          if name = reference then None else
-            try Some (name, List.assoc name alt_elems)
-            with Not_found ->
-              eprintf "Ignoring Not_found requested allele %s in graph construction."
-                name;
-              None
-        in
-        let from_specific = List.filter_map specific ~f:assoc_wrap in
-        let from_regex =
-          let regexes = List.map regex ~f:(Re_posix.compile_pat) in
-          List.filter alt_elems ~f:(fun (alt, alt_seq) ->
-            List.exists regexes ~f:(fun r -> Re.execp r alt))
-        in
-        List.filter ~f:(fun (a, _) -> not (List.mem a ~set:without))
-          (from_specific @ from_regex)
-  in
+  let alt_alleles = Alleles.Selection.apply_to_assoc selectors alt_elems in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
@@ -1322,10 +1303,13 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
             (allele, start_and_stops) :: acc)
   in
   let bounds =
-    A.Map.init aindex (fun allele -> List.rev (List.assoc allele start_and_stop_assoc))
+    A.Map.init aindex (fun allele ->
+      match List.Assoc.get allele start_and_stop_assoc with
+      | Some alst -> List.rev alst
+      | None      -> assert false)
   in
   if join_same_sequence then
-    JoinSameSequencePaths.do_it g aindex bounds; (* mutates 'g' *)
+    JoinSameSequencePaths.do_it g aindex bounds; (* mutates g *)
   let g, aindex, bounds =
     if remove_reference then
       RemoveSequence.do_it reference g aindex bounds
@@ -1346,27 +1330,9 @@ let construct_from_parsed ?(merge_map=[]) ?which ?(join_same_sequence=true)
   ; adjacents_arr
   }
 
-type input =
-  (* Ex. A_nuc.txt, B_gen.txt, full path to file. *)
-  | AlignmentFile of string
-  (* Ex. A, B, full path to prefix *)
-  | MergeFromPrefix of (string * Distances.logic)
-
-let input_to_string = function
-  | AlignmentFile path        -> Filename.basename path
-  | MergeFromPrefix (pp, dl)  -> sprintf "%s-%s_mgd"
-                                  (Distances.show_logic dl)
-                                  (Filename.basename pp)
-
-let construct_from_file ~join_same_sequence ~remove_reference ?which = function
-  | AlignmentFile file ->
-      Ok (construct_from_parsed
-            ~join_same_sequence ~remove_reference ?which
-            (Mas_parser.from_file file))
-  | MergeFromPrefix (prefix, dl) ->
-      Merge_mas.do_it prefix dl >>= fun (alignment, merge_map) ->
-        Ok (construct_from_parsed ~merge_map
-            ~join_same_sequence ~remove_reference ?which alignment)
+let construct ?arg input =
+  Alleles.Input.construct input >>= fun (mp, merge_map) ->
+      Ok (construct_from_parsed ~merge_map ?arg mp)
 
 (* More powerful accessors *)
 let all_bounds { aindex; bounds; _} allele =

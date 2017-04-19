@@ -290,7 +290,7 @@ module Make_alignment (Ag : Alignment_config) = struct
       this isn't strictly true since the Start of that allele could be within
       the range of the search str.
       - One approach would be to add the other starts, to the adjacents results.  *)
-    let not_seen = Alleles.Set.complement gt.aindex seen_alleles in
+    let not_seen = Alleles.Set.complement seen_alleles in
     let mismatch_whole_read = Ag.mismatches search_str_length in
     let assigned_not_seen = assign not_seen ~search_pos:0 Ag.stop_init mismatch_whole_read in
     match assigned_not_seen with

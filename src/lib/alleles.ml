@@ -1,7 +1,5 @@
 
 open Util
-module BitSet = Batteries.BitSet
-module Enum = Batteries.Enum
 
 type allele = string [@@deriving eq, ord]
 let compare = compare_allele
@@ -12,6 +10,8 @@ type index =
   ; to_index  : int StringMap.t
   ; to_allele : string array
   }
+
+let length { size; _} = size
 
 let index lst =
   let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
@@ -126,50 +126,54 @@ let to_alleles { to_allele; _ } = Array.to_list to_allele
 
 module Set = struct
 
-  type t = BitSet.t
+  type t = Bitv.t
+
+  let copy = Bitv.copy
 
   let init {size; _} =
-    BitSet.create size
+    Bitv.create size false
+
+  (* This is necessary for graph construction. *)
+  let empty () = Bitv.create 0 false
 
   let set { to_index; _ } s allele =
-    BitSet.set s (StringMap.find allele to_index);
+    Bitv.set s (StringMap.find allele to_index) true;
     s
 
-  let unite ~into from = BitSet.unite into from
+  (*let unite ~into from = CCBV.union_into ~into from *)
 
   let singleton index allele =
     let s = init index in
     set index s allele
 
   let clear { to_index; _ } s allele =
-    BitSet.unset s (StringMap.find allele to_index);
+    Bitv.set s (StringMap.find allele to_index) false;
     s
 
   let is_set { to_index; _ } s allele =
-    BitSet.mem s (StringMap.find allele to_index)
+    Bitv.get s (StringMap.find allele to_index)
 
   let fold { to_allele; } ~f ~init s =
-    Enum.fold (fun a i -> f a to_allele.(i)) init (BitSet.enum s)
+    let r = ref init in
+    Bitv.iteri_true (fun i -> r := f !r to_allele.(i)) s;
+    !r
 
   let iter index ~f s =
     fold index ~init:() ~f:(fun () a -> f a) s
 
-  let cardinal = BitSet.count
+  let cardinal = Bitv.pop
 
-  let empty = BitSet.empty
-  let compare = BitSet.compare
-  let equals = BitSet.equal
+  let compare = Pervasives.compare  (*?*)
 
-  let union = BitSet.union
+  let equals = (=) (*?*)
 
-  let inter = BitSet.inter
+  let union = Bitv.bw_or
 
-  let diff = BitSet.diff
+  let inter = Bitv.bw_and
 
-  let complement {size; _} t =
-    let c = BitSet.copy t in
-    for i = 0 to size - 1 do BitSet.toggle c i done;
-    c
+  let diff x y = Bitv.bw_and x (Bitv.bw_not  y)
+
+  let complement = Bitv.bw_not
 
   let to_string ?(compress=false) index s =
     fold index ~f:(fun a s -> s :: a) ~init:[] s
@@ -179,7 +183,7 @@ module Set = struct
 
   let complement_string ?(compress=false) ?prefix { to_allele; _} s =
     Array.fold_left to_allele ~init:(0, [])
-        ~f:(fun (i, acc) a -> if BitSet.mem s i
+        ~f:(fun (i, acc) a -> if Bitv.get s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
@@ -194,11 +198,12 @@ module Set = struct
 
   let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) t s =
     let make_shorter =
-      if BitSet.count s = t.size then
+      let p = Bitv.pop s in
+      if p = t.size then
         "Everything"
-      else if BitSet.count s = 0 then
+      else if p = 0 then
         "Nothing"
-      else if BitSet.count s <= t.size / 2 then
+      else if p <= t.size / 2 then
         to_string ~compress t s
       else
         match complement with
@@ -213,6 +218,8 @@ end (* Set *)
 module Map = struct
 
   type 'a t = 'a array
+
+  let to_array a = a
 
   let make { size; _} e =
     Array.make size e
@@ -264,13 +271,96 @@ module Map = struct
         (i + 1, (v, Set.singleton index a) ::asc))
     |> snd
 
+  let update_from s ~f m =
+    Bitv.iteri_true (fun i -> m.(i) <- f m.(i)) s
+
   let update_from_and_fold s ~f ~init m =
-    Enum.fold (fun acc i ->
-      let nm, nacc = f acc m.(i) in (* Use in 1st position ala fold_left. *)
-      m.(i) <- nm;
-      nacc) init (BitSet.enum s)
+    let r = ref init in
+    Bitv.iteri_true (fun i ->
+      let nm, nacc = f !r m.(i) in (* Use in 1st position ala fold_left. *)
+      r := nacc;
+      m.(i) <- nm) s;
+    !r
 
   let choose m =
     m.(0)
 
 end (* Map *)
+
+(* Different logic of how we choose which alleles to include in the analysis. *)
+module Selection = struct
+
+  (* Defined in this order to so that to apply multiple selections, we can sort
+     the list and apply Regex's first to generate possibilities and then use
+     reducing selectors like Without and Number afterwards. *)
+  type t =
+    | Regex of string
+    | Specific of string
+    | Without of string
+    | Number of int
+    [@@ deriving eq, ord, show ]
+    (* When ppx_deriving >4.1 hits:
+    [@@ deriving eq, ord, show { with_path = false }] *)
+
+  (* A bit more concise than show and easier for filenames.*)
+  let to_string = function
+    | Regex r     -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
+    | Specific s  -> sprintf "S%s" s
+    | Without e   -> sprintf "W%s" e
+    | Number n    -> sprintf "N%d" n
+
+  let list_to_string l =
+    String.concat ~sep:"_" (List.map l ~f:(to_string))
+
+  let apply_to_assoc lst =
+    let sorted = List.sort ~cmp:compare lst in
+    fun assoc ->
+      List.fold_left sorted ~init:assoc ~f:(fun acc -> function
+        | Regex r    -> let p = Re_posix.compile_pat r in
+                        List.filter acc ~f:(fun (allele, _) -> Re.execp p allele)
+        | Specific s -> List.filter acc ~f:(fun (allele, _) -> allele = s)
+        | Without e  -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
+        | Number n   -> List.take acc n)
+
+end (* Selection. *)
+
+(* Where do we get the allele information? *)
+module Input = struct
+
+  type t =
+    | AlignmentFile
+          of (string            (* path to file (ex. ../alignments/A_nuc.txt) *)
+             * bool)                                               (* impute? *)
+    | MergeFromPrefix
+          of (string                   (* path to prefix (ex ../alignments/A) *)
+             * Distances.logic                   (* how to measure distances. *)
+             * bool)                                               (* impute? *)
+
+  let imputed = function
+    | AlignmentFile (_, i)      -> i
+    | MergeFromPrefix (_, _, i) -> i
+
+  let to_string = function
+    | AlignmentFile (path, i)   -> sprintf "AF_%s_%b"
+                                    (Filename.chop_extension
+                                      (Filename.basename path))
+                                      i
+    | MergeFromPrefix (p, d, i) -> sprintf "MGD_%s_%s_%b"
+                                    (Filename.basename p)
+                                    (Distances.show_logic d)
+                                    i
+
+  let construct = function
+    | AlignmentFile (file, impute) ->
+        let mp = Mas_parser.from_file file in
+        if impute then
+          Merge_mas.naive_impute mp
+        else
+          Ok (mp, []) (* empty merge_map *)
+    | MergeFromPrefix (prefix, distance_logic, impute) ->
+        if impute then
+          failwith "Imputation and merging not implemented!"
+        else
+          Merge_mas.do_it prefix distance_logic
+
+end (* Input *)

@@ -48,13 +48,16 @@ open Common
 open Alignment
 
 let g_and_idx ?(cache=true) ?(k=10) ~file ?gi () =
-  let input = Ref_graph.AlignmentFile file in
-  let n = Option.map gi (fun n -> Ref_graph.NumberOfAlts n) in
+  let input = Alleles.Input.AlignmentFile (file, false) in
+  let default = Ref_graph.default_construction_arg in
+  let arg = Option.value_map gi ~default
+    ~f:(fun n -> { default with Ref_graph.selectors = [Alleles.Selection.Number n] })
+  in
   if cache then
-    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ?n () })
+    Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ~arg })
   else
     Cache.((invalid_arg_on_error "construct graph and index"
-            graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ?n () })
+            graph_and_two_index_no_cache) { k = k; graph_args = graph_args ~input ~arg })
 
 let unwrap_sf = function | Stopped r | Finished r -> r
 
@@ -125,8 +128,12 @@ let find_bad ?cache ?(length=100) ?(k=10) ?stop reads_file ~file start_size =
             let (pos_new, lal_new) = just_lal ~compare_pos ~length gsidx read in
             let diff_opt =
               List.fold_left prev_lal ~init:[] ~f:(fun acc (a, c) ->
-                let new_c = List.assoc a lal_new in
-                if new_c <> c then (a, c) :: acc else acc)
+                  match List.Assoc.get a lal_new with
+                  | None -> assert false
+                  | Some new_c ->
+                      if new_c <> c then
+                        (a, c) :: acc
+                      else acc)
             in
             match diff_opt with
             | [] -> ((read, (pos_new, lal_new)) :: nacc), wacc

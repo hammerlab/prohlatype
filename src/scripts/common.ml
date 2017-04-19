@@ -1,6 +1,12 @@
 
 (** Common script declarations *)
 
+let time s f =
+  let n = Sys.time () in
+  let r = f () in
+  Printf.printf "%-10s:%f\n" s (Sys.time () -. n);
+  r
+
 let (//) = Filename.concat
 let imgthla_dir =
   try Sys.getenv "IMGTHLA_DIR"

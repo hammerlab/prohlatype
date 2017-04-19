@@ -11,6 +11,8 @@ val equal : allele -> allele -> bool
 
 type index
 
+val length : index -> int
+
 (** [index list_of_alleles] will create an [index]. *)
 val index : allele list -> index
 
@@ -20,6 +22,8 @@ module Set : sig
 
   type t
 
+  val copy : t -> t
+
   (** [init index] create an empty set. *)
   val init : index -> t
 
@@ -27,14 +31,15 @@ module Set : sig
   val singleton : index -> allele -> t
 
   (** [set index t allele] will make sure that [allele] is
-      in [t], specifically [is_set index t allele] will be [true]. *)
+      in [t], specifically [is_set index t allele] will be [true].
+      [t] is mutated. *)
   val set : index -> t -> allele -> t
 
-  val unite : into:t -> t -> unit
+  (*val unite : into:t -> t -> unit *)
 
   (** [clear index t allele] will make sure that [allele] is not
       in [t], specifically [is_set index t allele] will be
-      [false]. *)
+      [false]. [t] is mutated. *)
   val clear : index -> t -> allele -> t
 
   (** [is_set index t allele] is [allele] in [t]. *)
@@ -64,8 +69,8 @@ module Set : sig
       in [e2]. *)
   val diff : t -> t -> t
 
-  (** [complement index t] returns a set of all the alleles not in [t].*)
-  val complement : index -> t -> t
+  (** [complement t] returns a set of all the alleles not in [t].*)
+  val complement : t -> t
 
   (** Construct a string of all the alleles found in the edge set. *)
   val to_string : ?compress:bool -> index -> t -> string
@@ -100,6 +105,8 @@ end (* Set *)
 module Map : sig
 
   type 'a t
+
+  val to_array : 'a t -> 'a array
 
   (** [make index default_value]. *)
   val make : index -> 'a -> 'a t
@@ -146,6 +153,8 @@ module Map : sig
       an association list. *)
   val values_assoc : index -> 'a t -> ('a * Set.t) list
 
+  val update_from : Set.t -> f:('a -> 'a) -> 'a t -> unit
+  
   (** [update_from_and_fold set f init map] updates and folds over the [set]
       elements of [map].*)
   val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
@@ -154,3 +163,33 @@ module Map : sig
   val choose : 'a t -> 'a
 
 end (* Map *)
+
+module Selection :
+sig
+  type t =
+    | Regex of string
+    | Specific of string
+    | Without of string
+    | Number of int
+  val equal : t -> t -> Ppx_deriving_runtime.bool
+  val compare : t -> t -> Ppx_deriving_runtime.int
+  val show : t -> string
+  val pp : Format.formatter -> t -> unit
+  val to_string : t -> string
+  val list_to_string : t list -> string
+  val apply_to_assoc : t list -> (string * 'a) list -> (string * 'a) list
+end (* Selection *)
+
+module Input :
+sig
+  type t =
+    | AlignmentFile of (string * bool)
+    | MergeFromPrefix of (string * Distances.logic * bool)
+  val imputed : t -> bool
+  val to_string : t -> string
+  val construct :
+    t ->
+    (Mas_parser.result * (Util.StringMap.key * Util.StringMap.key) list,
+      string)
+    result
+end (* Input *)

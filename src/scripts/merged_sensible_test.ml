@@ -2,14 +2,16 @@
 open Common
 open Util
 
-let to_input prefix = function
-  | `MergeTrie      -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.Trie)
-  | `MergeAveExon   -> Ref_graph.MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon)
-  | `Genetic        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_gen"))
-  | `Nuclear        -> Ref_graph.AlignmentFile (to_alignment_file (prefix ^ "_nuc"))
+let to_input prefix =
+  let open Alleles.Input in function
+  | `MergeTrie      -> MergeFromPrefix (to_merge_prefix prefix, Distances.Trie, false)
+  | `MergeAveExon   -> MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon, false)
+  | `Genetic        -> AlignmentFile (to_alignment_file (prefix ^ "_gen"), false)
+  | `Nuclear        -> AlignmentFile (to_alignment_file (prefix ^ "_nuc"), false)
 
 let load prefix t =
-  Cache.(graph (graph_args ~input:(to_input prefix t) ()))
+  let arg = Ref_graph.default_construction_arg in
+  Cache.(graph (graph_args ~input:(to_input prefix t) ~arg))
 
 let split_into_xons = String.split ~on:(`Character '|')
 

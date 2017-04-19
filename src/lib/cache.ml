@@ -60,45 +60,33 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
       end
 
 type graph_args =
-  { input               : Ref_graph.input
-  ; which               : Ref_graph.construct_which_args option
-  ; join_same_sequence  : bool
-  ; remove_reference    : bool
+  { input   : Alleles.Input.t
+  ; arg     : Ref_graph.construction_arg
   }
 
-let graph_args ?n ?(join_same_sequence=true) ?(remove_reference=false) ~input () =
-  { input
-  ; which = n
-  ; join_same_sequence
-  ; remove_reference
-  }
+let graph_args ~arg ~input =
+  { input; arg }
 
-let graph_args_to_string ga =
-  sprintf "%s_%s_%b_%b"
-    (Ref_graph.input_to_string ga.input)
-    (match ga.which with
-      | None -> "All"
-      | Some w -> Ref_graph.construct_which_args_to_string w)
-    ga.join_same_sequence
-    ga.remove_reference
+let graph_args_to_string {arg; input} =
+  sprintf "%s_%s"
+    (Alleles.Input.to_string input)
+    (Ref_graph.construction_arg_to_string arg)
 
 let dir = ".cache"
 
 let graph_cache_dir = Filename.concat dir "graphs"
 
-let graph_no_cache
-  { input; which; join_same_sequence; remove_reference; _ } =
-  Ref_graph.construct_from_file ~join_same_sequence ~remove_reference ?which
-    input
+let graph_no_cache { input; arg } =
+  Ref_graph.construct ~arg input
 
 (* TODO: We should add date parsing, so that we can distinguish different
    graphs, and make sure that we can type against the most recent. Or compare
    typing across IMGT release dates. *)
-let recent_check arg graph =
+let recent_check to_input to_date arg dateable =
   let file =
-    match arg.input with
-    | Ref_graph.AlignmentFile f -> f
-    | Ref_graph.MergeFromPrefix (p,_) -> p ^ "_nuc.txt"
+    match to_input arg with
+    | Alleles.Input.AlignmentFile (f,_)     -> f
+    | Alleles.Input.MergeFromPrefix (p,_,_) -> p ^ "_nuc.txt"
   in
   if Sys.file_exists file then begin
     let ic = open_in file in
@@ -109,13 +97,13 @@ let recent_check arg graph =
         true
     | Some ad ->
         close_in ic;
-        let recent = ad = graph.Ref_graph.align_date in
+        let recent = (ad = to_date dateable) in
         if recent then recent else begin
           eprintf "Cached sequence alignment graph is not recent, rebuilding.\n";
           false
         end
   end else begin
-    eprintf "Alignment file %s is missing, using cached graph.\n" file;
+    eprintf "Alignment file %s is missing, using cached object.\n" file;
     true
   end
 
@@ -128,7 +116,10 @@ let invalid_arg_on_error action f =
 
 let graph =
   let dir = Filename.concat (Sys.getcwd ()) graph_cache_dir in
-  disk_memoize ~dir ~up_to_date:recent_check graph_args_to_string
+  let up_to_date =
+    recent_check (fun i -> i.input) (fun g -> g.Ref_graph.align_date)
+  in
+  disk_memoize ~dir ~up_to_date graph_args_to_string
     (invalid_arg_on_error "construct graph" graph_no_cache)
 
 type index_args =
@@ -150,3 +141,32 @@ let graph_and_two_index =
   let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
   disk_memoize ~dir index_args_to_string
     (invalid_arg_on_error "construct graph and index" graph_and_two_index_no_cache)
+
+type par_phmm_args =
+  { pinput    : Alleles.Input.t
+  ; selectors : Alleles.Selection.t list
+  ; read_size : int
+  }
+
+let par_phmm_args ~input ~selectors ~read_size =
+  { pinput = input; selectors ; read_size }
+
+let par_phmm_args_to_string {pinput; selectors; read_size} =
+  sprintf "%s_%s_%d"
+    (Alleles.Input.to_string pinput)
+    (Alleles.Selection.list_to_string selectors)
+    read_size
+
+let par_phmm_cache_dir =
+  Filename.concat dir "parhmm"
+
+let par_phmm_no_cache { pinput; selectors ; read_size } =
+  ParPHMM2.construct pinput selectors
+
+let par_phmm =
+  let dir = Filename.concat (Sys.getcwd ()) par_phmm_cache_dir in
+  let up_to_date =
+    recent_check (fun i -> i.pinput) (fun p -> p.ParPHMM2.align_date)
+  in
+  disk_memoize ~dir ~up_to_date par_phmm_args_to_string
+    (invalid_arg_on_error "construct parphmm" par_phmm_no_cache)

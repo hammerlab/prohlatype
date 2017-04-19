@@ -3,9 +3,10 @@
 set -e
 
 echo A_gen    && ./biological_kmers.native A_gen
-echo A_nuc    && ./biological_kmers.native A_nuc      "A*01:11N"
+# They really messed up this fasta file
+echo A_nuc    && ./biological_kmers.native A_nuc      "A*01:11N" "fA*01:11N"
 echo B_gen    && ./biological_kmers.native B_gen
-echo B_nuc    && ./biological_kmers.native B_nuc      "B*44:02:01:02S" "B*07:44N"
+echo B_nuc    && ./biological_kmers.native B_nuc      "B*44:02:01:02S" "B*07:44N" "fB*07:44N"
 echo C_gen    && ./biological_kmers.native C_gen
 echo C_nuc    && ./biological_kmers.native C_nuc      "C*04:09N"
 echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"

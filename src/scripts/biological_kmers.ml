@@ -22,15 +22,14 @@ let kmer_table_from_fasta ~k file =
   in
   kt, fasta_seqs
 
-let create_kmer_counts ~k file known_diff_alleles =
+let create_kmer_counts ~k file =
   let fasta_kt, fasta_seqs = kmer_table_from_fasta ~k (to_fasta_file file) in
-  let n = Ref_graph.Alleles { specific = []; regex = [".*"]
-                            ; without = known_diff_alleles }
-  in
-  let input = Ref_graph.AlignmentFile (to_alignment_file file) in
-  let gm = Cache.(graph (graph_args ~input ~n ())) in
+  let arg = Ref_graph.default_construction_arg in
+  let input = Alleles.Input.AlignmentFile (to_alignment_file file, false) in
+  let gm = Cache.(graph (graph_args ~input ~arg)) in
   let graph_kt = Index.kmer_counts ~biological:true ~k gm in
-  fasta_kt, fasta_seqs, graph_kt
+  let idx = Index.create ~k gm in
+  fasta_kt, fasta_seqs, graph_kt, idx
 
 let is_substring s ~sub =
   match String.index_of_string s ~sub with
@@ -43,9 +42,16 @@ let header_has_allele_name ~header allele =
 let known_allele_in_header ~header known_alleles =
   List.find known_alleles ~f:(header_has_allele_name ~header)
 
-let diff kt1 kt2 fasta_seqs known_alleles =
-  let k = Kmer_table.k kt1 in
-  if Kmer_table.k kt2 <> k then
+let diff ~fasta_table ~graph_table fasta_seqs known_alleles idx =
+  let graph_wrong, fasta_wrong =
+    List.partition_map known_alleles ~f:(fun s ->
+      if String.get_exn s ~index:0 = 'f' then
+        `Snd (String.drop s ~index:1)
+      else
+        `Fst s)
+  in
+  let k = Kmer_table.k fasta_table in
+  if Kmer_table.k graph_table <> k then
     invalid_argf "Different k!"
   else
     let last_index = (1 lsl (k * 2)) - 1 in
@@ -53,31 +59,65 @@ let diff kt1 kt2 fasta_seqs known_alleles =
       if i = last_index then
         None
       else
-        let v1 = Kmer_table.lookup kt1 i in
-        let v2 = Kmer_table.lookup kt2 i in
+        let v1 = Kmer_table.lookup fasta_table i in
+        let v2 = Kmer_table.lookup graph_table i in
         if v1 = 0 && v2 = 0 then
           loop (i + 1)
         else if v1 > 0 && v2 > 0 then
           loop (i + 1)
+        else if v1 = 0 then
+          check_missing_from_fasta i (Kmer_to_int.decode ~k i) v1 v2
         else
           check_known_diffs i (Kmer_to_int.decode ~k i) v1 v2 fasta_seqs
     and check_known_diffs i s v1 v2 = function
-      | [] -> Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d) \
-                            didn't find it in Fasta sequences!" i s v1 v2)
+      | [] ->
+          let pos_msg =
+            match Index.lookup idx s with
+            | Error ts    ->
+                sprintf "(Couldn't even find it in index: %s)"
+                  (show_too_short ts)
+            | Ok pos_lst  ->
+                sprintf "(at: %s)"
+                  (String.concat ~sep:","
+                    (List.map pos_lst ~f:Index.show_position))
+          in
+          Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d, %s) \
+                         didn't find it in Fasta sequences!" i s v1 v2 pos_msg)
       | (header, seq) :: t ->
           if is_substring seq ~sub:s then
-            match known_allele_in_header ~header known_alleles with
+            match known_allele_in_header ~header graph_wrong with
             | None ->
                 Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d), \
                                is in %s's sequence but not known! Check round \
                                trip?"
                         i s v1 v2 header)
             | Some allele ->
-                printf "for %d Kmer: %s (fasta occ: %d, graph occ: %d), is known diff for %s.\n"
-                    i s v1 v2 allele;
-                loop (i + 1)
+                begin
+                  printf "for %d Kmer: %s (fasta occ: %d, graph occ: %d), is \
+                          known diff for %s.\n" i s v1 v2 allele;
+                  loop (i + 1)
+                end
           else
             check_known_diffs i s v1 v2 t
+    and check_missing_from_fasta i s v1 v2 =
+      (* Only thing we can verify is that one of the fasta_wrong doesn't have
+         the kmer in the sequence! *)
+      let is_there_at_least_one_seq_with_missing_kmer =
+        List.map fasta_wrong ~f:(fun allele ->
+            List.filter_map fasta_seqs ~f:(fun (header, seq) ->
+              if header_has_allele_name ~header allele then
+                None
+              else if is_substring seq ~sub:s then
+                None
+              else
+                Some allele))
+      in
+      begin match is_there_at_least_one_seq_with_missing_kmer with
+          | []  -> Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d) \
+                                  didn't find in known fasta errors."
+                                    i s v1 v2)
+          | ls  -> None
+      end
     in
     loop 0
 
@@ -94,9 +134,7 @@ let () =
       else
         Sys.argv.(1), Array.to_list (Array.sub Sys.argv 1 (n - 1))
     in
-    let from_fasta, fasta_seqs, from_graph =
-      create_kmer_counts ~k file known_diff_alleles
-    in
-    match diff from_fasta from_graph fasta_seqs known_diff_alleles with
+    let fasta_table, fasta_seqs, graph_table, idx = create_kmer_counts ~k file in
+    match diff ~fasta_table ~graph_table fasta_seqs known_diff_alleles idx with
     | None     -> print_endline "same"
     | Some msg -> print_endline msg; exit (-1)

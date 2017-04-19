@@ -1,24 +1,28 @@
 
 open Util
-open Common_options
 
 let construct
   (* input *)
-  alignment_file merge_file distance
+  alignment_file merge_file distance impute
   (* output *)
   ofile
-  (* graph construction. *) 
-  num_alt_to_add allele_list allele_regex_list
-  remove_reference notshort no_pdf no_open skip_disk_cache max_edge_char_length
-  not_human_edges not_join_same_seq not_compress_edges not_compress_start
+  (* allele selection. *)
+  regex_list specific_list without_list number_alleles
+  (* Construction args *)
+  remove_reference not_join_same_seq
+  (* output configuration. *)
+  notshort no_pdf no_open skip_disk_cache max_edge_char_length
+  not_human_edges not_compress_edges not_compress_start
   not_insert_newlines =
   let open Ref_graph in
   let open Cache in
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
-    to_filename_and_graph_args ?alignment_file ?merge_file ~distance
-      num_alt_to_add ~allele_list ~allele_regex_list
+    Common_options.to_filename_and_graph_args
+      ?alignment_file ?merge_file ~distance ~impute
+      ~specific_list ~regex_list ~without_list ?number_alleles
       ~join_same_sequence ~remove_reference
+
   in
   match fname_cargs_result with
   | Error msg ->
@@ -42,6 +46,7 @@ let app_name = "mhc2gpdf"
 
 let () =
   let open Cmdliner in
+  let open Common_options in
   let output_fname_arg =
     let docv = "FILE" in
     let doc  = "Output file name, defaults to a file \"(input file)_(number of \
@@ -80,7 +85,8 @@ let () =
   let max_edge_char_length_flag =
     let docv = "POSITIVE INTEGER" in
     let doc = "Specify a max number of characters to label the edges. (ex 100)" in
-    Arg.(value & opt (some positive_int) None & info ~doc ~docv ["max-edge-char-length"])
+    Arg.(value & opt (some positive_int) None
+               & info ~doc ~docv ["max-edge-char-length"])
   in
   let do_not_compress_edges_flag =
     let doc = "Do not run encode the alleles along the edges." in
@@ -111,18 +117,22 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg $ distance_flag
+            $ file_arg $ merge_arg $ distance_flag $ impute_flag
             (* output file *)
             $ output_fname_arg
-            $ num_alt_arg
+            (* allele selection. *)
+            $ regex_arg
             $ allele_arg
-            $ allele_regex_arg
+            $ without_arg
+            $ num_alt_arg
+            (* construction args. *)
             $ remove_reference_flag
+            $ do_not_join_same_sequence_paths_flag
+            (* output configuration *)
             $ not_short_flag $ no_pdf_flag $ no_open_flag
             $ no_cache_flag
             $ max_edge_char_length_flag
             $ not_human_edges_flag
-            $ do_not_join_same_sequence_paths_flag
             $ do_not_compress_edges_flag
             $ do_not_compress_start_flag
             $ do_not_insert_newlines_flag

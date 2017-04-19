@@ -99,6 +99,8 @@ val from_in_channel : in_channel -> result
 (** Parse an alignment file. *)
 val from_file : string -> result
 
+val sequence_length : 'a alignment_element list -> int
+
 module Boundaries : sig
 
   type marker =
@@ -118,6 +120,10 @@ module Boundaries : sig
   val bounded : string alignment_element list -> (marker * string) list
 
 end
+
+val split_sequence : string sequence -> pos:position -> string sequence * string sequence
+
+val split_gap : gap -> pos:position -> gap * gap
 
 val allele_sequences : reference:string alignment_element list ->
   allele:string alignment_element list -> (Boundaries.marker * string) list
