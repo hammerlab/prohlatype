@@ -17,21 +17,21 @@ let split_into_xons = String.split ~on:(`Character '|')
 
 let list_zip = List.map2 ~f:(fun a b -> (a,b))
 
-let test_same ~merged_seq ~genetic_seq (nuc, gen) =
-  let labels = sprintf "nuc %s: " nuc , sprintf "gen %s: " gen in
+let test_same ~merged_seq ~genetic_seq allele =
+  let labels = sprintf "merged %s: " allele , sprintf "genetic %s: " allele in
   if merged_seq <> genetic_seq then begin
     let mxs = split_into_xons merged_seq in
     let gxs = split_into_xons genetic_seq in
     let mxs_n = List.length mxs in
     let gxs_n = List.length gxs in
     if mxs_n <> gxs_n then
-      error "Merged list for %s doesn't have the same number %d of xon elements as genetic %d %s"
-        nuc mxs_n gxs_n gen
+      error "Merged list for %s doesn't have the same number %d of xon elements as genetic %d"
+        allele mxs_n gxs_n
     else begin
       list_zip mxs gxs
       |> list_fold_ok ~init:() ~f:(fun () (m, g) ->
           if m <> g then
-            error "while testing inserting same nucleic sequence in genetic sequence: %s vs %s\n%s\n" nuc gen
+            error "while testing inserting same nucleic sequence in genetic sequence: %s\n%s\n" allele
               (manual_comp_display ~labels m g)
           else
               Ok ())
@@ -126,7 +126,7 @@ let () =
         Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
           Ref_graph.sequence ~boundaries:true genetic_graph gen >>= fun genetic_seq ->
             if nuc = gen then
-              test_same ~merged_seq ~genetic_seq p
+              test_same ~merged_seq ~genetic_seq nuc
             else
               Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
                 test_diff ~merged_seq ~genetic_seq ~nuclear_seq p
