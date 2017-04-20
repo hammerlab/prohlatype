@@ -89,9 +89,6 @@ case "$TEST" in
     ;;
 esac
 
-#echo testing same alignment
-#./same_alignments_test.native
-
 # Full adjacents calculation takes too long
 #cp src/scripts/adjacent_tests.sh .
 #./adjacent_tests.sh

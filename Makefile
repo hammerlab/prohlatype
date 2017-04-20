@@ -1,7 +1,7 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner bitv biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving.4.1 nonstd.0.0.2 sosa.0.2.0 ocamlgraph.1.8.6 cmdliner.1.0.0 bitv.1.2 biocaml.0.6.0
-TOOLS=mhc2gpdf type par_type align2fasta allele_distances
-TESTS=test_parsing round_trip same_alignments_test adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
+TOOLS=mhc2gpdf par_type align2fasta allele_distances
+TESTS=test_parsing round_trip adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
 
 .PHONY: default setup clean build tools tests covered_tests
@@ -29,9 +29,6 @@ test_parsing:
 
 round_trip:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts round_trip.native
-
-same_alignment:
-	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts same_alignments_test.native
 
 adjacents:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts adjacents.native
@@ -65,9 +62,6 @@ covered_tests:
 mhc2gpdf:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app mhc2gpdf.native
 
-type:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app type.native
-
 par_type:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app par_type.native
 
@@ -96,6 +90,3 @@ report: report_dir
 
 clean_reports:
 	rm -rf report_dir bisect*.out
-
-## Throw Away Scripts
-# ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package future.unix -package biocaml -package biocaml.unix -I src/lib/ -I src/app type.native
