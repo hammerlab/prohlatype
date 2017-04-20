@@ -10,7 +10,7 @@ echo B_nuc    && ./biological_kmers.native B_nuc      "B*44:02:01:02S" "B*07:44N
 echo C_gen    && ./biological_kmers.native C_gen
 echo C_nuc    && ./biological_kmers.native C_nuc      "C*04:09N"
 echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"
-echo DRB1_gen && ./biological_kmers.native DRB1_gen
+echo DRB1_gen && ./biological_kmers.native DRB1_gen   "DRB1*15:02:01:01" "DRB1*12:01:01:01"
 echo DMA_gen  && ./biological_kmers.native DMA_gen
 echo DMA_nuc  && ./biological_kmers.native DMA_nuc
 echo DMB_gen  && ./biological_kmers.native DMB_gen
@@ -21,7 +21,7 @@ echo DOB_gen  && ./biological_kmers.native DOB_gen    "DOB*01:04:01:02"
 echo DOB_nuc  && ./biological_kmers.native DOB_nuc
 echo DPA1_gen && ./biological_kmers.native DPA1_gen
 echo DPA1_nuc && ./biological_kmers.native DPA1_nuc
-echo DPB1_gen && ./biological_kmers.native DPB1_gen
+echo DPB1_gen && ./biological_kmers.native DPB1_gen   "DPB1*13:01:02"
 echo DPB1_nuc && ./biological_kmers.native DPB1_nuc
 echo DPB2_gen && ./biological_kmers.native DPB2_gen   "DPB2*01:01:01"
 echo DPB2_nuc && ./biological_kmers.native DPB2_nuc
@@ -31,7 +31,7 @@ echo DQB1_gen && ./biological_kmers.native DQB1_gen
 echo DQB1_nuc && ./biological_kmers.native DQB1_nuc   "DQB1*06:79:01"
 echo DRA_gen  && ./biological_kmers.native DRA_gen
 echo DRA_nuc  && ./biological_kmers.native DRA_nuc
-echo DRB1_gen && ./biological_kmers.native DRB1_gen
+echo DRB1_gen && ./biological_kmers.native DRB1_gen   "DRB1*12:01:01:01" "DRB1*15:02:01:01"
 echo DRB3_gen && ./biological_kmers.native DRB3_gen
 echo DRB4_gen && ./biological_kmers.native DRB4_gen
 echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"

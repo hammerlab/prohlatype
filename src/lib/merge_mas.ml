@@ -49,7 +49,6 @@ At a lower level:
      than [align_reference] because it has to:
       - Actually deal with different merging sequences.
       - Maintain graph invariants such as start and end differences.
-      - Deal with potential splice variants.
 
   5. It would be surprising if we had alleles where we have only genetic data,
      (since one could presumably infer the nucleic components), so an error
@@ -231,24 +230,25 @@ let split_at_boundary_offset_before_and_drop_it ~offset ~pos lst =
 
 let replace_sequence r s = { r with sequence = s }
 
-(* Special splicing adjustments. *)
+(* Special splicing adjustments.
 (* TODO: Figure out how to impute these from genetic. *)
-let a_01_11N ?(verbose=false) r =
+let a_01_11N ?(verbose=true) r =
   let open Boundaries in
   if r.bm.index = 1 then begin
     if verbose then
-      printf "Adjusting A*01:11N's third exon!\n";
-    r
+      printf "Adjusting A*01:11N's third exon!\n%s\n"
+      (region_to_string al_els_to_string r)
+      (*String.concat ~sep:";" (List.map ~f:al_els_to_string r.sequence)*) ;
     (* The latest (2017-01-24): 3270 IMGT release doesn't include the splice
-       variant in the alignment file.
+       variant in the alignment file. *)
       { r with sequence =
         List.filter r.sequence
-          ~f:(function | Gap { gstart = 1084 } -> false | _ -> true)
-         @ [ Sequence { start = 1085; s = "T" }
-           ; Gap { gstart = 1102; length = 17 }
-           ; Gap { gstart = 1122; length = 14 }
+          ~f:(function | Gap { gstart = 1085 } -> false | _ -> true)
+         @ [ Sequence { start = 1086; s = "T" }
+           ; Gap { gstart = 1103; length = 17 }
+           ; Gap { gstart = 1123; length = 14 }
            ]
-    } *)
+    }
   end else
     r
 
@@ -271,10 +271,10 @@ let known_splice_adjustments ?verbose = function
   | "B*15:01:01:02N" as n -> drop_splice_failure_from_exon ?verbose n ~index:(-1) ~end_pos:75
   | "C*04:09N"       as n -> drop_splice_failure_from_exon ?verbose n ~index:6 ~end_pos:2999
   | _                     -> id
+*)
 
 let map_instr_to_alignments ?verbose ?(fail_on_empty=true) nallele ~gen ~nuc alg =
   let open Boundaries in
-  let splice_adj = known_splice_adjustments ?verbose nallele in
   let rec start = function
     | FillFromGenetic f :: tl when before_start f.bm ->
                 fill_from_g [] f tl ~gen ~nuc
@@ -314,7 +314,7 @@ let map_instr_to_alignments ?verbose ?(fail_on_empty=true) nallele ~gen ~nuc alg
     in
     let nacc = MergeFromNuclear
       { genetic = replace_sequence genetic gen_els
-      ; nuclear = splice_adj (replace_sequence nuclear nuc_els)
+      ; nuclear = replace_sequence nuclear nuc_els
       } :: acc
     in
     loop nacc ~gen:gen_after ~nuc:nuc_after tl
@@ -735,22 +735,51 @@ let merge_mp_to_dc_inputs ~gen ~nuc =
           else
             cm)
 
-let do_it ?verbose prefix dl =
-  align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
+(* IMGT alignment format, (nor the XML) provide a robust way to detect splice
+   variants and their respective start/stop positions with respect to the
+   global alignmnet. In the past, I've hard-coded transformations that perform
+   the appropriate adjustment. This solution isn't feasible in the long term,
+   and is abandonded to the comments above. This association list
+   (locus -> alleles) provides a quick way to just remove those alleles from
+   the graph.
+
+   To try creating the graph without them set ~drop_known_splice_variants to
+   false *)
+let splice_variants =
+  [ "A", [ "A*01:11N" ; "A*29:01:01:02N" ; "A*26:01:01:03N" ; "A*03:01:01:02N" ]
+  ; "B", [ "B*15:01:01:02N"; "B*44:02:01:02S"; "B*07:44N" ]
+  ; "C", [ "C*04:09N" ]
+  ]
+
+let splice_variant_filter p =
+  match List.Assoc.get p splice_variants with
+  | None      -> fun l -> l
+  | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
+
+let do_it ?verbose ?(drop_known_splice_variants=true) prefix dl =
+       align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
     if gen_mp.reference <> nuc_mp.reference then
       error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
     else if gen_mp.align_date <> nuc_mp.align_date then
       error "Align dates don't match %s vs %s" gen_mp.align_date nuc_mp.align_date
     else
+      let gen_mp, nuc_mp =
+        if drop_known_splice_variants then begin
+          let f = splice_variant_filter (Filename.basename prefix) in
+          { gen_mp with alt_elems = f gen_mp.alt_elems},
+          { nuc_mp with alt_elems = f nuc_mp.alt_elems}
+        end else
+          gen_mp, nuc_mp
+      in
       let nuc = nuc_mp.ref_elems in
       let gen = gen_mp.ref_elems in
       map_instr_to_alignments ?verbose nuc_mp.reference ~gen ~nuc instr >>= fun ref_instr ->
         let new_ref_elems = align_reference ref_instr in
         reference_positions_align ~seq:("reference:" ^ gen_mp.reference)
           new_ref_elems >>= fun _ref_position_check ->
-            let gen_assoc = gen_mp.alt_elems in
-            let nuc_assoc = nuc_mp.alt_elems in
-            let same, just_gen, just_nuc = same_and_diff ~gen_assoc ~nuc_assoc in
+            let same, just_gen, just_nuc =
+              same_and_diff ~gen_assoc:gen_mp.alt_elems ~nuc_assoc:nuc_mp.alt_elems
+            in
             let () =
               if just_gen <> [] then
                 eprintf "Found these alleles with only genetic data: %s\n"
