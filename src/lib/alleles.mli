@@ -22,6 +22,10 @@ val to_alleles : index -> allele list
     Set or Map function. *)
 val setup : index -> unit
 
+(** Return the current setup index, it may be nonsensp
+. *)
+val current : unit -> index
+
 module Set : sig
 
   type set
@@ -72,6 +76,8 @@ module Set : sig
   (** [diff e1 e2] will return an edge set with alleles found in [e1] but not
       in [e2]. *)
   val diff : set -> set -> set
+
+  val inter_diff : set -> set -> set * set * bool * bool
 
   (** [complement set] returns a set of all the alleles not in [set].*)
   val complement : set -> set

@@ -134,6 +134,9 @@ let setup i =
   _index := i;
   Fixed_width.setup i.size
 
+let current () =
+  !_index
+
 module Set = struct
 
   type set = Fixed_width.t
@@ -180,6 +183,8 @@ module Set = struct
   let inter = Fixed_width.inter
 
   let diff = Fixed_width.diff
+
+  let inter_diff = Fixed_width.inter_diff
 
   let complement = Fixed_width.negate
 

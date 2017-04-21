@@ -205,6 +205,23 @@ let diff in_ not_in =
   diff_into ~into not_in;
   into
 
+let inter_diff b1 b2 =
+  let inter_into = copy b1 in
+  let diff_into  = copy b1 in
+  let same = ref true in
+  let no_i = ref true in   (* no intersection? *)
+  for i = 0 to !last_array_index do
+    let b1i = Array.unsafe_get inter_into.a i in
+    let b2i = Array.unsafe_get b2.a i in
+    let ii  = b1i land b2i in
+    let di  = b1i land (lnot b2i) in
+    Array.unsafe_set inter_into.a i ii;
+    Array.unsafe_set diff_into.a i di;
+    same := !same && ii = b1i;
+    no_i := !no_i && ii = 0;
+  done;
+  inter_into, diff_into, !same, !no_i
+
 let select bv arr =
   let l = ref [] in
   begin try

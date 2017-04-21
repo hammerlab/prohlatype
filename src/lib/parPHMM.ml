@@ -422,23 +422,16 @@ let set_assoc to_find slst =
     | []          -> invalid_argf "Still missing! %s after looking in: %s"
                       (to_s to_find) (List.map slst ~f:(fun (s,_) -> to_s s) |> String.concat ~sep:"\n\t")
     | (s, v) :: t ->
-        let inter = Alleles.Set.inter s to_find in
-        let still_to_find = Alleles.Set.diff to_find s in
-        if !debug_set_assoc then
-          printf "For\t%s\n\
-                  in\t%s\n\
-                  found\t%s\n\
-                  butnot\t%s\n"
-            (to_s to_find)
-            (to_s s)
-            (to_s inter)
-            (to_s still_to_find);
-        if inter = to_find then                         (* Found everything *)
+        let inter, still_to_find, same_intersect, no_intersect =
+          Alleles.Set.inter_diff to_find s in
+
+        if same_intersect then begin                        (* Found everything *)
           (to_find, v) :: acc
-        else if Alleles.Set.cardinal inter = 0 then       (* Found nothing. *)
+        end else if no_intersect then begin       (* Found nothing. *)
           loop to_find acc t
-        else                                            (* Found something. *)
+        end else begin                                         (* Found something. *)
           loop still_to_find ((inter, v) :: acc) t
+        end
   in
   loop to_find [] slst
 
