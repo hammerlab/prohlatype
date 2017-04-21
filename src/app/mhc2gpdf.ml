@@ -9,7 +9,7 @@ let construct
   (* allele selection. *)
   regex_list specific_list without_list number_alleles
   (* Construction args *)
-  remove_reference not_join_same_seq
+  not_join_same_seq
   (* output configuration. *)
   notshort no_pdf no_open skip_disk_cache max_edge_char_length
   not_human_edges not_compress_edges not_compress_start
@@ -21,8 +21,7 @@ let construct
     Common_options.to_filename_and_graph_args
       ?alignment_file ?merge_file ~distance ~impute
       ~specific_list ~regex_list ~without_list ?number_alleles
-      ~join_same_sequence ~remove_reference
-
+      ~join_same_sequence
   in
   match fname_cargs_result with
   | Error msg ->
@@ -126,7 +125,6 @@ let () =
             $ without_arg
             $ num_alt_arg
             (* construction args. *)
-            $ remove_reference_flag
             $ do_not_join_same_sequence_paths_flag
             (* output configuration *)
             $ not_short_flag $ no_pdf_flag $ no_open_flag
