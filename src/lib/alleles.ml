@@ -21,6 +21,8 @@ let index lst =
   in
   { size; to_index; to_allele }
 
+let to_alleles { to_allele; _ } = Array.to_list to_allele
+
 module CompressNames = struct
 
   let split_colon = String.split ~on:(`Character ':')
@@ -122,68 +124,79 @@ module CompressNames = struct
 
 end  (* CompressNames *)
 
-let to_alleles { to_allele; _ } = Array.to_list to_allele
+let _index = ref
+  { size      = 0
+  ; to_index  = StringMap.empty
+  ; to_allele = [||]
+  }
+
+let setup i =
+  _index := i;
+  Fixed_width.setup i.size
+
+let current () =
+  !_index
 
 module Set = struct
 
-  type t = Bitv.t
+  type set = Fixed_width.t
 
-  let copy = Bitv.copy
+  let empty = Fixed_width.empty
 
-  let init {size; _} =
-    Bitv.create size false
+  let copy = Fixed_width.copy
 
-  (* This is necessary for graph construction. *)
-  let empty () = Bitv.create 0 false
+  let init () = Fixed_width.create false
 
-  let set { to_index; _ } s allele =
-    Bitv.set s (StringMap.find allele to_index) true;
+  let set s allele =
+    Fixed_width.set s (StringMap.find allele !_index.to_index);
     s
 
-  (*let unite ~into from = CCBV.union_into ~into from *)
+  let unite ~into from = Fixed_width.union_into ~into from
 
-  let singleton index allele =
-    let s = init index in
-    set index s allele
+  let singleton allele =
+    let s = init () in
+    set s allele
 
-  let clear { to_index; _ } s allele =
-    Bitv.set s (StringMap.find allele to_index) false;
+  let clear s allele =
+    Fixed_width.reset s (StringMap.find allele !_index.to_index);
     s
 
-  let is_set { to_index; _ } s allele =
-    Bitv.get s (StringMap.find allele to_index)
+  let is_set s allele =
+    Fixed_width.get s (StringMap.find allele !_index.to_index)
 
-  let fold { to_allele; } ~f ~init s =
+  let fold ~f ~init s =
     let r = ref init in
-    Bitv.iteri_true (fun i -> r := f !r to_allele.(i)) s;
+    Fixed_width.iter_true s (fun i -> r := f !r !_index.to_allele.(i));
     !r
 
-  let iter index ~f s =
-    fold index ~init:() ~f:(fun () a -> f a) s
+  let iter ~f s =
+    fold ~init:() ~f:(fun () a -> f a) s
 
-  let cardinal = Bitv.pop
+  let cardinal = Fixed_width.cardinal
 
   let compare = Pervasives.compare  (*?*)
 
   let equals = (=) (*?*)
 
-  let union = Bitv.bw_or
+  let union = Fixed_width.union
 
-  let inter = Bitv.bw_and
+  let inter = Fixed_width.inter
 
-  let diff x y = Bitv.bw_and x (Bitv.bw_not  y)
+  let diff = Fixed_width.diff
 
-  let complement = Bitv.bw_not
+  let inter_diff = Fixed_width.inter_diff
 
-  let to_string ?(compress=false) index s =
-    fold index ~f:(fun a s -> s :: a) ~init:[] s
+  let complement = Fixed_width.negate
+
+  let to_string ?(compress=false) s =
+    fold ~f:(fun a s -> s :: a) ~init:[] s
     |> List.rev
     |> (fun l -> if compress then CompressNames.f l else l)
     |> String.concat ~sep:";"
 
-  let complement_string ?(compress=false) ?prefix { to_allele; _} s =
-    Array.fold_left to_allele ~init:(0, [])
-        ~f:(fun (i, acc) a -> if Bitv.get s i
+  let complement_string ?(compress=false) ?prefix s =
+    Array.fold_left !_index.to_allele ~init:(0, [])
+        ~f:(fun (i, acc) a -> if Fixed_width.get s i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
@@ -196,20 +209,20 @@ module Set = struct
                  | None    -> s
                  | Some cp -> cp ^ s
 
-  let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) t s =
+  let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) s =
     let make_shorter =
-      let p = Bitv.pop s in
-      if p = t.size then
+      let p = cardinal s in
+      if p = !_index.size then
         "Everything"
       else if p = 0 then
         "Nothing"
-      else if p <= t.size / 2 then
-        to_string ~compress t s
+      else if p <= !_index.size / 2 then
+        to_string ~compress s
       else
         match complement with
-        | `Yes           -> complement_string ~compress ~prefix:"C. of " t s
-        | `Prefix prefix -> complement_string ~compress ~prefix t s
-        | `No            -> to_string ~compress t s
+        | `Yes           -> complement_string ~compress ~prefix:"C. of " s
+        | `Prefix prefix -> complement_string ~compress ~prefix s
+        | `No            -> to_string ~compress s
     in
     String.take make_shorter ~index:max_length
 
@@ -217,20 +230,18 @@ end (* Set *)
 
 module Map = struct
 
-  type 'a t = 'a array
+  type 'a map = 'a array
 
   let to_array a = a
 
-  let make { size; _} e =
-    Array.make size e
+  let make e =
+    Array.make !_index.size e
 
-  let init { size; to_allele; _} f =
-    Array.init size ~f:(fun i -> f to_allele.(i))
+  let init f =
+    Array.init !_index.size ~f:(fun i -> f !_index.to_allele.(i))
 
-  let get { to_index; _} m a =
-    m.(StringMap.find a to_index)
-
-  let cardinal = Array.length
+  let get m a =
+    m.(StringMap.find a !_index.to_index)
 
   let update2 ~source ~dest f =
     for i = 0 to Array.length source - 1 do
@@ -240,18 +251,18 @@ module Map = struct
   let map2_wa ~f m1 m2 =
     Array.init (Array.length m1) ~f:(fun i -> f m1.(i) m2.(i))
 
-  let fold { to_allele; size; _} ~f ~init amap =
+  let fold ~f ~init amap =
     let s = ref init in
-    for i = 0 to size - 1 do
-      s := f !s amap.(i) to_allele.(i)
+    for i = 0 to !_index.size - 1 do
+      s := f !s amap.(i) !_index.to_allele.(i)
     done;
     !s
 
-  let iter i ~f amap =
-    fold i ~init:() ~f:(fun () m a -> f m a) amap
+  let iter ~f amap =
+    fold ~init:() ~f:(fun () m a -> f m a) amap
 
-  let map { to_allele; _} ~f amap =
-    Array.mapi amap ~f:(fun i c -> f amap.(i) (to_allele.(i)))
+  let map ~f amap =
+    Array.mapi amap ~f:(fun i c -> f amap.(i) (!_index.to_allele.(i)))
 
   let fold_wa = Array.fold_left
 
@@ -260,26 +271,26 @@ module Map = struct
   let map_wa ~f amap =
     Array.map amap ~f
 
-  let values_assoc index amap =
+  let values_assoc amap =
     Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
-      let a = index.to_allele.(i) in
+      let a = !_index.to_allele.(i) in
       try
         let s, rest = remove_and_assoc v asc in
         (* TODO: make these modules recursive to allow maps to see inside sets *)
-        (i + 1, (v, Set.set index s a) :: rest)
+        (i + 1, (v, Set.set s a) :: rest)
       with Not_found ->
-        (i + 1, (v, Set.singleton index a) ::asc))
+        (i + 1, (v, Set.singleton a) ::asc))
     |> snd
 
   let update_from s ~f m =
-    Bitv.iteri_true (fun i -> m.(i) <- f m.(i)) s
+    Fixed_width.iter_true s (fun i -> m.(i) <- f m.(i))
 
   let update_from_and_fold s ~f ~init m =
     let r = ref init in
-    Bitv.iteri_true (fun i ->
+    Fixed_width.iter_true s (fun i ->
       let nm, nacc = f !r m.(i) in (* Use in 1st position ala fold_left. *)
       r := nacc;
-      m.(i) <- nm) s;
+      m.(i) <- nm);
     !r
 
   let choose m =

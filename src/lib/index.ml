@@ -130,7 +130,7 @@ let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
     G.fold_pred_e (fun (_,e,_) a -> Alleles.Set.union e a) g.g n
       (Alleles.Set.init g.aindex)
   in *)
-  let everything = Alleles.Set.(complement (init g.aindex)) in
+  let everything = Alleles.Set.(complement (init ())) in
   let proc node state =
     match node with
     | S _ | E _ | B _ -> state

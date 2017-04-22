@@ -30,7 +30,7 @@ If cache exists -> load it.
     warn and return cached.
 read, cache and return. *)
 
-let disk_memoize ?dir ?up_to_date arg_to_string f =
+let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
   let dir = Option.value dir ~default:(Filename.get_temp_dir_name ()) in
   fun ?(skip_disk_cache=false) arg ->
     if skip_disk_cache then
@@ -48,7 +48,7 @@ let disk_memoize ?dir ?up_to_date arg_to_string f =
         let i = open_in file in
         let r = Marshal.from_channel i in
         close_in i;
-        r
+        match after_load with | None -> r | Some f -> f r; r
       in
       if Sys.file_exists file then begin
         let r = load () in
@@ -119,7 +119,8 @@ let graph =
   let up_to_date =
     recent_check (fun i -> i.input) (fun g -> g.Ref_graph.align_date)
   in
-  disk_memoize ~dir ~up_to_date graph_args_to_string
+  let set_allele_index g = Alleles.setup g.Ref_graph.aindex in
+  disk_memoize ~dir ~up_to_date ~after_load:set_allele_index graph_args_to_string
     (invalid_arg_on_error "construct graph" graph_no_cache)
 
 type index_args =
@@ -139,7 +140,8 @@ let graph_and_two_index_no_cache {k; graph_args} =
 
 let graph_and_two_index =
   let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
-  disk_memoize ~dir index_args_to_string
+  let set_allele_index (g,_) = Alleles.setup g.Ref_graph.aindex in
+  disk_memoize ~dir ~after_load:set_allele_index index_args_to_string
     (invalid_arg_on_error "construct graph and index" graph_and_two_index_no_cache)
 
 type par_phmm_args =
@@ -168,5 +170,6 @@ let par_phmm =
   let up_to_date =
     recent_check (fun i -> i.pinput) (fun p -> p.ParPHMM.align_date)
   in
-  disk_memoize ~dir ~up_to_date par_phmm_args_to_string
+  let set_allele_index p = Alleles.setup p.ParPHMM.allele_index in
+  disk_memoize ~dir ~up_to_date ~after_load:set_allele_index par_phmm_args_to_string
     (invalid_arg_on_error "construct parphmm" par_phmm_no_cache)

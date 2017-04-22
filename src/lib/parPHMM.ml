@@ -179,9 +179,9 @@ type position_map = (Mas_parser.position * int) list
   The mapping (position into base_state array) is then recovered by iterating
   over this position map as we move along Mas_parser.alignment_element's for
   the alleles. *)
-let initialize_base_array_and_position_map ali reference ref_elems =
+let initialize_base_array_and_position_map reference ref_elems =
   let open Mas_parser in
-  let ref_set () = Alleles.Set.singleton ali reference in
+  let ref_set () = Alleles.Set.singleton reference in
   let sequence_to_base_states_array prev_state s =
     String.to_character_list s
     |> List.mapi ~f:(fun i c ->
@@ -258,28 +258,28 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 (* Add an allele's Mas_parser.sequence to the current run-length encoded state. *)
-let add_alternate_allele ali reference ~position_map allele allele_instr arr =
+let add_alternate_allele reference ~position_map allele allele_instr arr =
   let base_and_offset b o ((bp,bo), _) = b = bp && o = bo in
   let add_to_base_state i b o =
     (*printf "adding base at %d %c %d\n" i (BaseState.to_char b) o; *)
     match List.find arr.(i) ~f:(base_and_offset b o) with
-    | None              -> let s = Alleles.Set.singleton ali allele in
+    | None              -> let s = Alleles.Set.singleton allele in
                            (*printf "single cell at %d for %s \n"  i allele; *)
                            arr.(i) <- ((b, o), s) :: arr.(i)
-    | Some ((ab,ro), s) -> (*printf "At: %d %s to %s\n"  i allele (Alleles.Set.to_string ali s); *)
-                           ignore (Alleles.Set.set ali s allele)
+    | Some ((ab,ro), s) -> (*printf "At: %d %s to %s\n"  i allele (Alleles.Set.to_string s); *)
+                           ignore (Alleles.Set.set s allele)
   in
-  let is_reference_set (_, s) = Alleles.Set.is_set ali s reference in
+  let has_reference_set (_, s) = Alleles.Set.is_set s reference in
   let add_to_reference_set offset start end_ =
     (*printf "adding reference set at %d %d %d\n" offset start end_; *)
     let rec loop i offset =
       if i = end_ then offset else begin
-        match List.find arr.(i) ~f:is_reference_set with
+        match List.find arr.(i) ~f:has_reference_set with
         | None              -> (* Reference in gap -> so are we! *)
                                loop (i + 1) (-1)  (* Offset becomes -1 after 1st use! *)
         | Some ((rb,ro), s) ->
             if ro = offset then begin
-              ignore (Alleles.Set.set ali s allele);
+              ignore (Alleles.Set.set s allele);
               loop (i + 1) (-1)
             end else begin
               add_to_base_state i rb offset;
@@ -348,7 +348,7 @@ module type Ring = sig
 
 end (* Ring *)
 
-type emissions = ((BaseState.t * int) * Alleles.Set.t) list
+type emissions = ((BaseState.t * int) * Alleles.Set.set) list
 (* For every k there are 3 possible states. *)
 
 type 'a cell =
@@ -357,8 +357,8 @@ type 'a cell =
   ; delete  : 'a
   }
 
-type 'a entry = (Alleles.Set.t * 'a cell) list
-type 'a final_entry = (Alleles.Set.t * 'a) list
+type 'a entry = (Alleles.Set.set * 'a cell) list
+type 'a final_entry = (Alleles.Set.set * 'a) list
 
 type workspace =
   { mutable forward             : float entry array array
@@ -375,14 +375,14 @@ let generate_workspace number_alleles bigK read_size =
 
 type 'a fwd_recurrences =
   { start     :  char -> float -> emissions -> 'a entry
-  ; first_row : 'a entry array array -> Alleles.index -> char -> float ->
+  ; first_row : 'a entry array array -> char -> float ->
                   emissions -> i:int -> 'a entry
-  ; middle    : 'a entry array array -> Alleles.index -> char -> float ->
+  ; middle    : 'a entry array array -> char -> float ->
                   emissions -> i:int -> k:int -> 'a entry
   (* Doesn't use the delete section. *)
   ; end_      : 'a entry array array -> int -> 'a final_entry
 
-  ; emission  : 'a final_entry array -> Alleles.index -> 'a array
+  ; emission  : 'a final_entry array -> 'a array
 
 (* Combine emission results *)
   ; combine   : into:'a array -> 'a array -> unit
@@ -415,30 +415,23 @@ let mutate_or_add value allele_set lst =
 
 let debug_set_assoc = ref false
 
-let set_assoc ali to_find slst =
+let set_assoc to_find slst =
   if !debug_set_assoc then printf "set_assoc %d\n" (List.length slst);
-  let to_s = Alleles.Set.to_string ali in
+  let to_s = Alleles.Set.to_string in
   let rec loop to_find acc = function
     | []          -> invalid_argf "Still missing! %s after looking in: %s"
                       (to_s to_find) (List.map slst ~f:(fun (s,_) -> to_s s) |> String.concat ~sep:"\n\t")
     | (s, v) :: t ->
-        let inter = Alleles.Set.inter s to_find in
-        let still_to_find = Alleles.Set.diff to_find s in
-        if !debug_set_assoc then
-          printf "For\t%s\n\
-                  in\t%s\n\
-                  found\t%s\n\
-                  butnot\t%s\n"
-            (to_s to_find)
-            (to_s s)
-            (to_s inter)
-            (to_s still_to_find);
-        if inter = to_find then                         (* Found everything *)
+        let inter, still_to_find, same_intersect, no_intersect =
+          Alleles.Set.inter_diff to_find s in
+
+        if same_intersect then begin                        (* Found everything *)
           (to_find, v) :: acc
-        else if Alleles.Set.cardinal inter = 0 then       (* Found nothing. *)
+        end else if no_intersect then begin       (* Found nothing. *)
           loop to_find acc t
-        else                                            (* Found something. *)
+        end else begin                                         (* Found something. *)
           loop still_to_find ((inter, v) :: acc) t
+        end
   in
   loop to_find [] slst
 
@@ -496,8 +489,7 @@ module ForwardGen (R : Ring) = struct
                         ; delete = zero
                         })
                 end
-    ; first_row = begin fun fm ali base base_error emissions ~i ->
-                    let set_assoc = set_assoc ali in
+    ; first_row = begin fun fm base base_error emissions ~i ->
                     List.fold_left emissions ~init:[]
                       ~f:(fun acc ((b, offset), allele_set) ->
                             let emp = to_match_prob base base_error b in
@@ -514,8 +506,7 @@ module ForwardGen (R : Ring) = struct
                               ; delete = t_m_d * zero + t_d_d * zero
                               } als acc))
                   end
-    ; middle  = begin fun fm ali base base_error emissions ~i ~k ->
-                  let set_assoc = set_assoc ali in
+    ; middle  = begin fun fm base base_error emissions ~i ~k ->
                   List.fold_left emissions ~init:[]
                     ~f:(fun acc ((b, offset), allele_set) ->
                           let emp = to_match_prob base base_error b in
@@ -547,8 +538,8 @@ module ForwardGen (R : Ring) = struct
                   List.map fc ~f:(fun (allele_set, c) ->
                     allele_set, (c.match_ * t_m_s + c.insert * t_i_s))
                 end
-    ; emission  = begin fun final ali ->
-                    let ret = Alleles.Map.make ali zero in
+    ; emission  = begin fun final ->
+                    let ret = Alleles.Map.make zero in
                     Array.iter final ~f:(fun l ->
                       List.iter l ~f:(fun (allele_set, v) ->
                         Alleles.Map.update_from allele_set ~f:((+) v) ret));
@@ -687,10 +678,11 @@ let construct input selectors =
       in
       let alleles = mp.reference :: List.map ~f:fst nalt_elems in
       let allele_index = Alleles.index alleles in
-      let ems, position_map = initialize_base_array_and_position_map
-        allele_index mp.reference mp.ref_elems
+      let () = Alleles.setup allele_index in
+      let ems, position_map =
+        initialize_base_array_and_position_map mp.reference mp.ref_elems
       in
-      let aaa = add_alternate_allele allele_index mp.reference ~position_map in
+      let aaa = add_alternate_allele mp.reference ~position_map in
       List.iter ~f:(fun (allele, altseq) -> aaa allele altseq ems) nalt_elems;
       Ok { align_date = mp.align_date
          ; allele_index
@@ -740,7 +732,7 @@ let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
       let base = String.get_exn read i in
       let base_prob = read_prob.(i) in
       ws.forward.(0).(i) <-
-        recurrences.first_row ws.forward allele_index base base_prob ~i emissions_a.(0)
+        recurrences.first_row ws.forward base base_prob ~i emissions_a.(0)
     done;
     (* All other rows. *)
     for k = 1 to bigK - 1 do
@@ -751,13 +743,13 @@ let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
         let base = String.get_exn read i in
         let base_prob = read_prob.(i) in
         ws.forward.(k).(i) <-
-          recurrences.middle ws.forward allele_index base base_prob ~i ~k ek
+          recurrences.middle ws.forward base base_prob ~i ~k ek
       done
     done;
     for k = 0 to bigK - 1 do
       ws.final.(k) <- recurrences.end_ ws.forward k
     done;
-    ws.per_allele_emission <- recurrences.emission ws.final allele_index;
+    ws.per_allele_emission <- recurrences.emission ws.final;
     recurrences.combine ~into ws.per_allele_emission;
     if !debug_ref then save_workspace ws;
     into

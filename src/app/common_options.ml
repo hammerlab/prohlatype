@@ -158,6 +158,7 @@ let num_alt_arg =
   (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
 
 (*** Other args. ***)
+(*
 let remove_reference_flag =
   let doc  = "Remove the reference allele from the graph. The reference \
               allele is the one that is listed first in the alignments file. \
@@ -168,6 +169,7 @@ let remove_reference_flag =
               the graph after the other alleles are added."
   in
   Arg.(value & flag & info ~doc ["no-reference"])
+  *)
 
 let impute_flag =
   let doc  = "Fill in the missing segments of alleles with an iterative \
@@ -205,13 +207,13 @@ let to_filename_and_graph_args
     ~without_list
     ?number_alleles
   (* Graph modifiers. *)
-  ~join_same_sequence ~remove_reference =
+  ~join_same_sequence =
     to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
       let selectors =
         regex_list @ specific_list @ without_list @
           (match number_alleles with | None -> [] | Some s -> [s])
       in
-      let arg = {Ref_graph.selectors; join_same_sequence; remove_reference} in
+      let arg = {Ref_graph.selectors; join_same_sequence } in
       let graph_arg = Cache.graph_args ~arg ~input in
       let option_based_fname = Cache.graph_args_to_string graph_arg in
       Ok (option_based_fname, graph_arg)

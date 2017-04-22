@@ -12,12 +12,6 @@ matrix:
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=round
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeA
-    - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeB
-    - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeC
-    - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=alleleDiffA
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=biologicalKmers
