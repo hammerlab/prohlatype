@@ -710,6 +710,19 @@ let generate_workspace_conf c read_size =
   let number_alleles = Alleles.length c.allele_index in
   generate_workspace number_alleles bigK read_size
 
+let arr_to_str a =
+  Array.to_list a
+  |> List.map ~f:(sprintf "%f")
+  |> String.concat ~sep:"; "
+  |> sprintf "[|%s|]"
+
+let compare_emissions e1 e2 =
+  let r1 = Array.fold_left e1 ~init:neg_infinity ~f:max in
+  let r2 = Array.fold_left e2 ~init:neg_infinity ~f:max in
+  (*printf "r %f %s vs c %f %s\n" r1 (arr_to_str e1) r2 (arr_to_str e2);*)
+  (*printf "r %f vs c %f\n" r1 r2;*)
+  r1 >= r2
+
 let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
   let bigK = Array.length emissions_a in
   let number_alleles = Alleles.length allele_index in
@@ -724,35 +737,51 @@ let forward_pass ?(logspace=true) ?ws { allele_index; emissions_a } read_size =
     | Some w -> w
     | None   -> generate_workspace number_alleles bigK read_size
   in
-  fun ~into read read_prob ->
-    (* special case the first row. *)
-    ws.forward.(0).(0) <-
-      recurrences.start (String.get_exn read 0) read_prob.(0) emissions_a.(0);
-    for i = 1 to read_size - 1 do
-      let base = String.get_exn read i in
-      let base_prob = read_prob.(i) in
-      ws.forward.(0).(i) <-
-        recurrences.first_row ws.forward base base_prob ~i emissions_a.(0)
-    done;
-    (* All other rows. *)
-    for k = 1 to bigK - 1 do
-      let ek = emissions_a.(k) in
-      ws.forward.(k).(0) <-
-        recurrences.start (String.get_exn read 0) read_prob.(0) ek;
+  fun ?(check_rc=true) ~into read read_prob ->
+    let pass read read_prob =
+      (* special case the first row. *)
+      ws.forward.(0).(0) <-
+        recurrences.start (String.get_exn read 0) read_prob.(0) emissions_a.(0);
       for i = 1 to read_size - 1 do
         let base = String.get_exn read i in
         let base_prob = read_prob.(i) in
-        ws.forward.(k).(i) <-
-          recurrences.middle ws.forward base base_prob ~i ~k ek
-      done
-    done;
-    for k = 0 to bigK - 1 do
-      ws.final.(k) <- recurrences.end_ ws.forward k
-    done;
-    ws.per_allele_emission <- recurrences.emission ws.final;
-    recurrences.combine ~into ws.per_allele_emission;
-    if !debug_ref then save_workspace ws;
-    into
+        ws.forward.(0).(i) <-
+          recurrences.first_row ws.forward base base_prob ~i emissions_a.(0)
+      done;
+      (* All other rows. *)
+      for k = 1 to bigK - 1 do
+        let ek = emissions_a.(k) in
+        ws.forward.(k).(0) <-
+          recurrences.start (String.get_exn read 0) read_prob.(0) ek;
+        for i = 1 to read_size - 1 do
+          let base = String.get_exn read i in
+          let base_prob = read_prob.(i) in
+          ws.forward.(k).(i) <-
+            recurrences.middle ws.forward base base_prob ~i ~k ek
+        done
+      done;
+      for k = 0 to bigK - 1 do
+        ws.final.(k) <- recurrences.end_ ws.forward k
+      done;
+      ws.per_allele_emission <- recurrences.emission ws.final;
+    in
+    if check_rc then begin
+      pass read read_prob;                                        (* Regular. *)
+      let regular = Array.copy ws.per_allele_emission in
+      pass (reverse_complement read) (array_rev read_prob);             (* Complement *)
+      if compare_emissions regular ws.per_allele_emission then begin
+        recurrences.combine ~into regular;
+        into
+      end else begin
+        recurrences.combine ~into ws.per_allele_emission;
+        into
+      end
+    end else begin
+      pass read read_prob;
+      recurrences.combine ~into ws.per_allele_emission;
+      if !debug_ref then save_workspace ws;
+      into
+    end
 
 let setup ?ws ~logspace t read_size =
   let perform_forward_pass = forward_pass ?ws ~logspace t read_size in
