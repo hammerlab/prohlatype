@@ -40,20 +40,20 @@ let to_update_f ~check_rc ~logspace perform_forward_pass update_me fqi =
     | Result.Ok read_probs ->
       perform_forward_pass ~into:update_me fqi.Biocaml_unix.Fastq.sequence read_probs)
 
-let to_set ~check_rc ~logspace rp read_size =
+let to_set ~check_rc ?band ~logspace rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
   in
   let perform_forward_pass, update_me =
     time (sprintf "Allocating forward pass workspaces")
-      (fun () -> ParPHMM.setup ~logspace pt read_size)
+      (fun () -> ParPHMM.setup ?band ~logspace pt read_size)
   in
   let update = to_update_f ~check_rc ~logspace (perform_forward_pass ~check_rc) in
   let alleles = Alleles.to_alleles pt.ParPHMM.allele_index in
   `Set (alleles, update, update_me)
 
-let across_fastq ?number_of_reads ~specific_reads ~check_rc ~logspace file init =
+let across_fastq ?number_of_reads ~specific_reads ~check_rc ?band ~logspace file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
@@ -61,7 +61,7 @@ let across_fastq ?number_of_reads ~specific_reads ~check_rc ~logspace file init 
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
                 let `Set (alleles, update, update_me) =
-                  to_set ~check_rc ~logspace rp read_size
+                  to_set ~check_rc ?band ~logspace rp read_size
                 in
                 `Set (alleles, update, update update_me fqi)
             | `Set (alelles, update, ret) ->
@@ -90,10 +90,20 @@ let type_
     read_size_override
     not_logspace
     not_check_rc
+    not_band
+    start_column
+    number
+    width
     =
   let logspace = not not_logspace in
   let impute   = not not_impute in
   let check_rc = not not_check_rc in
+  let band     =
+    if not_band then
+      None
+    else
+      Some { ParPHMM.Bands.start_column; number; width }
+  in
   let need_read_size_r =
     to_read_size_dependent
       ?alignment_file ?merge_file ~distance ~impute
@@ -106,12 +116,13 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set ~check_rc ~logspace need_read_size r
+      | Some r -> to_set ~check_rc ?band ~logspace need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~check_rc ~logspace fastq init
+    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~check_rc
+                            ?band ~logspace fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
 
@@ -143,6 +154,42 @@ let () =
     in
     Arg.(value & flag & info ~doc ["do-not-impute"])
   in
+  (* Band arguments *)
+  let not_band_flag =
+    let doc = "Calculate the full forward pass matrix." in
+    Arg.(value & flag & info ~doc ["do-not-band"])
+  in
+  let band_start_column_arg =
+    let default = ParPHMM.Bands.(default.start_column) in
+    let docv = "POSITIVE INTEGER" in
+    let doc =
+      sprintf "At which column in the forward pass to compute bands instead \
+               of the full pass. Defaults to: %d." default
+    in
+    Arg.(value
+          & opt positive_int default
+          & info ~doc ~docv ["band-start-column"])
+  in
+  let number_bands_arg =
+    let default = ParPHMM.Bands.(default.number) in
+    let docv = "POSITIVE INTEGER" in
+    let doc  =
+      sprintf "Number of bands to calculate. Defaults to %d" default
+    in
+    Arg.(value
+          & opt positive_int default
+          & info ~doc ~docv ["number_bands"])
+  in
+  let band_width_arg =
+    let default = ParPHMM.Bands.(default.width) in
+    let docv = "greater than 1" in
+    let doc  =
+      sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
+    in
+    Arg.(value
+          & opt greater_than_one default
+          & info ~doc ~docv ["band-width"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -172,6 +219,10 @@ let () =
             $ read_size_override_arg
             $ not_logspace_flag
             $ not_check_rc_flag
+            $ not_band_flag
+            $ band_start_column_arg
+            $ number_bands_arg
+            $ band_width_arg
             (* How are we typing
             $ map_arg $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg

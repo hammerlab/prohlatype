@@ -1,5 +1,6 @@
 (* Common arguments shared between programs. *)
 
+module Ns = String
 open Util
 open Cmdliner
 
@@ -23,6 +24,19 @@ let int_fprinter frmt =
 let positive_int =
   Arg.conv ~docv:"POSITIVE INTEGER"
     ((positive_int_parser (fun n -> n)), int_fprinter)
+
+let greater_than_one =
+  let docv = "natural number greater than 1" in
+  Arg.conv ~docv:(Ns.uppercase_ascii docv)
+    ((fun s ->
+      try
+        let d = Scanf.sscanf s "%d" (fun x -> x) in
+        if d <= 1 then
+          Error (`Msg (s ^ " is not a " ^ docv))
+        else
+          Ok d
+      with Scanf.Scan_failure msg ->
+        Error (`Msg msg)), int_fprinter)
 
 let non_negative_int_parser =
   fun s ->
