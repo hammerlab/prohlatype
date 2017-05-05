@@ -209,7 +209,7 @@ module Set = struct
                  | None    -> s
                  | Some cp -> cp ^ s
 
-  let to_human_readable ?(compress=true) ?(max_length=500) ?(complement=`Yes) s =
+  let to_human_readable ?(compress=true) ?(max_length=1000) ?(complement=`Yes) s =
     let make_shorter =
       let p = cardinal s in
       if p = !_index.size then
