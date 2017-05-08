@@ -842,7 +842,7 @@ module ForwardGen (R : Ring) = struct
                    entry
                 end
     ; end_    = begin fun fm k ->
-                  CAM.map ~bijective:true fm.(k).(read_size-2)
+                  CAM.map ~bijective:true fm.(k).(read_size-1)
                     ~f:(fun c -> c.match_ * t_m_s + c.insert * t_i_s)
                 end
     ; emission  = begin fun ?spec_rows final ->
