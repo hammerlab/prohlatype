@@ -1206,12 +1206,12 @@ module Bands = struct
   let find_indices_below_n n increments inds =
     n_times n (find_indices_below increments) inds
 
-  let to_bands t c inds =
-    let lnds = CAM.map inds ~bijective:true ~f:(fun (bv, i) -> bv, [i]) in
+  let to_bands t c ~to_index inds =
+    let lnds = CAM.map inds ~bijective:true ~f:(fun st -> st, [to_index st]) in
     let ai = find_indices_above_n c.width t.emissions_a lnds in
     let bi = find_indices_below_n c.width t.increment_a lnds in
     (* tl_exn -> drop the center band, so we don't duplicate it. *)
-    CAM.map2 ai bi ~f:(fun (bv, a) (_bv2, b) -> bv, a @ (List.tl_exn (List.rev b)))
+    CAM.map2 ai bi ~f:(fun (st, a) (_st2, b) -> st, a @ (List.tl_exn (List.rev b)))
 
 (*
   let merge_overlapping_bands last_row width band_indices =
@@ -1260,7 +1260,7 @@ module Bands = struct
                                        But then how do we normalize? *)
     ; last_value  : 'a cell         (* Doesn't have to occur at end_row *)
     ; alleles     : Alleles.Set.set
-    } (*[@@deriving eq, ord]  The order determines comparison. *)
+    } (*The order determines comparison. *)
 
   let to_string sc t =
     sprintf "rows: %s\tbv: [m: %s; i: %s; d: %s]\tlv: [m: %s; i: %s; d: %s]\n\t\ts: %s"
@@ -1273,13 +1273,6 @@ module Bands = struct
       (sc t.last_value.delete)
       (Alleles.Set.to_human_readable t.alleles)
 
-  let expand_to_uniq l =
-    List.map l ~f:(fun asm ->
-      CAM.to_list asm
-      |> List.map ~f:(fun (alleles, (rows, best_value, last_value)) ->
-          { rows; best_value; last_value; alleles}))
-    |> List.concat
-
   (* TODO: Should we shift these down 1 ala next_band ? *)
   let setup t c forward =
     select_specific_band_indices forward c
@@ -1288,9 +1281,13 @@ module Bands = struct
     (* We have to keep the Allele.Set bands separate, not in an
        CAM.t to avoid overlaps. *)
     |> List.map ~f:(fun p ->
-        to_bands t c (CAM.of_list [p])
-        |> lookup_previous_values forward c.start_column)
-    |> expand_to_uniq
+        CAM.of_list [p]
+        |> to_bands t c ~to_index:(fun (bv, i) -> i)
+        |> lookup_previous_values forward c.start_column
+        |> CAM.to_list
+        |> List.map ~f:(fun (alleles, (rows, (best_value, _), last_value)) ->
+            { rows; best_value; last_value; alleles}))
+    |>  List.flatten
 
   (* As we fill a band we keep track of a little bit of state to determine how
      we orient the next band parameters. In particular we need to
@@ -1363,15 +1360,14 @@ module Bands = struct
 
   let next_band t c fs_map =
     CAM.concat_map fs_map ~f:(fun alleles fs ->
-      (*printf "next_band %d %s in %s\n%!"
+      printf "next_band %d %s in %s\n%!"
         fs.best_row (Alleles.Set.to_human_readable alleles)
-          (Alleles.Set.to_human_readable (CAM.domain t.increment_a.(fs.best_row))); *)
+          (Alleles.Set.to_human_readable (CAM.domain t.increment_a.(fs.best_row)));
       (* Shift the band, by adjusting around best_row,  for next column *)
       CAM.get_exn alleles t.increment_a.(fs.best_row)
-      |> CAM.map ~bijective:true ~f:(fun nr -> (), nr)     (* TODO: Have 2 different to_bands *)
       (* Now fill in the width. *)
-      |> to_bands t c
-      |> CAM.map ~bijective:true ~f:(fun ((),rows) -> (rows, fs.best_c, fs.last_c)))
+      |> to_bands t c ~to_index:(fun nr -> nr)
+      |> CAM.map ~bijective:true ~f:(fun (_br,rows) -> (rows, fs.best_c, fs.last_c)))
     |> CAM.to_list
     |> List.map ~f:(fun (alleles, (rows, best_value, last_value)) ->
         { rows ; alleles ; best_value ; last_value })
