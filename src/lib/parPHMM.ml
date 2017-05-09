@@ -817,14 +817,8 @@ module ForwardGen (R : Ring) = struct
                           CAM.map3_partial insertsi
                             ~by1:matches
                             ~missing1:(fun missing_matches _insert_c ->
-                              (*
-                              match cur_col with
-                              | None -> invalid_argf "At %d (offset %d) %d looking for matches still missing %s"
-                                        k offset i (Alleles.Set.to_human_readable missing_matches)
-                              | Some v -> CAM.get_exn missing_matches v) *)
-                                let default = CAM.singleton missing_matches zero_cell in
-                                Option.value_map ~default cur_col ~f:(fun as_ ->
-                                  Option.value (CAM.get missing_matches as_) ~default))
+                              CAM.singleton missing_matches
+                                (Option.value prev_col ~default:zero_cell))
                             ~by2:deletes
                             ~missing2:(fun missing_deletes _insert_c _match_c ->
                                 let default = CAM.singleton missing_deletes zero_cell in
@@ -1360,9 +1354,9 @@ module Bands = struct
 
   let next_band t c fs_map =
     CAM.concat_map fs_map ~f:(fun alleles fs ->
-      printf "next_band %d %s in %s\n%!"
+      (*printf "next_band %d %s in %s\n%!"
         fs.best_row (Alleles.Set.to_human_readable alleles)
-          (Alleles.Set.to_human_readable (CAM.domain t.increment_a.(fs.best_row)));
+          (Alleles.Set.to_human_readable (CAM.domain t.increment_a.(fs.best_row))); *)
       (* Shift the band, by adjusting around best_row,  for next column *)
       CAM.get_exn alleles t.increment_a.(fs.best_row)
       (* Now fill in the width. *)
