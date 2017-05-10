@@ -1522,17 +1522,20 @@ type mapped_stats =
   ; cpositions  : (float * int) list
   }
 
-let mapped_stats_to_string ms =
+let mapped_stats_to_string ?(sep='\t') ms =
   let al_to_s l =
-    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf "%s:%f" a l))
+    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf "%s:%0.2f" a l))
   in
   let pl_to_s l =
-    String.concat ~sep:";" (List.map l ~f:(fun (l,p) -> sprintf "%d:%f" p l))
+    String.concat ~sep:";" (List.map l ~f:(fun (l,p) -> sprintf "%d:%0.2f" p l))
   in
-  sprintf "%s\t%s\t%s\t%s"
+  sprintf "%s%c%s%c%s%c%s"
     (al_to_s ms.regular)
-    (pl_to_s ms.rpositions)
+    sep
     (al_to_s ms.complement)
+    sep
+    (pl_to_s ms.rpositions)
+    sep
     (pl_to_s ms.cpositions)
 
 

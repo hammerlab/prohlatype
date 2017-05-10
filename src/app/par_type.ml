@@ -56,7 +56,6 @@ type 'a g =
   ; mutable s : 'a
   }
 
-(* TODO: Use GADT *)
 let proc_g = function
   | `Mapper g -> begin fun fqi ->
                   g.s <- g.f g.s fqi;
@@ -96,10 +95,8 @@ let to_set ~map ~check_rc ?band ~logspace rp read_size =
               ; fin = begin fun lst ->
                         printf "got %d\n" (List.length lst);
                         List.iter lst ~f:(fun (n, s) ->
-                          printf "%s:%s\n" n (ParPHMM.mapped_stats_to_string s))
-              end
-
-
+                          printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
+                      end
               }
       )
   in
