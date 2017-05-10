@@ -387,7 +387,7 @@ module CAM : sig
   val concat_map2 : 'a t -> by:'b t -> f:(set -> 'a -> 'b -> 'c t) -> 'c t
 
   val concat_map2_partial : 'a t -> by:'b t -> f:(set -> 'a -> 'b -> 'c t) ->
-    missing:(set -> 'a -> 'c) -> 'c t
+    missing:(set -> 'a -> 'c t) -> 'c t
 
   val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
 
@@ -400,9 +400,11 @@ module CAM : sig
   val map2_partial : 'a t -> by:'b t -> missing:(set -> 'a -> 'c t) ->
     f:('a -> 'b -> 'c) -> 'c t
 
-  val map3_partial : 'a t -> by1:'b t -> by2:'c t ->
-    missing1:(set -> 'a -> 'd t) -> missing2:(set -> 'a -> 'b -> 'd t) ->
+  val map3_partial : 'a t ->
+    by1:'b t -> missing1:(set -> 'a -> 'b t) ->
+    by2:'c t -> missing2:(set -> 'a -> 'b -> 'c t) ->
     f:('a -> 'b -> 'c -> 'd) -> 'd t
+
 
   val partition_map : 'a t -> f:(set -> 'a -> [< `Fst of 'b | `Snd of 'c ]) ->
      'b t * 'c t
@@ -550,7 +552,9 @@ end = struct
     in
     loop to_find init t
 
-  let absorb t ~init = List.fold_left t ~init ~f:mutate_or_add
+  let absorb_k t ~init ~f = List.fold_left t ~init ~f
+
+  let absorb t ~init = absorb_k t ~init ~f:mutate_or_add
 
   let concat_map l ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) -> absorb (f s a) ~init)
@@ -572,7 +576,7 @@ end = struct
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init
         ~k:(fun intersect b init -> absorb (f intersect a b) ~init)
-        ~missing:(fun sm acc -> mutate_or_add acc (sm, missing sm a)))
+        ~missing:(fun sm init -> absorb ~init (missing sm a)))
 
   let map2 l1 l2 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (s, a) ->
@@ -598,17 +602,17 @@ end = struct
         ~k:(fun intercept b acc -> mutate_or_add acc (intercept, f a b))
         ~missing:(fun sm init -> absorb ~init (missing sm a)))
 
-  let map3_partial l ~by1 ~by2 ~missing1 ~missing2 ~f=
+  let map3_partial l ~by1 ~missing1 ~by2 ~missing2 ~f =
     List.fold_left l ~init:[] ~f:(fun init (is1, a) ->
-      set_assoc_k ~n:"1" is1 by1 ~init
-        (*~missing:(fun sm acc -> mutate_or_add acc (sm, missing1 sm a)) *)
-        ~missing:(fun sm init -> absorb ~init (missing1 sm a))
-        ~k:(fun is2 b init ->
-            set_assoc_k ~n:"2" is2 by2 ~init
-              (*~missing:(fun sm acc -> mutate_or_add acc (sm, missing2 sm a b)) *)
-              ~missing:(fun sm init -> absorb ~init (missing2 sm a b))
-              ~k:(fun intercept c acc ->
-                    mutate_or_add acc (intercept, f a b c))))
+      let k is2 b init =
+        let k2 intercept c acc = mutate_or_add acc (intercept, f a b c) in
+        set_assoc_k is2 by2 ~init ~k:k2
+          ~missing:(fun sm init ->
+            absorb_k (missing2 sm a b) ~init ~f:(fun init (s, b) -> k2 s b init))
+      in
+      set_assoc_k is1 by1 ~init ~k
+        ~missing:(fun sm init ->
+          absorb_k (missing1 sm a) ~init ~f:(fun init (s, b) -> k s b init)))
 
   let init_everything v =
     let nothing = Alleles.Set.init () in
@@ -693,7 +697,7 @@ type 'a fwd_recurrences =
   ; banded    : 'a entry array array -> (int * 'a) CAM.t ->
                 (*char -> float -> emissions -> *)
                 ?prev_col:('a cell) -> ?cur_col:('a entry) ->
-                i:int -> k:int -> Alleles.Set.set -> 'a entry
+                i:int -> k:int -> 'a entry
 
   (* Doesn't use the delete section. *)
   ; end_      : 'a entry array array -> int -> 'a final_entry
@@ -799,41 +803,53 @@ module ForwardGen (R : Ring) = struct
                                       }))
                 end
     ; middle_emissions = to_em_set
-    ; banded  = begin fun fm em_values (* base base_error emissions *)
-                    ?prev_col ?cur_col ~i ~k allele_set ->
-                  let inserts = fm.(k).(i-1) in
-                  let allele_ems = CAM.get_exn allele_set em_values in
-                  let entry = CAM.concat_map2_partial allele_ems ~by:inserts
-                    ~missing:(fun missing_inserts _ep_pair ->
-                        match prev_col with
-                        | None -> invalid_argf "At %d %d looking for inserts still missing %s"
+    ; banded  = begin fun fm allele_ems ?prev_col ?cur_col ~i ~k ->
+                  let with_insert inters (offset, emission_p) insert_c =
+                    let calc insert_c match_c delete_c =
+                      let r =
+                        { match_ = emission_p  * ( t_m_m * match_c.match_
+                                                 + t_i_m * match_c.insert
+                                                 + t_d_m * match_c.delete)
+                        ; insert = insert_prob * ( t_m_i * insert_c.match_
+                                                 + t_i_i * insert_c.insert)
+                        ; delete = (* one *)     ( t_m_d * delete_c.match_
+                                                 + t_d_d * delete_c.delete)
+                        }
+                      in
+                      (*let () =
+                        printf "--------%d %d %s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+                          k i (R.to_string emission_p)
+                          (cell_to_string R.to_string match_c)
+                          (cell_to_string R.to_string insert_c)
+                          (cell_to_string R.to_string delete_c)
+                          (cell_to_string R.to_string r)
+                      in*)
+                      r
+                    in
+                    let ks = Pervasives.(+) k offset in
+                    let matches = fm.(ks).(i-1) in
+                    let deletes = fm.(ks).(i) in
+                    let insertsi = CAM.singleton inters insert_c in
+                    CAM.map3_partial insertsi
+                      ~by1:matches
+                      ~missing1:(fun missing_matches _insert_c ->
+                        CAM.singleton missing_matches
+                          (Option.value prev_col ~default:zero_cell))
+                      ~by2:deletes
+                      ~missing2:(fun missing_deletes _insert_c _match_c ->
+                          let default = CAM.singleton missing_deletes zero_cell in
+                          Option.value_map ~default cur_col ~f:(fun as_ ->
+                            Option.value (CAM.get missing_deletes as_) ~default))
+                      ~f:calc
+                    in
+                    let inserts = fm.(k).(i-1) in
+                    CAM.concat_map2_partial allele_ems ~by:inserts
+                      ~missing:(fun missing_inserts ep_pair ->
+                          match prev_col with
+                          | None -> invalid_argf "At %d %d looking for inserts still missing %s"
                                       k i (Alleles.Set.to_human_readable missing_inserts)
-                        | Some v -> v)
-                    ~f:(fun inters (offset, emission_p) insert_c ->
-                          let ks = Pervasives.(+) k offset in
-                          let matches = fm.(ks).(i-1) in
-                          let deletes = fm.(ks).(i) in
-                          let insertsi = CAM.singleton inters insert_c in
-                          CAM.map3_partial insertsi
-                            ~by1:matches
-                            ~missing1:(fun missing_matches _insert_c ->
-                              CAM.singleton missing_matches
-                                (Option.value prev_col ~default:zero_cell))
-                            ~by2:deletes
-                            ~missing2:(fun missing_deletes _insert_c _match_c ->
-                                let default = CAM.singleton missing_deletes zero_cell in
-                                Option.value_map ~default cur_col ~f:(fun as_ ->
-                                  Option.value (CAM.get missing_deletes as_) ~default))
-                            ~f:(fun insert_c match_c delete_c ->
-                                  { match_ = emission_p  * ( t_m_m * match_c.match_
-                                                           + t_i_m * match_c.insert
-                                                           + t_d_m * match_c.delete)
-                                  ; insert = insert_prob * ( t_m_i * insert_c.match_
-                                                           + t_i_i * insert_c.insert)
-                                  ; delete = (* one *)     ( t_m_d * delete_c.match_
-                                                           + t_d_d * delete_c.delete)}))
-                  in
-                   entry
+                          | Some v -> with_insert missing_inserts ep_pair v)
+                      ~f:with_insert
                 end
     ; end_    = begin fun fm k ->
                   CAM.map ~bijective:true fm.(k).(read_size-1)
@@ -1073,8 +1089,6 @@ let arr_to_str a =
 let compare_emissions e1 e2 =
   let r1 = Array.fold_left e1 ~init:neg_infinity ~f:max in
   let r2 = Array.fold_left e2 ~init:neg_infinity ~f:max in
-  (*printf "r %f %s vs c %f %s\n" r1 (arr_to_str e1) r2 (arr_to_str e2);*)
-  (*printf "r %f vs c %f\n" r1 r2;*)
   r1 >= r2
 
 (***** regular (fill in everything) forward  pass  *)
@@ -1354,9 +1368,6 @@ module Bands = struct
 
   let next_band t c fs_map =
     CAM.concat_map fs_map ~f:(fun alleles fs ->
-      (*printf "next_band %d %s in %s\n%!"
-        fs.best_row (Alleles.Set.to_human_readable alleles)
-          (Alleles.Set.to_human_readable (CAM.domain t.increment_a.(fs.best_row))); *)
       (* Shift the band, by adjusting around best_row,  for next column *)
       CAM.get_exn alleles t.increment_a.(fs.best_row)
       (* Now fill in the width. *)
@@ -1367,37 +1378,43 @@ module Bands = struct
         { rows ; alleles ; best_value ; last_value })
 
   let fill_next t c recurrences em_map forward base base_prob i b col_values =
-    (* printf "filling: %s: %s\n" (String.concat ~sep:";" (List.map b.rows ~f:string_of_int))
-      (Alleles.Set.to_human_readable b.alleles); *)
+    (*let () =
+      printf "current bands for %c %f rows:%s at %d \n\t%s\n"
+        base base_prob
+        (String.concat ~sep:";" (List.map b.rows ~f:(sprintf "%d"))) i
+          (to_string (sprintf "%f") b)
+    in*)
     let cur_col = CAM.get b.alleles col_values in
     let update ?cur_col emp k alleles =
-      (*printf "updating %d %d %s, emissions: %s\n%!" k i
-        (Alleles.Set.to_human_readable alleles)
-        (CAM.to_string_full (fun (b,d) -> sprintf "%c,%d" (BaseState.to_char b) d)
-          t.emissions_a.(k)); *)
       let em_values, nem_map =
         try
           let emv = IntMap.find k emp in
           emv, emp
         with Not_found ->
           let es = recurrences.middle_emissions base base_prob t.emissions_a.(k) in
+          (*let () =
+            printf "calculated emissions: %d %c %f: %s\n"
+              k base base_prob
+                (CAM.to_string_full (fun (i,c) -> sprintf "%d,%f" i c) es)
+          in*)
           let nemp = IntMap.add ~key:k ~data:es emp in
           es, nemp
       in
+      let allele_emissions = CAM.get_exn alleles em_values in
       let entry =
-        recurrences.banded forward em_values
+        recurrences.banded forward allele_emissions
           (* Poor design: No harm in adding this as banded will only use this
              value in the missing case. So we're not going to track that we're
              at the right row. *)
           ~prev_col:b.last_value ?cur_col
-          ~i ~k alleles
+          ~i ~k
       in
       forward.(k).(i) <- CAM.join entry forward.(k).(i);
       nem_map, entry
     in
     match b.rows with
     | []                -> invalid_argf "empty rows"
-    | start_row :: rows -> begin
+    | start_row :: trows -> begin
         let nem_map, first_entry = update ?cur_col em_map start_row b.alleles in
         let state =
           CAM.map first_entry ~bijective:true
@@ -1413,16 +1430,22 @@ module Bands = struct
           | k :: rows ->
               let nem_map, entry = update ~cur_col em_map k not_full_alleles in
               let new_fill_state = update_fill_state fill_state k entry in
-              if rows = [] then begin (* filled all that we were supposed to *)
+              if rows <> [] then                  (* Still have remaining rows to fill. *)
+                loop nem_map acc new_fill_state not_full_alleles entry rows
+              else begin                          (* Filled all that we're supposed to. *)
                 let full, not_full_state =
                   CAM.partition_map new_fill_state ~f:(fun _s fs ->
                     if fs.worse >= c.width then `Fst fs else `Snd fs)
                 in
                 let full_bands = next_band t c full in
+                (*let () =
+                  printf "new bands for k:%d at %d: %d\n" k i (List.length full_bands);
+                  List.iter full_bands ~f:(fun b ->
+                    printf "\t%s\n" (to_string (sprintf "%f") b))
+                in*)
                 let nacc = full_bands @ acc in
-                if CAM.length not_full_state = 0 then (* And nothing left to fill -> Done *)
-                  nacc, nem_map
-                else if k = Array.length t.increment_a then (* reached end ! *)
+                if CAM.length not_full_state = 0 ||     (* Nothing left to fill -> Done *)
+                   k = Array.length t.increment_a then                  (* Reached end! *)
                   nacc, nem_map
                 else begin
                   CAM.fold not_full_state ~init:(nacc, nem_map)
@@ -1435,10 +1458,9 @@ module Bands = struct
                               loop em_map acc (CAM.singleton alleles2 state) alleles2
                               entry [next_row]))
                 end
-              end else (* Still have remaining rows to fill. *)
-                loop nem_map acc new_fill_state not_full_alleles entry rows
+              end
         in
-        loop nem_map [] state b.alleles first_entry rows
+        loop nem_map [] state b.alleles first_entry trows
     end
 
   let fill_end recurrences final forward b =
