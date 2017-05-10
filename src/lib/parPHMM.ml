@@ -1515,8 +1515,29 @@ module Bands = struct
 
 end (* Bands *)
 
+type mapped_stats =
+  { regular     : (float * string) list
+  ; rpositions  : (float * int) list
+  ; complement  : (float * string) list
+  ; cpositions  : (float * int) list
+  }
+
+let mapped_stats_to_string ms =
+  let al_to_s l =
+    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf "%s:%f" a l))
+  in
+  let pl_to_s l =
+    String.concat ~sep:";" (List.map l ~f:(fun (l,p) -> sprintf "%d:%f" p l))
+  in
+  sprintf "%s\t%s\t%s\t%s"
+    (al_to_s ms.regular)
+    (pl_to_s ms.rpositions)
+    (al_to_s ms.complement)
+    (pl_to_s ms.cpositions)
+
+
 (*** Full Forward Pass *)
-let forward_pass ?(logspace=true) ?ws ?band t read_size =
+let forward_pass ?(map=false) ?(logspace=true) ?ws ?band t read_size =
   if !debug_ref then save_pphmm t;
   let bigK = Array.length t.emissions_a in
   let number_alleles = Alleles.length t.allele_index in
@@ -1542,37 +1563,67 @@ let forward_pass ?(logspace=true) ?ws ?band t read_size =
     | Some c ->
         fun read read_prob ->
           (* clear the forward array since the banded pass algorithm relies on
-             unfilled cells to indicate boundaries, places where we use heuristics.*)
+             unfilled cells to indicate boundaries; places where we use heuristics.*)
           ws.forward <- Array.init bigK ~f:(fun _ -> Array.make read_size CAM.empty);
           regular_both t ws recurrences last_row c.Bands.start_column read read_prob;
           Bands.pass c t ws recurrences last_row last_read_index read read_prob
   in
-  fun ?(check_rc=true) ~into read read_prob ->
-    if check_rc then begin
-      pass read read_prob;                                        (* Regular. *)
-      let regular = Array.copy ws.per_allele_emission in
-      pass (reverse_complement read) (array_rev read_prob);     (* Complement *)
-      if compare_emissions regular ws.per_allele_emission then begin
-        recurrences.combine ~into regular;
-        into
-      end else begin
-        recurrences.combine ~into ws.per_allele_emission;
-        into
-      end
-    end else begin
-      pass read read_prob;
-      recurrences.combine ~into ws.per_allele_emission;
-      if !debug_ref then save_workspace ws;
-      into
-    end
+  if map then
+    let lg5 a i lst = largest 5 a i lst in
+    let allist = Alleles.(current () |> to_alleles) in
+    let cam_max = CAM.fold ~init:(neg_infinity) ~f:(fun m _s v -> max m v) in
+    let best_alleles emissions =
+      Array.to_list emissions
+      |> List.fold_left2 allist
+        ~init:[] ~f:(fun acc allele emission -> lg5 emission allele acc)
+    in
+    let best_positions final =
+      Array.fold_left final ~init:(0, [])
+        ~f:(fun (p, acc) fcam-> (p+1,lg5 (cam_max fcam) p acc))
+      |> snd
+    in
+    `Mapper (
+      fun read read_prob ->
+        pass read read_prob;                                        (* Regular. *)
+        let regular     = best_alleles ws.per_allele_emission in
+        let rpositions  = best_positions ws.final in
+        pass (reverse_complement read) (array_rev read_prob);     (* Complement *)
+        let complement  = best_alleles ws.per_allele_emission in
+        let cpositions  = best_positions ws.final in
+        { regular; rpositions; complement; cpositions})
+  else
+    `Reducer (
+      fun ?(check_rc=true) ~into read read_prob ->
+        if check_rc then begin
+          pass read read_prob;                                        (* Regular. *)
+          let regular = Array.copy ws.per_allele_emission in
+          pass (reverse_complement read) (array_rev read_prob);     (* Complement *)
+          if compare_emissions regular ws.per_allele_emission then begin
+            recurrences.combine ~into regular;
+            into
+          end else begin
+            recurrences.combine ~into ws.per_allele_emission;
+            into
+          end
+        end else begin
+          pass read read_prob;
+          recurrences.combine ~into ws.per_allele_emission;
+          if !debug_ref then save_workspace ws;
+          into
+        end)
 
-let setup ?ws ?band ~logspace t read_size =
-  let perform_forward_pass = forward_pass ?band ?ws ~logspace t read_size in
-  let output_array =
-    let number_alleles = Alleles.length t.allele_index in
-    if logspace then
-      ForwardLogSpace.per_allele_emission_arr number_alleles
-    else
-      Forward.per_allele_emission_arr number_alleles
-  in
-  perform_forward_pass, output_array
+let setup ?map ?ws ?band ~logspace t read_size =
+  forward_pass ?map ?band ?ws ~logspace t read_size
+  |> function
+      | `Reducer f -> begin
+          let output_array =
+            let number_alleles = Alleles.length t.allele_index in
+            if logspace then
+              ForwardLogSpace.per_allele_emission_arr number_alleles
+            else
+              Forward.per_allele_emission_arr number_alleles
+          in
+          `Reducer (f, output_array)
+        end
+      | `Mapper m ->
+          `Mapper m

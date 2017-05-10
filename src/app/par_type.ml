@@ -31,7 +31,7 @@ let to_read_size_dependent
 
 exception PPE of string
 
-let to_update_f ~check_rc ~logspace perform_forward_pass update_me fqi =
+let to_reduce_update_f ~check_rc ~logspace perform_forward_pass update_me fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
     let p = if logspace then Fastq.phred_log_probs else Fastq.phred_probabilities in
@@ -40,46 +40,97 @@ let to_update_f ~check_rc ~logspace perform_forward_pass update_me fqi =
     | Result.Ok read_probs ->
       perform_forward_pass ~into:update_me fqi.Biocaml_unix.Fastq.sequence read_probs)
 
-let to_set ~check_rc ?band ~logspace rp read_size =
+let to_map_update_f ~logspace f acc fqi =
+  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
+    let open Core_kernel.Std in
+    let p = if logspace then Fastq.phred_log_probs else Fastq.phred_probabilities in
+    match p fqi.Biocaml_unix.Fastq.qualities with
+    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
+    | Result.Ok read_probs ->
+        let t = f fqi.Biocaml_unix.Fastq.sequence read_probs in
+        (fqi.Biocaml_unix.Fastq.name, t) :: acc)
+
+type 'a g =
+  { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
+  ; fin       : 'a -> unit
+  ; mutable s : 'a
+  }
+
+(* TODO: Use GADT *)
+let proc_g = function
+  | `Mapper g -> begin fun fqi ->
+                  g.s <- g.f g.s fqi;
+                  `Mapper g
+                 end
+  | `Reducer g -> begin fun fqi ->
+                  g.s <- g.f g.s fqi;
+                  `Reducer g
+                 end
+
+
+let to_set ~map ~check_rc ?band ~logspace rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
   in
-  let perform_forward_pass, update_me =
-    time (sprintf "Allocating forward pass workspaces")
-      (fun () -> ParPHMM.setup ?band ~logspace pt read_size)
-  in
-  let update = to_update_f ~check_rc ~logspace (perform_forward_pass ~check_rc) in
   let alleles = Alleles.to_alleles pt.ParPHMM.allele_index in
-  `Set (alleles, update, update_me)
+  let g =
+    time (sprintf "Allocating forward pass workspaces")
+      (fun () ->
+        match ParPHMM.setup ~map ?band ~logspace pt read_size with
+        | `Reducer (f, u) ->
+            `Reducer
+              { f   = to_reduce_update_f ~check_rc ~logspace (f ~check_rc)
+              ; s   = u
+              ; fin = fun final_likelihoods ->
+                  List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
+                  |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
+                  |> List.iter ~f:(fun (l,a) ->
+                      let v = (*if logspace then 10. ** l else*) l in
+                      printf "%10s\t%0.20f\n" a v)
+              }
+        | `Mapper m ->
+            `Mapper
+              { f   = to_map_update_f ~logspace m
+              ; s   = []
+              ; fin = begin fun lst ->
+                        printf "got %d\n" (List.length lst);
+                        List.iter lst ~f:(fun (n, s) ->
+                          printf "%s:%s\n" n (ParPHMM.mapped_stats_to_string s))
+              end
 
-let across_fastq ?number_of_reads ~specific_reads ~check_rc ?band ~logspace file init =
+
+              }
+      )
+  in
+  `Set g
+
+let fin = function
+  | `Setup _ -> eprintf "Didn't fine any reads."
+  | `Set (`Mapper g)  -> g.fin g.s
+  | `Set (`Reducer g) -> g.fin g.s
+
+
+
+let across_fastq ~map ?number_of_reads ~specific_reads ~check_rc ?band ~logspace file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set (alleles, update, update_me) =
-                  to_set ~check_rc ?band ~logspace rp read_size
-                in
-                `Set (alleles, update, update update_me fqi)
-            | `Set (alelles, update, ret) ->
-                `Set (alelles, update, update ret fqi))
-    |> function
-        | `Setup _ -> eprintf "Didn't fine any reads."
-        | `Set (alleles, _, final_likelihoods) ->
-            List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
-            |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-            |> List.iter ~f:(fun (l,a) ->
-                let v = (*if logspace then 10. ** l else*) l in
-                printf "%10s\t%0.20f\n" a v)
+                let `Set g = to_set ~map ~check_rc ?band ~logspace rp read_size in
+                `Set (proc_g g fqi)
+            | `Set g ->
+                `Set (proc_g g fqi))
+    |> fin
   with PPE e ->
     eprintf "%s" e
 
+
 let type_
   (* Allele information source *)
-  alignment_file merge_file distance not_impute
+    alignment_file merge_file distance not_impute
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
   (* Process *)
@@ -94,6 +145,8 @@ let type_
     start_column
     number
     width
+  (* how are we typing *)
+    map
     =
   let logspace = not not_logspace in
   let impute   = not not_impute in
@@ -116,12 +169,12 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set ~check_rc ?band ~logspace need_read_size r
+      | Some r -> to_set ~map ~check_rc ?band ~logspace need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~check_rc
+    | [fastq]         -> across_fastq ~map ?number_of_reads ~specific_reads ~check_rc
                             ?band ~logspace fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
@@ -190,6 +243,13 @@ let () =
           & opt greater_than_one default
           & info ~doc ~docv ["band-width"])
   in
+  let map_flag =
+    let doc = "Map (do not reduce) the typing of the individual reads." in
+    let docv = "This switch turns the typing logic into more of a diagnostic \
+                mode. The end user can see how individual reads are typed."
+    in
+    Arg.(value & flag & info ~doc ~docv ["map"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -223,8 +283,9 @@ let () =
             $ band_start_column_arg
             $ number_bands_arg
             $ band_width_arg
-            (* How are we typing
-            $ map_arg $ map_allele_arg
+            (* How are we typing *)
+            $ map_flag
+            (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
               $ upto_kmer_hood_arg
