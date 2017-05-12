@@ -94,11 +94,13 @@ let to_set ~map ~check_rc ?band ~logspace rp read_size =
               ; s   = []
               ; fin = begin fun lst ->
                         printf "got %d\n" (List.length lst);
-                        List.iter lst ~f:(fun (n, s) ->
+                        List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
+                          ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
+                        |> List.rev
+                        |> List.iter ~f:(fun (n, s) ->
                           printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
                       end
-              }
-      )
+              })
   in
   `Set g
 

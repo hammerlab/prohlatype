@@ -1529,15 +1529,21 @@ let mapped_stats_to_string ?(sep='\t') ms =
   let pl_to_s l =
     String.concat ~sep:";" (List.map l ~f:(fun (l,p) -> sprintf "%d:%0.2f" p l))
   in
-  sprintf "%s%c%s%c%s%c%s"
-    (al_to_s ms.regular)
-    sep
-    (al_to_s ms.complement)
-    sep
-    (pl_to_s ms.rpositions)
-    sep
-    (pl_to_s ms.cpositions)
+  if fst (List.hd_exn ms.rpositions) > fst (List.hd_exn ms.cpositions) then
+    sprintf "R %s%c%s%c%s%c%s"
+      (al_to_s ms.regular)    sep
+      (al_to_s ms.complement) sep
+      (pl_to_s ms.rpositions) sep
+      (pl_to_s ms.cpositions)
+  else
+    sprintf "C %s%c%s%c%s%c%s"
+      (al_to_s ms.complement) sep
+      (al_to_s ms.regular)    sep
+      (pl_to_s ms.cpositions) sep
+      (pl_to_s ms.rpositions)
 
+let best_stat ms =
+  max (fst (List.hd_exn ms.rpositions)) (fst (List.hd_exn ms.cpositions))
 
 (*** Full Forward Pass *)
 let forward_pass ?(map=false) ?(logspace=true) ?ws ?band t read_size =
