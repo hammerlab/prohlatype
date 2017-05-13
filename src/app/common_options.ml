@@ -56,13 +56,13 @@ let non_negative_int =
 (*** Graph source arguments. ***)
 let file_arg =
   let docv = "FILE" in
-  let doc  = "File to lookup IMGT allele alignments. The alleles found in this\
-              file will initially define the set of alleles to be used. Use an\
+  let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
+              file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
   Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
 
 let merge_arg =
-  let parser path =
+  let parser_ path =
     let s = Filename.basename path in
     let n = path ^ "_nuc.txt" in
     let g = path ^ "_gen.txt" in
@@ -75,7 +75,7 @@ let merge_arg =
     else
       `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
-  let convrtr = parser, (fun frmt -> Format.fprintf frmt "%s") in
+  let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
   let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
