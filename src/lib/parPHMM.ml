@@ -749,20 +749,21 @@ module ForwardGen (R : Ring) = struct
   let recurrences tm ~insert_prob read_size =
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
-    let t_s_m = constant (tm `StartOrEnd `Match) in
-    let t_s_i = constant (tm `StartOrEnd `Insert) in
-    let t_m_m = constant (tm `Match `Match) in
-    let t_i_m = constant (tm `Insert `Match) in
-    let t_d_m = constant (tm `Delete `Match) in
+    let open Phmm.TransitionMatrix in
+    let t_s_m = constant (tm StartOrEnd Match) in
+    let t_s_i = constant (tm StartOrEnd Insert) in
+    let t_m_m = constant (tm Match Match) in
+    let t_i_m = constant (tm Insert Match) in
+    let t_d_m = constant (tm Delete Match) in
 
-    let t_m_i = constant (tm `Match `Insert) in
-    let t_i_i = constant (tm `Insert `Insert) in
+    let t_m_i = constant (tm Match Insert) in
+    let t_i_i = constant (tm Insert Insert) in
 
-    let t_m_d = constant (tm `Match `Delete) in
-    let t_d_d = constant (tm `Delete `Delete) in
+    let t_m_d = constant (tm Match Delete) in
+    let t_d_d = constant (tm Delete Delete) in
 
-    let t_m_s = constant (tm `Match `StartOrEnd) in
-    let t_i_s = constant (tm `Insert `StartOrEnd) in
+    let t_m_s = constant (tm Match StartOrEnd) in
+    let t_i_s = constant (tm Insert StartOrEnd) in
 
     let start_i = t_s_i * insert_prob in
     (* TODO: I could imagine some scenario's where it makes sense to cache,
