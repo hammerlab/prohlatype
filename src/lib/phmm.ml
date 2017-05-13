@@ -145,7 +145,7 @@ let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
   let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
   let insert_prob = 0.25 in (* There are 4 characters, assume equality. *)
   let p_c_m i k =
-    if read.[i] = refs.[k] then
+    if String.get_exn read i = String.get_exn refs k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.
@@ -396,7 +396,7 @@ let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
   let p_c_m i k =
     if k = ref_length || i = ref_length then
       0.0
-    else if read.[i] = refs.[k] then
+    else if String.get_exn read i = String.get_exn refs k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.
