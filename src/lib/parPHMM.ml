@@ -668,9 +668,111 @@ let cell_to_string f c =
   sprintf "{match_: %s; insert: %s; delete: %s}"
     (f c.match_) (f c.insert) (f c.delete)
 
+type 'a recurrences =
+  { start   : 'a -> 'a cell
+  ; top_row : 'a -> 'a cell -> 'a cell
+  ; middle  : 'a -> insert_c:('a cell)
+                 -> delete_c:('a cell)
+                 -> match_c:('a cell)
+                 -> 'a cell
+  ; end_    : 'a cell -> 'a
+  }
+
+(** What are the values and equations that determine how probabilities are
+    calculated in the forward pass. *)
+module ForwardCalcs  (R : Ring) = struct
+
+  (* TODO. Avoid the `float_of_int (Phred_score.to_int c) /. -10.` round trip
+      between converting to log10p and then back to log10, and just use char's
+      instead for the quality calc. *)
+  let to_match_prob base base_error =
+    let compare_against c =
+      if base = c then
+        R.complement_probability base_error
+      else
+        R.times_one_third base_error
+    in
+    let open BaseState in
+    function
+    | A -> compare_against 'A'
+    | C -> compare_against 'C'
+    | G -> compare_against 'G'
+    | T -> compare_against 'T'
+
+  let g tm ~insert_p read_size =
+
+    let open R in                       (* Opening R shadows '+' and '*' below*)
+    let open Phmm.TransitionMatrix in
+    let t_s_m = constant (tm StartOrEnd Match) in
+    let t_s_i = constant (tm StartOrEnd Insert) in
+    let t_m_m = constant (tm Match Match) in
+    let t_i_m = constant (tm Insert Match) in
+    let t_d_m = constant (tm Delete Match) in
+
+    let t_m_i = constant (tm Match Insert) in
+    let t_i_i = constant (tm Insert Insert) in
+
+    let t_m_d = constant (tm Match Delete) in
+    let t_d_d = constant (tm Delete Delete) in
+
+    let t_m_s = constant (tm Match StartOrEnd) in
+    let t_i_s = constant (tm Insert StartOrEnd) in
+
+    let start_i = insert_p * t_s_i in
+    { start   = begin fun emission_p ->
+                  { match_ = emission_p * t_s_m
+                  ; insert = start_i
+                  ; delete = zero
+                  }
+                end
+    ; top_row = begin fun emission_p insert_c ->
+                  { match_ = emission_p * ( t_m_m * zero
+                                          + t_i_m * zero
+                                          + t_d_m * zero)
+                  ; insert = insert_p   * ( t_m_i * insert_c.match_
+                                          + t_i_i * insert_c.insert)
+                  ; delete = (* one *  *) ( t_m_d * zero
+                                          + t_d_d * zero)
+                  }
+                end
+    ; middle  = begin fun emission_p ~insert_c ~delete_c ~match_c ->
+                  let r =
+                    { match_ = emission_p * ( t_m_m * match_c.match_
+                                            + t_i_m * match_c.insert
+                                            + t_d_m * match_c.delete)
+                    ; insert = insert_p   * ( t_m_i * insert_c.match_
+                                            + t_i_i * insert_c.insert)
+                    ; delete = (* one *)    ( t_m_d * delete_c.match_
+                                            + t_d_d * delete_c.delete)
+                    }
+                  in
+               (* let () =
+                    printf "--------%d %d %s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+                      k i (R.to_string emission_p)
+                      (cell_to_string R.to_string match_c)
+                      (cell_to_string R.to_string insert_c)
+                      (cell_to_string R.to_string delete_c)
+                      (cell_to_string R.to_string r)
+                   in*)
+                  r
+                 end
+   ; end_    = begin fun cell ->
+                  cell.match_ * t_m_s + cell.insert * t_i_s
+               end
+   }
+
+  let zero_cell =
+    { match_ = R.zero
+    ; insert = R.zero
+    ; delete = R.zero
+    }
+
+end (* ForwardCalcs *)
+
 type 'a entry = 'a cell CAM.t
 type 'a final_entry = 'a CAM.t
 
+(* TODO: Wrap in module. *)
 type workspace =
   { mutable forward             : float entry array array
   ; mutable final               : float final_entry array
@@ -696,11 +798,11 @@ module IntMap = Map.Make(struct type t = int [@@deriving ord] end)
 
 type 'a emission_map = (int * 'a) CAM.t IntMap.t
 
-type 'a fwd_recurrences =
-  { start     :  char -> float -> emissions -> 'a entry
-  ; first_row : 'a entry array array -> char -> float ->
+type 'a fwr =
+  { f_start   :  char -> float -> emissions -> 'a entry
+  ; f_top_row : 'a entry array array -> char -> float ->
                   emissions -> i:int -> k:int -> 'a entry
-  ; middle    : 'a entry array array -> char -> float ->
+  ; f_middle  : 'a entry array array -> char -> float ->
                   emissions -> i:int -> k:int -> 'a entry
   (* This isn't the greatest design.... *)
   ; middle_emissions : char -> float -> emissions -> (int * 'a) CAM.t
@@ -710,7 +812,7 @@ type 'a fwd_recurrences =
                 i:int -> k:int -> 'a entry
 
   (* Doesn't use the delete section. *)
-  ; end_      : 'a entry array array -> int -> 'a final_entry
+  ; f_end_    : 'a entry array array -> int -> 'a final_entry
 
   ; emission  : ?spec_rows:(int list list) -> 'a final_entry array -> 'a array
 
@@ -720,79 +822,34 @@ type 'a fwd_recurrences =
 
 module ForwardGen (R : Ring) = struct
 
-  (* TODO. Avoid the `float_of_int (Phred_score.to_int c) /. -10.` round trip
-      between converting to log10p and then back to log10, and just use char's
-      instead for the quality calc. *)
-  let to_match_prob base base_error =
-    let compare_against c =
-      if base = c then
-        R.complement_probability base_error
-      else
-        R.times_one_third base_error
-    in
-    let open BaseState in
-    function
-    | A -> compare_against 'A'
-    | C -> compare_against 'C'
-    | G -> compare_against 'G'
-    | T -> compare_against 'T'
-
   let per_allele_emission_arr len =
     Array.make len R.one
 
-  let zero_cell =
-    { match_ = R.zero
-    ; insert = R.zero
-    ; delete = R.zero
-    }
+  module Fc = ForwardCalcs(R)
 
-  let recurrences tm ~insert_prob read_size =
+  let recurrences tm ~insert_p read_size =
+    let r = Fc.g tm ~insert_p read_size in
 
-    let open R in                       (* Opening R shadows '+' and '*' below*)
-    let open Phmm.TransitionMatrix in
-    let t_s_m = constant (tm StartOrEnd Match) in
-    let t_s_i = constant (tm StartOrEnd Insert) in
-    let t_m_m = constant (tm Match Match) in
-    let t_i_m = constant (tm Insert Match) in
-    let t_d_m = constant (tm Delete Match) in
-
-    let t_m_i = constant (tm Match Insert) in
-    let t_i_i = constant (tm Insert Insert) in
-
-    let t_m_d = constant (tm Match Delete) in
-    let t_d_d = constant (tm Delete Delete) in
-
-    let t_m_s = constant (tm Match StartOrEnd) in
-    let t_i_s = constant (tm Insert StartOrEnd) in
-
-    let start_i = t_s_i * insert_prob in
-    (* TODO: I could imagine some scenario's where it makes sense to cache,
+   (* TODO: I could imagine some scenario's where it makes sense to cache,
        precompute or memoize this calculation. The # of base errors isn't
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
     let to_em_set base base_error emissions =
       CAM.map emissions ~f:(fun (b, offset) ->
-        offset, to_match_prob base base_error b)
+        offset, Fc.to_match_prob base base_error b)
     in
-    { start   = begin fun base base_error emissions ->
+    { f_start = begin fun base base_error emissions ->
                   to_em_set base base_error emissions
                   |> CAM.map ~bijective:true
-                      ~f:(fun (_offset, emissionp) ->
-                            { match_ = emissionp * t_s_m
-                            ; insert = start_i
-                            ; delete = zero
-                            })
+                      ~f:(fun (_offset, emissionp) -> r.start emissionp)
                 end
-    ; first_row = begin fun fm base base_error emissions ~i ~k ->
+    ; f_top_row = begin fun fm base base_error emissions ~i ~k ->
                     to_em_set base base_error emissions
                     |> CAM.map2 (fm.(k).(i-1))
-                        ~f:(fun ic (_offset, emission_p) ->
-                              { match_ = emission_p * ( t_m_m * zero + t_i_m * zero + t_d_m * zero)
-                              ; insert = insert_prob * (t_m_i * ic.match_ + t_i_i * ic.insert)
-                              ; delete =   (* one * *) (t_m_d * zero + t_d_d * zero)
-                              })
-                  end
-    ; middle  = begin fun fm base base_error emissions ~i ~k ->
+                        ~f:(fun insert_c (_offset, emission_p) ->
+                              r.top_row emission_p insert_c)
+                 end
+    ; f_middle = begin fun fm base base_error emissions ~i ~k ->
                   let inserts = fm.(k).(i-1) in
                   let ems = to_em_set base base_error emissions in
                   CAM.concat_map2 inserts ~by:ems   (* ORDER matters for performance! *)
@@ -804,38 +861,13 @@ module ForwardGen (R : Ring) = struct
                             (* inserti should come before other 2 for performance. *)
                             CAM.map3 insertsi deletes matches
                                 ~f:(fun insert_c delete_c match_c ->
-                                      { match_ = emission_p * ( t_m_m * match_c.match_
-                                                              + t_i_m * match_c.insert
-                                                              + t_d_m * match_c.delete)
-                                      ; insert = insert_prob * ( t_m_i * insert_c.match_
-                                                               + t_i_i * insert_c.insert)
-                                      ; delete = (* one *)     ( t_m_d * delete_c.match_
-                                                               + t_d_d * delete_c.delete)
-                                      }))
-                end
+                                    r.middle emission_p ~insert_c ~delete_c ~match_c))
+               end
     ; middle_emissions = to_em_set
     ; banded  = begin fun fm allele_ems ?prev_col ?cur_col ~i ~k ->
                   let with_insert inters (offset, emission_p) insert_c =
-                    let calc insert_c match_c delete_c =
-                      let r =
-                        { match_ = emission_p  * ( t_m_m * match_c.match_
-                                                 + t_i_m * match_c.insert
-                                                 + t_d_m * match_c.delete)
-                        ; insert = insert_prob * ( t_m_i * insert_c.match_
-                                                 + t_i_i * insert_c.insert)
-                        ; delete = (* one *)     ( t_m_d * delete_c.match_
-                                                 + t_d_d * delete_c.delete)
-                        }
-                      in
-                      (*let () =
-                        printf "--------%d %d %s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
-                          k i (R.to_string emission_p)
-                          (cell_to_string R.to_string match_c)
-                          (cell_to_string R.to_string insert_c)
-                          (cell_to_string R.to_string delete_c)
-                          (cell_to_string R.to_string r)
-                      in*)
-                      r
+                    let calc insert_c delete_c match_c =
+                      r.middle emission_p ~insert_c ~delete_c ~match_c
                     in
                     let ks = Pervasives.(+) k offset in
                     let matches = fm.(ks).(i-1) in
@@ -845,10 +877,10 @@ module ForwardGen (R : Ring) = struct
                       ~by1:matches
                       ~missing1:(fun missing_matches _insert_c ->
                         CAM.singleton missing_matches
-                          (Option.value prev_col ~default:zero_cell))
+                          (Option.value prev_col ~default:Fc.zero_cell))
                       ~by2:deletes
                       ~missing2:(fun missing_deletes _insert_c _match_c ->
-                          let default = CAM.singleton missing_deletes zero_cell in
+                          let default = CAM.singleton missing_deletes Fc.zero_cell in
                           Option.value_map ~default cur_col ~f:(fun as_ ->
                             Option.value (CAM.get missing_deletes as_) ~default))
                       ~f:calc
@@ -862,11 +894,11 @@ module ForwardGen (R : Ring) = struct
                           | Some v -> with_insert missing_inserts ep_pair v)
                       ~f:with_insert
                 end
-    ; end_    = begin fun fm k ->
-                  CAM.map ~bijective:true fm.(k).(read_size-1)
-                    ~f:(fun c -> c.match_ * t_m_s + c.insert * t_i_s)
+    ; f_end_  = begin fun fm k ->
+                  CAM.map ~bijective:true fm.(k).(read_size-1) ~f:r.end_
                 end
     ; emission  = begin fun ?spec_rows final ->
+                    let open R in
                     let ret = Alleles.Map.make zero in
                     let update_cam l =
                       CAM.iter l ~f:(fun alleles v ->
@@ -882,6 +914,7 @@ module ForwardGen (R : Ring) = struct
                     Alleles.Map.to_array ret
                   end
     ; combine   = begin fun ~into em ->
+                    let open R in
                     Array.iteri em ~f:(fun i e -> into.(i) <- into.(i) * e)
                   end
     }
@@ -1091,7 +1124,7 @@ let generate_workspace_conf c read_size =
   let number_alleles = Alleles.length c.allele_index in
   generate_workspace number_alleles bigK read_size
 
-let arr_to_str a =
+let float_arr_to_str a =
   Array.to_list a
   |> List.map ~f:(sprintf "%f")
   |> String.concat ~sep:"; "
@@ -1106,29 +1139,29 @@ let compare_emissions e1 e2 =
 let regular_pass t ws recurrences rows columns read read_prob =
   (* special case the first row. *)
   ws.forward.(0).(0) <-
-    recurrences.start (String.get_exn read 0) read_prob.(0) t.emissions_a.(0);
+    recurrences.f_start (String.get_exn read 0) read_prob.(0) t.emissions_a.(0);
   for i = 1 to columns do
     let base = String.get_exn read i in
     let base_prob = read_prob.(i) in
     ws.forward.(0).(i) <-
-      recurrences.first_row ws.forward base base_prob ~i ~k:0 t.emissions_a.(0)
+      recurrences.f_top_row ws.forward base base_prob ~i ~k:0 t.emissions_a.(0)
   done;
   (* All other rows. *)
   for k = 1 to rows do
     let ek = t.emissions_a.(k) in
     ws.forward.(k).(0) <-
-      recurrences.start (String.get_exn read 0) read_prob.(0) ek;
+      recurrences.f_start (String.get_exn read 0) read_prob.(0) ek;
     for i = 1 to columns do
       let base = String.get_exn read i in
       let base_prob = read_prob.(i) in
       ws.forward.(k).(i) <-
-        recurrences.middle ws.forward base base_prob ~i ~k ek
+        recurrences.f_middle ws.forward base base_prob ~i ~k ek
     done
   done
 
 let regular_final ws recurrences rows =
   for k = 0 to rows do
-    ws.final.(k) <- recurrences.end_ ws.forward k
+    ws.final.(k) <- recurrences.f_end_ ws.forward k
   done;
   ws.per_allele_emission <- recurrences.emission ws.final
 
@@ -1476,7 +1509,7 @@ module Bands = struct
 
   let fill_end recurrences final forward b =
     List.iter b.rows ~f:(fun k ->
-      final.(k) <- CAM.join (recurrences.end_ forward k) final.(k))
+      final.(k) <- CAM.join (recurrences.f_end_ forward k) final.(k))
 
   let pass c t ws recurrences last_row last_read_index =
     (* order matters for passing along last_col *)
@@ -1561,10 +1594,10 @@ let forward_pass ?(map=false) ?(logspace=true) ?ws ?band t read_size =
   let bigK = Array.length t.emissions_a in
   let number_alleles = Alleles.length t.allele_index in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
-  let insert_prob = 0.25 in
+  let insert_p = 0.25 in
   let recurrences =
     (if logspace then ForwardLogSpace.recurrences else Forward.recurrences)
-      tm ~insert_prob read_size
+      tm ~insert_p read_size
   in
   let ws =
     match ws with
