@@ -630,6 +630,8 @@ end = struct
 
 end (* CAM *)
 
+let cam_max = CAM.fold ~init:(neg_infinity) ~f:(fun m _s v -> max m v)
+
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
 
@@ -681,6 +683,14 @@ let generate_workspace number_alleles bigK read_size =
   ; final               = Array.make bigK CAM.empty
   ; per_allele_emission = just_zeros number_alleles
   }
+
+let clear_workspace ws =
+  let bigK = Array.length ws.final in
+  let rs   = Array.length ws.forward.(0) in
+  let numA = Array.length ws.per_allele_emission in
+  ws.forward <- Array.init bigK ~f:(fun _ -> Array.make rs CAM.empty);
+  ws.final   <- Array.make bigK CAM.empty;
+  Array.fill ws.per_allele_emission ~pos:0 ~len:numA 0.
 
 module IntMap = Map.Make(struct type t = int [@@deriving ord] end)
 
@@ -857,16 +867,16 @@ module ForwardGen (R : Ring) = struct
                 end
     ; emission  = begin fun ?spec_rows final ->
                     let ret = Alleles.Map.make zero in
-                    let update_from_allele_assoc l =
+                    let update_cam l =
                       CAM.iter l ~f:(fun alleles v ->
                         Alleles.Map.update_from alleles ~f:((+) v) ret)
                     in
                     let () =
                       match spec_rows with
-                      | None   -> Array.iter final ~f:update_from_allele_assoc
+                      | None   -> Array.iter final ~f:update_cam
                       | Some l -> List.iter l ~f:(fun rows ->
                                     List.iter rows ~f:(fun k ->
-                                      update_from_allele_assoc final.(k)))
+                                      update_cam final.(k)))
                     in
                     Alleles.Map.to_array ret
                   end
@@ -1523,23 +1533,22 @@ type mapped_stats =
   }
 
 let mapped_stats_to_string ?(sep='\t') ms =
-  let al_to_s l =
-    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf "%s:%0.2f" a l))
+  let l_to_s fmt l =
+    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf fmt  a l))
   in
-  let pl_to_s l =
-    String.concat ~sep:";" (List.map l ~f:(fun (l,p) -> sprintf "%d:%0.2f" p l))
-  in
+  let al_to_s l = l_to_s "%s:%0.2f" l in
+  let pl_to_s l = l_to_s "%d:%0.2f" l in
   if fst (List.hd_exn ms.rpositions) > fst (List.hd_exn ms.cpositions) then
     sprintf "R %s%c%s%c%s%c%s"
       (al_to_s ms.regular)    sep
-      (al_to_s ms.complement) sep
       (pl_to_s ms.rpositions) sep
+      (al_to_s ms.complement) sep
       (pl_to_s ms.cpositions)
   else
     sprintf "C %s%c%s%c%s%c%s"
       (al_to_s ms.complement) sep
-      (al_to_s ms.regular)    sep
       (pl_to_s ms.cpositions) sep
+      (al_to_s ms.regular)    sep
       (pl_to_s ms.rpositions)
 
 let best_stat ms =
@@ -1571,16 +1580,15 @@ let forward_pass ?(map=false) ?(logspace=true) ?ws ?band t read_size =
         regular_both t ws recurrences last_row last_read_index
     | Some c ->
         fun read read_prob ->
-          (* clear the forward array since the banded pass algorithm relies on
+          (* clear the forward/final array since the banded pass algorithm relies on
              unfilled cells to indicate boundaries; places where we use heuristics.*)
-          ws.forward <- Array.init bigK ~f:(fun _ -> Array.make read_size CAM.empty);
-          regular_both t ws recurrences last_row c.Bands.start_column read read_prob;
+          clear_workspace ws;
+          regular_pass t ws recurrences last_row c.Bands.start_column read read_prob;
           Bands.pass c t ws recurrences last_row last_read_index read read_prob
   in
   if map then
     let lg5 a i lst = largest 5 a i lst in
     let allist = Alleles.(current () |> to_alleles) in
-    let cam_max = CAM.fold ~init:(neg_infinity) ~f:(fun m _s v -> max m v) in
     let best_alleles emissions =
       Array.to_list emissions
       |> List.fold_left2 allist
@@ -1588,7 +1596,8 @@ let forward_pass ?(map=false) ?(logspace=true) ?ws ?band t read_size =
     in
     let best_positions final =
       Array.fold_left final ~init:(0, [])
-        ~f:(fun (p, acc) fcam-> (p+1,lg5 (cam_max fcam) p acc))
+        ~f:(fun (p, acc) fcam ->
+          (p + 1, lg5 (cam_max fcam) p acc))
       |> snd
     in
     `Mapper (
