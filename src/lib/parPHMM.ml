@@ -1649,35 +1649,33 @@ let forward_pass ?(map=false) ?logspace ?ws ?band t read_size =
           (p + 1, lg5 (cam_max fcam) p acc))
       |> snd
     in
-    `Mapper (
-      fun read read_prob ->
-        pass false read read_prob;                                    (* Regular. *)
-        let regular     = best_alleles ws.per_allele_emission in
-        let rpositions  = best_positions ws.final in
-        pass true read read_prob;                                   (* Complement *)
-        let complement  = best_alleles ws.per_allele_emission in
-        let cpositions  = best_positions ws.final in
-        { regular; rpositions; complement; cpositions})
+    `Mapper (fun read read_prob ->
+      pass false read read_prob;                                    (* Regular. *)
+      let regular     = best_alleles ws.per_allele_emission in
+      let rpositions  = best_positions ws.final in
+      pass true read read_prob;                                   (* Complement *)
+      let complement  = best_alleles ws.per_allele_emission in
+      let cpositions  = best_positions ws.final in
+      { regular; rpositions; complement; cpositions})
   else
-    `Reducer (
-      fun ?(check_rc=true) ~into read read_prob ->
-        if check_rc then begin
-          pass false read read_prob;                                  (* Regular. *)
-          let regular = Array.copy ws.per_allele_emission in
-          pass true read read_prob;                                 (* Complement *)
-          if compare_emissions regular ws.per_allele_emission then begin
-            combine ~into regular;
-            into
-          end else begin
-            combine ~into ws.per_allele_emission;
-            into
-          end
-        end else begin
-          pass false read read_prob;
-          combine ~into ws.per_allele_emission;
-          if !debug_ref then Workspace.save ws;
+    `Reducer (fun ?(check_rc=true) ~into read read_prob ->
+      if check_rc then begin
+        pass false read read_prob;                                  (* Regular. *)
+        let regular = Array.copy ws.per_allele_emission in
+        pass true read read_prob;                                 (* Complement *)
+        if compare_emissions regular ws.per_allele_emission then begin
+          combine ~into regular;
           into
-        end)
+        end else begin
+          combine ~into ws.per_allele_emission;
+          into
+        end
+      end else begin
+        pass false read read_prob;
+        combine ~into ws.per_allele_emission;
+        if !debug_ref then Workspace.save ws;
+        into
+      end)
 
 let setup ?map ?ws ?band ~logspace t read_size =
   forward_pass ?map ?band ?ws ~logspace t read_size
