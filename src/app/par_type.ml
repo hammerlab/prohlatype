@@ -230,7 +230,7 @@ let () =
     in
     Arg.(value
           & opt positive_int default
-          & info ~doc ~docv ["number_bands"])
+          & info ~doc ~docv ["number-bands"])
   in
   let band_width_arg =
     let default = ParPHMM.Bands.(default.width) in
