@@ -35,13 +35,15 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
   fun ?(skip_disk_cache=false) arg ->
     if skip_disk_cache then
       f arg
-    else
+    else begin
       let file = Filename.concat dir (arg_to_string arg) in
       let save r =
+        (*
         if not (Sys.file_exists dir) then make_full_path dir;
         let o = open_out file in
         Marshal.to_channel o r [];
         close_out o;
+        *)
         r
       in
       let load () =
@@ -58,6 +60,7 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
       end else begin
         save (f arg)
       end
+    end
 
 type graph_args =
   { input   : Alleles.Input.t
