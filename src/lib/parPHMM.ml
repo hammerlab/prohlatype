@@ -1711,13 +1711,6 @@ let reducer pass ?(check_rc=true) read read_prob =
     pass.per_allele_llhd ()
   end
 
-let reporter pass read read_prob =
-  pass.doit false read read_prob;                                 (* Regular. *)
-  let regular = Array.copy (pass.per_allele_llhd ()) in
-  pass.doit true read read_prob;                                (* Complement *)
-  let complement = pass.per_allele_llhd () in
-  regular, complement
-
 let forward_pass ?band mode t read_size =
   let pass = setup_single_pass ?band read_size t in
   match mode with
@@ -1725,6 +1718,11 @@ let forward_pass ?band mode t read_size =
   | `Reducer  -> `Reducer (pass.output_ws_array (), reducer pass)
 
 module Many = struct
+
+  type obs =
+    { regular     : float array
+    ; complement  : float array
+    }
 
   let max_arr = Array.fold_left ~init:neg_infinity ~f:max
 
@@ -1734,21 +1732,24 @@ module Many = struct
     ; llhd  : float array
     }
 
-  let to_bs (name, (rld, cld)) =
-    let rm = max_arr rld in
-    let cm = max_arr cld in
+  let to_bs (name, {regular; complement}) =
+    let rm = max_arr regular in
+    let cm = max_arr complement in
     if rm >= cm then
-      { name; maxl = rm ; llhd = rld}
+      { name; maxl = rm ; llhd = regular}
     else
-      { name; maxl = cm ; llhd = cld}
+      { name; maxl = cm ; llhd = complement}
+
+  let best_bs bs1 bs2 =
+    (*printf "%s %f vs %s %f\n%!" bs1.name bs1.maxl bs2.name bs2.maxl; *)
+    if bs1.maxl >= bs2.maxl then bs1 else bs2
 
   let best = function
     | []          -> invalid_argf "Can't select best from empty!"
     | h :: t ->
         let init = to_bs h in
         List.fold_left t ~init ~f:(fun bs p ->
-          let pbs = to_bs p in
-          if pbs.maxl > bs.maxl then pbs else bs)
+          best_bs bs (to_bs p))
 
   let add_log_likelihoods ~into nl =
     let n = Array.length into in
@@ -1766,6 +1767,14 @@ module Many = struct
 
 end (* Many *)
 
+let reporter pass read read_prob =
+  pass.doit false read read_prob;                                 (* Regular. *)
+  let regular = Array.copy (pass.per_allele_llhd ()) in
+  pass.doit true read read_prob;                                (* Complement *)
+  let complement = pass.per_allele_llhd () in
+  { Many.regular; complement}
+
+
 let forward_pass_m ?band mode tlst read_size =
   let passes =
     List.map tlst ~f:(fun (name,t) -> name, setup_single_pass ?band read_size t)
@@ -1777,5 +1786,6 @@ let forward_pass_m ?band mode tlst read_size =
   | `Reporter ->
       `Reporter ( List.map passes ~f:(fun (name, pass) -> name, pass.output_ws_array ())
                 , fun read read_prob state ->
-                  let current = List.map passes ~f:(fun (n, p) -> n, reporter p read read_prob) in
+                  let current = List.map passes ~f:(fun (n, p) ->
+                    n, reporter p read read_prob) in
                   Many.merge current state)
