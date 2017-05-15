@@ -3,13 +3,15 @@
 open Util
 open Common
 
-let adjacents_at_test { Ref_graph.g; offset; posarr; bounds} ~pos =
-  Ref_graph.adjacents_at_private g offset posarr bounds ~pos
+let adjacents_at_test { Ref_graph.g; aset; amap; offset; posarr; bounds} ~pos =
+  Ref_graph.adjacents_at_private g aset amap offset posarr bounds ~pos
 
+(*
 let test_graph file g pos =
   let open Ref_graph in
   let (edge_node_set, _, _) = adjacents_at_test g ~pos in
   print_endline (EdgeNodeSet.to_table edge_node_set)
+  *)
 
 let test_graph_fail file g pos =
   let open Ref_graph in

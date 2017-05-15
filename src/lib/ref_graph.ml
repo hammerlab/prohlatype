@@ -53,42 +53,19 @@ module Nodes = struct
     | N _ | B _ -> true
     | S _ | E _ -> false
 
-end
+end (* Nodes *)
 
 module Edges = struct
-  type t = Alleles.Set.set
+
+  type t = Alleles.set
   let hash = Hashtbl.hash
-  let compare = Alleles.Set.compare
-  let equal = Alleles.Set.equals
-  let default = Alleles.Set.empty
-end
+  let compare = Alleles.set_compare
+  let equal = Alleles.set_equals
+  let default = Alleles.set_empty
+
+end (* Edges *)
 
 module G = Imperative.Digraph.ConcreteLabeled(Nodes)(Edges)
-
-exception Found of Nodes.t
-
-let next_node_along g allele ~from =
-  try
-    G.fold_succ_e (fun (_, bt, vs) n ->
-        if Alleles.Set.is_set bt allele then raise (Found vs) else n)
-      g from None
-  with Found v ->
-    Some v
-
-let fold_along_allele g allele ~start ~f ~init =
-  if not (G.mem_vertex g start) then
-    invalid_argf "%s is not a vertex in the graph." (Nodes.vertex_name start)
-  else
-    let next = next_node_along g allele in
-    let rec loop from (acc, stop) =
-      match stop with
-      | `Stop     -> acc
-      | `Continue ->
-          match next ~from with
-          | None    -> acc
-          | Some vs -> loop vs (f acc vs)
-    in
-    loop start (f init start)
 
 let between g start stop =
   let ng = G.create () in
@@ -131,7 +108,7 @@ module EdgeNodeSet = struct
       if r = 0 then Edges.compare e1 e2 else r
   end)
 
-  let to_string ?max_length ?complement s =
+  (*let to_string ?max_length ?complement s =
     fold ~f:(fun (e, n) a ->
       (sprintf "(%s -> %s)"
         (Alleles.Set.to_human_readable ?max_length ?complement e)
@@ -147,13 +124,13 @@ module EdgeNodeSet = struct
           (Nodes.vertex_name n)
           (Alleles.Set.to_human_readable ?max_length ?complement e))
     |> String.concat ~sep:"\n"
-    |> sprintf "%s"
+    |> sprintf "%s" *)
 
 end (* EdgeNodeSet *)
 
 type adjacent_info =
   { edge_node_set : EdgeNodeSet.t
-  ; seen_alleles  : Alleles.Set.set
+  ; seen_alleles  : Alleles.set
   }
 
 type t =
@@ -161,7 +138,9 @@ type t =
   ; reference     : string
   ; g             : G.t                                            (* The actual graph. *)
   ; aindex        : Alleles.index               (* The allele index, for Sets and Maps. *)
-  ; bounds        : sep list Alleles.Map.map(* Map of where the alleles start and stop. *)
+  ; aset          : (module Alleles.Set)
+  ; amap          : (module Alleles.Map)
+  ; bounds        : sep list Alleles.map    (* Map of where the alleles start and stop. *)
   ; posarr        : by_position_array
   ; adjacents_arr : adjacent_info array
   ; offset        : int
@@ -178,47 +157,52 @@ type t =
 
 (** [starts_by_position g] returns an associated list of alignment_position and
     an a set of alleles that start at that position. *)
-let starts_by_position { bounds; _ } =
-  Alleles.Map.fold bounds ~init:[] ~f:(fun asc sep_lst allele ->
+let starts_by_position { bounds; amap; aset; _ } =
+  let module AS = (val aset : Alleles.Set) in
+  let module AM = (val amap : Alleles.Map) in
+  AM.fold bounds ~init:[] ~f:(fun asc sep_lst allele ->
     List.fold_left sep_lst ~init:asc ~f:(fun asc sep ->
       let pos = fst sep.start in
       try
         let bts, rest = remove_and_assoc pos asc in
-        (pos, Alleles.Set.set bts allele) :: rest
+        (pos, AS.set bts allele) :: rest
       with Not_found ->
-        (pos, Alleles.Set.singleton allele) :: asc))
+        (pos, AS.singleton allele) :: asc))
 
-let add_allele_edge g pv nv allele =
+let add_allele_edge g aset pv nv allele =
+  let module AS = (val aset : Alleles.Set) in
   let new_edge =
     try
       let eset = G.find_edge g pv nv |> G.E.label in
       G.remove_edge g pv nv;
-      G.E.create pv (Alleles.Set.set eset allele) nv
+      G.E.create pv (AS.set eset allele) nv
     with Not_found ->
-      G.E.create pv (Alleles.Set.singleton allele) nv
+      G.E.create pv (AS.singleton allele) nv
   in
   G.add_edge_e g new_edge
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
 let create_compressed_starts t =
+  let module AS = (val t.aset : Alleles.Set) in
   let start_asc = starts_by_position t in
   let ng = G.copy t.g in
   let open Nodes in
   List.iter start_asc ~f:(fun (pos, allele_set) ->
-    if Alleles.Set.cardinal allele_set > 1 then begin
-      let a_str = Alleles.Set.to_string ~compress:true allele_set in
+    if AS.cardinal allele_set > 1 then begin
+      let a_str = AS.to_string ~compress:true allele_set in
       let node = G.V.create (S (pos, a_str)) in
       G.add_vertex ng node;
-      Alleles.Set.iter allele_set ~f:(fun allele ->
+      AS.iter allele_set ~f:(fun allele ->
         let rm = S (pos, allele) in
-        G.iter_succ (fun sv -> add_allele_edge ng node sv allele) ng rm;
+        G.iter_succ (fun sv -> add_allele_edge ng t.aset node sv allele) ng rm;
         G.remove_vertex ng rm)
     end);
   { t with g = ng }
 
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
+  let module AS = (val t.aset : Alleles.Set) in
   let { g; _} = if compress_start then create_compressed_starts t else t in
   let oc = open_out fname in
   let insert_newline = insert_chars ['\n'] in
@@ -239,9 +223,9 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
         let compress = compress_edges in
         let s =
           if human_edges then
-            Alleles.Set.to_human_readable ~compress ?max_length (G.E.label e)
+            AS.to_human_readable ~compress ?max_length (G.E.label e)
           else
-            Alleles.Set.to_string ~compress (G.E.label e)
+            AS.to_string ~compress (G.E.label e)
         in
         if insert_newlines then
           [`Label ( insert_newline s) ]
@@ -305,9 +289,10 @@ let reference_starts_and_ends lst =
     let e, l = loop end_ [] t in
     start, e, l
 
-let add_reference_elems g allele ref_elems =
+let add_reference_elems g aset allele ref_elems =
+  let module AS = (val aset : Alleles.Set) in
   let open Nodes in
-  let bse () = Alleles.Set.singleton allele in
+  let bse () = AS.singleton allele in
   let add_start start_pos lst =
     let st = start_pos, allele in
     `Started (st, G.V.create (S st)) :: lst
@@ -383,20 +368,32 @@ let test_consecutive_elements allele =
       | End _ :: _                                          -> `Close close_pos
       end
 
-let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
+exception Found of Nodes.t
+
+let next_node_along g aset allele ~from =
+  let module AS = (val aset : Alleles.Set) in
+  try
+    G.fold_succ_e (fun (_, bt, vs) n ->
+        if AS.is_set bt allele then raise (Found vs) else n)
+      g from None
+  with Found v ->
+    Some v
+
+let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
+  let module AS = (val aset : Alleles.Set) in
   let open Mas_parser in
   let open Nodes in
   let first_start_node = S first_start in
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
   let next_reference ~msg from =
-    match next_node_along g reference ~from with
+    match next_node_along g aset reference ~from with
     | Some n -> n
     | None   -> match List.Assoc.get from end_to_start_nodes with
                 | Some n -> n
                 | None   -> invalid_arg msg
   in
-  let add_allele_edge pv nv = add_allele_edge g pv nv allele in
+  let add_allele_edge pv nv = add_allele_edge g aset pv nv allele in
   let do_nothing _ _ = () in
   let advance_until ~visit ~prev ~next pos =
     let rec forward node msg =
@@ -428,14 +425,14 @@ let add_non_ref g reference (first_start, last_end, end_to_next_start_assoc) all
       let v1 = N (p, fs) in
       G.add_vertex g v1;
       let s_inter =
-        List.fold_left pr ~init:(Alleles.Set.init ())
+        List.fold_left pr ~init:(AS.init ())
             ~f:(fun bta (p, bt, _) ->
                   G.add_edge_e g (G.E.create p bt v1);
-                  Alleles.Set.union bt bta)
+                  AS.union bt bta)
       in
       let v2 = N (pos, sn) in
       G.add_vertex g v2;
-      let s_inter = Alleles.Set.clear s_inter allele in
+      let s_inter = AS.clear s_inter allele in
       G.add_edge_e g (G.E.create v1 s_inter v2);
       List.iter su ~f:(fun (_, e, s) -> G.add_edge_e g (G.E.create v2 e s));
       (v1, v2)
@@ -669,9 +666,10 @@ end
 
 module FoldAtSamePosition = struct
 
-  let after_start_nodes g bounds =
+  let after_start_nodes g amap bounds =
+    let module AM = (val amap : Alleles.Map) in
     let open Nodes in
-    Alleles.Map.fold bounds ~init:NodeQueue.empty
+    AM.fold bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
@@ -701,12 +699,13 @@ module FoldAtSamePosition = struct
     loop init q
 
 
-  let fold_after_starts g bounds ~f ~init =
-    fold_from g (after_start_nodes g bounds) ~f ~init
+  let fold_after_starts g amap bounds ~f ~init =
+    fold_from g (after_start_nodes g amap bounds) ~f ~init
 
-  let node_queue_with_start_and_successors_nodes g bounds =
+  let node_queue_with_start_and_successors_nodes g amap bounds =
+    let module AM = (val amap : Alleles.Map) in
     let open Nodes in
-    Alleles.Map.fold bounds ~init:NodeQueue.empty
+    AM.fold bounds ~init:NodeQueue.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
@@ -714,30 +713,31 @@ module FoldAtSamePosition = struct
                 let nq = NodeQueue.add s q in
                 NodeQueue.add_successors g s nq))
 
-  let f g bounds ~f ~init =
-    fold_from g (node_queue_with_start_and_successors_nodes g bounds) ~f ~init
+  let f g amap bounds ~f ~init =
+    fold_from g (node_queue_with_start_and_successors_nodes g amap bounds) ~f ~init
 
 end (* FoldAtSamePosition *)
 
-let range_pr bounds =
-  Alleles.Map.fold_wa bounds ~init:(max_int, min_int)
+let range_pr amap bounds =
+  let module AM = (val amap : Alleles.Map) in
+  AM.fold_wa bounds ~init:(max_int, min_int)
     ~f:(fun p sep_lst ->
           List.fold_left sep_lst ~init:p ~f:(fun (st, en) sep ->
             (min st (fst sep.start)), (max en sep.end_)))
 
 (** [range g] returns the minimum and maximum alignment position in [g]. *)
-let range { bounds; _ } =
-  range_pr bounds
+let range { amap; bounds; _ } =
+  range_pr amap bounds
 
-let create_by_position g bounds =
-  let st, en = range_pr bounds in
+let create_by_position g amap bounds =
+  let st, en = range_pr amap bounds in
   let rec redirects dest num acc =
     if num <= 0 then
       acc
     else
       redirects dest (num - 1) ((Redirect dest) :: acc)
   in
-  FoldAtSamePosition.(f g bounds ~init:(0, []) ~f:(fun (i,acc) lst ->
+  FoldAtSamePosition.(f g amap bounds ~init:(0, []) ~f:(fun (i,acc) lst ->
     let p = Nodes.position (List.hd_exn lst) in
     let j = p - st in
     let num_redirects = j - (i + 1) in
@@ -791,24 +791,26 @@ module JoinSameSequencePaths = struct
     | S _
     | B _      -> G.fold_succ (add_node_successors_only g) g v q
 
-  let after_starts g bounds =
+  let after_starts g amap bounds =
+    let module AM = (val amap : Alleles.Map) in
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
-    Alleles.Map.fold bounds ~init:Apsq.empty
+    AM.fold bounds ~init:Apsq.empty
       ~f:(fun q sep_lst allele ->
             List.fold_left sep_lst ~init:q
               ~f:(fun q sep ->
                     add_successors (S (fst sep.start, allele)) q))
 
-  let do_it g bounds =
+  let do_it g aset amap bounds =
+    let module AS = (val aset : Alleles.Set) in
     let open Nodes in
     let add_successors = G.fold_succ (add_node_successors_only g) g in
-    let qstart = after_starts g bounds in
+    let qstart = after_starts g amap bounds in
     let unite_edges pv nv e =
       try
         let ecur = G.find_edge g pv nv in
         let into = G.E.label ecur in
-        Alleles.Set.unite ~into e
+        AS.unite ~into e
       with Not_found ->
         G.add_edge_e g (G.E.create pv e nv)
     in
@@ -822,10 +824,10 @@ module JoinSameSequencePaths = struct
       let v1 = N (p, fs) in
       if not (G.mem_vertex g v1) then G.add_vertex g v1;
       let s_inter =
-        List.fold_left pr ~init:(Alleles.Set.init ())
+        List.fold_left pr ~init:(AS.init ())
           ~f:(fun bta (p, bt, _) ->
                 unite_edges p v1 bt;
-                Alleles.Set.union bt bta)
+                AS.union bt bta)
       in
       let v2 = N (p1, sn) in
       if not (G.mem_vertex g v2) then G.add_vertex g v2;
@@ -958,7 +960,8 @@ let find_nodes_at_private offset posarr ~pos =
   in
   lookup_at true (pos - offset)
 
-let find_node_at_private ?allele ?ongap ~pos g offset posarr =
+let find_node_at_private ?allele ?ongap ~pos g aset offset posarr =
+  let module AS = (val aset : Alleles.Set) in
   let module M = struct exception Found end in
   let open Nodes in
   let all_str, test =
@@ -968,7 +971,7 @@ let find_node_at_private ?allele ?ongap ~pos g offset posarr =
         let is_along_allele node =
           try
             G.fold_pred_e (fun (_, e, _) _b ->
-              if Alleles.Set.is_set e a then
+              if AS.is_set e a then
                 raise M.Found else false) g node false
           with M.Found ->
             true
@@ -1139,25 +1142,28 @@ let within ?(include_ends=true) pos sep =
   (fst sep.start) <= pos &&
     ((include_ends && pos <= sep.end_) || pos < sep.end_)
 
-let alleles_with_data_private ?include_ends bounds ~pos =
-  Alleles.Map.fold bounds ~init:(Alleles.Set.init ()) ~f:(fun es sep_lst allele ->
+let alleles_with_data_private ?include_ends aset amap bounds ~pos =
+  let module AM = (val amap : Alleles.Map) in
+  let module AS = (val aset : Alleles.Set) in
+  AM.fold bounds ~init:(AS.init ()) ~f:(fun es sep_lst allele ->
     List.fold_left sep_lst ~init:es ~f:(fun es sep ->
       if within ?include_ends pos sep then
-        Alleles.Set.set es allele
+        AS.set es allele
       else
         es))
 
 (* At or past *)
 let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
-  ?prev_edge_node_set ~pos g offset posarr bounds =
+  ?prev_edge_node_set ~pos g aset amap offset posarr bounds =
+  let module AS = (val aset : Alleles.Set) in
   let max_length = max_edge_debug_length in
-  let all_edges = alleles_with_data_private ~include_ends:false bounds ~pos in
+  let all_edges = alleles_with_data_private ~include_ends:false aset amap bounds ~pos in
   let prev_edge_node_set =
     Option.map prev_edge_node_set ~f:(EdgeNodeSet.fold ~init:EdgeNodeSet.empty
         ~f:(fun ((edge, node) as en) nes ->
             if (Nodes.position node > pos || Nodes.inside pos node)
             (* Can be optimized with an non-empty intersect method *)
-            && Alleles.Set.(cardinal (inter all_edges edge)) > 0 then
+            && AS.(cardinal (inter all_edges edge)) > 0 then
               EdgeNodeSet.add en nes
             else
               nes))
@@ -1168,10 +1174,10 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
       begin
         if !adjacents_debug_ref then
           eprintf "Still missing\n1:%s\n2:%s\n"
-            (Alleles.Set.to_human_readable ?max_length
-              (Alleles.Set.diff all_edges es_acc))
-            (Alleles.Set.to_human_readable ?max_length
-              (Alleles.Set.diff es_acc all_edges));
+            (AS.to_human_readable ?max_length
+              (AS.diff all_edges es_acc))
+            (AS.to_human_readable ?max_length
+              (AS.diff es_acc all_edges));
           false
       end
   in
@@ -1182,20 +1188,20 @@ let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
       if !adjacents_debug_ref then
         eprintf "Adding %s <- %s.\n"
           (Nodes.vertex_name node)
-          (Alleles.Set.to_human_readable ?max_length edge);
-      Alleles.Set.union edge edge_set
+          (AS.to_human_readable ?max_length edge);
+      AS.union edge edge_set
   in
-  let init = Alleles.Set.init () in
+  let init = AS.init () in
   Adjacents.check_by_levels ?prev_edge_node_set ~max_height ~init ~stop g rootn ~f
 
-let create_adjacents_arr g offset posarr bounds =
-  let st, en = range_pr bounds in
+let create_adjacents_arr g aset amap offset posarr bounds =
+  let st, en = range_pr amap bounds in
   let len = en - st + 1 in
   let pensr = ref None in
   Array.init len ~f:(fun i ->
     let pos = offset + i in
     let (edge_node_set, seen_alleles, _) =
-      adjacents_at_private ?prev_edge_node_set:!pensr g offset posarr bounds ~pos
+      adjacents_at_private ?prev_edge_node_set:!pensr g aset amap offset posarr bounds ~pos
     in
     pensr := Some edge_node_set;
     {edge_node_set; seen_alleles})
@@ -1226,31 +1232,35 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
   let aindex = Alleles.index (reference :: List.map ~f:fst alt_alleles) in
-  (*********** VERY IMPORTANT *********************)
-  let () = Alleles.setup aindex in
-  let refs_start_ends = add_reference_elems g reference ref_elems in
+  let module Aset = Alleles.MakeSet (struct let index = aindex end) in
+  let aset = (module Aset : Alleles.Set) in
+  let module Amap = Alleles.MakeMap (struct let index = aindex end) in
+  let amap = (module Amap : Alleles.Map) in
+  let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let start_and_stop_assoc =
     List.fold_left alt_alleles ~init:[ reference, refs_start_ends]
       ~f:(fun acc (allele, lst) ->
-            let start_and_stops = add_non_ref g reference fs_ls_st_assoc allele lst in
+            let start_and_stops = add_non_ref g aset reference fs_ls_st_assoc allele lst in
             (allele, start_and_stops) :: acc)
   in
   let bounds =
-    Alleles.Map.init (fun allele ->
+    Amap.init (fun allele ->
       match List.Assoc.get allele start_and_stop_assoc with
       | Some alst -> List.rev alst
       | None      -> assert false)
   in
   if join_same_sequence then
-    JoinSameSequencePaths.do_it g bounds; (* mutates g *)
-  let offset = fst (range_pr bounds) in
-  let posarr = create_by_position g bounds in
-  let adjacents_arr = create_adjacents_arr g offset posarr bounds in
+    JoinSameSequencePaths.do_it g aset amap bounds; (* mutates g *)
+  let offset = fst (range_pr amap bounds) in
+  let posarr = create_by_position g amap bounds in
+  let adjacents_arr = create_adjacents_arr g aset amap offset posarr bounds in
   { align_date
   ; reference
   ; g
   ; aindex
+  ; aset
+  ; amap
   ; bounds
   ; offset
   ; posarr
@@ -1263,8 +1273,9 @@ let construct ?arg input =
       Ok (construct_from_parsed ~merge_map ?arg mp)
 
 (* More powerful accessors *)
-let all_bounds { bounds; _} allele =
-  Alleles.Map.get bounds allele
+let all_bounds { bounds; amap; _} allele =
+  let module AM = (val amap : Alleles.Map) in
+  AM.get bounds allele
 
 let find_bound g allele ~pos =
   all_bounds g allele
@@ -1272,13 +1283,28 @@ let find_bound g allele ~pos =
   |> Option.value_map ~default:(error "%d is not in any bounds" pos)
         ~f:(fun s -> Ok s)
 
+let fold_along_allele g aset allele ~start ~f ~init =
+  if not (G.mem_vertex g start) then
+    invalid_argf "%s is not a vertex in the graph." (Nodes.vertex_name start)
+  else
+    let next = next_node_along g aset allele in
+    let rec loop from (acc, stop) =
+      match stop with
+      | `Stop     -> acc
+      | `Continue ->
+          match next ~from with
+          | None    -> acc
+          | Some vs -> loop vs (f acc vs)
+    in
+    loop start (f init start)
+
 (* This methods advantage is that [next_after] works ! *)
 let find_position_old ?(next_after=false) t ~allele ~pos =
   let open Nodes in
   let next_after o v = if next_after then Some (v, false) else o in
   find_bound t allele ~pos >>= fun bound ->
     let start = S (fst bound.start, allele) in
-    fold_along_allele t.g allele ~start ~init:None
+    fold_along_allele t.g t.aset allele ~start ~init:None
       ~f:(fun o v ->
             match v with
             | S (p, _) when p <= pos                   -> o, `Continue
@@ -1294,8 +1320,8 @@ let find_position_old ?(next_after=false) t ~allele ~pos =
     |> Option.value_map ~default:(error "%d in a gap" pos)
         ~f:(fun x -> Ok x)
 
-let find_node_at ?allele ?ongap ~pos { g; offset; posarr; _} =
-  find_node_at_private ?allele ?ongap ~pos g offset posarr
+let find_node_at ?allele ?ongap ~pos { g; aset; offset; posarr; _} =
+  find_node_at_private ?allele ?ongap ~pos g aset offset posarr
 
 (* - A list of nodes to start searching from. If there is more than one it
      is a list of the start nodes.
@@ -1305,6 +1331,7 @@ let find_node_at ?allele ?ongap ~pos { g; offset; posarr; _} =
      accounts for starting a node that we're going to trim with the function
      of the previous argument.  *)
 let parse_start_arg g allele =
+  let module AM = (val g.amap : Alleles.Map) in
   let id x = x in
   let open Nodes in function
   | Some (`Node s)        ->
@@ -1338,7 +1365,7 @@ let parse_start_arg g allele =
         else
           Ok ([v], String.drop ~index, -index)
   | None                  ->
-      begin match Alleles.Map.get g.bounds allele with
+      begin match AM.get g.bounds allele with
       | exception Not_found -> error "Allele %s not found in graph!" allele
       | []                  -> error "Allele %s not found in graph!" allele
       | spl                 -> Ok (List.map spl ~f:(fun sep ->
@@ -1379,7 +1406,7 @@ let sequence ?(boundaries=false) ?start ?stop gt allele =
     >>= fun (start, pre, count) ->
       let stop, post = parse_stop_arg ~count stop in
       List.fold_left start ~init:[] ~f:(fun acc start ->
-        fold_along_allele gt.g allele ~start ~init:acc
+        fold_along_allele gt.g gt.aset allele ~start ~init:acc
           ~f:(fun clst node ->
                 match node with
                 | N (_, s)             -> (s :: clst, stop node)
@@ -1391,8 +1418,8 @@ let sequence ?(boundaries=false) ?start ?stop gt allele =
       |> post
       |> fun s -> Ok s
 
-let alleles_with_data ?include_ends { bounds; _} ~pos =
-  alleles_with_data_private ?include_ends bounds ~pos
+let alleles_with_data ?include_ends { aset; amap; bounds; _} ~pos =
+  alleles_with_data_private ?include_ends aset amap  bounds ~pos
 
 (* This method is super awkward, since it is mirroring the
   gap searching logic of Adjacents, but not as carefully/exhaustively. *)
