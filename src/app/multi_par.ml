@@ -32,22 +32,24 @@ let to_read_size_dependent
 
 exception PPE of string
 
-let to_map_update_f f acc fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        let t = f fqi.Biocaml_unix.Fastq.sequence read_probs in
-        (fqi.Biocaml_unix.Fastq.name, t) :: acc)
+let ppe s = raise (PPE s)
+let ppef fmt =
+  ksprintf ppe fmt
 
-let to_reporter_update_f f update_lst fqi =
+(* TODO: write out type annotation for f, otherwise it is too abstract *)
+let to_update_f read_size ~f acc fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        f fqi.Biocaml_unix.Fastq.sequence read_probs update_lst)
+    let ls = String.length fqi.Biocaml_unix.Fastq.sequence in
+    let lq = String.length fqi.Biocaml_unix.Fastq.qualities in
+    if ls <> read_size then
+      ppef "Sequence length %d not configured length:%d, skipping." ls read_size
+    else if lq <> read_size then
+      ppef "Sequence length %d not configured length:%d, skipping." ls read_size
+    else
+      match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
+      | Result.Error e       -> ppe (Error.to_string_hum e)
+      | Result.Ok read_probs -> f acc fqi.Biocaml_unix.Fastq.name fqi.Biocaml_unix.Fastq.sequence read_probs)
 
 type 'a g =
   { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
@@ -57,12 +59,20 @@ type 'a g =
 
 let proc_g = function
   | `Mapper g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Mapper g
+                  try
+                    g.s <- g.f g.s fqi;
+                    `Mapper g
+                  with PPE e ->
+                    eprintf "for %s: %s" fqi.Biocaml_unix.Fastq.name e;
+                    `Mapper g
                  end
   | `Reporter g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Reporter g
+                    try
+                      g.s <- g.f g.s fqi;
+                      `Reporter g
+                  with PPE e ->
+                    eprintf "for %s: %s" fqi.Biocaml_unix.Fastq.name e;
+                    `Reporter g
                  end
 
 let sort_mapped_output lst =
@@ -96,16 +106,16 @@ let to_set ?band mode rp read_size =
         match ParPHMM.forward_pass_m ?band mode ptlst read_size with
         | `Mapper m ->
             `Mapper
-              { f   = to_map_update_f m
+              { f   = to_update_f read_size ~f:(fun l n s r -> (n, m s r) :: l)
               ; s   = []
               ; fin = begin fun lst ->
                         printf "Reads: %d\n" (List.length lst);
                         output_mapped (sort_mapped_output lst)
                       end
               }
-        | `Reporter (lst, f) ->
+        | `Reporter (lst, ff) ->
             `Reporter
-              { f   = to_reporter_update_f f 
+              { f   = to_update_f read_size ~f:(fun l _n s r -> ff s r l)
               ; s   = lst
               ; fin = begin fun lst ->
                         List.iter2 ptlst lst ~f:(fun (name, pt) (_name, llhd) ->
