@@ -1,7 +1,7 @@
 (* Typing via a Parametric PHMM. *)
 open Util
 
-let app_name = "par_type"
+let app_name = "multi_par"
 
 let time s f =
   let n = Sys.time () in
