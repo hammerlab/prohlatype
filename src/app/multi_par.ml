@@ -3,6 +3,8 @@ open Util
 
 let app_name = "multi_par"
 
+let (//) = Filename.concat
+
 let time s f =
   let n = Sys.time () in
   let r = f () in
@@ -94,7 +96,7 @@ let output_mapped lst =
         (List.map lst ~f:(fun (name, ms) ->
           sprintf "%s\t%s" name
             (ParPHMM.mapped_stats_to_string ~sep:'\t' ms)))))
-      
+
 let to_set ?band mode rp read_size =
   let ptlst =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
@@ -150,6 +152,7 @@ let across_fastq ?number_of_reads ~specific_reads ?band mode file init =
 
 let type_
   (* Allele information source *)
+    class1_gen_dir
     alignment_files merge_files distance
   (* Process *)
     skip_disk_cache
@@ -171,6 +174,14 @@ let type_
     else
       Some { ParPHMM.start_column; number; width }
   in
+  let alignment_files, merge_files =
+    match class1_gen_dir with
+    | None   -> alignment_files, merge_files
+    | Some d -> [ d // "A_gen.txt"
+                ; d // "B_gen.txt"
+                ; d // "C_gen.txt"
+                ], []
+  in
   let need_read_size_r =
     to_read_size_dependent
       ~alignment_files ~merge_files ~distance ~impute
@@ -188,7 +199,7 @@ let type_
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads 
+    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads
                             ?band mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
@@ -281,6 +292,13 @@ let () =
     in
     Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
   in
+  let class1gen_arg =
+    let docv  = "DIRECTORY" in
+    let doc   = "Short-cut argument that expands the given dir to look for \
+                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                 alignment files or merge arguments." in
+    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -299,6 +317,7 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
+            $ class1gen_arg
             $ files_arg $ merges_arg $ distance_flag
             (* What to do ? *)
             $ no_cache_flag
