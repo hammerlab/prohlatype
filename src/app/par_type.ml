@@ -141,7 +141,7 @@ let type_
     read_size_override
     not_check_rc
     not_band
-    start_column
+    column
     number
     width
   (* how are we typing *)
@@ -153,7 +153,7 @@ let type_
     if not_band then
       None
     else
-      Some { ParPHMM.start_column; number; width }
+      Some { ParPHMM.column; number; width }
   in
   let need_read_size_r =
     to_read_size_dependent
@@ -207,8 +207,8 @@ let () =
     let doc = "Calculate the full forward pass matrix." in
     Arg.(value & flag & info ~doc ["do-not-band"])
   in
-  let band_start_column_arg =
-    let default = ParPHMM.(band_default.start_column) in
+  let band_column_arg =
+    let default = ParPHMM.(band_default.column) in
     let docv = "POSITIVE INTEGER" in
     let doc =
       sprintf "At which column in the forward pass to compute bands instead \
@@ -216,7 +216,7 @@ let () =
     in
     Arg.(value
           & opt positive_int default
-          & info ~doc ~docv ["band-start-column"])
+          & info ~doc ~docv ["band-column"])
   in
   let number_bands_arg =
     let default = ParPHMM.(band_default.number) in
@@ -274,7 +274,7 @@ let () =
             $ read_size_override_arg
             $ not_check_rc_flag
             $ not_band_flag
-            $ band_start_column_arg
+            $ band_column_arg
             $ number_bands_arg
             $ band_width_arg
             (* How are we typing *)
