@@ -1373,11 +1373,14 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
         in
         let allele_emissions = CAM.get_exn alleles em_values in
         let entry =
-          recurrences.banded ws allele_emissions ~i ~k
-            (* Poor design: No harm in adding prev_col and cur_col as banded
-               will only use this value in the missing case. So we're not going
-               to track that we're at the right row. *)
-            ~prev_col:b.last_value ?cur_col
+          if k = 0 then
+            recurrences.f_start obsp emissions_a.(0)
+          else
+            recurrences.banded ws allele_emissions ~i ~k
+              (* Poor design: No harm in adding prev_col and cur_col as banded
+                will only use this value in the missing case. So we're not going
+                to track that we're at the right row. *)
+              ~prev_col:b.last_value ?cur_col
         in
         ws.forward.(k).(i) <- CAM.join entry ws.forward.(k).(i);
         nem_map, entry
