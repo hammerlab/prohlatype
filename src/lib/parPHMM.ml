@@ -853,14 +853,14 @@ module ForwardCalcs  (R : Ring) = struct
                                             + t_d_d * delete_c.delete)
                     }
                   in
-               (* let () =
-                    printf "--------%d %d %s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
-                      k i (R.to_string emission_p)
-                      (cell_to_string R.to_string match_c)
-                      (cell_to_string R.to_string insert_c)
-                      (cell_to_string R.to_string delete_c)
-                      (cell_to_string R.to_string r)
-                   in*)
+                  (*let () =
+                      printf "--------%s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+                        (R.to_string emission_p)
+                        (cell_to_string R.to_string match_c)
+                        (cell_to_string R.to_string insert_c)
+                        (cell_to_string R.to_string delete_c)
+                        (cell_to_string R.to_string r)
+                  in*)
                   r
                  end
    ; end_    = begin fun cell ->
@@ -1058,18 +1058,18 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                     let deletes = ws.forward.(ks).(i) in
                     let insertsi = CAM.singleton inters insert_c in
                     CAM.map3_partial insertsi
-                      ~by1:matches
-                      ~missing1:(fun missing_matches _insert_c ->
-                        CAM.singleton missing_matches
-                          (Option.value prev_col ~default:Fc.zero_cell))
-                      ~by2:deletes
-                      ~missing2:(fun missing_deletes _insert_c _match_c ->
+                      ~by1:deletes
+                      ~missing1:(fun missing_deletes _insert_c ->
                           let default = CAM.singleton missing_deletes Fc.zero_cell in
                           Option.value_map ~default cur_col ~f:(fun as_ ->
                             Option.value (CAM.get missing_deletes as_) ~default))
+                      ~by2:matches
+                      ~missing2:(fun missing_matches _insert_c _delete_c ->
+                        CAM.singleton missing_matches
+                          (Option.value prev_col ~default:Fc.zero_cell))
                       ~f:calc
-                    in
-                    let inserts = ws.forward.(k).(i-1) in
+                  in
+                  let inserts = ws.forward.(k).(i-1) in
                     CAM.concat_map2_partial allele_ems ~by:inserts
                       ~missing:(fun missing_inserts ep_pair ->
                           match prev_col with
