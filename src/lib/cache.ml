@@ -41,7 +41,7 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
         (*
         if not (Sys.file_exists dir) then make_full_path dir;
         let o = open_out file in
-        Marshal.to_channel o r [];
+        Marshal.to_channel o r [Marshal.Closures];
         close_out o;
         *)
         r
