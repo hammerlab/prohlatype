@@ -89,6 +89,7 @@ let fold_over_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
 
 let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
   let open Nodes in
+  let module AS = (val g.aset : Alleles.Set) in
   let rec fill_partial_matches node state = function
     | [] -> state
     | ls -> fold_partials_on_successor node state ls
@@ -102,8 +103,8 @@ let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
         (* skip the node BUT filter on the alleles going to this node! *)
         let nplst =
           List.filter_map plst ~f:(fun (k, ke, bstate) ->
-            let kei = Alleles.Set.inter in_edge ke in
-            if Alleles.Set.cardinal kei > 0 then
+            let kei = AS.inter in_edge ke in
+            if AS.cardinal kei > 0 then
               Some (k, kei, bstate)
             else None)
         in
@@ -114,8 +115,8 @@ let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
     | N (p, s) ->
         let l = String.length s in
         let f (state, pacc) (krem, k_edge, bstate) =
-          let kei = Alleles.Set.inter in_edge k_edge in
-          if Alleles.Set.cardinal kei > 0 then begin
+          let kei = AS.inter in_edge k_edge in
+          if AS.cardinal kei > 0 then begin
             if krem <= l then
               close state (p, s) (part ~index:0 krem) bstate, pacc
             else
@@ -130,7 +131,7 @@ let fold_over_biological_kmers_in_graph ~k ~init ~absorb ~extend ~close g =
     G.fold_pred_e (fun (_,e,_) a -> Alleles.Set.union e a) g.g n
       (Alleles.Set.init g.aindex)
   in *)
-  let everything = Alleles.Set.(complement (init ())) in
+  let everything = AS.(complement (init ())) in
   let proc node state =
     match node with
     | S _ | E _ | B _ -> state

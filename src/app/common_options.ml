@@ -206,10 +206,16 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
+let input_alignments ~impute file =
+  Alleles.Input.AlignmentFile (file, impute)
+
+let input_merges ~distance ~impute prefix =
+  Alleles.Input.MergeFromPrefix (prefix, distance, impute)
+
 let to_input ?alignment_file ?merge_file ~distance ~impute () =
   match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (Alleles.Input.MergeFromPrefix (prefix, distance, impute))
-  | (Some alignment_file), _  -> Ok (Alleles.Input.AlignmentFile (alignment_file, impute))
+  | _,          (Some prefix) -> Ok (input_merges ~distance ~impute prefix)
+  | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
   | None,                None -> Error "Either a file or merge argument must be specified"
 
 let to_filename_and_graph_args
