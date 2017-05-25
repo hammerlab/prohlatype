@@ -6,6 +6,8 @@
 
 open Util
 
+let debug_ref = ref false
+
 let array_findi v a =
   let n = Array.length a in
   let rec loop i =
@@ -1353,13 +1355,13 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
 
     let fill_next emissions_a increment_a c recurrences em_map ws obsp i b col_values =
       let open Workspace in
-      (*let () =
+      if !debug_ref then begin
         let base, base_prob = obsp in
         printf "current bands for %c %f rows:%s at %d \n\t%s\n"
           base base_prob
           (String.concat ~sep:";" (List.map b.rows ~f:(sprintf "%d"))) i
             (to_string (sprintf "%f") b)
-      in*)
+      end;
       let cur_col = CAM.get b.alleles col_values in
       let update ?cur_col emp k alleles =
         let em_values, nem_map =
@@ -1371,11 +1373,14 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
             let nemp = PosMap.add ~key:k ~data:es emp in
             es, nemp
         in
-        let allele_emissions = CAM.get_exn alleles em_values in
         let entry =
           if k = 0 then
-            recurrences.f_start obsp emissions_a.(0)
+            (* Even though f_start returns the transitions for _all_  alleles
+               the rest of the banded logic assumes that this entry is for
+               only _alleles. *)
+            CAM.get_exn alleles (recurrences.f_start obsp emissions_a.(0))
           else
+            let allele_emissions = CAM.get_exn alleles em_values in
             recurrences.banded ws allele_emissions ~i ~k
               (* Poor design: No harm in adding prev_col and cur_col as banded
                 will only use this value in the missing case. So we're not going
@@ -1411,11 +1416,11 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                       if fs.worse >= c.width then `Fst fs else `Snd fs)
                   in
                   let full_bands = next_band emissions_a increment_a c full in
-                  (*let () =
+                  if !debug_ref then begin
                     printf "new bands for k:%d at %d: %d\n" k i (List.length full_bands);
                     List.iter full_bands ~f:(fun b ->
                       printf "\t%s\n" (to_string (sprintf "%f") b))
-                  in*)
+                  end;
                   let nacc = full_bands @ acc in
                   if CAM.length not_full_state = 0 ||     (* Nothing left to fill -> Done *)
                     k = Array.length increment_a then                     (* Reached end! *)
@@ -1444,9 +1449,12 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
     let pass c emissions_a increment_a number_alleles ws recurrences last_read_index a =
       (* order matters for passing along last_col *)
       let first_bands = setup emissions_a increment_a c ws |> List.sort ~cmp:compare in
-      (*printf "first_bands %d \n" (List.length first_bands);
-      List.iter first_bands ~f:(fun t -> printf "\t%s\n" (to_string (sprintf "%0.3f") t));*)
-      let banded_middle bands first_banded_column =
+      if !debug_ref then begin
+        printf "first_bands %d \n" (List.length first_bands);
+        List.iter first_bands ~f:(fun t ->
+          printf "\t%s\n" (to_string (sprintf "%0.3f") t))
+      end;
+      let banded_middle first_banded_column =
         let rec loop bands i =
           let new_bands_to_flatten, _last_em_map, _last_col_values =
             List.fold_left bands ~init:([], PosMap.empty, CAM.empty)
@@ -1469,13 +1477,16 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                 and within the int lists, the comparison is by the values,
                 with smaller length lists taking precedence. *)
               |> List.sort ~cmp:compare
-          in
-          (*printf "bands at %d %d \n" i (List.length new_bands);
-          List.iter new_bands ~f:(fun t -> printf "\t%s\n" (to_string (sprintf "%f") t)); *)
-          loop new_bands (i + 1)
+            in
+            if !debug_ref then begin
+              printf "bands at %d %d \n" i (List.length new_bands);
+              List.iter new_bands ~f:(fun t ->
+                printf "\t%d%s\n" (Hashtbl.hash t) (to_string (sprintf "%f") t))
+            end;
+            loop new_bands (i + 1)
           end
         in
-        loop bands first_banded_column
+        loop first_bands first_banded_column
       in
       let open Workspace in
       let banded_end bands =
@@ -1483,7 +1494,7 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
         let spec_rows = List.map bands ~f:(fun b -> b.rows) in
         ws.per_allele_emission <- recurrences.emission ~spec_rows ws number_alleles
       in
-      banded_end (banded_middle first_bands (c.column + 1))
+      banded_end (banded_middle (c.column + 1))
 
   end (* Bands *)
 
@@ -1544,8 +1555,6 @@ let construct input selectors =
          ; increment_a
          }
   end
-
-let debug_ref = ref false
 
 let save_pphmm t =
   let fname = Filename.temp_file ~temp_dir:"." "pphmm" "" in
@@ -1629,7 +1638,6 @@ type proc =
   3. a function to combine results *)
 let setup_single_pass ?band read_size t =
   let { number_alleles; emissions_a; increment_a; aset; alleles; _ } = t in
-  if !debug_ref then save_pphmm t;
   let bigK = Array.length emissions_a in
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_p = 0.25 in
@@ -1707,7 +1715,6 @@ let reducer pass ?(check_rc=true) read read_prob =
     end
   end else begin
     pass.doit false read read_prob;
-    if !debug_ref then pass.save_workspace ();
     pass.per_allele_llhd ()
   end
 
