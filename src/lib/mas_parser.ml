@@ -216,7 +216,7 @@ let parse_data line =
   String.split line ~on:(`Character ' ')
   |> List.filter ~f:((<>) String.empty)
   |> function
-      | s :: _ when s.[0] = Some '|' -> Dash
+      | s :: _ when String.get s 0 = Some '|' -> Dash
       | "AA" :: "codon" :: _         -> Dash (* not really but not modeling this at the moment. *)
       | "gDNA" :: pos :: _           -> Position (true, int_of_string pos)
       | "cDNA" :: pos :: _           -> Position (true, int_of_string pos)

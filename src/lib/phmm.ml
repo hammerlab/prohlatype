@@ -64,17 +64,22 @@ module TransitionMatrix = struct
     (*tm.(start_end_idx).(start_end_idx)  <- 0.; *)
     tm
 
+  type state =
+    | Match
+    | Insert
+    | Delete
+    | StartOrEnd
+
   let init ?(model_probs=`Default) ~ref_length read_length =
     let tm = init_m ~model_probs ~ref_length read_length in
     let to_index = function
-      | `Match      -> match_idx
-      | `Insert     -> insertion_idx
-      | `Delete     -> deletion_idx
-      | `StartOrEnd -> start_end_idx
+      | Match      -> match_idx
+      | Insert     -> insertion_idx
+      | Delete     -> deletion_idx
+      | StartOrEnd -> start_end_idx
     in
     fun f t -> tm.(to_index f).(to_index t)
 
-  type state = [ `Match | `Insert | `Delete | `StartOrEnd ]
   type t = state -> state -> float
 end (* TransitionMatrix *)
 
@@ -95,34 +100,35 @@ let ii i = 3 * i + 1
 let di i = 3 * i + 2
 
 let forward_recurrences =
+  let open TransitionMatrix in
   { start   = begin fun emission_prob ~insert_prob tm k ->
-                (tm `StartOrEnd `Match) *. (emission_prob 0 k)
-                , (tm `StartOrEnd `Insert) *. insert_prob
+                (tm StartOrEnd Match) *. (emission_prob 0 k)
+                , (tm StartOrEnd Insert) *. insert_prob
                 , 0.
               end
   ; match_  = begin fun emission_prob tm dm ~i -> function
                 | 0 -> 0.
                 | k -> (emission_prob i k) *.
-                          (  (tm `Match `Match)   *. dm.(i-1).(mi (k - 1))
-                          +. (tm `Insert `Match)  *. dm.(i-1).(ii (k - 1))
-                          +. (tm `Delete `Match)  *. dm.(i-1).(di (k - 1)))
+                          (  (tm Match Match)   *. dm.(i-1).(mi (k - 1))
+                          +. (tm Insert Match)  *. dm.(i-1).(ii (k - 1))
+                          +. (tm Delete Match)  *. dm.(i-1).(di (k - 1)))
               end
    (* Notice that we do not transition between successive inserts: we're just
       extending the current (same k) insert. *)
   ; insert  = begin fun ~insert_prob tm dm ~i k ->
                 insert_prob *.
-                  (   (tm `Match `Insert)   *. dm.(i-1).(mi k)
-                  +.  (tm `Insert `Insert)  *. dm.(i-1).(ii k))
+                  (   (tm Match Insert)   *. dm.(i-1).(mi k)
+                  +.  (tm Insert Insert)  *. dm.(i-1).(ii k))
               end
   ; delete  = begin fun tm dm ~i -> function
                 | 0 -> 0.
-                | k -> ( (tm `Match `Delete)  *. dm.(i).(mi (k - 1))
-                       +.(tm `Delete `Delete) *. dm.(i).(di (k - 1)))
+                | k -> ( (tm Match Delete)  *. dm.(i).(mi (k - 1))
+                       +.(tm Delete Delete) *. dm.(i).(di (k - 1)))
               end
   ; end_    = begin fun tm dm ~i k ->
-                (tm `Match `StartOrEnd) *. dm.(i).(mi k)
-                , (tm `Insert `StartOrEnd) *. dm.(i).(ii k)
-                , 0. (* (since (tm `Delete `StartOrEnd) = 0. *)
+                (tm Match StartOrEnd) *. dm.(i).(mi k)
+                , (tm Insert StartOrEnd) *. dm.(i).(ii k)
+                , 0. (* (since (tm Delete StartOrEnd) = 0. *)
               end
   }
 
@@ -139,7 +145,7 @@ let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
   let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
   let insert_prob = 0.25 in (* There are 4 characters, assume equality. *)
   let p_c_m i k =
-    if read.[i] = refs.[k] then
+    if String.get_exn read i = String.get_exn refs k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.
@@ -214,24 +220,25 @@ let log1pexp x =
 let max3 x y z = max x (max y z)
 
 let viterbi_recurrences =
+  let open TransitionMatrix in
   { forward_recurrences with
     match_  = begin fun emission_prob tm dm ~i -> function
                 | 0 -> 0.
                 | k -> (emission_prob i k) *.
                           (max3
-                            ((tm `Match `Match)   *. dm.(i-1).(mi (k - 1)))
-                            ((tm `Insert `Match)  *. dm.(i-1).(ii (k - 1)))
-                            ((tm `Delete `Match)  *. dm.(i-1).(di (k - 1))))
+                            ((tm Match Match)   *. dm.(i-1).(mi (k - 1)))
+                            ((tm Insert Match)  *. dm.(i-1).(ii (k - 1)))
+                            ((tm Delete Match)  *. dm.(i-1).(di (k - 1))))
               end
   ; insert  = begin fun ~insert_prob tm dm ~i k ->
                 insert_prob *.
-                  (max ((tm `Match `Insert)   *. dm.(i-1).(mi k))
-                       ((tm `Insert `Insert)  *. dm.(i-1).(ii k)))
+                  (max ((tm Match Insert)   *. dm.(i-1).(mi k))
+                       ((tm Insert Insert)  *. dm.(i-1).(ii k)))
               end
   ; delete  = begin fun tm dm ~i -> function
                 | 0 -> 0.
-                | k -> max ((tm `Match `Delete)   *. dm.(i).(mi (k - 1)))
-                           ((tm `Delete `Delete)  *. dm.(i).(di (k - 1)))
+                | k -> max ((tm Match Delete)   *. dm.(i).(mi (k - 1)))
+                           ((tm Delete Delete)  *. dm.(i).(di (k - 1)))
               end
   }
 
@@ -334,14 +341,15 @@ type bwd_recurrences =
   }
 
 let backward_recurrences ref_size =
+  let open TransitionMatrix in
   { last    = begin fun tm _ ->
-                (tm `Match `StartOrEnd )
-                , (tm `Insert `StartOrEnd)
+                (tm Match StartOrEnd)
+                , (tm Insert StartOrEnd)
                 , 0.
               end
   ; first   = begin fun emission_prob ~insert_prob tm dm k ->
-                  (tm `StartOrEnd `Match) *. (emission_prob 0 k) *. dm.(1).(mi k)
-                , (tm `StartOrEnd `Insert) *. insert_prob *. dm.(1).(ii k)
+                  (tm StartOrEnd Match) *. (emission_prob 0 k) *. dm.(1).(mi k)
+                , (tm StartOrEnd Insert) *. insert_prob *. dm.(1).(ii k)
                 , 0.
               end
   ; match_  = begin fun emission_prob ~insert_prob tm dm ~i k ->
@@ -352,9 +360,9 @@ let backward_recurrences ref_size =
                     dm.(i+1).(mi (k+1)), dm.(i).(di (k+1))
                 in
                 let emission_p = emission_prob i (k + 1) in
-                   emission_p   *. (tm `Match `Match)   *. dmm
-                +. insert_prob  *. (tm `Match `Insert)  *. dm.(i+1).(ii k)
-                +.                 (tm `Match `Delete ) *. dmd
+                   emission_p   *. (tm Match Match)   *. dmm
+                +. insert_prob  *. (tm Match Insert)  *. dm.(i+1).(ii k)
+                +.                 (tm Match Delete ) *. dmd
               end
   ; insert  = begin fun emission_prob ~insert_prob tm dm ~i k ->
                 let dmm =
@@ -364,8 +372,8 @@ let backward_recurrences ref_size =
                     dm.(i+1).(mi (k+1))
                 in
                 let emission_p = emission_prob i (k + 1) in
-                   emission_p   *. (tm `Insert `Match)  *. dmm
-                +. insert_prob  *. (tm `Insert `Insert) *. dm.(i+1).(ii k)
+                   emission_p   *. (tm Insert Match)  *. dmm
+                +. insert_prob  *. (tm Insert Insert) *. dm.(i+1).(ii k)
               end
   ; delete  = begin fun emission_prob tm dm ~i k->
                 let dmm, dmd =
@@ -375,8 +383,8 @@ let backward_recurrences ref_size =
                       dm.(i+1).(mi (k+1)), dm.(i).(di (k+1))
                 in
                 let emission_p = emission_prob i (k + 1) in
-                emission_p *. (tm `Delete `Match)  *. dmm
-                +.            (tm `Delete `Delete) *. dmd
+                emission_p *. (tm Delete Match)  *. dmm
+                +.            (tm Delete Delete) *. dmd
               end
  }
 
@@ -388,7 +396,7 @@ let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
   let p_c_m i k =
     if k = ref_length || i = ref_length then
       0.0
-    else if read.[i] = refs.[k] then
+    else if String.get_exn read i = String.get_exn refs k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.

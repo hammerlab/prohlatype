@@ -1,5 +1,6 @@
 (* Common arguments shared between programs. *)
 
+module Ns = String
 open Util
 open Cmdliner
 
@@ -24,6 +25,19 @@ let positive_int =
   Arg.conv ~docv:"POSITIVE INTEGER"
     ((positive_int_parser (fun n -> n)), int_fprinter)
 
+let greater_than_one =
+  let docv = "natural number greater than 1" in
+  Arg.conv ~docv:(Ns.uppercase_ascii docv)
+    ((fun s ->
+      try
+        let d = Scanf.sscanf s "%d" (fun x -> x) in
+        if d <= 1 then
+          Error (`Msg (s ^ " is not a " ^ docv))
+        else
+          Ok d
+      with Scanf.Scan_failure msg ->
+        Error (`Msg msg)), int_fprinter)
+
 let non_negative_int_parser =
   fun s ->
     try
@@ -42,13 +56,13 @@ let non_negative_int =
 (*** Graph source arguments. ***)
 let file_arg =
   let docv = "FILE" in
-  let doc  = "File to lookup IMGT allele alignments. The alleles found in this\
-              file will initially define the set of alleles to be used. Use an\
+  let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
+              file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
   Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
 
 let merge_arg =
-  let parser path =
+  let parser_ path =
     let s = Filename.basename path in
     let n = path ^ "_nuc.txt" in
     let g = path ^ "_gen.txt" in
@@ -61,7 +75,7 @@ let merge_arg =
     else
       `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
-  let convrtr = parser, (fun frmt -> Format.fprintf frmt "%s") in
+  let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
   let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
@@ -192,10 +206,16 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
+let input_alignments ~impute file =
+  Alleles.Input.AlignmentFile (file, impute)
+
+let input_merges ~distance ~impute prefix =
+  Alleles.Input.MergeFromPrefix (prefix, distance, impute)
+
 let to_input ?alignment_file ?merge_file ~distance ~impute () =
   match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (Alleles.Input.MergeFromPrefix (prefix, distance, impute))
-  | (Some alignment_file), _  -> Ok (Alleles.Input.AlignmentFile (alignment_file, impute))
+  | _,          (Some prefix) -> Ok (input_merges ~distance ~impute prefix)
+  | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
   | None,                None -> Error "Either a file or merge argument must be specified"
 
 let to_filename_and_graph_args
