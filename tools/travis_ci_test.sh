@@ -8,6 +8,8 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 eval `opam config env`
 export OPAMYES="true"
 
+# Test cfstreams new build system
+opam pin add -k git cfstream git://github.com/biocaml/cfstream#master
 make setup
 
 # for test coverage
