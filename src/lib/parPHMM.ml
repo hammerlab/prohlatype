@@ -339,7 +339,7 @@ let list_map2_snd l1 l2 ~f =
 
 type set = Alleles.set
 
-(* CAM= Compressed Allele Map
+(* CAM = Compressed Allele Map
 
    Since our PHMM is parameterized by alleles, we have to keep track many
    values on a per allele basis. This module aims to provide an abstraction
