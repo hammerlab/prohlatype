@@ -50,6 +50,8 @@ module type M = sig
 
   val get : set -> 'a t -> 'a t option
 
+  val get_value : set -> 'a t -> 'a option
+
   exception StillMissing of string
 
   val get_exn : set -> 'a t -> 'a t
@@ -178,6 +180,11 @@ module Make (AS : Alleles.Set) : M = struct
   let get_exn = set_assoc_exn
 
   let get = set_assoc
+
+  let get_value s t =
+    Option.bind (get s t) ~f:(function
+      | [_,v] -> Some v
+      | _     -> None)
 
   let iter l ~f = List.iter l ~f:(fun (a, s) -> f a s)
 

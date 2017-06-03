@@ -570,8 +570,27 @@ module ForwardCalcs  (R : Ring) = struct
 
 end (* ForwardCalcs *)
 
+(* Create the workspace for the forward calculation for a single,
+   aka reference, allele. *)
+module SingleWorkspace = struct
 
-module MakeWorkspace (Cm : CAM.M) = struct
+  type 'a entry = 'a cell
+  type 'a final_entry = 'a
+
+  type 'a t =
+    { mutable forward   : 'a entry array array
+    ; mutable final     : 'a array
+    }
+
+  let generate zero_cell bigK read_size =
+    { forward             = Array.init bigK ~f:(fun _ -> Array.make read_size zero_cell)
+    ; final               = Array.make bigK zero_cell.match_
+    }
+
+end (* SingleWorkspace *)
+
+(* Create and manage the workspace for the forward pass for multiple alleles.*)
+module MakeMultipleWorkspace (Cm : CAM.M) = struct
 
   type 'a entry = 'a cell CAM.t
   type 'a final_entry = 'a CAM.t
@@ -610,7 +629,95 @@ module MakeWorkspace (Cm : CAM.M) = struct
     close_in ic;
     ws
 
-end (* MakeWorkspace *)
+end (* MakeMultipleWorkspace *)
+
+(* Pairing the observation makes it easier to abstract the regular vs
+  reverse complement access pattern. Leaving this as a pair to avoid
+  redundant pairing/unpairing.
+
+  I'll use obsp (observation pair) as the variable name. *)
+type obs = char * float
+
+module ForwardSingleGen (R: Ring) = struct
+
+  module Workspace = SingleWorkspace
+
+  type base = BaseState.t
+
+  type 'a fwr =
+    { s_start     :  obs -> base -> 'a Workspace.entry
+    ; s_top_row   : 'a Workspace.t
+                      -> obs
+                      -> base
+                      -> i:int
+                      -> 'a Workspace.entry
+    ; s_middle    : 'a Workspace.t
+                      -> obs
+                      -> base
+                      -> i:int
+                      -> k:int
+                      -> 'a Workspace.entry
+    ; s_end       : 'a Workspace.t -> int -> 'a Workspace.final_entry
+    ; s_emission  : 'a Workspace.t -> 'a
+    }
+
+
+  module Fc = ForwardCalcs(R)
+
+  let recurrences tm ~insert_p read_size =
+    let open Workspace in
+    let r = Fc.g tm ~insert_p read_size in
+    { s_start   = begin fun obsp base -> r.start (Fc.to_match_prob obsp base) end
+    ; s_top_row = begin fun ws obsp base ~i ->
+                    r.top_row (Fc.to_match_prob obsp base) (ws.forward.(0).(i-1))
+                  end
+    ; s_middle = begin fun ws obsp base ~i ~k ->
+                  let emp = Fc.to_match_prob obsp base in
+                  let ks = k-1 in
+                  let insert_c = ws.forward.(k).(i-1) in
+                  let match_c = ws.forward.(ks).(i-1) in
+                  let delete_c = ws.forward.(ks).(i) in
+                  r.middle emp ~insert_c ~delete_c ~match_c
+                end
+    ; s_end  = begin fun ws k ->
+                  r.end_ ws.forward.(k).(read_size-1)
+               end
+    ; s_emission = begin fun ws ->
+                    let r = ref R.zero in
+                    Array.iter ws.final ~f:(fun f -> r := R.(!r + f));
+                    !r
+                  end
+   }
+
+  let pass ~read_size allele_a =
+    let ref_length = Array.length allele_a in
+    let tm = Phmm.TransitionMatrix.init ~ref_length read_size in
+    let insert_p = R.constant 0.25 in
+    let recurrences = recurrences tm ~insert_p read_size in
+    let ws = Workspace.generate Fc.zero_cell ref_length read_size in
+    let last_row = ref_length - 1 in
+    let last_read_index = read_size - 1 in
+    let open Workspace in
+    fun a ->
+      let a_0 = a 0 in
+      ws.forward.(0).(0) <- recurrences.s_start a_0 allele_a.(0);
+      for i = 1 to last_read_index do
+        ws.forward.(0).(i) <- recurrences.s_top_row ws (a i) allele_a.(0) ~i
+      done;
+      for k = 1 to last_row do
+        let ak = allele_a.(k) in
+        ws.forward.(k).(0) <- recurrences.s_start a_0 ak;
+        for i = 1 to last_read_index do
+          ws.forward.(0).(i) <- recurrences.s_middle ws (a i) ak ~i ~k
+        done
+      done;
+      for k = 0 to last_row do
+        ws.final.(k) <- recurrences.s_end ws k
+      done;
+      recurrences.s_emission ws
+
+
+end (* ForwardSingleGen *)
 
 module PosMap = Map.Make(struct type t = int [@@deriving ord] end)
 
@@ -650,14 +757,14 @@ let band_default =
   ; width   = 3
   }
 
-module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
+module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   module Cm = CAM.Make(Aset)
 
   (* Eh... not the best place for it. *)
   let cam_max = Cm.fold ~init:(neg_infinity) ~f:(fun m _s v -> max m v)
 
-  module Workspace = MakeWorkspace(Cm)
+  module Workspace = MakeMultipleWorkspace(Cm)
 
   type base_emissions = (BaseState.t * int) CAM.t
 
@@ -665,22 +772,18 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
   type 'a oeps = (int * 'a) CAM.t
   type 'a emission_map = 'a oeps PosMap.t
 
-  (* Pairing the observation makes it easier to abstract the regular vs
-    reverse complement access pattern. Leaving this as a pair to avoid
-    redundant pairing/unpairing.
-
-    I'll use obsp (observation pair) as the variable name. *)
-  type obs = char * float
-
   type 'a fwr =
     { f_start   :  obs -> base_emissions -> 'a Workspace.entry
     ; f_top_row : 'a Workspace.t
-                      -> obs  -> base_emissions
-                      -> i:int -> k:int
+                      -> obs
+                      -> base_emissions
+                      -> i:int
                       -> 'a Workspace.entry
     ; f_middle  : 'a Workspace.t
-                      -> obs -> base_emissions
-                      -> i:int -> k:int
+                      -> obs
+                      -> base_emissions
+                      -> i:int
+                      -> k:int
                       -> 'a Workspace.entry
 
    (* This isn't the greatest design.... *)
@@ -691,7 +794,7 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                     -> i:int -> k:int -> 'a Workspace.entry
 
    (* Doesn't use the delete section. *)
-    ; f_end_    : 'a Workspace.t -> int -> 'a Workspace.final_entry
+    ; f_end     : 'a Workspace.t -> int -> 'a Workspace.final_entry
 
     ; emission  : ?spec_rows:(int list list) -> 'a Workspace.t -> int -> 'a array
 
@@ -722,9 +825,9 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                   |> Cm.map ~bijective:true
                       ~f:(fun (_offset, emissionp) -> r.start emissionp)
                 end
-    ; f_top_row = begin fun ws obsp emissions ~i ~k ->
+    ; f_top_row = begin fun ws obsp emissions ~i ->
                     to_em_set obsp emissions
-                    |> Cm.map2 (ws.forward.(k).(i-1))
+                    |> Cm.map2 (ws.forward.(0).(i-1))
                         ~f:(fun insert_c (_offset, emission_p) ->
                               r.top_row emission_p insert_c)
                  end
@@ -773,9 +876,9 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
                           | Some v -> with_insert missing_inserts ep_pair v)
                       ~f:with_insert
                 end
-    ; f_end_  = begin fun ws k ->
-                  Cm.map ~bijective:true ws.forward.(k).(read_size-1) ~f:r.end_
-                end
+    ; f_end = begin fun ws k ->
+                Cm.map ~bijective:true ws.forward.(k).(read_size-1) ~f:r.end_
+              end
     ; emission  = begin fun ?spec_rows ws len ->
                     let open R in
                     let ret = Array.make len zero in
@@ -803,17 +906,18 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
       open Workspace
 
       let pass ws recurrences emissions_a rows columns a =
+        let a_0 = a 0 in
         (* special case the first row. *)
         ws.forward.(0).(0) <-
-          recurrences.f_start (a 0) emissions_a.(0);
+          recurrences.f_start a_0 emissions_a.(0);
         for i = 1 to columns do
           ws.forward.(0).(i) <-
-            recurrences.f_top_row ws (a i) ~i ~k:0 emissions_a.(0)
+            recurrences.f_top_row ws (a i) ~i emissions_a.(0)
         done;
         (* All other rows. *)
         for k = 1 to rows do
           let ek = emissions_a.(k) in
-          ws.forward.(k).(0) <- recurrences.f_start (a 0) ek;
+          ws.forward.(k).(0) <- recurrences.f_start a_0 ek;
           for i = 1 to columns do
             ws.forward.(k).(i) <-
               recurrences.f_middle ws (a i) ~i ~k ek
@@ -822,7 +926,7 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
 
       let final ws recurrences rows ~number_alleles =
         for k = 0 to rows do
-          ws.final.(k) <- recurrences.f_end_ ws k
+          ws.final.(k) <- recurrences.f_end ws k
         done;
         ws.per_allele_emission <- recurrences.emission ws number_alleles
 
@@ -1135,7 +1239,7 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
     let fill_end recurrences ws b =
       let open Workspace in
       List.iter b.rows ~f:(fun k ->
-        ws.final.(k) <- Cm.join (recurrences.f_end_ ws k) ws.final.(k))
+        ws.final.(k) <- Cm.join (recurrences.f_end ws k) ws.final.(k))
 
     let pass c emissions_a increment_a number_alleles ws recurrences last_read_index a =
       (* order matters for passing along last_col *)
@@ -1189,10 +1293,13 @@ module ForwardGen (R : Ring)(Aset: Alleles.Set) = struct
 
   end (* Bands *)
 
-end (* ForwardGen *)
+end (* ForwardMultipleGen *)
 
-module Forward = ForwardGen(MultiplicativeProbability)
-module ForwardLogSpace = ForwardGen (LogProbabilities)
+module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
+module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
+
+module ForwardS = ForwardSingleGen(MultiplicativeProbability)
+module ForwardSLogSpace = ForwardSingleGen(LogProbabilities)
 
 type t =
   { align_date      : string
@@ -1200,7 +1307,6 @@ type t =
   ; aset            : (module Alleles.Set)
   ; alleles         : string list
   ; merge_map       : (string * string) list
-  (*; emissions_a     : (Alleles.set * (BaseState.t * int)) list array *)
   ; emissions_a     : (BaseState.t * int) CAM.t array
   ; increment_a     : (Alleles.set * int) list array
   }
@@ -1267,10 +1373,25 @@ let float_arr_to_str a =
   |> String.concat ~sep:"; "
   |> sprintf "[|%s|]"
 
-let compare_emissions e1 e2 =
-  let r1 = Array.fold_left e1 ~init:neg_infinity ~f:max in
-  let r2 = Array.fold_left e2 ~init:neg_infinity ~f:max in
-  r1 >= r2
+(* Single, for one allele, forward pass *)
+let single_allele_forward_pass read_size t allele =
+  let { emissions_a; aset; alleles; _ } = t in
+  let module Aset = (val aset : Alleles.Set) in
+  (* Recover allele's base sequence, aka, emission. *)
+  if not (List.exists ~f:((=) allele) alleles) then
+    invalid_argf "%s not found among the list of alleles!" allele
+  else
+    let module Cm = CAM.Make(Aset) in
+    let allele_set = Aset.singleton allele in
+    let allele_a =
+      Array.fold_left emissions_a ~init:[] ~f:(fun acc cm ->
+        match Cm.get_value allele_set cm with
+        | None         -> acc           (* In gap. *)
+        | Some (bs, _) -> bs :: acc)
+      |> List.rev
+      |> Array.of_list
+    in
+    ForwardSLogSpace.pass ~read_size allele_a
 
 (* Abstracts, behind a function the regular or reverse complement access
    pattern of a read. This is to avoid manually reversing and converting
@@ -1334,7 +1455,7 @@ let setup_single_pass ?band read_size t =
   let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
   let insert_p = 0.25 in
   let module AS = (val aset : Alleles.Set) in
-  let module F = ForwardLogSpace(AS) in
+  let module F = ForwardMLogSpace(AS) in
   let r = F.recurrences tm ~insert_p read_size in
   let ws = F.Workspace.generate number_alleles bigK read_size in
   let last_row = bigK - 1 in
@@ -1393,6 +1514,11 @@ let mapper pass read read_prob =
   let complement  = pass.best_alleles () in
   let cpositions  = pass.best_positions () in
   { regular; rpositions; complement; cpositions}
+
+let compare_emissions e1 e2 =
+  let r1 = Array.fold_left e1 ~init:neg_infinity ~f:max in
+  let r2 = Array.fold_left e2 ~init:neg_infinity ~f:max in
+  r1 >= r2
 
 let reducer pass ?(check_rc=true) read read_prob =
   if check_rc then begin
