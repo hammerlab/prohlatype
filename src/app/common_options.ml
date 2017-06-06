@@ -89,7 +89,7 @@ let merge_arg =
 
 (*** Allele selector arguments. ***)
 let regex_command_line_args = ["allele-regex"]
-let allele_command_line_args = ["a"; "allele"]
+let allele_command_line_args = ["spec-allele"]
 let without_command_line_args = ["without-allele"]
 let num_command_line_args = ["n"; "num-alt"]
 

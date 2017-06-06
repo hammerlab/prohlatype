@@ -593,6 +593,19 @@ module SingleWorkspace (R : Ring) = struct
     ; emission = R.zero
     }
 
+  let save ws =
+    let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
+    let oc = open_out fname in
+    Marshal.to_channel oc ws [];
+    close_out oc;
+    printf "Saved workspace to %s\n" fname
+
+  let load fname =
+    let ic = open_in fname in
+    let ws : t = Marshal.from_channel ic in
+    close_in ic;
+    ws
+
 end (* SingleWorkspace *)
 
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
@@ -605,7 +618,7 @@ module MakeMultipleWorkspace (R : Ring)(Cm : CAM.M) = struct
 
   type t = (entry, final_entry, R.t array) workspace
 
-  let generate number_alleles ref_size read_size =
+  let generate number_alleles ~ref_size ~read_size =
     { forward   = Array.init ref_size ~f:(fun _ -> Array.make read_size Cm.empty)
     ; final     = Array.make ref_size Cm.empty
     ; emission  = Array.make number_alleles R.zero
@@ -728,16 +741,16 @@ module ForwardSingleGen (R: Ring) = struct
     in
     let end_ ws k = r.end_ ws.forward.(k).(read_size-1) in
     let final_e ws =
-      Array.iter ws.final ~f:(fun f -> ws.emission <- R.(ws.emission + f))
+      Array.iter ws.final ~f:(fun f ->
+        ws.emission <- R.(ws.emission + f))
     in
     { start ; top_row ; middle ; end_ ; final_e }
 
-  let pass ~read_size allele_a =
+  let full ws ~read_size allele_a =
     let ref_length = Array.length allele_a in
     let tm = Phmm.TransitionMatrix.init ~ref_length read_size in
     let insert_p = R.constant 0.25 in
     let recurrences = recurrences tm ~insert_p read_size in
-    let ws = Workspace.generate ref_length read_size in
     let open Workspace in
     ForwardPass.full ws recurrences
         ~rows:(ref_length - 1) ~columns:(read_size - 1)
@@ -1333,26 +1346,6 @@ let float_arr_to_str a =
   |> String.concat ~sep:"; "
   |> sprintf "[|%s|]"
 
-(* Single, for one allele, forward pass *)
-let single_allele_forward_pass read_size t allele =
-  let { emissions_a; aset; alleles; _ } = t in
-  let module Aset = (val aset : Alleles.Set) in
-  (* Recover allele's base sequence, aka, emission. *)
-  if not (List.exists ~f:((=) allele) alleles) then
-    invalid_argf "%s not found among the list of alleles!" allele
-  else
-    let module Cm = CAM.Make(Aset) in
-    let allele_set = Aset.singleton allele in
-    let allele_a =
-      Array.fold_left emissions_a ~init:[] ~f:(fun acc cm ->
-        match Cm.get_value allele_set cm with
-        | None         -> acc           (* In gap. *)
-        | Some (bs, _) -> bs :: acc)
-      |> List.rev
-      |> Array.of_list
-    in
-    ForwardSLogSpace.pass ~read_size allele_a
-
 (* Abstracts, behind a function the regular or reverse complement access
    pattern of a read. This is to avoid manually reversing and converting
    the read. *)
@@ -1405,6 +1398,51 @@ type proc =
   ; save_workspace  : unit -> unit
   }
 
+
+(* TODO: expose this 5 if it becomes useful *)
+let lg5 a i lst =
+  largest 5 a i lst
+
+(* Single, for one allele, forward pass *)
+let setup_single_allele_forward_pass t read_size allele =
+  let { emissions_a; aset; alleles; _ } = t in
+  let module Aset = (val aset : Alleles.Set) in
+  (* Recover allele's base sequence, aka, emission. *)
+  if not (List.exists ~f:((=) allele) alleles) then
+    invalid_argf "%s not found among the list of alleles!" allele
+  else
+    let module Cm = CAM.Make(Aset) in
+    let allele_set = Aset.singleton allele in
+    let allele_a =
+      Array.fold_left emissions_a ~init:[] ~f:(fun acc cm ->
+        match Cm.get_value allele_set cm with
+        | None         -> acc           (* In gap. *)
+        | Some (bs, _) -> bs :: acc)
+      |> List.rev
+      |> Array.of_list
+    in
+    let best_positions final =
+      Array.fold_left final ~init:(0, [])
+        ~f:(fun (p, acc) l ->
+          (p + 1, lg5 l p acc))
+      |> snd
+    in
+    let ref_size = Array.length allele_a in
+    let ws = ForwardSLogSpace.Workspace.generate ~ref_size ~read_size in
+    let pass = ForwardSLogSpace.full ws ~read_size allele_a in
+    let doit rc rd rd_errors =
+      let read = access rc rd rd_errors in
+      pass read
+    in
+    let best_alleles () = [ws.emission, allele] in
+    let best_positions () = best_positions ws.final in
+    let per_allele_llhd () = [| ws.emission |] in
+    let save_workspace () = ForwardSLogSpace.Workspace.save ws in
+    let output_ws_array () = [| LogProbabilities.one |] in
+    { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
+    ; output_ws_array
+    }
+
 (* Return
   1. a function to process one read
   2. the workspace that it uses
@@ -1420,7 +1458,6 @@ let setup_single_pass ?band read_size t =
   let ws = F.Workspace.generate number_alleles bigK read_size in
   let last_row = bigK - 1 in
   let last_read_index = read_size - 1 in
-  let lg5 a i lst = largest 5 a i lst in  (* TODO: expose this 5 if it becomes useful *)
   let best_alleles emissions =
     Array.to_list emissions
     |> List.fold_left2 alleles
@@ -1496,6 +1533,12 @@ let reducer pass ?(check_rc=true) read read_prob =
     pass.doit false read read_prob;
     pass.per_allele_llhd ()
   end
+
+let single_allele_forward_pass mode pt read_size allele =
+  let pass = setup_single_allele_forward_pass pt read_size allele in
+  match mode with
+  | `Mapper   -> `Mapper (mapper pass)
+  | `Reducer  -> `Reducer (pass.output_ws_array (), reducer pass)
 
 let forward_pass ?band mode t read_size =
   let pass = setup_single_pass ?band read_size t in
