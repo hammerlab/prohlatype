@@ -72,6 +72,19 @@ let proc_g = function
                   `Reducer g
                  end
 
+let output_reducer alleles final_likelihoods =
+  List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
+  |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
+  |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
+
+let output_mapper lst =
+  printf "Reads: %d\n" (List.length lst);
+  List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
+    ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
+  |> List.rev
+  |> List.iter ~f:(fun (n, s) ->
+    printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
+
 let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
@@ -88,23 +101,13 @@ let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
               `Reducer
                 { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
                 ; s   = u
-                ; fin = fun final_likelihoods ->
-                    List.mapi pt.ParPHMM.alleles ~f:(fun i a -> (final_likelihoods.(i), a))
-                    |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-                    |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
+                ; fin = output_reducer pt.ParPHMM.alleles
                 }
           | `Mapper m ->
               `Mapper
                 { f   = to_map_update_f m
                 ; s   = []
-                ; fin = begin fun lst ->
-                          printf "Reads: %d\n" (List.length lst);
-                          List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
-                            ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
-                          |> List.rev
-                          |> List.iter ~f:(fun (n, s) ->
-                            printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
-                        end
+                ; fin = output_mapper
                 })
     | Some allele ->
         let add_ll = add_log_likelihoods 1 in
@@ -115,23 +118,13 @@ let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
                 `Reducer
                   { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
                   ; s   = u
-                  ; fin = fun final_likelihoods ->
-                      List.mapi [allele] ~f:(fun i a -> (final_likelihoods.(i), a))
-                      |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-                      |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
+                  ; fin = output_reducer [allele]
                   }
             | `Mapper m ->
                 `Mapper
                   { f   = to_map_update_f m
                   ; s   = []
-                  ; fin = begin fun lst ->
-                            printf "Reads: %d\n" (List.length lst);
-                            List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
-                              ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
-                            |> List.rev
-                            |> List.iter ~f:(fun (n, s) ->
-                              printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
-                          end
+                  ; fin = output_mapper
                   })
   in
   `Set g
