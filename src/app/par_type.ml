@@ -72,7 +72,7 @@ let proc_g = function
                   `Reducer g
                  end
 
-let to_set mode specific_allele ~check_rc ?band rp read_size =
+let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -83,7 +83,7 @@ let to_set mode specific_allele ~check_rc ?band rp read_size =
       let add_ll = add_log_likelihoods pt.ParPHMM.number_alleles in
       time (sprintf "Allocating forward pass workspaces")
         (fun () ->
-          match ParPHMM.forward_pass mode ?band pt read_size with
+          match ParPHMM.forward_pass mode ?insert_p ?band pt read_size with
           | `Reducer (u, f) ->
               `Reducer
                 { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
@@ -110,13 +110,13 @@ let to_set mode specific_allele ~check_rc ?band rp read_size =
         let add_ll = add_log_likelihoods 1 in
         time (sprintf "Allocating forward pass workspaces")
           (fun () ->
-            match ParPHMM.single_allele_forward_pass mode pt read_size allele with
+            match ParPHMM.single_allele_forward_pass ?insert_p mode pt read_size allele with
             | `Reducer (u, f) ->
                 `Reducer
                   { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
                   ; s   = u
                   ; fin = fun final_likelihoods ->
-                      List.mapi [allele] (*pt.ParPHMM.alleles*) ~f:(fun i a -> (final_likelihoods.(i), a))
+                      List.mapi [allele] ~f:(fun i a -> (final_likelihoods.(i), a))
                       |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
                       |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
                   }
@@ -167,6 +167,7 @@ let type_
   (* What to do? *)
     fastq_file_lst number_of_reads specific_reads
   (* options *)
+    insert_p
     read_size_override
     not_check_rc
     not_band
@@ -309,6 +310,7 @@ let () =
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
+            $ insert_probability_arg
             $ read_size_override_arg
             $ not_check_rc_flag
             $ not_band_flag

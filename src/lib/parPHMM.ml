@@ -500,7 +500,9 @@ module ForwardCalcs  (R : Ring) = struct
     | G -> compare_against 'G'
     | T -> compare_against 'T'
 
-  let g tm ~insert_p read_size =
+  let debug_ref = ref false
+
+  let g ?(insert_p=Phmm.default_insert_probability) tm read_length =
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
     let open Phmm.TransitionMatrix in
@@ -519,12 +521,23 @@ module ForwardCalcs  (R : Ring) = struct
     let t_m_s = constant (tm Match StartOrEnd) in
     let t_i_s = constant (tm Insert StartOrEnd) in
 
+    let insert_p = constant insert_p in
     let start_i = insert_p * t_s_i in
     { start   = begin fun emission_p ->
-                  { match_ = emission_p * t_s_m
-                  ; insert = start_i
-                  ; delete = zero
-                  }
+                  let r =
+                    { match_ = emission_p * t_s_m
+                    ; insert = start_i
+                    ; delete = zero
+                    }
+                  in
+                  let () =
+                    if !debug_ref then
+                      printf "--------start: emission_p:%s\t insert_p%s:\n\tafter: %s\n"
+                        (R.to_string emission_p)
+                        (R.to_string insert_p)
+                        (cell_to_string R.to_string r)
+                  in
+                  r
                 end
     ; top_row = begin fun emission_p insert_c ->
                   { match_ = emission_p * ( t_m_m * zero
@@ -547,14 +560,16 @@ module ForwardCalcs  (R : Ring) = struct
                                             + t_d_d * delete_c.delete)
                     }
                   in
-                  (*let () =
-                      printf "--------%s \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+                  let () =
+                    if !debug_ref then
+                      printf "--------middle: emission:%s \
+                            \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
                         (R.to_string emission_p)
                         (cell_to_string R.to_string match_c)
                         (cell_to_string R.to_string insert_c)
                         (cell_to_string R.to_string delete_c)
                         (cell_to_string R.to_string r)
-                  in*)
+                  in
                   r
                  end
    ; end_    = begin fun cell ->
@@ -587,9 +602,9 @@ module SingleWorkspace (R : Ring) = struct
 
   type t = (entry, final_entry, R.t) workspace
 
-  let generate ~ref_size ~read_size =
-    { forward  = Array.init ref_size ~f:(fun _ -> Array.make read_size Fc.zero_cell)
-    ; final    = Array.make ref_size R.zero
+  let generate ~ref_length ~read_length =
+    { forward  = Array.init ref_length ~f:(fun _ -> Array.make read_length Fc.zero_cell)
+    ; final    = Array.make ref_length R.zero
     ; emission = R.zero
     }
 
@@ -611,25 +626,23 @@ end (* SingleWorkspace *)
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
 module MakeMultipleWorkspace (R : Ring)(Cm : CAM.M) = struct
 
-  module Fc = ForwardCalcs(R)
-
   type entry = R.t cell CAM.t
   type final_entry = R.t CAM.t
 
   type t = (entry, final_entry, R.t array) workspace
 
-  let generate number_alleles ~ref_size ~read_size =
-    { forward   = Array.init ref_size ~f:(fun _ -> Array.make read_size Cm.empty)
-    ; final     = Array.make ref_size Cm.empty
+  let generate number_alleles ~ref_length ~read_length =
+    { forward   = Array.init ref_length ~f:(fun _ -> Array.make read_length Cm.empty)
+    ; final     = Array.make ref_length Cm.empty
     ; emission  = Array.make number_alleles R.zero
     }
 
   let clear ws =
-    let ref_size       = Array.length ws.final in
-    let read_size      = Array.length ws.forward.(0) in
+    let ref_length       = Array.length ws.final in
+    let read_length      = Array.length ws.forward.(0) in
     let number_alleles = Array.length ws.emission in
-    ws.forward <- Array.init ref_size ~f:(fun _ -> Array.make read_size Cm.empty);
-    ws.final   <- Array.make ref_size Cm.empty;
+    ws.forward <- Array.init ref_length ~f:(fun _ -> Array.make read_length Cm.empty);
+    ws.final   <- Array.make ref_length Cm.empty;
     Array.fill ws.emission ~pos:0 ~len:number_alleles R.zero
 
   let save ws =
@@ -681,7 +694,12 @@ type ('workspace, 'entry, 'final_entry, 'base) recurrences =
 *)
 module ForwardPass = struct
 
-  let pass ws ~rows ~columns recurrences ~read ~reference =
+  let last_array_index arr =
+    Array.length arr - 1
+
+  let pass ws ?rows ?columns recurrences ~read ~reference =
+    let rows = Option.value rows ~default:(last_array_index ws.forward) in
+    let columns = Option.value columns ~default:(last_array_index ws.forward.(0)) in
     let a_0 = read 0 in
     let b_0 = reference 0 in
     (* special case the first row. *)
@@ -698,21 +716,22 @@ module ForwardPass = struct
       done
     done
 
-  let final ws recurrences rows =
+  let final ?rows ws recurrences =
+    let rows = Option.value rows ~default:(last_array_index ws.final) in
     for k = 0 to rows do
       ws.final.(k) <- recurrences.end_ ws k
     done
 
   (* Fill in both parts of the workspace. *)
-  let both ws recurrences ~rows ~columns ~read ~reference =
-    pass ws recurrences ~rows ~columns ~read ~reference;
-    final ws recurrences rows
+  let both ws recurrences ?rows ?columns ~read ~reference =
+    pass ?rows ?columns ws recurrences ~read ~reference;
+    final ?rows ws recurrences
 
   (* After filling in both parts of the workspace,
      compute the final emission value. *)
-  let full ws recurrences ~rows ~columns ~read ~reference =
-    pass ws recurrences ~rows ~columns ~read ~reference;
-    final ws recurrences rows;
+  let full ?rows ?columns ws recurrences ~read ~reference =
+    pass ?rows ?columns ws recurrences ~read ~reference;
+    final ?rows ws recurrences;
     recurrences.final_e ws
 
 end (* ForwardPass *)
@@ -724,9 +743,9 @@ module ForwardSingleGen (R: Ring) = struct
 
   type base = BaseState.t
 
-  let recurrences tm ~insert_p read_size =
+  let recurrences ?insert_p tm read_length =
     let open Workspace in
-    let r = Fc.g tm ~insert_p read_size in
+    let r = Fc.g ?insert_p tm read_length in
     let start obsp base = r.start (Fc.to_match_prob obsp base) in
     let top_row ws obsp base ~i =
       r.top_row (Fc.to_match_prob obsp base) (ws.forward.(0).(i-1))
@@ -739,22 +758,24 @@ module ForwardSingleGen (R: Ring) = struct
       let delete_c = ws.forward.(ks).(i) in
       r.middle emp ~insert_c ~delete_c ~match_c
     in
-    let end_ ws k = r.end_ ws.forward.(k).(read_size-1) in
+    let end_ ws k = r.end_ ws.forward.(k).(read_length-1) in
     let final_e ws =
       Array.iter ws.final ~f:(fun f ->
         ws.emission <- R.(ws.emission + f))
     in
     { start ; top_row ; middle ; end_ ; final_e }
 
-  let full ws ~read_size allele_a =
-    let ref_length = Array.length allele_a in
-    let tm = Phmm.TransitionMatrix.init ~ref_length read_size in
-    let insert_p = R.constant 0.25 in
-    let recurrences = recurrences tm ~insert_p read_size in
+  let full ?insert_p ?transition_ref_length ~read_length ws allele_a =
+    let tm =
+      let ref_length = Option.value transition_ref_length
+        ~default:(Array.length allele_a)
+      in
+      printf "creating transition with ref_length %d and read_length %d \n"
+        ref_length read_length;
+      Phmm.TransitionMatrix.init ~ref_length read_length in
+    let recurrences = recurrences ?insert_p tm read_length in
     let open Workspace in
-    ForwardPass.full ws recurrences
-        ~rows:(ref_length - 1) ~columns:(read_size - 1)
-        ~reference:(fun k -> allele_a.(k))
+    ForwardPass.full ws recurrences ~reference:(fun k -> allele_a.(k))
 
 end (* ForwardSingleGen *)
 
@@ -824,9 +845,9 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   module Fc = ForwardCalcs(R)
 
-  let recurrences tm ~insert_p read_size =
+  let recurrences ?insert_p tm read_length =
     let open Workspace in
-    let r = Fc.g tm ~insert_p read_size in
+    let r = Fc.g ?insert_p tm read_length in
 
    (* TODO: I could imagine some scenario's where it makes sense to cache,
        precompute or memoize this calculation. The # of base errors isn't
@@ -862,7 +883,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
                         r.middle emission_p ~insert_c ~delete_c ~match_c))
     in
     let end_ ws k =
-      Cm.map ~bijective:true ws.forward.(k).(read_size-1) ~f:r.end_
+      Cm.map ~bijective:true ws.forward.(k).(read_length-1) ~f:r.end_
     in
     let update_emission_from_cam ws l =
       let open R in
@@ -1273,7 +1294,6 @@ module ForwardSLogSpace = ForwardSingleGen(LogProbabilities)
 module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
 module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
 
-
 type t =
   { align_date      : string
   ; number_alleles  : int
@@ -1404,7 +1424,7 @@ let lg5 a i lst =
   largest 5 a i lst
 
 (* Single, for one allele, forward pass *)
-let setup_single_allele_forward_pass t read_size allele =
+let setup_single_allele_forward_pass ?insert_p t read_length allele =
   let { emissions_a; aset; alleles; _ } = t in
   let module Aset = (val aset : Alleles.Set) in
   (* Recover allele's base sequence, aka, emission. *)
@@ -1427,9 +1447,16 @@ let setup_single_allele_forward_pass t read_size allele =
           (p + 1, lg5 l p acc))
       |> snd
     in
-    let ref_size = Array.length allele_a in
-    let ws = ForwardSLogSpace.Workspace.generate ~ref_size ~read_size in
-    let pass = ForwardSLogSpace.full ws ~read_size allele_a in
+    let ref_length = Array.length allele_a in
+    let ws = ForwardSLogSpace.Workspace.generate ~ref_length ~read_length in
+    (* For comparison against all of the alleles we want to have the same
+       transition probabilities, that depends upon the reference size.
+       Therefore we'll use the reference size of all the alleles; size of
+       emissio_a.  Perhaps we want to expose a parameter to switch to the
+       'local' reference size; size of allele_a. *)
+    let transition_ref_length = Array.length emissions_a in
+    let pass = ForwardSLogSpace.full ?insert_p ~transition_ref_length
+                  ~read_length ws allele_a in
     let doit rc rd rd_errors =
       let read = access rc rd rd_errors in
       pass read
@@ -1447,17 +1474,16 @@ let setup_single_allele_forward_pass t read_size allele =
   1. a function to process one read
   2. the workspace that it uses
   3. a function to combine results *)
-let setup_single_pass ?band read_size t =
+let setup_single_pass ?band ?insert_p read_length t =
   let { number_alleles; emissions_a; increment_a; aset; alleles; _ } = t in
-  let bigK = Array.length emissions_a in
-  let tm = Phmm.TransitionMatrix.init ~ref_length:bigK read_size in
-  let insert_p = 0.25 in
+  let ref_length = Array.length emissions_a in
+  let () = printf "creating transition with ref %d read %d \n" ref_length read_length in
+  let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
   let module AS = (val aset : Alleles.Set) in
   let module F = ForwardMLogSpace(AS) in
-  let r, br = F.recurrences tm ~insert_p read_size in
-  let ws = F.Workspace.generate number_alleles bigK read_size in
-  let last_row = bigK - 1 in
-  let last_read_index = read_size - 1 in
+  let r, br = F.recurrences ?insert_p tm read_length in
+  let ws = F.Workspace.generate number_alleles ref_length read_length in
+  let last_read_index = read_length - 1 in
   let best_alleles emissions =
     Array.to_list emissions
     |> List.fold_left2 alleles
@@ -1478,9 +1504,7 @@ let setup_single_pass ?band read_size t =
   let normal () =
     let doit rc rd rd_errors =
       let read = access rc rd rd_errors in
-      F.Regular.full ws r
-          ~reference ~read
-          ~rows:last_row ~columns:last_read_index
+      F.Regular.full ws r ~reference ~read
     in
     { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
     ; output_ws_array
@@ -1492,7 +1516,7 @@ let setup_single_pass ?band read_size t =
       (* clear the forward/final array since the banded pass algorithm relies on
          unfilled cells to indicate boundaries (places where we use heuristics).*)
       F.Workspace.clear ws;
-      F.Regular.pass ws r ~reference ~rows:last_row ~columns:c.column ~read;
+      F.Regular.pass ws r ~reference ~columns:c.column ~read;
       F.Bands.pass c emissions_a increment_a ws (r, br) last_read_index read
     in
     { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
@@ -1534,14 +1558,14 @@ let reducer pass ?(check_rc=true) read read_prob =
     pass.per_allele_llhd ()
   end
 
-let single_allele_forward_pass mode pt read_size allele =
-  let pass = setup_single_allele_forward_pass pt read_size allele in
+let single_allele_forward_pass ?insert_p mode pt read_length allele =
+  let pass = setup_single_allele_forward_pass ?insert_p pt read_length allele in
   match mode with
   | `Mapper   -> `Mapper (mapper pass)
   | `Reducer  -> `Reducer (pass.output_ws_array (), reducer pass)
 
-let forward_pass ?band mode t read_size =
-  let pass = setup_single_pass ?band read_size t in
+let forward_pass ?insert_p ?band mode t read_length =
+  let pass = setup_single_pass ?insert_p ?band read_length t in
   match mode with
   | `Mapper   -> `Mapper (mapper pass)
   | `Reducer  -> `Reducer (pass.output_ws_array (), reducer pass)
@@ -1604,9 +1628,9 @@ let reporter pass read read_prob =
   { Many.regular; complement}
 
 
-let forward_pass_m ?band mode tlst read_size =
+let forward_pass_m ?band mode tlst read_length =
   let passes =
-    List.map tlst ~f:(fun (name,t) -> name, setup_single_pass ?band read_size t)
+    List.map tlst ~f:(fun (name,t) -> name, setup_single_pass ?band read_length t)
   in
   match mode with
   | `Mapper ->
