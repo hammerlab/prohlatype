@@ -770,8 +770,6 @@ module ForwardSingleGen (R: Ring) = struct
       let ref_length = Option.value transition_ref_length
         ~default:(Array.length allele_a)
       in
-      printf "creating transition with ref_length %d and read_length %d \n"
-        ref_length read_length;
       Phmm.TransitionMatrix.init ~ref_length read_length in
     let recurrences = recurrences ?insert_p tm read_length in
     let open Workspace in
@@ -1477,7 +1475,6 @@ let setup_single_allele_forward_pass ?insert_p t read_length allele =
 let setup_single_pass ?band ?insert_p read_length t =
   let { number_alleles; emissions_a; increment_a; aset; alleles; _ } = t in
   let ref_length = Array.length emissions_a in
-  let () = printf "creating transition with ref %d read %d \n" ref_length read_length in
   let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
   let module AS = (val aset : Alleles.Set) in
   let module F = ForwardMLogSpace(AS) in
