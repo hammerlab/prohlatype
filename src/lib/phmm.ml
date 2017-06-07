@@ -7,11 +7,13 @@ type probabilities =
   ; ending        : float     (* gamma *)
   }
 
-let default_probabilities ?(read_length=100) () =
+let default_transition_probabilities ?(read_length=100) () =
   { gap_open      = 0.001
   ; gap_extension = 0.1
   ; ending        = 1. /. (2.0 *. float read_length)
   }
+
+let default_insert_probability = 0.25
 
 module Float = struct
   let ( + ) x y = x +. y
@@ -30,8 +32,8 @@ module TransitionMatrix = struct
   let init_m ?(model_probs=`Default) ~ref_length read_length =
     let mp =
       match model_probs with
-      | `Default                 -> default_probabilities ~read_length ()
-      | `WithAverageReadLength l -> default_probabilities ~read_length:l ()
+      | `Default                 -> default_transition_probabilities ~read_length ()
+      | `WithAverageReadLength l -> default_transition_probabilities ~read_length:l ()
       | `Spec model              -> model
     in
     (* Rename the probabilities to follow the convention in the paper.
@@ -64,6 +66,11 @@ module TransitionMatrix = struct
     (*tm.(start_end_idx).(start_end_idx)  <- 0.; *)
     tm
 
+  let print_matrix tm =
+    Array.iter tm ~f:(fun r ->
+      Array.iter r ~f:(printf "%0.7f\t");
+      printf "\n")
+
   type state =
     | Match
     | Insert
@@ -72,6 +79,7 @@ module TransitionMatrix = struct
 
   let init ?(model_probs=`Default) ~ref_length read_length =
     let tm = init_m ~model_probs ~ref_length read_length in
+    (*print_matrix tm;*)
     let to_index = function
       | Match      -> match_idx
       | Insert     -> insertion_idx

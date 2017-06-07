@@ -89,7 +89,7 @@ let merge_arg =
 
 (*** Allele selector arguments. ***)
 let regex_command_line_args = ["allele-regex"]
-let allele_command_line_args = ["a"; "allele"]
+let allele_command_line_args = ["spec-allele"]
 let without_command_line_args = ["without-allele"]
 let num_command_line_args = ["n"; "num-alt"]
 
@@ -339,3 +339,35 @@ let to_distance_targets_and_candidates alignment_file_opt merge_opt =
   | None, None  ->
       Error "Either a file or merge argument must be specified"
 
+let probability_parser s =
+  try
+    let f = Scanf.sscanf s "%f" (fun x -> x) in
+    if f < 0.0 then
+      Error (`Msg (s ^ " is less than zero, not a valid probability."))
+    else if f = 0.0 then begin
+      eprintf "zero probability specified; things might be strange!\n";
+      Ok f
+    end else if f = 1.0 then begin
+      eprintf "one probability specified; things might be strange!\n";
+      Ok f
+    end else if f > 1.0 then
+      Error (`Msg (s ^ " is greater than one, not a valid probability."))
+    else
+      Ok f
+  with Scanf.Scan_failure msg ->
+    Error (`Msg msg)
+
+let probability_arg =
+  Arg.conv ~docv:"PROBABILITY"
+    (probability_parser, (fun fmt -> Format.fprintf fmt "%f"))
+
+let insert_probability_arg =
+  let docv = "PROBABILITY" in
+  let doc  =
+    sprintf "Specify a value between 0 and 1 to represent the insert \
+              emission probability. The default value is: %f"
+      Phmm.default_insert_probability
+  in
+  Arg.(value
+      & opt probability_arg Phmm.default_insert_probability
+      & info ~doc ~docv ["insert-emission-probability"])
