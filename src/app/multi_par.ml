@@ -161,7 +161,7 @@ let type_
   (* options *)
     read_size_override
     not_band
-    column
+    warmup
     number
     width
   (* how are we typing *)
@@ -172,7 +172,7 @@ let type_
     if not_band then
       None
     else
-      Some { ParPHMM.column; number; width }
+      Some { ParPHMM.warmup; number; width }
   in
   let alignment_files, merge_files =
     match class1_gen_dir with
@@ -218,16 +218,16 @@ let () =
     let doc = "Calculate the full forward pass matrix." in
     Arg.(value & flag & info ~doc ["do-not-band"])
   in
-  let band_column_arg =
-    let default = ParPHMM.(band_default.column) in
+  let band_warmup_arg =
+    let default = ParPHMM.(band_default.warmup) in
     let docv = "POSITIVE INTEGER" in
     let doc =
-      sprintf "At which column in the forward pass to compute bands instead \
+      sprintf "At which warmup in the forward pass to compute bands instead \
                of the full pass. Defaults to: %d." default
     in
     Arg.(value
           & opt positive_int default
-          & info ~doc ~docv ["band-column"])
+          & info ~doc ~docv ["band-warmup"])
   in
   let number_bands_arg =
     let default = ParPHMM.(band_default.number) in
@@ -326,7 +326,7 @@ let () =
             (* options. *)
             $ read_size_override_arg
             $ not_band_flag
-            $ band_column_arg
+            $ band_warmup_arg
             $ number_bands_arg
             $ band_width_arg
             (* How are we typing *)
