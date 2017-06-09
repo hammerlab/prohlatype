@@ -353,7 +353,7 @@ let float_cell_to_string = cell_to_string (sprintf "%0.3f")
 
 type 'a cell_recurrences =
   { start   : 'a -> 'a cell
-  ; top_col : 'a -> 'a cell -> 'a cell
+  ; fst_col : 'a -> 'a cell -> 'a cell
   ; middle  : 'a -> insert_c:('a cell)
                  -> delete_c:('a cell)
                  -> match_c:('a cell)
@@ -421,7 +421,7 @@ module ForwardCalcs  (R : Ring) = struct
                   in
                   r
                 end
-    ; top_col = begin fun emission_p insert_c ->
+    ; fst_col = begin fun emission_p insert_c ->
                   { match_ = emission_p * ( t_m_m * zero
                                           + t_i_m * zero
                                           + t_d_m * zero)
@@ -562,7 +562,7 @@ type read_accessor = int -> obs
 (* I'm somewhat purposefully shadowing the cell_recurrences field names. *)
 type ('workspace, 'entry, 'final_entry, 'base) recurrences =
   { start   :  obs -> 'base -> 'entry
-  ; top_col : 'workspace -> obs -> 'base -> i:int -> 'entry
+  ; fst_col : 'workspace -> obs -> 'base -> i:int -> 'entry
   ; middle  : 'workspace -> obs -> 'base -> i:int -> k:int -> 'entry
   ; end_    : 'workspace -> int -> 'final_entry
 
@@ -600,7 +600,7 @@ module ForwardPass = struct
     done;
     for i = 1 to rows do
       let a_i = read i in
-      ws.forward.(i).(0) <- recurrences.top_col ws a_i ~i (reference 0);
+      ws.forward.(i).(0) <- recurrences.fst_col ws a_i ~i (reference 0);
       for k = 1 to columns do
         ws.forward.(i).(k) <- recurrences.middle ws a_i ~i ~k (reference k);
       done
@@ -637,8 +637,8 @@ module ForwardSingleGen (R: Ring) = struct
     let open Workspace in
     let r = Fc.g ?insert_p tm read_length in
     let start obsp base = r.start (Fc.to_match_prob obsp base) in
-    let top_col ws obsp base ~i =
-      r.top_col (Fc.to_match_prob obsp base) (ws.forward.(i-1).(0))
+    let fst_col ws obsp base ~i =
+      r.fst_col (Fc.to_match_prob obsp base) (ws.forward.(i-1).(0))
     in
     let middle ws obsp base ~i ~k =
       let emp = Fc.to_match_prob obsp base in
@@ -653,7 +653,7 @@ module ForwardSingleGen (R: Ring) = struct
       Array.iter ws.final ~f:(fun f ->
         ws.emission <- R.(ws.emission + f))
     in
-    { start ; top_col ; middle ; end_ ; final_e }
+    { start ; fst_col ; middle ; end_ ; final_e }
 
   let full ?insert_p ?transition_ref_length ~read_length ws allele_a =
     let tm =
@@ -758,11 +758,11 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
       |> Cm.map ~bijective:true
         ~f:(fun (_offset, emissionp) -> r.start emissionp)
     in
-    let top_col ws obsp emissions ~i =
+    let fst_col ws obsp emissions ~i =
       to_em_set obsp emissions
       |> Cm.map2 (ws.forward.(i-1).(0))
           ~f:(fun insert_c (_offset, emission_p) ->
-                r.top_col emission_p insert_c)
+                r.fst_col emission_p insert_c)
     in
     let middle ws obsp emissions ~i ~k =
       let inserts = ws.forward.(i-1).(k) in
@@ -823,7 +823,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
         List.iter cols ~f:(fun k ->
           update_emission_from_cam ws ws.final.(k)))
     in
-    { start; top_col; middle; end_; final_e}
+    { start; fst_col; middle; end_; final_e}
     , { middle_emissions = to_em_set ; banded ; spec_final_e}
 
   module Regular = ForwardPass
