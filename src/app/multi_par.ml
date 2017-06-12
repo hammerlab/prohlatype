@@ -97,7 +97,7 @@ let output_mapped lst =
           sprintf "%s\t%s" name
             (ParPHMM.mapped_stats_to_string ~sep:'\t' ms)))))
 
-let to_set ?band mode rp read_size =
+let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
   let ptlst =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -105,7 +105,9 @@ let to_set ?band mode rp read_size =
   let g =
     time (sprintf "Allocating forward pass workspaces")
       (fun () ->
-        match ParPHMM.forward_pass_m ?band mode ptlst read_size with
+        let r = ParPHMM.forward_pass_m ?insert_p ?max_number_mismatches ?band
+                mode ptlst read_size in
+        match r with
         | `Mapper m ->
             `Mapper
               { f   = to_update_f read_size ~f:(fun l n s r -> (n, m s r) :: l)
@@ -135,14 +137,15 @@ let fin = function
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reporter g) -> g.fin g.s
 
-let across_fastq ?number_of_reads ~specific_reads ?band mode file init =
+let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
+  ~specific_reads ?band mode file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads ~init file
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set ?band mode rp read_size in
+                let `Set g = to_set ?insert_p ?max_number_mismatches ?band mode rp read_size in
                 `Set (proc_g g fqi)
             | `Set g ->
                 `Set (proc_g g fqi))
@@ -159,6 +162,8 @@ let type_
   (* What to do? *)
     fastq_file_lst number_of_reads specific_reads
   (* options *)
+    insert_p
+    max_number_mismatches
     read_size_override
     not_band
     warmup
@@ -194,12 +199,13 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set ?band mode need_read_size r
+      | Some r -> to_set ~insert_p ?max_number_mismatches ?band mode need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads
+    | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches
+                            ?number_of_reads ~specific_reads
                             ?band mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
@@ -292,6 +298,13 @@ let () =
     in
     Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
   in
+  let max_number_mismatches_arg =
+    let docv = "POSITIVE INTEGER" in
+    let doc = "Setup a filter on the reads to cancel evaluation once we've \
+               seen this many mismatches." in
+    Arg.(value & opt (some positive_int) None & info ~doc ~docv
+          ["max-mismatches"])
+  in
   let class1gen_arg =
     let docv  = "DIRECTORY" in
     let doc   = "Short-cut argument that expands the given dir to look for \
@@ -324,6 +337,8 @@ let () =
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
+            $ insert_probability_arg
+            $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_band_flag
             $ band_warmup_arg

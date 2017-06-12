@@ -14,14 +14,6 @@ open Util
 
 type set = Alleles.set
 
-let list_map_snd lst ~f =
-  List.map lst ~f:(fun (k, v) -> k, f v)
-
-let list_map2_snd l1 l2 ~f =
-  List.map2 l1 l2 ~f:(fun (k1, v1) (k2, v2) ->
-    assert (k1 = k2);
-    (k1, f v1 v2))
-
 type 'a t = (set * 'a) list
 
 module type M = sig
@@ -215,7 +207,7 @@ module Make (AS : Alleles.Set) : M = struct
   let map ?bijective l ~f =
     match bijective with
     | Some true         ->                                            (* O(n) *)
-      list_map_snd ~f:(fun v -> f v) l
+      List.map_snd ~f:(fun v -> f v) l
     | Some false | None ->                                          (* O(n^2) *)
       List.fold_left l ~init:[] ~f:(fun acc (s, v) -> add s (f v) acc)
 

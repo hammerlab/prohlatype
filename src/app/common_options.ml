@@ -371,3 +371,10 @@ let insert_probability_arg =
   Arg.(value
       & opt probability_arg Phmm.default_insert_probability
       & info ~doc ~docv ["insert-emission-probability"])
+
+let max_number_mismatches_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc = "Setup a filter on the reads to cancel evaluation once we've \
+              seen this many mismatches." in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv
+        ["max-mismatches"])

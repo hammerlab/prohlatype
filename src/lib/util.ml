@@ -1,7 +1,21 @@
-
 include MoreLabels
-include Nonstd
 module String = Sosa.Native_string
+
+module NList = struct
+  include Nonstd.List
+
+  let map_snd lst ~f = map lst ~f:(fun (k, v) -> k, f v)
+
+  let map2_snd l1 l2 ~f =
+    map2 l1 l2 ~f:(fun (k1, v1) (k2, v2) ->
+      assert (k1 = k2);
+      (k1, f v1 v2))
+
+end (* NList *)
+
+include (Nonstd : module type of Nonstd with module List := NList)
+
+module List = NList
 
 let invalid_argf ?(prefix="") fmt =
   ksprintf invalid_arg ("%s" ^^ fmt) prefix

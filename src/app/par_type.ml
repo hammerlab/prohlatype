@@ -32,12 +32,14 @@ let to_read_size_dependent
 exception PPE of string
 
 let add_log_likelihoods n =
-  fun ~into nl ->
-    for i = 0 to n - 1 do
-      into.(i) <- into.(i) +. nl.(i)
-    done
+  let open ParPHMM in
+  fun ~into ->
+    function
+    | Filtered _   -> ()
+    | Completed rs ->
+      for i = 0 to n - 1 do into.(i) <- into.(i) +. rs.likelihood.(i) done
 
-let to_reduce_update_f ~check_rc perform_forward_pass add_ll update_me fqi =
+let to_reduce_update_f perform_forward_pass add_ll update_me fqi =
   time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
     let open Core_kernel.Std in
     match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
@@ -85,7 +87,8 @@ let output_mapper lst =
   |> List.iter ~f:(fun (n, s) ->
     printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
 
-let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
+let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
+  rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -96,10 +99,14 @@ let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
       let add_ll = add_log_likelihoods pt.ParPHMM.number_alleles in
       time (sprintf "Allocating forward pass workspaces")
         (fun () ->
-          match ParPHMM.forward_pass mode ?insert_p ?band pt read_size with
+          let r =
+            ParPHMM.forward_pass mode ?insert_p ?max_number_mismatches
+            ?band pt read_size
+          in
+          match r with
           | `Reducer (u, f) ->
               `Reducer
-                { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
+                { f   = to_reduce_update_f (f ~check_rc) add_ll
                 ; s   = u
                 ; fin = output_reducer pt.ParPHMM.alleles
                 }
@@ -113,10 +120,14 @@ let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
         let add_ll = add_log_likelihoods 1 in
         time (sprintf "Allocating forward pass workspaces")
           (fun () ->
-            match ParPHMM.single_allele_forward_pass ?insert_p mode pt read_size allele with
+            let r =
+              ParPHMM.single_allele_forward_pass ?insert_p ?max_number_mismatches
+              mode pt read_size allele
+            in
+            match r with
             | `Reducer (u, f) ->
                 `Reducer
-                  { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
+                  { f   = to_reduce_update_f (f ~check_rc) add_ll
                   ; s   = u
                   ; fin = output_reducer [allele]
                   }
@@ -134,14 +145,16 @@ let fin = function
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reducer g) -> g.fin g.s
 
-let across_fastq ?number_of_reads ~specific_reads ~check_rc specific_allele ?band mode file init =
+let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
+    ~specific_reads ~check_rc specific_allele ?band mode file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set mode specific_allele ~check_rc ?band rp read_size in
+                let `Set g = to_set ?insert_p ?max_number_mismatches
+                                mode specific_allele ~check_rc ?band rp read_size in
                 `Set (proc_g g fqi)
             | `Set g ->
                 `Set (proc_g g fqi))
@@ -161,6 +174,7 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     insert_p
+    max_number_mismatches
     read_size_override
     not_check_rc
     not_band
@@ -191,12 +205,14 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set mode specific_allele ~check_rc ?band need_read_size r
+      | Some r -> to_set ~insert_p ?max_number_mismatches
+                    mode specific_allele ~check_rc ?band need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~check_rc ?band
+    | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches ?number_of_reads
+                          ~specific_reads ~check_rc ?band
                           specific_allele mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
@@ -304,6 +320,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ insert_probability_arg
+            $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_check_rc_flag
             $ not_band_flag
