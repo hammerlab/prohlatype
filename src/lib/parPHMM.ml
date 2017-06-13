@@ -635,17 +635,12 @@ type obs = char * float
 type read_accessor = int -> obs
 
 (* I'm somewhat purposefully shadowing the cell_recurrences field names. *)
-type ('workspace, 'entry, 'final_entry, 'base) recurrences =
+type ('workspace, 'entry, 'final_entry, 'final_emission, 'base) recurrences =
   { start   :  obs -> 'base -> 'entry
   ; fst_col : 'workspace -> obs -> 'base -> i:int -> 'entry
   ; middle  : 'workspace -> obs -> 'base -> i:int -> k:int -> 'entry
   ; end_    : 'workspace -> int -> 'final_entry
-
-  (* Unfortunately the abstraction/separation of workspace and how we traverse
-     it leaks at this point when we want to calculate tine final emission.
-     This method should just fill in, or mutate to the correct value, the final
-     emission. *)
-  ; final_e : 'workspace -> unit
+  ; final_e : 'workspace -> 'final_emission
   }
 
 (* Given:
@@ -697,7 +692,7 @@ module ForwardPass = struct
   let full ?rows ws recurrences ~read ~reference =
     pass ?rows ws recurrences ~read ~reference;
     final ws recurrences;
-    recurrences.final_e ws
+    ws.emission <- recurrences.final_e ws
 
 end (* ForwardPass *)
 
@@ -747,13 +742,17 @@ module FilteringForwardPass = struct
   let full ?rows ws recurrences ~read ~reference t =
     pass ?rows ws recurrences ~read ~reference t;
     final ws recurrences;
-    recurrences.final_e ws
+    ws.emission <- recurrences.final_e ws
 
 end (* FilteringForwardPass *)
 
 type 'a pass_result =
   | Completed of 'a
   | Filtered of string
+
+let pass_result_to_string c_to_s = function
+  | Completed c -> sprintf "Completed: %s" (c_to_s c)
+  | Filtered m  -> sprintf "Filtered: %s" m
 
 module ForwardSingleGen (R: Ring) = struct
 
@@ -779,8 +778,8 @@ module ForwardSingleGen (R: Ring) = struct
     in
     let end_ ws k = r.end_ ws.forward.(read_length-1).(k) in
     let final_e ws =
-      Array.iter ws.final ~f:(fun f ->
-        ws.emission <- R.(ws.emission + f))
+      Array.fold_left ~init:R.zero ~f:(R.(+)) ws.final
+      (* Array.iter ws.final ~f:(fun f -> ws.emission <- R.(ws.emission + f)) *)
     in
     { start ; fst_col ; middle ; end_ ; final_e }
 
@@ -883,7 +882,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
                           -> i:int
                           -> k:int
                           -> Workspace.entry
-    ; spec_final_e     : int list list -> Workspace.t -> unit
+    ; spec_final_e     : int list list -> Workspace.t -> R.t array
     }
 
   let per_allele_emission_arr len =
@@ -891,7 +890,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   module Fc = ForwardCalcs(R)
 
-  let recurrences ?insert_p tm read_length =
+  let recurrences ?insert_p tm read_length number_alleles =
     let open Workspace in
     let r = Fc.g ?insert_p tm read_length in
 
@@ -931,12 +930,15 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
     let end_ ws k =
       Cm.map ~bijective:true ws.forward.(read_length-1).(k) ~f:r.end_
     in
-    let update_emission_from_cam ws l =
+    let update_emission_from_cam em l =
       let open R in
-      Cm.iter_values l ~f:(fun i v -> ws.emission.(i) <- ws.emission.(i) + v)
+      Cm.iter_values l ~f:(fun i v -> em.(i) <- em.(i) + v)
     in
     let final_e ws =
-      Array.iter ws.final ~f:(update_emission_from_cam ws)
+      let em = Array.make number_alleles R.zero in
+      Array.iter ws.final ~f:(update_emission_from_cam em);
+      em
+      (*Array.iter ws.final ~f:(update_emission_from_cam ws) *)
     in
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
       let with_insert inters (offset, emission_p) insert_c =
@@ -969,9 +971,11 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
           ~f:with_insert
     in
     let spec_final_e spec_cols ws =
+      let em = Array.make number_alleles R.zero in
       List.iter spec_cols ~f:(fun cols ->
         List.iter cols ~f:(fun k ->
-          update_emission_from_cam ws ws.final.(k)))
+          update_emission_from_cam em ws.final.(k)));
+      em
     in
     { start; fst_col; middle; end_; final_e}
     , { middle_emissions = to_em_set ; banded ; spec_final_e}
@@ -1331,7 +1335,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
       let banded_end bands =
         List.iter bands ~f:(fill_end rrecs ws);
         let spec_cols = List.map bands ~f:(fun b -> b.cols) in
-        brecs.spec_final_e spec_cols ws
+        ws.emission <- brecs.spec_final_e spec_cols ws
       in
       banded_end (banded_middle (c.warmup + 1))
 
@@ -1438,7 +1442,6 @@ type proc =
   ; best_alleles    : unit -> (float * string) list
   ; best_positions  : unit -> (float * int) list
   ; per_allele_llhd : unit -> float array                     (* Pass'es output. *)
-  ; save_workspace  : unit -> unit
   }
 
 
@@ -1490,9 +1493,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     let best_alleles () = [ws.emission, allele] in
     let best_positions () = best_positions ws.final in
     let per_allele_llhd () = [| ws.emission |] in
-    let save_workspace () = ForwardSLogSpace.Workspace.save ws in
     let output_ws_array () = [| LogProbabilities.one |] in
-    { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
+    { doit ; best_alleles ; best_positions ; per_allele_llhd
     ; output_ws_array
     }
 
@@ -1506,7 +1508,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
   let module AS = (val aset : Alleles.Set) in
   let module F = ForwardMLogSpace(AS) in
-  let r, br = F.recurrences ?insert_p tm read_length in
+  let r, br = F.recurrences ?insert_p tm read_length number_alleles in
   let ws = F.Workspace.generate number_alleles ref_length read_length in
   let last_read_index = read_length - 1 in
   let best_alleles emissions =
@@ -1524,14 +1526,17 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let best_alleles () = best_alleles ws.emission in
   let best_positions () = best_positions ws.final in
   let per_allele_llhd () = ws.emission in
-  let save_workspace () = F.Workspace.save ws in
   let output_ws_array () = F.per_allele_emission_arr t.number_alleles in
   let normal () =
     let doit rc rd rd_errors =
+      (* We do not have to clear the workspace, since a full pass will
+         overwrite all elements of the workspace.
+        F.Workspace.clear ws;*)
       let read = access rc rd rd_errors in
       match max_number_mismatches with
-      | None -> F.Regular.full ws r ~reference ~read;
-                Completed ()
+      | None ->
+          F.Regular.full ws r ~reference ~read;
+          Completed ()
       | Some number_mismatches ->
           let of_entry = F.cam_max_cell in
           let ft = F.Fc.match_filter ~number_mismatches of_entry in
@@ -1541,21 +1546,22 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           with PastThreshold msg ->
             Filtered msg
     in
-    { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
+    { doit ; best_alleles ; best_positions ; per_allele_llhd
     ; output_ws_array
     }
   in
   let banded c =
     let doit rc rd rd_errors =
-      let read = access rc rd rd_errors in
-      (* clear the forward/final array since the banded pass algorithm relies on
-         unfilled cells to indicate boundaries (places where we use heuristics).*)
+      (* Clear the forward/final array since the banded pass algorithm relies
+         on unfilled cells to indicate boundaries (places where we use
+         heuristics). *)
       F.Workspace.clear ws;
+      let read = access rc rd rd_errors in
       F.Regular.pass ws r ~reference ~read ~rows:c.warmup;
       F.Bands.pass c emissions_a increment_a ws (r, br) last_read_index read;
       Completed ()
     in
-    { doit ; best_alleles ; best_positions ; per_allele_llhd ; save_workspace
+    { doit ; best_alleles ; best_positions ; per_allele_llhd
     ; output_ws_array
     }
   in
@@ -1733,12 +1739,11 @@ let forward_pass_m ?insert_p ?max_number_mismatches ?band mode tlst read_length 
   match mode with
   | `Mapper ->
       `Mapper (fun read read_prob ->
-        List.map passes ~f:(fun (n, p) -> n, mapper p read read_prob))
+        List.map_snd passes ~f:(fun p -> mapper p read read_prob))
   | `Reporter ->
-      `Reporter ( List.map passes ~f:(fun (name, pass) -> name, pass.output_ws_array ())
+      `Reporter ( List.map_snd passes ~f:(fun proc -> proc.output_ws_array ())
                 , fun read read_prob state ->
-                  let current =
-                    List.map passes ~f:(fun (n, p) ->
-                      n, reducer p read read_prob)
-                  in
-                  MultiLoci.merge current state)
+                    let current =
+                      List.map_snd passes ~f:(fun p -> reducer p read read_prob)
+                    in
+                    MultiLoci.merge current state)
