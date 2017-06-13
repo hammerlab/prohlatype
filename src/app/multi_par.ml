@@ -51,7 +51,9 @@ let to_update_f read_size ~f acc fqi =
     else
       match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
       | Result.Error e       -> ppe (Error.to_string_hum e)
-      | Result.Ok read_probs -> f acc fqi.Biocaml_unix.Fastq.name fqi.Biocaml_unix.Fastq.sequence read_probs)
+      | Result.Ok read_probs -> f acc ~name:fqi.Biocaml_unix.Fastq.name
+                                      ~seq:fqi.Biocaml_unix.Fastq.sequence
+                                      ~read_probs)
 
 type 'a g =
   { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
@@ -110,16 +112,20 @@ let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
         match r with
         | `Mapper m ->
             `Mapper
-              { f   = to_update_f read_size ~f:(fun l n s r -> (n, m s r) :: l)
+              { f   = to_update_f read_size
+                          ~f:(fun l ~name ~seq ~read_probs ->
+                                (name, m seq read_probs) :: l)
               ; s   = []
               ; fin = begin fun lst ->
                         printf "Reads: %d\n" (List.length lst);
                         output_mapped (sort_mapped_output lst)
                       end
               }
-        | `Reporter (lst, ff) ->
+        | `Reporter (lst, r) ->
             `Reporter
-              { f   = to_update_f read_size ~f:(fun l _n s r -> ff s r l)
+              { f   = to_update_f read_size
+                          ~f:(fun l ~name ~seq ~read_probs ->
+                                r seq read_probs l)
               ; s   = lst
               ; fin = begin fun lst ->
                         List.iter2 ptlst lst ~f:(fun (name, pt) (_name, llhd) ->
