@@ -378,3 +378,52 @@ let max_number_mismatches_arg =
               seen this many mismatches." in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv
         ["max-mismatches"])
+
+let read_size_override_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc = "Override the number of bases to calculate the likelihood over, \
+              instead of using the number of bases in the FASTQ." in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
+
+let map_flag =
+  let doc = "Map (do not reduce) the typing of the individual reads." in
+  let docv = "This switch turns the typing logic into more of a diagnostic \
+              mode. The end user can see how individual reads are typed."
+  in
+  Arg.(value & flag & info ~doc ~docv ["map"])
+
+(* Band arguments *)
+let not_band_flag =
+  let doc = "Calculate the full forward pass matrix." in
+  Arg.(value & flag & info ~doc ["do-not-band"])
+
+let band_warmup_arg =
+  let default = ParPHMM.(band_default.warmup) in
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "At which row in the forward pass to compute bands instead \
+              of the full pass. Defaults to: %d." default
+  in
+  Arg.(value
+        & opt positive_int default
+        & info ~doc ~docv ["band-warmup"])
+
+let number_bands_arg =
+  let default = ParPHMM.(band_default.number) in
+  let docv = "POSITIVE INTEGER" in
+  let doc  =
+    sprintf "Number of bands to calculate. Defaults to %d" default
+  in
+  Arg.(value
+        & opt positive_int default
+        & info ~doc ~docv ["number-bands"])
+
+let band_width_arg =
+  let default = ParPHMM.(band_default.width) in
+  let docv = "greater than 1" in
+  let doc  =
+    sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
+  in
+  Arg.(value
+        & opt greater_than_one default
+        & info ~doc ~docv ["band-width"])
