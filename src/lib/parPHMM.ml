@@ -213,6 +213,12 @@ let add_alternate_allele aset reference ~position_map allele allele_instr arr =
 
 type set = Alleles.set
 
+(*let dx = 2.22044e-16 *)
+let dx = 1.e-8
+
+let not_significantly_different_from ?(d=dx) x y =
+  y >= (x -. d) && y <= (x +. d)
+
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
 
@@ -224,6 +230,8 @@ module type Ring = sig
   val ( + ) : t -> t -> t
   val ( * ) : t -> t -> t
   val max   : t -> t -> t
+
+  val close_enough : t -> t -> bool
 
   (* Special constructs necessary for the probabilistic logic. *)
   (* Convert constant probabilities. *)
@@ -244,6 +252,9 @@ module MultiplicativeProbability = struct
   let ( + ) = ( +. )
   let ( * ) = ( *. )
   let max   = max
+
+  let close_enough x y =
+    not_significantly_different_from x y
 
   let constant x = x
 
@@ -278,6 +289,9 @@ module LogProbabilities = struct
     else (* lx < ly *)             ly +. log10 (1. +. exp10 (lx -. ly))
 
   let max   = max
+
+  let close_enough x y =
+    not_significantly_different_from x y
 
   let constant = log10
 
@@ -483,6 +497,14 @@ module ForwardCalcs  (R : Ring) = struct
     ; insert = R.zero
     ; delete = R.zero
     }
+
+  let cells_close_enough c1 c2 =
+    R.close_enough c1.match_ c2.match_
+    && R.close_enough c1.insert c2.insert
+    && R.close_enough c1.delete c2.delete
+
+
+  (********** A potential filter **********)
 
   (* Keep track of the encountered read errors, assume that {mismatches}
      of the most likely (lowest base error) bases are wrong. While the the rest
@@ -863,6 +885,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
        precompute or memoize this calculation. The # of base errors isn't
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
+    let eq = Fc.cells_close_enough in
     let to_em_set obsp emissions =
       Cm.map emissions ~f:(fun (b, offset) ->
         offset, Fc.to_match_prob obsp b)
@@ -874,21 +897,21 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
     in
     let fst_col ws obsp emissions ~i =
       to_em_set obsp emissions
-      |> Cm.map2 (ws.forward.(i-1).(0))
+      |> Cm.map2 ~eq (ws.forward.(i-1).(0))
           ~f:(fun insert_c (_offset, emission_p) ->
                 r.fst_col emission_p insert_c)
     in
     let middle ws obsp emissions ~i ~k =
       let inserts = ws.forward.(i-1).(k) in
       let ems = to_em_set obsp emissions in
-      Cm.concat_map2 inserts ~by:ems   (* ORDER matters for performance! *)
+      Cm.concat_map2 ~eq inserts ~by:ems   (* ORDER matters for performance! *)
           ~f:(fun inters insert_c (offset, emission_p) ->
                 let ks = Pervasives.(+) k offset in
                 let matches = ws.forward.(i-1).(ks) in
                 let deletes = ws.forward.(i).(ks) in
                 let insertsi = Cm.singleton inters insert_c in
                 (* inserti should come before other 2 for performance. *)
-                Cm.map3 insertsi deletes matches
+                Cm.map3 ~eq:Fc.cells_close_enough insertsi deletes matches
                   ~f:(fun insert_c delete_c match_c ->
                         r.middle emission_p ~insert_c ~delete_c ~match_c))
     in
@@ -914,7 +937,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
         let matches = ws.forward.(i-1).(ks) in
         let deletes = ws.forward.(i).(ks) in
         let insertsi = Cm.singleton inters insert_c in
-        Cm.map3_partial insertsi
+        Cm.map3_partial ~eq insertsi
           ~by1:deletes
           ~missing1:(fun missing_deletes _insert_c ->
               let default = Cm.singleton missing_deletes Fc.zero_cell in
@@ -927,7 +950,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
           ~f:calc
       in
       let inserts = ws.forward.(i-1).(k) in
-        Cm.concat_map2_partial allele_ems ~by:inserts
+        Cm.concat_map2_partial ~eq allele_ems ~by:inserts
           ~missing:(fun missing_inserts ep_pair ->
               match prev_row with
               | None -> invalid_argf "At %d %d looking for inserts still missing %s"

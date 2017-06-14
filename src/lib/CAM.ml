@@ -26,7 +26,7 @@ module type M = sig
 
   val to_string_full : ('a -> string) -> 'a t -> string
 
-  val of_list : (set * 'a) list -> 'a t
+  val of_list : ?eq:('a -> 'a -> bool) -> (set * 'a) list -> 'a t
 
   val singleton : set -> 'a -> 'a t
 
@@ -36,9 +36,9 @@ module type M = sig
 
   val length : 'a t -> int
 
-  val add : set -> 'a -> 'a t -> 'a t
+  val add : ?eq:('a -> 'a -> bool) -> set -> 'a -> 'a t -> 'a t
 
-  val join : 'a t -> 'a t -> 'a t
+  val join : ?eq:('a -> 'a -> bool) -> 'a t -> 'a t -> 'a t
 
   val get : set -> 'a t -> 'a t option
 
@@ -58,28 +58,62 @@ module type M = sig
   val map : ?bijective:bool -> 'a t -> f:('a -> 'b) -> 'b t
 
   (* Not the perfect name for this function. *)
-  val concat_map : 'a t -> f:(set -> 'a -> 'b t) -> 'b t
+  val concat_map : ?eq:('b -> 'b -> bool)
+                  -> 'a t
+                  -> f:(set -> 'a -> 'b t)
+                  -> 'b t
 
-  val concat_map2 : 'a t -> by:'b t -> f:(set -> 'a -> 'b -> 'c t) -> 'c t
+  val concat_map2 : ?eq:('c -> 'c -> bool)
+                    -> 'a t
+                    -> by:'b t
+                    -> f:(set -> 'a -> 'b -> 'c t)
+                    -> 'c t
 
-  val concat_map2_partial : 'a t -> by:'b t -> f:(set -> 'a -> 'b -> 'c t) ->
-    missing:(set -> 'a -> 'c t) -> 'c t
+  val concat_map2_partial : ?eq:('c -> 'c -> bool)
+                            -> 'a t
+                            -> by:'b t
+                            -> f:(set -> 'a -> 'b -> 'c t)
+                            -> missing:(set -> 'a -> 'c t)
+                            -> 'c t
 
-  val map2 : 'a t -> 'b t -> f:('a -> 'b -> 'c) -> 'c t
+  val map2 : ?eq:('c -> 'c -> bool)
+            -> 'a t
+            -> 'b t
+            -> f:('a -> 'b -> 'c)
+            -> 'c t
 
-  val map3 : 'a t -> 'b t -> 'c t -> f:('a -> 'b -> 'c -> 'd) -> 'd t
+  val map3 : ?eq:('d -> 'd -> bool)
+            -> 'a t
+            -> 'b t
+            -> 'c t
+            -> f:('a -> 'b -> 'c -> 'd)
+            -> 'd t
 
-  val map4 : 'a t -> 'b t -> 'c t -> 'd t -> f:('a -> 'b -> 'c -> 'd -> 'e) -> 'e t
+  val map4 : ?eq:('e -> 'e -> bool)
+            -> 'a t
+            -> 'b t
+            -> 'c t
+            -> 'd t
+            -> f:('a -> 'b -> 'c -> 'd -> 'e)
+            -> 'e t
 
   val init_everything : 'a -> 'a t
 
-  val map2_partial : 'a t -> by:'b t -> missing:(set -> 'a -> 'c t) ->
-    f:('a -> 'b -> 'c) -> 'c t
+  val map2_partial : ?eq:('c -> 'c -> bool)
+                    -> 'a t
+                    -> by:'b t
+                    -> missing:(set -> 'a -> 'c t)
+                    -> f:('a -> 'b -> 'c)
+                    -> 'c t
 
-  val map3_partial : 'a t ->
-    by1:'b t -> missing1:(set -> 'a -> 'b t) ->
-    by2:'c t -> missing2:(set -> 'a -> 'b -> 'c t) ->
-    f:('a -> 'b -> 'c -> 'd) -> 'd t
+  val map3_partial : ?eq:('d -> 'd -> bool)
+                    -> 'a t
+                    -> by1:'b t
+                    -> missing1:(set -> 'a -> 'b t)
+                    -> by2:'c t
+                    -> missing2:(set -> 'a -> 'b -> 'c t)
+                    -> f:('a -> 'b -> 'c -> 'd)
+                    -> 'd t
 
   val partition_map : 'a t -> f:(set -> 'a -> [< `Fst of 'b | `Snd of 'c ]) ->
      'b t * 'c t
@@ -119,19 +153,20 @@ module Make (AS : Alleles.Set) : M = struct
       (AS.copy new_allele_set, value) :: assoc *)
 
   (* Union, tail recursive. *)
-  let mutate_or_add lst ((alleles, value) as p) =
+  let mutate_or_add ?eq lst ((alleles, value) as p) =
+    let eq = Option.value eq ~default:(=) in
     let rec loop acc = function
-      | (s, v) :: t when v = value -> acc @ (AS.union s alleles, v) :: t
-      | h :: t                     -> loop (h :: acc) t
-      | []                         -> p :: acc
+      | (s, v) :: t when eq v value -> acc @ (AS.union s alleles, v) :: t
+      | h :: t                      -> loop (h :: acc) t
+      | []                          -> p :: acc
     in
     loop [] lst
 
-  let add alleles v l = mutate_or_add l (alleles,v)
+  let add ?eq alleles v l = mutate_or_add ?eq l (alleles,v)
 
-  let join l1 l2 = List.fold_left l1 ~init:l2 ~f:mutate_or_add
+  let join ?eq l1 l2 = List.fold_left l1 ~init:l2 ~f:(mutate_or_add ?eq)
 
-  let of_list l = List.fold_left l ~init:[] ~f:mutate_or_add
+  let of_list ?eq l = List.fold_left l ~init:[] ~f:(mutate_or_add ?eq)
 
   let singleton s a = [s,a]
 
@@ -236,10 +271,10 @@ module Make (AS : Alleles.Set) : M = struct
 
   let absorb_k t ~init ~f = List.fold_left t ~init ~f
 
-  let absorb t ~init = absorb_k t ~init ~f:mutate_or_add
+  let absorb ?eq t ~init = absorb_k t ~init ~f:(mutate_or_add ?eq)
 
-  let concat_map l ~f =
-    List.fold_left l ~init:[] ~f:(fun init (s, a) -> absorb (f s a) ~init)
+  let concat_map ?eq l ~f =
+    List.fold_left l ~init:[] ~f:(fun init (s, a) -> absorb ?eq (f s a) ~init)
 
   (* The order of set arguments matters for performance. Better to fold over
      the longer list and lookup (set_assoc_k) into the shorter one. Remember
@@ -248,46 +283,46 @@ module Make (AS : Alleles.Set) : M = struct
      automatically re-order functional arguments as necessary?
 
      Probably just need a better data structure. *)
-  let concat_map2 l ~by ~f =
+  let concat_map2 ?eq l ~by ~f =
     (*printf "%d %d\n" (List.length l) (List.length by); *)
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init ~k:(fun intersect b init ->
-        absorb (f intersect a b) ~init))
+        absorb ?eq (f intersect a b) ~init))
 
-  let concat_map2_partial l ~by ~f ~missing =
+  let concat_map2_partial ?eq l ~by ~f ~missing =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init
-        ~k:(fun intersect b init -> absorb (f intersect a b) ~init)
-        ~missing:(fun sm init -> absorb ~init (missing sm a)))
+        ~k:(fun intersect b init -> absorb ?eq (f intersect a b) ~init)
+        ~missing:(fun sm init -> absorb ?eq ~init (missing sm a)))
 
-  let map2 l1 l2 ~f =
+  let map2 ?eq l1 l2 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s l2 ~init ~k:(fun intersect b acc ->
-        mutate_or_add acc (intersect, f a b)))
+        mutate_or_add ?eq acc (intersect, f a b)))
 
-  let map3 l1 l2 l3 ~f =
+  let map3 ?eq l1 l2 l3 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (is1, a) ->
       set_assoc_k ~n:"1" is1 l2 ~init ~k:(fun is2 b init ->
         set_assoc_k ~n:"2" is2 l3 ~init ~k:(fun intersect c acc ->
-          mutate_or_add acc (intersect, f a b c))))
+          mutate_or_add ?eq acc (intersect, f a b c))))
 
-  let map4 l1 l2 l3 l4 ~f =
+  let map4 ?eq l1 l2 l3 l4 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (is1, a) ->
       set_assoc_k is1 l2 ~init ~k:(fun is2 b init ->
         set_assoc_k is2 l3 ~init ~k:(fun is3 c init ->
           set_assoc_k is3 l4 ~init ~k:(fun intersect d acc ->
-            mutate_or_add acc (intersect, f a b c d)))))
+            mutate_or_add ?eq acc (intersect, f a b c d)))))
 
-  let map2_partial l ~by ~missing ~f =
+  let map2_partial ?eq l ~by ~missing ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init
-        ~k:(fun intercept b acc -> mutate_or_add acc (intercept, f a b))
-        ~missing:(fun sm init -> absorb ~init (missing sm a)))
+        ~k:(fun intercept b acc -> mutate_or_add ?eq acc (intercept, f a b))
+        ~missing:(fun sm init -> absorb ?eq ~init (missing sm a)))
 
-  let map3_partial l ~by1 ~missing1 ~by2 ~missing2 ~f =
+  let map3_partial ?eq l ~by1 ~missing1 ~by2 ~missing2 ~f =
     List.fold_left l ~init:[] ~f:(fun init (is1, a) ->
       let k is2 b init =
-        let k2 intercept c acc = mutate_or_add acc (intercept, f a b c) in
+        let k2 intercept c acc = mutate_or_add ?eq acc (intercept, f a b c) in
         set_assoc_k is2 by2 ~init ~k:k2
           ~missing:(fun sm init ->
             absorb_k (missing2 sm a b) ~init ~f:(fun init (s, b) -> k2 s b init))
