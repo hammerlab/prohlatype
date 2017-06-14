@@ -650,78 +650,39 @@ type ('workspace, 'entry, 'final_entry, 'final_emission, 'base) recurrences =
     - read and references acccessors
 
    Produce functions that actually traverse and fill in the forward pass,
-   and emission values.
-*)
+   and emission values. These functions also take an optional [filter] that
+   may raise an exception (such as {PastThreshold}) to signal a stop of the
+   computation. *)
 module ForwardPass = struct
 
   let last_array_index arr =
     Array.length arr - 1
 
-  (* Expose how many rows, how much of the read, to calculate for the forward
-     pass, in order to reuse this code for the banded passes. They will
-     initialize with a full pass, up to {warmup} before selecting the columns
-     for the bands.*)
-  let pass ?rows ws recurrences ~read ~reference =
+  let empty_filter =
+    { init  = ()
+    ; base  = begin fun () _ -> () end
+    ; entry = begin fun () _ -> () end
+    }
+
+  let pass_f ?rows ~filter ws recurrences ~read ~reference =
     let columns = last_array_index ws.forward.(0) in
     let rows = Option.value rows ~default:(last_array_index ws.forward) in
     let a_0 = read 0 in
-    for k = 0 to columns do
-      ws.forward.(0).(k) <- recurrences.start a_0 (reference k);
-    done;
-    for i = 1 to rows do
-      let a_i = read i in
-      ws.forward.(i).(0) <- recurrences.fst_col ws a_i ~i (reference 0);
-      for k = 1 to columns do
-        ws.forward.(i).(k) <- recurrences.middle ws a_i ~i ~k (reference k);
-      done
-    done
-
-  let final ws recurrences =
-    let columns = last_array_index ws.final in
-    for k = 0 to columns do
-      ws.final.(k) <- recurrences.end_ ws k
-    done
-
-  (* Fill in both parts of the workspace. *)
-  let both ?rows ws recurrences ~read ~reference =
-    pass ?rows ws recurrences ~read ~reference;
-    final ws recurrences
-
-  (* After filling in both parts of the workspace,
-     compute the final emission value. *)
-  let full ?rows ws recurrences ~read ~reference =
-    pass ?rows ws recurrences ~read ~reference;
-    final ws recurrences;
-    ws.emission <- recurrences.final_e ws
-
-end (* ForwardPass *)
-
-(* Similar to ForwardPass but include logic that allows for filtering, for
-   early termination, during the pass. *)
-module FilteringForwardPass = struct
-
-  let last_array_index arr =
-    Array.length arr - 1
-
-  let pass ?rows ws recurrences ~read ~reference t =
-    let columns = last_array_index ws.forward.(0) in
-    let rows = Option.value rows ~default:(last_array_index ws.forward) in
-    let a_0 = read 0 in
-    let ft = ref (t.base t.init a_0) in
+    let ft = ref (filter.base filter.init a_0) in
     for k = 0 to columns do
       let ne = recurrences.start a_0 (reference k) in
-      ft := t.entry !ft ne;
+      ft := filter.entry !ft ne;
       ws.forward.(0).(k) <- ne
     done;
     for i = 1 to rows do
       let a_i = read i in
-      ft := t.base !ft a_i;
+      ft := filter.base !ft a_i;
       let ne = recurrences.fst_col ws a_i ~i (reference 0) in
-      ft := t.entry !ft ne;
+      ft := filter.entry !ft ne;
       ws.forward.(i).(0) <- ne;
       for k = 1 to columns do
         let ne = recurrences.middle ws a_i ~i ~k (reference k) in
-        ft := t.entry !ft ne;
+        ft := filter.entry !ft ne;
         ws.forward.(i).(k) <- ne
       done
     done
@@ -733,18 +694,22 @@ module FilteringForwardPass = struct
     done
 
   (* Fill in both parts of the workspace. *)
-  let both ?rows ws recurrences ~read ~reference t =
-    pass ?rows ws recurrences ~read ~reference t;
+  let both_f ?rows ~filter ws recurrences ~read ~reference =
+    pass_f ?rows ~filter ws recurrences ~read ~reference;
     final ws recurrences
 
   (* After filling in both parts of the workspace,
      compute the final emission value. *)
-  let full ?rows ws recurrences ~read ~reference t =
-    pass ?rows ws recurrences ~read ~reference t;
-    final ws recurrences;
+  let full_f ?rows ~filter ws recurrences ~read ~reference =
+    both_f ?rows ~filter ws recurrences ~read ~reference;
     ws.emission <- recurrences.final_e ws
 
-end (* FilteringForwardPass *)
+  (* Without the filter. *)
+  let pass = pass_f ~filter:empty_filter
+
+  let full = full_f ~filter:empty_filter
+
+end (* ForwardPass *)
 
 type 'a pass_result =
   | Completed of 'a
@@ -802,9 +767,9 @@ module ForwardSingleGen (R: Ring) = struct
     | Some number_mismatches ->
         begin fun ~read ->
           let of_entry c = c.match_ in
-          let ft = Fc.match_filter ~number_mismatches of_entry in
+          let filter = Fc.match_filter ~number_mismatches of_entry in
           try
-            FilteringForwardPass.full ws recurrences ~reference ~read ft;
+            ForwardPass.full_f ~filter ws recurrences ~reference ~read;
             Completed ()
           with PastThreshold msg ->
             Filtered msg
@@ -980,15 +945,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
     { start; fst_col; middle; end_; final_e}
     , { middle_emissions = to_em_set ; banded ; spec_final_e}
 
-  module Regular = struct
-
-    let pass = ForwardPass.pass
-    let full = ForwardPass.full
-
-    let pass_f = FilteringForwardPass.pass
-    let full_f = FilteringForwardPass.full
-
-  end
+  module Regular = ForwardPass
 
   (* Banded Pass logic **)
   module Bands = struct
@@ -1539,9 +1496,9 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           Completed ()
       | Some number_mismatches ->
           let of_entry = F.cam_max_cell in
-          let ft = F.Fc.match_filter ~number_mismatches of_entry in
+          let filter = F.Fc.match_filter ~number_mismatches of_entry in
           try
-            F.Regular.full_f ws r ~reference ~read ft;
+            F.Regular.full_f ~filter ws r ~reference ~read;
             Completed ()
           with PastThreshold msg ->
             Filtered msg
