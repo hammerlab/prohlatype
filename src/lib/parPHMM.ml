@@ -214,10 +214,12 @@ let add_alternate_allele aset reference ~position_map allele allele_instr arr =
 type set = Alleles.set
 
 (*let dx = 2.22044e-16 *)
+(* TODO: Should we export this as a settable parameter?
+         Can we tweak it further, ie make it bigger? *)
 let dx = 1.e-8
 
-let not_significantly_different_from ?(d=dx) x y =
-  y >= (x -. d) && y <= (x +. d)
+let close_enough x y =
+  abs_float (x -. y) < dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
@@ -254,7 +256,7 @@ module MultiplicativeProbability = struct
   let max   = max
 
   let close_enough x y =
-    not_significantly_different_from x y
+    close_enough x y
 
   let constant x = x
 
@@ -291,7 +293,7 @@ module LogProbabilities = struct
   let max   = max
 
   let close_enough x y =
-    not_significantly_different_from x y
+    close_enough x y
 
   let constant = log10
 
