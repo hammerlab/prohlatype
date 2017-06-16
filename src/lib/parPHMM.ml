@@ -6,8 +6,6 @@
 
 open Util
 
-let debug_ref = ref false
-
 let array_findi v a =
   let n = Array.length a in
   let rec loop i =
@@ -599,6 +597,7 @@ module type Workspace_intf = sig
   val get_emission : t -> final_emission
   val set_emission : t -> final_emission -> unit
 
+  (* This is exported only to initialize the bands. *)
   val fold_over_row : t -> int -> init:'a -> f:('a -> entry -> 'a) -> 'a
 
   val fold_over_final : t -> init:'a -> f:('a -> final_entry -> 'a) -> 'a
@@ -610,10 +609,23 @@ end (* Workspace_intf *)
 
 module CommonWorkspace = struct
 
+  (* The recurrence logic (see {middle} _below_) relies only upon the previous
+     state of the read, or the row (the Markov in pphMm). Therefore for the
+     bulk of the forward pass (ignoring final emission) we can conserve space
+     by storing only 2 rows and alternating. Externally, the workspace allows
+     access to {read_length} amount of rows; although this isn't enforced and
+     is only a product of ForwardPass calling {rows} correctly.
+
+     Internally, the workspace maps (mod) to the appriate offset into the 2
+     rows. In practice this has a small impact on run time performance: ~1-3,
+     as we essentially just shift when GC work gets done. But this has a huge
+     impact on total memory usage and is probably an important change as it
+     will allow more instances of prohlatype to be run in parallel. *)
   type ('entry, 'final_entry, 'final_emission) w =
     { mutable forward   : 'entry array array
     ; mutable final     : 'final_entry array
     ; mutable emission  : 'final_emission
+    ; read_length       : int
     }
 
   let last_array_index arr =
@@ -623,10 +635,11 @@ module CommonWorkspace = struct
     last_array_index ws.forward.(0)
 
   let rows ws =
-    last_array_index ws.forward
+    ws.read_length - 1
 
-  let get ws ~i ~k = ws.forward.(i).(k)
-  let set ws ~i ~k e = ws.forward.(i).(k) <- e
+  let get ws ~i ~k = ws.forward.(i mod 2).(k)
+
+  let set ws ~i ~k e = ws.forward.(i mod 2).(k) <- e
 
   let get_final ws k = ws.final.(k)
   let set_final ws k e = ws.final.(k) <- e
@@ -670,15 +683,16 @@ module SingleWorkspace (R : Ring) :
   type workspace_opt = unit
 
   let generate () ~ref_length ~read_length =
-    { forward  = Array.init read_length ~f:(fun _ -> Array.make ref_length Fc.zero_cell)
+    { forward  = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Fc.zero_cell)
     ; final    = Array.make ref_length R.zero
     ; emission = R.zero
+    ; read_length
     }
 
   let clear ws =
     let ref_length  = Array.length ws.final in
-    let read_length = Array.length ws.forward in
-    ws.forward  <- Array.init read_length ~f:(fun _ -> Array.make ref_length Fc.zero_cell);
+    let number_rows = Array.length ws.forward in
+    ws.forward  <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Fc.zero_cell);
     ws.final    <- Array.make ref_length R.zero;
     ws.emission <- R.zero
 
@@ -714,16 +728,17 @@ module MakeMultipleWorkspace (R : Ring)(Cm : CAM.M) :
   type workspace_opt = int
 
   let generate number_alleles ~ref_length ~read_length =
-    { forward   = Array.init read_length ~f:(fun _ -> Array.make ref_length Cm.empty)
+    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Cm.empty)
     ; final     = Array.make ref_length Cm.empty
     ; emission  = Array.make number_alleles R.zero
+    ; read_length
     }
 
   let clear ws =
     let ref_length     = Array.length ws.final in
-    let read_length    = Array.length ws.forward in
+    let number_rows    = Array.length ws.forward in
     let number_alleles = Array.length ws.emission in
-    ws.forward <- Array.init read_length ~f:(fun _ -> Array.make ref_length Cm.empty);
+    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Cm.empty);
     ws.final   <- Array.make ref_length Cm.empty;
     Array.fill ws.emission ~pos:0 ~len:number_alleles R.zero
 
@@ -1063,6 +1078,8 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   (* Banded Pass logic **)
   module Bands = struct
+
+    let debug_ref = ref false
 
     (* 1. Identify bands. *)
     let select_specific_band_indices ws c =
