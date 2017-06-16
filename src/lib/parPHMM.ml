@@ -214,10 +214,10 @@ type set = Alleles.set
 (*let dx = 2.22044e-16 *)
 (* TODO: Should we export this as a settable parameter?
          Can we tweak it further, ie make it bigger? *)
-let dx = 1.e-8
+let dx = ref 1.e-6
 
 let close_enough x y =
-  abs_float (x -. y) < dx
+  abs_float (x -. y) < !dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
@@ -946,6 +946,8 @@ let band_default =
 
 module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
+  let debug_ref = ref false
+
   module Cm = CAM.Make(Aset)
 
   (* Eh... not the best place for it. *)
@@ -1017,6 +1019,8 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
                 let deletes = W.get ws ~i ~k:ks in
                 let insertsi = Cm.singleton inters insert_c in
                 (* inserti should come before other 2 for performance. *)
+                if !debug_ref then
+                  printf "at %d k:%d for %s\n" i k (Aset.to_human_readable inters);
                 Cm.map3 ~eq:Fc.cells_close_enough insertsi deletes matches
                   ~f:(fun insert_c delete_c match_c ->
                         r.middle emission_p ~insert_c ~delete_c ~match_c))

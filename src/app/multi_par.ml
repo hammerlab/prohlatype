@@ -177,7 +177,10 @@ let type_
     width
   (* how are we typing *)
     map
+    forward_accuracy_opt
     =
+  Option.value_map forward_accuracy_opt ~default:()
+    ~f:(fun fa -> ParPHMM.dx := fa);
   let impute   = true in
   let band     =
     if not_band then
@@ -303,6 +306,7 @@ let () =
             $ band_width_arg
             (* How are we typing *)
             $ map_flag
+            $ forward_pass_accuracy_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ upto_kmer_hood_arg

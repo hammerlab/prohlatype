@@ -7,16 +7,15 @@ open Cmdliner
 let repo = "prohlatype"
 
 (*** Basic command line parsers and printers. ***)
-let positive_int_parser w =
-  fun s ->
-    try
-      let d = Scanf.sscanf s "%d" (fun x -> x) in
-      if d <= 0 then
-        Error (`Msg (s ^ " is not a positive integer"))
-      else
-        Ok (w d)
-    with Scanf.Scan_failure msg ->
-      Error (`Msg msg)
+let positive_int_parser w s =
+  try
+    let d = Scanf.sscanf s "%d" (fun x -> x) in
+    if d <= 0 then
+      Error (`Msg (s ^ " is not a positive integer"))
+    else
+      Ok (w d)
+  with Scanf.Scan_failure msg ->
+    Error (`Msg msg)
 
 let int_fprinter frmt =
   Format.fprintf frmt "%d"
@@ -24,6 +23,21 @@ let int_fprinter frmt =
 let positive_int =
   Arg.conv ~docv:"POSITIVE INTEGER"
     ((positive_int_parser (fun n -> n)), int_fprinter)
+
+let positive_float_parser s =
+    try
+      let f = Scanf.sscanf s "%f" (fun x -> x) in
+      if f <= 0. then
+        Error (`Msg (s ^ " is not a positive float"))
+      else
+        Ok f
+    with Scanf.Scan_failure msg ->
+      Error (`Msg msg)
+
+let positive_float =
+  Arg.conv ~docv:"POSITIVE FLOAT"
+    (positive_float_parser, fun frmt -> Format.fprintf frmt "%f")
+
 
 let greater_than_one =
   let docv = "natural number greater than 1" in
@@ -427,3 +441,15 @@ let band_width_arg =
   Arg.(value
         & opt greater_than_one default
         & info ~doc ~docv ["band-width"])
+
+let forward_pass_accuracy_arg =
+  let docv = "POSITIVE DOUBLE" in
+  let doc  =
+    sprintf "Tweak the accuracy (and consequently speed) of the forward pass \
+      (larger -> less accurate but faster). The default value is %f. The \
+      implementation uses 63 bit floats which is more than sufficient for \
+      this calculation."
+      !ParPHMM.dx
+  in
+  Arg.(value & opt (some positive_float) None
+             & info ~doc ~docv ["numerical-accuracy"])
