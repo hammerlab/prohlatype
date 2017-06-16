@@ -89,14 +89,6 @@ module type M = sig
             -> f:('a -> 'b -> 'c -> 'd)
             -> 'd t
 
-  val map4 : ?eq:('e -> 'e -> bool)
-            -> 'a t
-            -> 'b t
-            -> 'c t
-            -> 'd t
-            -> f:('a -> 'b -> 'c -> 'd -> 'e)
-            -> 'e t
-
   val init_everything : 'a -> 'a t
 
   val map2_partial : ?eq:('c -> 'c -> bool)
@@ -305,13 +297,6 @@ module Make (AS : Alleles.Set) : M = struct
       set_assoc_k ~n:"1" is1 l2 ~init ~k:(fun is2 b init ->
         set_assoc_k ~n:"2" is2 l3 ~init ~k:(fun intersect c acc ->
           mutate_or_add ?eq acc (intersect, f a b c))))
-
-  let map4 ?eq l1 l2 l3 l4 ~f =
-    List.fold_left l1 ~init:[] ~f:(fun init (is1, a) ->
-      set_assoc_k is1 l2 ~init ~k:(fun is2 b init ->
-        set_assoc_k is2 l3 ~init ~k:(fun is3 c init ->
-          set_assoc_k is3 l4 ~init ~k:(fun intersect d acc ->
-            mutate_or_add ?eq acc (intersect, f a b c d)))))
 
   let map2_partial ?eq l ~by ~missing ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
