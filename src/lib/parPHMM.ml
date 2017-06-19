@@ -212,8 +212,6 @@ let add_alternate_allele aset reference ~position_map allele allele_instr arr =
 type set = Alleles.set
 
 (*let dx = 2.22044e-16 *)
-(* TODO: Should we export this as a settable parameter?
-         Can we tweak it further, ie make it bigger? *)
 let dx = ref 1.e-6
 
 let close_enough x y =
