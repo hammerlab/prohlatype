@@ -70,7 +70,7 @@ let initialize_base_array_and_position_map aset reference ref_elems =
     |> List.mapi ~f:(fun i c ->
         let p = if i = 0 then prev_state else -1 in
         let b = BaseState.of_char c in
-        [(b, p), ref_set ()])
+        [ref_set (), (b, p)])
     |> Array.of_list
   in
   let gap_to_base_states_array len = Array.make len [] in
@@ -143,17 +143,17 @@ let rec position_and_advance sp (pos_map : position_map) =
 (* Add an allele's Mas_parser.sequence to the current run-length encoded state. *)
 let add_alternate_allele aset reference ~position_map allele allele_instr arr =
   let module AS = (val aset : Alleles.Set) in
-  let base_and_offset b o ((bp,bo), _) = b = bp && o = bo in
+  let base_and_offset b o (_, (bp,bo)) = b = bp && o = bo in
   let add_to_base_state i b o =
     (*printf "adding base at %d %c %d\n" i (BaseState.to_char b) o; *)
     match List.find arr.(i) ~f:(base_and_offset b o) with
     | None              -> let s = AS.singleton allele in
                            (*printf "single cell at %d for %s \n"  i allele; *)
-                           arr.(i) <- ((b, o), s) :: arr.(i)
-    | Some ((ab,ro), s) -> (*printf "At: %d %s to %s\n"  i allele (AS.to_string s); *)
+                           arr.(i) <- (s, (b, o)) :: arr.(i)
+    | Some (s, (ab,ro)) -> (*printf "At: %d %s to %s\n"  i allele (AS.to_string s); *)
                            ignore (AS.set s allele)
   in
-  let has_reference_set (_, s) = AS.is_set s reference in
+  let has_reference_set (s, _) = AS.is_set s reference in
   let add_to_reference_set offset start end_ =
     (*printf "adding reference set at %d %d %d\n" offset start end_; *)
     let rec loop i offset =
@@ -161,7 +161,7 @@ let add_alternate_allele aset reference ~position_map allele allele_instr arr =
         match List.find arr.(i) ~f:has_reference_set with
         | None              -> (* Reference in gap -> so are we! *)
                                loop (i + 1) (-1)  (* Offset becomes -1 after 1st use! *)
-        | Some ((rb,ro), s) ->
+        | Some (s, (rb,ro)) ->
             if ro = offset then begin
               ignore (AS.set s allele);
               loop (i + 1) (-1)
@@ -711,13 +711,13 @@ end (* SingleWorkspace *)
 
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
 module MakeMultipleWorkspace (R : Ring)(Cm : CAM.M) :
-  (Workspace_intf with type entry = R.t cell CAM.t
-                   and type final_entry = R.t CAM.t
+  (Workspace_intf with type entry = R.t cell Cm.t
+                   and type final_entry = R.t Cm.t
                    and type final_emission = R.t array
                    and type workspace_opt = int) = struct
 
-  type entry = R.t cell CAM.t
-  type final_entry = R.t CAM.t
+  type entry = R.t cell Cm.t
+  type final_entry = R.t Cm.t
   type final_emission = R.t array
 
   include CommonWorkspace
@@ -957,10 +957,10 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   module W = MakeMultipleWorkspace(R)(Cm)
 
-  type base_emissions = (BaseState.t * int) CAM.t
+  type base_emissions = (BaseState.t * int) Cm.t
 
   (* offset and emission probabilties *)
-  type 'a oeps = (int * 'a) CAM.t
+  type 'a oeps = (int * 'a) Cm.t
   type 'a emission_map = 'a oeps PosMap.t
   type 'a banded_recs =
     (* This isn't the greatest design, but we need to separate (to cache) the
@@ -1439,7 +1439,7 @@ type t =
   ; aset            : (module Alleles.Set)
   ; alleles         : string list
   ; merge_map       : (string * string) list
-  ; emissions_a     : (BaseState.t * int) CAM.t array
+  ; emissions_a     : (Alleles.set * (BaseState.t * int)) list array
   ; increment_a     : (Alleles.set * int) list array
   }
 
@@ -1464,18 +1464,15 @@ let construct input selectors =
       in
       let aaa = add_alternate_allele aset mp.reference ~position_map in
       List.iter ~f:(fun (allele, altseq) -> aaa allele altseq emissions_a) nalt_elems;
-      let emissions_a =
-        (* TODO: Move the CAM logic up into the construction algorithms *)
-        Array.map emissions_a ~f:(fun l ->
-          List.map l ~f:(fun (b, s) -> (s, b)) |> Cm.of_list)
-      in
       let increment_a = Array.make (Array.length emissions_a - 1) Cm.empty in
       Array.iteri emissions_a ~f:(fun i s ->
         if i = 0 then () else
-          Cm.map s ~f:(fun (_b, v) -> v)
+          Cm.of_list s
+          |> Cm.map ~f:(fun (_b, v) -> v)
           |> Cm.iter ~f:(fun s g ->
               let k = i + g in
               increment_a.(k) <- Cm.add s i increment_a.(k)));
+      let increment_a = Array.map ~f:Cm.to_list increment_a in
       Ok { align_date = mp.align_date
          ; number_alleles = Alleles.length allele_index
          ; aset
@@ -1541,6 +1538,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     invalid_argf "%s not found among the list of alleles!" allele
   else
     let module Cm = CAM.Make(Aset) in
+    let emissions_a = Array.map emissions_a ~f:Cm.of_list in
     let allele_set = Aset.singleton allele in
     let allele_a =
       Array.fold_left emissions_a ~init:[] ~f:(fun acc cm ->
@@ -1587,8 +1585,10 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let { number_alleles; emissions_a; increment_a; aset; alleles; _ } = t in
   let ref_length = Array.length emissions_a in
   let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
-  let module AS = (val aset : Alleles.Set) in
-  let module F = ForwardMLogSpace(AS) in
+  let module Aset = (val aset : Alleles.Set) in
+  let module Cm = CAM.Make(Aset) in
+  let emissions_a = Array.map emissions_a ~f:Cm.of_list in
+  let module F = ForwardMLogSpace(Aset) in
   let r, br = F.recurrences ?insert_p tm read_length number_alleles in
   let ws = F.W.generate number_alleles ref_length read_length in
   let last_read_index = read_length - 1 in
@@ -1630,6 +1630,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
     ; output_ws_array
     }
   in
+  let increment_a = Array.map ~f:Cm.of_list increment_a in
   let banded c =
     let doit rc rd rd_errors =
       (* Clear the forward/final array since the banded pass algorithm relies
