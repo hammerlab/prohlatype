@@ -14,11 +14,9 @@ open Util
 
 type set = Alleles.set
 
-type 'a t = (set * 'a) list
-
 module type M = sig
 
-  (*type 'a t *)
+  type 'a t
 
   val allele_set_to_string : set -> string
 
@@ -113,6 +111,8 @@ module type M = sig
 end (* M *)
 
 module Make (AS : Alleles.Set) : M = struct
+
+  type 'a t = (set * 'a) list
 
   let empty = []
 
