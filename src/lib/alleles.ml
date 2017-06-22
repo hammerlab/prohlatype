@@ -185,6 +185,8 @@ module type Set = sig
 
   val inter_diff : set -> set -> set * set * bool * bool
 
+  val split3 : set -> set -> set * set * set * bool * bool * bool
+
   (** [complement set] returns a set of all the alleles not in [set].*)
   val complement : set -> set
 
@@ -265,6 +267,8 @@ module MakeSet (I: Index) : Set = struct
   let diff = Fw.diff
 
   let inter_diff = Fw.inter_diff
+
+  let split3 = Fw.split3
 
   let complement = Fw.negate
 

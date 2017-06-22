@@ -118,15 +118,17 @@ module Make (AS : Alleles.Set) : M = struct
 
   let allele_set_to_string s = AS.to_human_readable s
 
-  let to_string t =
-    String.concat ~sep:"\n\t"
-      (List.map t ~f:(fun (s,_v) ->
-        sprintf "%s" (allele_set_to_string s)))
+  let to_string = function
+    | []  -> "empty"
+    | lst -> String.concat ~sep:"\n\t"
+                (List.map lst ~f:(fun (s,_v) ->
+                  sprintf "%s" (allele_set_to_string s)))
 
-  let to_string_full v_to_s t =
-    String.concat ~sep:"\n\t"
-      (List.map t ~f:(fun (s,v) ->
-        sprintf "%s:%s" (allele_set_to_string s) (v_to_s v)))
+  let to_string_full v_to_s = function
+    | []  -> "empty"
+    | lst -> String.concat ~sep:"\n\t"
+                (List.map lst ~f:(fun (s,v) ->
+                    sprintf "%s:%s" (allele_set_to_string s) (v_to_s v)))
 
   (* let mutate_or_add assoc new_allele_set value =
     let added =
@@ -258,35 +260,85 @@ module Make (AS : Alleles.Set) : M = struct
   let concat_map ?eq l ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) -> absorb ?eq (f s a) ~init)
 
-  (* The order of set arguments matters for performance. Better to fold over
-     the longer list and lookup (set_assoc_k) into the shorter one. Remember
-     that the lookup requires a Allele.inter_diff per item! Perhaps it makes
-     sense to keep track of the length to avoid O(n) lookups and then
-     automatically re-order functional arguments as necessary?
+  (* Unroll the list so that there's less of it to search. *)
+  let set_assoc_u ?n ?missing to_find t ~k ~init =
+    let rec loop to_find acc macc = function
+      | []          -> begin match missing with
+                       | None -> still_missingf "%s%s after looking in: %s"
+                                  (Option.value ~default:"" n)
+                                  (allele_set_to_string to_find) (to_string t)
+                       | Some m -> m to_find acc macc
+                       end
+      | (s, v) :: tl ->
+          let inter, still_to_find, left_in_s,
+              found_everything, no_intersect, left = AS.split3 to_find s
+          in
+          if found_everything then begin                    (* Found everything *)
+            (* Where we end up using set_assoc_u, it turns out that the cost of
+               reversing macc to preserver order doesn't improve performance. *)
+            let nmacc = macc @ (if left then (left_in_s, v) :: tl else tl) in
+            (k to_find v acc), nmacc
+          end else if no_intersect then begin                 (* Found nothing. *)
+            loop to_find acc ((s,v) :: macc) tl
+          end else begin                                    (* Found something. *)
+            let nacc = k inter v acc in
+            let nmacc = (left_in_s, v) :: macc in
+            loop still_to_find nacc nmacc tl
+          end
+    in
+    loop to_find init [] t
 
-     Probably just need a better data structure. *)
-  let concat_map2 ?eq l ~by ~f =
-    (*printf "%d %d\n" (List.length l) (List.length by); *)
+(*  let concat_map2 ?eq l ~by ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init ~k:(fun intersect b init ->
-        absorb ?eq (f intersect a b) ~init))
+        absorb ?eq (f intersect a b) ~init))*)
 
-  let concat_map2_partial ?eq l ~by ~f ~missing =
+  let concat_map2 ?eq l ~by ~f =
+    List.fold_left l ~init:([], by) ~f:(fun (init, nby) (s, a) ->
+      set_assoc_u s nby ~init
+        ~k:(fun intersect b init    -> absorb ?eq (f intersect a b) ~init))
+    |> fst
+
+(*  let concat_map2_partial ?eq l ~by ~f ~missing =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s by ~init
         ~k:(fun intersect b init -> absorb ?eq (f intersect a b) ~init)
-        ~missing:(fun sm init -> absorb ?eq ~init (missing sm a)))
+        ~missing:(fun sm init -> absorb ?eq ~init (missing sm a))) *)
 
-  let map2 ?eq l1 l2 ~f =
+  let concat_map2_partial ?eq l ~by ~f ~missing =
+    List.fold_left l ~init:([], by) ~f:(fun (init, nby) (s, a) ->
+      set_assoc_u s nby ~init
+        ~k:(fun intersect b init -> absorb ?eq (f intersect a b) ~init)
+        ~missing:(fun sm init nby -> absorb ?eq ~init (missing sm a), nby))
+    |> fst
+
+  (*let map2 ?eq l1 l2 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (s, a) ->
       set_assoc_k s l2 ~init ~k:(fun intersect b acc ->
+        mutate_or_add ?eq acc (intersect, f a b))) *)
+
+  let map2 ?eq l1 l2 ~f =
+    List.fold_left l1 ~init:([],l2) ~f:(fun (init, nl2) (s, a) ->
+      set_assoc_u s nl2 ~init ~k:(fun intersect b acc ->
         mutate_or_add ?eq acc (intersect, f a b)))
+    |> fst
 
   let map3 ?eq l1 l2 l3 ~f =
     List.fold_left l1 ~init:[] ~f:(fun init (is1, a) ->
       set_assoc_k ~n:"1" is1 l2 ~init ~k:(fun is2 b init ->
         set_assoc_k ~n:"2" is2 l3 ~init ~k:(fun intersect c acc ->
           mutate_or_add ?eq acc (intersect, f a b c))))
+
+(* TODO: For map3 it is TOO costly to construct nl2 & nl3. This asymmetry
+   really demonstrates the difficulty of making this lookup efficient.
+  let map3 ?eq l1 l2 l3 ~f =
+    List.fold_left l1 ~init:([],l2,l3) ~f:(fun (acc, nl2, nl3) (is1, a) ->
+      set_assoc_u ~n:"1" is1 nl2 ~init:(acc,nl3) ~k:(fun is2 b (init, nl3) ->
+        set_assoc_u ~n:"2" is2 nl3 ~init ~k:(fun intersect c acc ->
+          mutate_or_add ?eq acc (intersect, f a b c)))
+      |> fun ((acc,ml3),ml2) -> (acc,ml2,ml3))
+    |> fun (x, _, _) -> x
+    *)
 
   let map2_partial ?eq l ~by ~missing ~f =
     List.fold_left l ~init:[] ~f:(fun init (s, a) ->
