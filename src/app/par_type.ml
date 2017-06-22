@@ -239,8 +239,8 @@ let () =
     Arg.(value & flag & info ~doc ["do-not-impute"])
   in
   let spec_allele_arg =
-    let doc = "ALLELE" in
-    let docv = "Use a faster mode where we measure the likelihood for just \
+    let docv = "ALLELE" in
+    let doc  = "Use a faster mode where we measure the likelihood for just \
                 the passed allele. The allele must be found in the alignment \
                 or merge file." in
     Arg.(value & opt (some string) None
