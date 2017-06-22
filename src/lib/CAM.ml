@@ -175,22 +175,35 @@ module Make (AS : Alleles.Set) : M = struct
   let still_missingf fmt =
     ksprintf (fun s -> raise (StillMissing s)) fmt
 
-  let set_assoc_exn to_find t =
+  let set_assoc_k ?n ?missing to_find t ~k ~init =
     let rec loop to_find acc = function
-      | []          -> still_missingf "%s after looking in: %s"
-                        (allele_set_to_string to_find) (to_string t)
+      | []          -> begin match missing with
+                       | None -> still_missingf "%s%s after looking in: %s"
+                                  (Option.value ~default:"" n)
+                                  (allele_set_to_string to_find) (to_string t)
+                       | Some m -> m to_find acc
+                       end
       | (s, v) :: t ->
           let inter, still_to_find, same_intersect, no_intersect =
-            AS.inter_diff to_find s in
+            AS.inter_diff to_find s
+          in
           if same_intersect then begin                      (* Found everything *)
-            (to_find, v) :: acc
+            k to_find v acc
           end else if no_intersect then begin                 (* Found nothing. *)
             loop to_find acc t
           end else begin                                    (* Found something. *)
-            loop still_to_find ((inter, v) :: acc) t
+            let nacc = k inter v acc in
+            loop still_to_find nacc t
           end
     in
-    loop to_find [] t
+    loop to_find init t
+
+  let set_assoc_exn to_find t =
+    set_assoc_k to_find t
+      ~init:[]
+      ~k:(fun to_find v acc -> (to_find, v) :: acc)
+      ~missing:(fun to_find t -> still_missingf "%s after looking in: %s"
+                        (allele_set_to_string to_find) (to_string t))
 
   let set_assoc to_find t =
     try Some (set_assoc_exn to_find t)
@@ -237,29 +250,6 @@ module Make (AS : Alleles.Set) : M = struct
       List.map_snd ~f:(fun v -> f v) l
     | Some false | None ->                                          (* O(n^2) *)
       List.fold_left l ~init:[] ~f:(fun acc (s, v) -> add s (f v) acc)
-
-  let set_assoc_k ?n ?missing to_find t ~k ~init =
-    let rec loop to_find acc = function
-      | []          -> begin match missing with
-                       | None -> still_missingf "%s%s after looking in: %s"
-                                  (Option.value ~default:"" n)
-                                  (allele_set_to_string to_find) (to_string t)
-                       | Some m -> m to_find acc
-                       end
-      | (s, v) :: t ->
-          let inter, still_to_find, same_intersect, no_intersect =
-            AS.inter_diff to_find s
-          in
-          if same_intersect then begin                      (* Found everything *)
-            k to_find v acc
-          end else if no_intersect then begin                 (* Found nothing. *)
-            loop to_find acc t
-          end else begin                                    (* Found something. *)
-            let nacc = k inter v acc in
-            loop still_to_find nacc t
-          end
-    in
-    loop to_find init t
 
   let absorb_k t ~init ~f = List.fold_left t ~init ~f
 
