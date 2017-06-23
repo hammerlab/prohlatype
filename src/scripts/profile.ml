@@ -1,7 +1,6 @@
 
 (*
 #require "csv";
-let res_fname = ...;;
 *)
 
 let keys =
@@ -46,18 +45,42 @@ let load_prohlatype fname =
         | None -> (gene, [r]) :: acc
         | Some (nr, nacc) -> (gene, r :: nr) :: nacc)
 
-let hla_likelihoods lst =
-  List.map lst ~f:(fun (gene, llhd) ->
-    gene
-    , (List.map llhd ~f:(fun (allele, l) -> (allele, List.hd_exn l |> float_of_string))
-      |> List.sort ~cmp:(fun (_a1, l1) (_a2, l2) -> compare l2 l1) (* descending *)))
+let group_by_assoc l =
+  let insert assoc (k, v) =
+    match List.Assoc.remove_and_get k assoc with
+    | None              -> (k,[v]) :: assoc
+    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
+  in
+  List.fold_left ~init:[] ~f:insert l
 
 type nr = Nomenclature.resolution * Nomenclature.suffix option
 type gene = string
+(* Since prohlatype can report the same likelihood for multiple alleles,
+   we need to group them. We'll assign all of the values in a group the
+   best, ie the index of the lowest allele in the same group.  *)
+type result_group =
+  { alleles     : nr list
+  ; pos         : int
+  ; likelihood  : float
+  }
+
+
+let hla_likelihoods lst =
+  List.map lst ~f:(fun (gene, llhd) ->
+    let likelihoods =
+      List.map llhd ~f:(fun (allele, l) -> (List.hd_exn l |> float_of_string, allele))  (* parse likelihood value. *)
+      |> group_by_assoc                                                           (* group by the same likelihoods *)
+      |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
+      |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
+          (pos + List.length alleles, { alleles; pos; likelihood } :: acc))
+      |> snd                                                                               (* discard index count. *)
+      |> List.rev                                                                (* reverse to make lookup easier. *)
+    in
+    gene, likelihoods)
 
 type record =
   { correct_alleles     : (gene * nr) list
-  ; allele_likelihoods  : (gene * (nr * float) list) list
+  ; allele_likelihoods  : (gene * result_group list) list
   }
 
 let load_data ~dir ~fname_to_key =
@@ -89,112 +112,32 @@ let summarize r ~gene ~metric ~f ~init =
         | Some llhd -> f acc key (List.map gls ~f:(fun (_gene, nr) -> metric nr llhd))
         end)
 
-let lookup_position ?wrong nr nr_assoc =
-  let wrong = Option.value wrong ~default:(List.length nr_assoc) in
-  match (fst nr) with                     (* Match on just the name, ignore suffix *)
+let alleles_match nr1 nr2 =
+  match (fst nr1) with                     (* Match on just the name, ignore suffix *)
   | Nomenclature.Two (r1, r2) ->
-      List.findi nr_assoc ~f:(fun _i (nr2, _v) ->
-        match (fst nr2) with                               (* Also, ignore suffix. *)
+      begin match (fst nr2) with                               (* Also, ignore suffix. *)
         | Nomenclature.One _ -> invalid_argf "What! %s only 1 in Prohlatype output!"
-                                      (Nomenclature.resolution_and_suffix_opt_to_string nr2)
+                                        (Nomenclature.resolution_and_suffix_opt_to_string nr2)
         | Nomenclature.Two (s1, s2)
         | Nomenclature.Three (s1, s2, _)
-        | Nomenclature.Four (s1, s2, _, _) -> r1 = s1 && r2 = s2)
-      |> Option.value_map ~default:wrong ~f:fst
+        | Nomenclature.Four (s1, s2, _, _) -> r1 = s1 && r2 = s2
+      end
   | fnr ->
-    invalid_argf "Unsupported resolution: %s "
-      (Nomenclature.resolution_to_string fnr)
+      invalid_argf "Unsupported resolution: %s "
+        (Nomenclature.resolution_to_string fnr)
+
+let lookup_position ~wrong nr group_list =
+  List.find group_list ~f:(fun rg ->
+    List.exists rg.alleles ~f:(alleles_match nr))
+  |> Option.value_map ~default:wrong ~f:(fun rg -> rg.pos)
 
 let best_positions r ~gene =
   summarize r ~gene ~metric:(lookup_position ~wrong:10000)
     ~init:[]
     ~f:(fun l k il -> (k, (List.sort ~cmp:compare il)) :: l)
 
-(*
-let lookup_position tsv = function
-  | Nomenclature.Two (_, _) as nmt ->
-      List.findi tsv ~f:(fun _i l ->
-        match l with
-        | Ok (_, (nmt2, _)) when nmt2 = nmt -> true
-        | _ -> false)
-      |> Option.map ~f:(fun (i, _) -> i)
-      |> Option.value ~default:max_int
-  | _ -> invalid_arg "Not 2 in mptt"
-
-let to_sample_and_locus s =
-  match String.split s ~on:(`Character '_') with
-  | sa :: _ :: l :: [] -> sa, l
-  | _   -> invalid_arg ("to_sample_and_locus: " ^ s)
-
-let dir = "performance/2017_04_22/filtered/"
-
-let as_good_as_first f s =
-  let open Nomenclature in
-  match f, s with
-  | One o          , One oo
-  | One o          , Two (oo,_)
-  | One o          , Three (oo,_,_)
-  | One o          , Four (oo,_,_,_)    -> o = oo
-  | Two (o,t)      , Two (oo,tt)
-  | Two (o,t)      , Three (oo,tt,_)
-  | Two (o,t)      , Four (oo,tt,_,_)   -> o = oo && t = tt
-  | Three (o,t,r)  , Three (oo,tt,rr)
-  | Three (o,t,r)  , Four (oo,tt,rr,_)  -> o = oo && t = tt && r = rr
-  | Four (o,t,r,f) , Four (oo,tt,rr,ff) -> o = oo && t = tt && r = rr && f = ff
-  | _              , _                  -> false
-
-let do_it dir gene =
-  let correct = both gene in
-  Sys.readdir dir
-  |> Array.to_list
-  |> List.filter_map ~f:(fun f ->
-      let sample, sample_gene = to_sample_and_locus f in
-      if gene <> sample_gene then
-        None
-      else
-        let res =
-          load_prohlatype (Filename.concat dir f)
-          |> List.map ~f:(fun (_a, (v, _)) -> v)
-        in
-        List.filter correct ~f:(fun (s,_) -> s = sample)
-        |> List.map ~f:(fun (_, nm) ->
-              nm, List.findi res ~f:(fun _ v -> as_good_as_first nm v))
-        |> fun l -> Some (sample, l))
-
-let disp ?gene res =
-  List.map res ~f:(fun (a,l) ->
-    (a, List.map l
-      ~f:(fun (nm1, o) ->
-          Nomenclature.resolution_to_string ?gene nm1
-          , Option.map o ~f:(fun (i, nm2) ->
-              i, Nomenclature.resolution_to_string ?gene nm2))))
-
-let count_below k =
-  List.fold_left ~init:0 ~f:(fun c (_, l) ->
-    List.fold_left l ~init:c ~f:(fun c (_, o) ->
-      match o with | Some (v, _) when v < k -> c + 1  | _ -> c)) ;;
-*)
-
-(*
-(*let open Oml.Statistics in *)
-let analyze ?(genes=["A"; "B"; "C"]) ?(reads=[1;2]) ~prof_dir ?(suffix="_nuc.txt") () =
-  List.fold_left genes ~init:[] ~f:(fun acc gene ->
-    let train_samples = to_res gene `Train in
-    List.fold_left reads ~init:acc ~f:(fun acc read ->
-        let to_filename sample = sprintf "%s_%d/%s_%d_%s%s" prof_dir sample read gene suffix in
-        let positions =
-          List.map train_samples ~f:(fun (sample, res) ->
-            let filename = to_filename sample in
-            sample, res, lookup_position (load_prohlatype filename) res)
-        in
-        (gene, read, filter, positions) :: acc))
-
-let display_analysis mp lst =
-  printf "gene\tfilter\n";
-  List.iter lst ~f:(fun (gene, _read, filter, m) ->
-        printf "%s\t%d\t%s\n%!" gene filter (mp m))
-
-let in_top ?(n=10.0) arr =
-  Array.fold_left ~init:0.0 ~f:(fun s v -> if v < n then s +. 1. else s) arr
-
-  *)
+let best ~gene r k =
+  let cr = best_positions r ~gene in
+  let d = List.length cr in
+  let n = List.length (List.filter cr ~f:(fun (_, l) -> List.hd_exn l < k)) in
+  (n, d, (float n) /. (float d))
