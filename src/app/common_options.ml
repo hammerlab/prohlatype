@@ -38,7 +38,6 @@ let positive_float =
   Arg.conv ~docv:"POSITIVE FLOAT"
     (positive_float_parser, fun frmt -> Format.fprintf frmt "%f")
 
-
 let greater_than_one =
   let docv = "natural number greater than 1" in
   Arg.conv ~docv:(Ns.uppercase_ascii docv)
@@ -106,6 +105,7 @@ let regex_command_line_args = ["allele-regex"]
 let allele_command_line_args = ["spec-allele"]
 let without_command_line_args = ["without-allele"]
 let num_command_line_args = ["n"; "num-alt"]
+let do_not_ignore_suffixed_alleles_flags = ["do-not-ignore-suffixed-alleles"]
 
 let args_to_string lst =
   List.map lst ~f:(fun s -> (if String.length s = 1 then "-" else "--") ^ s)
@@ -185,6 +185,19 @@ let num_alt_arg =
   let nconv = conv ~docv (parser_, Alleles.Selection.pp) in
   (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
 
+let do_not_ignore_suffixed_alleles_flag =
+  let doc = "IMGT publishes alleles with suffixes ('N', 'L', 'S', 'C', 'A' or \
+            'Q') to indicate special conditions such as null alleles ('N') or \
+            questionable expression ('Q'). Often times, these alleles can \
+            complicate prohlatype as reads sometimes align suprisingly well \
+            to them (ex. HLA-A*11:50Q) as opposed to the true validated \
+            allele. For the purposes of having a clearer typing algorithm we \
+            exclude all such alleles from IMGT by default. For rare cases or \
+            diagnostic purposes one can pass this flag to bring them back \
+            into the analysis."
+  in
+  Arg.(value & flag & info ~doc do_not_ignore_suffixed_alleles_flags)
+
 (*** Other args. ***)
 (*
 let remove_reference_flag =
@@ -232,6 +245,18 @@ let to_input ?alignment_file ?merge_file ~distance ~impute () =
   | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
   | None,                None -> Error "Either a file or merge argument must be specified"
 
+let option_to_list o =
+  Option.value_map o ~default:[] ~f:(fun s -> [s])
+
+let aggregate_selectors ?number_alleles
+  ~regex_list ~specific_list ~without_list ~do_not_ignore_suffixed_alleles =
+    regex_list
+    @ specific_list
+    @ without_list
+    @ (option_to_list number_alleles)
+    @ (if do_not_ignore_suffixed_alleles then
+        [Alleles.Selection.DoNotIgnoreSuffixed] else [])
+
 let to_filename_and_graph_args
   (* Allele information source *)
   ?alignment_file ?merge_file ~distance ~impute
@@ -240,12 +265,13 @@ let to_filename_and_graph_args
     ~specific_list
     ~without_list
     ?number_alleles
+    ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
   ~join_same_sequence =
     to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
       let selectors =
-        regex_list @ specific_list @ without_list @
-          (match number_alleles with | None -> [] | Some s -> [s])
+        aggregate_selectors ~regex_list ~specific_list ~without_list
+          ?number_alleles ~do_not_ignore_suffixed_alleles
       in
       let arg = {Ref_graph.selectors; join_same_sequence } in
       let graph_arg = Cache.graph_args ~arg ~input in

@@ -8,6 +8,7 @@ let construct
   ofile
   (* allele selection. *)
   regex_list specific_list without_list number_alleles
+  do_not_ignore_suffixed_alleles
   (* Construction args *)
   not_join_same_seq
   (* output configuration. *)
@@ -21,6 +22,7 @@ let construct
     Common_options.to_filename_and_graph_args
       ?alignment_file ?merge_file ~distance ~impute
       ~specific_list ~regex_list ~without_list ?number_alleles
+      ~do_not_ignore_suffixed_alleles
       ~join_same_sequence
   in
   match fname_cargs_result with
@@ -124,6 +126,7 @@ let () =
             $ allele_arg
             $ without_arg
             $ num_alt_arg
+            $ do_not_ignore_suffixed_alleles_flag
             (* construction args. *)
             $ do_not_join_same_sequence_paths_flag
             (* output configuration *)

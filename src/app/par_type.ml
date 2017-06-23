@@ -17,13 +17,14 @@ let to_read_size_dependent
     ~specific_list
     ~without_list
     ?number_alleles
+    ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
     =
     Common_options.to_input ?alignment_file ?merge_file ~distance ~impute ()
       >>= fun input ->
         let selectors =
-          regex_list @ specific_list @ without_list @
-            (match number_alleles with | None -> [] | Some s -> [s])
+          Common_options.aggregate_selectors ~regex_list ~specific_list
+            ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
         in
         Ok (fun read_size ->
             let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
@@ -167,6 +168,7 @@ let type_
     alignment_file merge_file distance not_impute
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
+    do_not_ignore_suffixed_alleles
     specific_allele
   (* Process *)
     skip_disk_cache
@@ -199,6 +201,7 @@ let type_
     to_read_size_dependent
       ?alignment_file ?merge_file ~distance ~impute
       ~regex_list ~specific_list ~without_list ?number_alleles
+      ~do_not_ignore_suffixed_alleles
       ~skip_disk_cache
   in
   match need_read_size_r with
@@ -267,6 +270,7 @@ let () =
             $ file_arg $ merge_arg $ distance_flag $ do_not_impute_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+            $ do_not_ignore_suffixed_alleles_flag
             $ spec_allele_arg
             (* What to do ? *)
             $ no_cache_flag
