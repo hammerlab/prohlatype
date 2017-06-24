@@ -62,8 +62,10 @@ let manual_diff ~reference ~allele ~file () =
 
 let test_sequences file =
   let all_args =
-    Cache.graph_args ~input:(Alleles.Input.AlignmentFile (to_alignment_file file, false))
-        ~arg:Ref_graph.default_construction_arg
+    Cache.graph_args
+      ~input:(Alleles.Input.AlignmentFile (to_alignment_file file, false))
+      ~arg:Ref_graph.{ default_construction_arg with
+                        selectors = [ Alleles.Selection.DoNotIgnoreSuffixed] }
   in
   let gall = Cache.graph all_args in
   let a_fasta = Fasta.all (to_fasta_file file) in
