@@ -1995,4 +1995,3 @@ let output s final_likelihoods =
   in
   Array.sort o ~cmp;
   Array.iter o ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
-
