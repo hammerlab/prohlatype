@@ -479,3 +479,10 @@ let forward_pass_accuracy_arg =
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["numerical-accuracy"])
+
+let do_not_past_threshold_filter_flag =
+  let doc = "Do not use previously calculated likelihoods (ex. from other loci \
+             or considering the reverse complement alignment) as a threshold \
+             filter to short-circuit evaluations."
+  in
+  Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])

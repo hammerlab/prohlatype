@@ -99,7 +99,7 @@ let output_mapped lst =
           sprintf "%s\t%s" name
             (ParPHMM.mapped_stats_to_string ~sep:'\t' ms)))))
 
-let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
+let to_set ?insert_p ~past_threshold_filter ?max_number_mismatches ?band mode rp read_size =
   let ptlst =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -107,8 +107,10 @@ let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
   let g =
     time (sprintf "Allocating forward pass workspaces")
       (fun () ->
-        let r = ParPHMM.forward_pass_m ?insert_p ?max_number_mismatches ?band
-                mode ptlst read_size in
+        let r =
+          ParPHMM.forward_pass_m ?insert_p ?max_number_mismatches ?band
+            ~past_threshold_filter mode ptlst read_size
+        in
         match r with
         | `Mapper m ->
             `Mapper
@@ -141,15 +143,19 @@ let fin = function
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reporter g) -> g.fin g.s
 
-let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
-  ~specific_reads ?band mode file init =
+let across_fastq ?insert_p ?max_number_mismatches
+  ~past_threshold_filter
+  ?number_of_reads ~specific_reads ?band mode file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads ~init file
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set ?insert_p ?max_number_mismatches ?band mode rp read_size in
+                let `Set g =
+                  to_set ?insert_p ~past_threshold_filter
+                    ?max_number_mismatches ?band mode rp read_size
+                in
                 `Set (proc_g g fqi)
             | `Set g ->
                 `Set (proc_g g fqi))
@@ -167,6 +173,7 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     insert_p
+    do_not_past_threshold_filter
     max_number_mismatches
     read_size_override
     not_band
@@ -194,6 +201,7 @@ let type_
                 ; d // "C_gen.txt"
                 ], []
   in
+  let past_threshold_filter = not do_not_past_threshold_filter in
   let need_read_size_r =
     to_read_size_dependent
       ~alignment_files ~merge_files ~distance ~impute
@@ -206,12 +214,14 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set ~insert_p ?max_number_mismatches ?band mode need_read_size r
+      | Some r -> to_set ~insert_p ?max_number_mismatches
+                    ~past_threshold_filter ?band mode need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
     | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches
+                            ~past_threshold_filter
                             ?number_of_reads ~specific_reads
                             ?band mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
@@ -296,6 +306,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ insert_probability_arg
+            $ do_not_past_threshold_filter_flag
             $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_band_flag
