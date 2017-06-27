@@ -207,7 +207,7 @@ let type_
       ~alignment_files ~merge_files ~distance ~impute
       ~skip_disk_cache
   in
-  let mode = if map then `Mapper else `Reporter in
+  let mode = match map with | Some n -> `Mapper n | None -> `Reporter in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->

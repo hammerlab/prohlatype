@@ -1549,19 +1549,13 @@ type proc =
   ; doit            : ?prev_threshold:float
                       -> bool -> string -> float array
                       -> unit pass_result
-  (* Get the best alleles. TODO: Expose # of alleles *)
-  ; best_alleles    : unit -> (float * string) list
-  (* Get the best positions. TODO: Expose # of best positions. *)
-  ; best_positions  : unit -> (float * int) list
+  ; best_alleles    : int -> (float * string) list
+  ; best_positions  : int -> (float * int) list
   (* Get the calculated likelihoods. *)
   ; per_allele_llhd : unit -> float array                     (* Pass'es output. *)
   (* Get a possible threshold value for future passes. *)
   ; maximum_match   : unit -> float
   }
-
-(* TODO: expose this 5 if it becomes useful *)
-let lg5 a i lst =
-  largest 5 a i lst
 
 (* Single, for one allele, forward pass *)
 let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
@@ -1585,9 +1579,10 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     in
     let ref_length = Array.length allele_a in
     let ws = ForwardSLogSpace.W.generate () ~ref_length ~read_length in
-    let best_positions () =
+    let best_positions n =
+      let lgn = largest n in
       ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
-        ~f:(fun (p, acc) l -> (p + 1, lg5 l p acc))
+        ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
       |> snd
     in
     let maximum_match () =
@@ -1608,7 +1603,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       let read = access rc rd rd_errors in
       pass read
     in
-    let best_alleles () = [ ForwardSLogSpace.W.get_emission ws, allele] in
+    let best_alleles _n = [ ForwardSLogSpace.W.get_emission ws, allele] in
     let per_allele_llhd () = [| ForwardSLogSpace.W.get_emission ws |] in
     let init_global_state () = [| LogProbabilities.one |] in
     { doit ; best_alleles ; best_positions ; per_allele_llhd
@@ -1631,16 +1626,19 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let r, br = F.recurrences ?insert_p tm read_length number_alleles in
   let ws = F.W.generate number_alleles ref_length read_length in
   let last_read_index = read_length - 1 in
-  let best_alleles () =
+  let best_alleles n =
     let alleles = allele_index.Alleles.to_allele in
-    Array.fold_left (F.W.get_emission ws) ~init:(0,[])
-      ~f:(fun (i, acc) emission -> i+1,lg5 emission alleles.(i) acc)
+    let emissions = F.W.get_emission ws in
+    let lgn = largest n in
+    Array.fold_left emissions ~init:(0,[])
+      ~f:(fun (i, acc) emission -> (i+1, lgn emission alleles.(i) acc))
     |> snd
   in
-  let best_positions () =
+  let best_positions n =
+    let lgn = largest n in
     F.W.fold_over_final ws ~init:(0, [])
       ~f:(fun (p, acc) fcam ->
-        (p + 1, lg5 (F.cam_max fcam) p acc))
+        (p + 1, lgn (F.cam_max fcam) p acc))
     |> snd
   in
   let maximum_match () =
@@ -1807,11 +1805,11 @@ let both ?past_threshold_filter pass_res_to_stat proc read read_prob =
   in
   { regular; complement; last_threshold }
 
-let mapper ?past_threshold_filter =
+let mapper ~n ?past_threshold_filter =
   both ?past_threshold_filter
     (fun _rc proc ->
-      { per_allele = proc.best_alleles ()
-      ; positions  = proc.best_positions ()
+      { per_allele = proc.best_alleles n
+      ; positions  = proc.best_positions n
       })
 
 let compare_emissions e1 e2 =
@@ -1860,7 +1858,7 @@ let single_allele_forward_pass ?insert_p ?max_number_mismatches mode pt
     read_length allele
   in
   match mode with
-  | `Mapper   -> `Mapper (mapper proc)
+  | `Mapper n -> `Mapper (mapper ~n proc)
   | `Reducer  -> `Reducer (proc.init_global_state ()
                           , reducer proc)
 
@@ -1873,7 +1871,7 @@ let forward_pass ?insert_p ?max_number_mismatches ?past_threshold_filter
       ~f:(function | true -> Some `Start | false -> None)
   in
   match mode with
-  | `Mapper   -> `Mapper (mapper ?past_threshold_filter proc)
+  | `Mapper n -> `Mapper (mapper ~n ?past_threshold_filter proc)
   | `Reducer  -> `Reducer (proc.init_global_state ()
                           , reducer ?past_threshold_filter proc)
 
@@ -1925,7 +1923,8 @@ let forward_pass_m ?insert_p ?max_number_mismatches ?past_threshold_filter
   let make_passes = setup_single_pass ?insert_p ?max_number_mismatches ?band read_length in
   let passes = List.map_snd tlst ~f:make_passes in
   match mode with
-  | `Mapper ->
+  | `Mapper n ->
+      let mapper = mapper ~n in
       let multi_mapper read read_prob =
         match past_threshold_filter with
         | None
