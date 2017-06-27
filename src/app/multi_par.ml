@@ -130,9 +130,7 @@ let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
               ; fin = begin fun lst ->
                         List.iter2 ptlst lst ~f:(fun (name, pt) (_name, llhd) ->
                           printf "%s\n" name;
-                          List.mapi pt.ParPHMM.alleles ~f:(fun i a -> llhd.(i), a)
-                          |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-                          |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l))
+                          ParPHMM.output (`Pt pt) llhd)
                       end
               })
   in

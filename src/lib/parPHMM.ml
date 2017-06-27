@@ -141,7 +141,7 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 (* Add an allele's Mas_parser.sequence to the current run-length encoded state. *)
-let add_alternate_allele aset reference ~position_map allele allele_instr arr =
+let add_alternate_allele aset ~reference ~position_map allele allele_instr arr =
   let module AS = (val aset : Alleles.Set) in
   let base_and_offset b o (_, (bp,bo)) = b = bp && o = bo in
   let add_to_base_state i b o =
@@ -1437,7 +1437,7 @@ type t =
   { align_date      : string
   ; number_alleles  : int
   ; aset            : (module Alleles.Set)
-  ; alleles         : string list
+  ; allele_index    : Alleles.index             (* Canonical order for alleles. *)
   ; merge_map       : (string * string) list
   ; emissions_a     : (Alleles.set * (BaseState.t * int)) list array
   ; increment_a     : (Alleles.set * int) list array
@@ -1449,20 +1449,19 @@ let construct input selectors =
   else begin
     let open Mas_parser in
     Alleles.Input.construct input >>= fun (mp, merge_map) ->
+      let { reference; ref_elems; alt_elems; align_date} = mp in
       let nalt_elems =
-        mp.alt_elems
-        |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2)
+        alt_elems
         |> Alleles.Selection.apply_to_assoc selectors
       in
-      let alleles = mp.reference :: List.map ~f:fst nalt_elems in
-      let allele_index = Alleles.index alleles in
+      let allele_index = Alleles.index (reference :: List.map ~f:fst nalt_elems) in
       let module Aset = Alleles.MakeSet (struct let index = allele_index end) in
       let aset = (module Aset : Alleles.Set) in
       let module Cm = CAM.Make(Aset) in
       let emissions_a, position_map =
-        initialize_base_array_and_position_map aset mp.reference mp.ref_elems
+        initialize_base_array_and_position_map aset reference ref_elems
       in
-      let aaa = add_alternate_allele aset mp.reference ~position_map in
+      let aaa = add_alternate_allele aset ~reference ~position_map in
       List.iter ~f:(fun (allele, altseq) -> aaa allele altseq emissions_a) nalt_elems;
       let increment_a = Array.make (Array.length emissions_a - 1) Cm.empty in
       Array.iteri emissions_a ~f:(fun i s ->
@@ -1473,10 +1472,10 @@ let construct input selectors =
               let k = i + g in
               increment_a.(k) <- Cm.add s i increment_a.(k)));
       let increment_a = Array.map ~f:Cm.to_list increment_a in
-      Ok { align_date = mp.align_date
+      Ok { align_date
          ; number_alleles = Alleles.length allele_index
          ; aset
-         ; alleles
+         ; allele_index
          ; merge_map
          ; emissions_a
          ; increment_a
@@ -1531,10 +1530,10 @@ let lg5 a i lst =
 (* Single, for one allele, forward pass *)
 let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   t read_length allele =
-  let { emissions_a; aset; alleles; _ } = t in
+  let { emissions_a; aset; allele_index; _ } = t in
   let module Aset = (val aset : Alleles.Set) in
   (* Recover allele's base sequence, aka, emission. *)
-  if not (List.exists ~f:((=) allele) alleles) then
+  if not (StringMap.mem allele allele_index.Alleles.to_index) then
     invalid_argf "%s not found among the list of alleles!" allele
   else
     let module Cm = CAM.Make(Aset) in
@@ -1582,7 +1581,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   2. the workspace that it uses
   3. a function to combine results *)
 let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
-  let { number_alleles; emissions_a; increment_a; aset; alleles; _ } = t in
+  let { number_alleles; emissions_a; increment_a; aset; allele_index; _ } = t in
   let ref_length = Array.length emissions_a in
   let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
   let module Aset = (val aset : Alleles.Set) in
@@ -1593,10 +1592,10 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let ws = F.W.generate number_alleles ref_length read_length in
   let last_read_index = read_length - 1 in
   let best_alleles () =
-    F.W.get_emission ws
-    |> Array.to_list
-    |> List.fold_left2 alleles
-        ~init:[] ~f:(fun acc allele emission -> lg5 emission allele acc)
+    let alleles = allele_index.Alleles.to_allele in
+    Array.fold_left (F.W.get_emission ws) ~init:(0,[])
+      ~f:(fun (i, acc) emission -> i+1,lg5 emission alleles.(i) acc)
+    |> snd
   in
   let best_positions () =
     F.W.fold_over_final ws ~init:(0, [])
@@ -1642,7 +1641,10 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
       F.Bands.pass c emissions_a increment_a ws (r, br) last_read_index read;
       Completed ()
     in
-    { doit ; best_alleles ; best_positions ; per_allele_llhd
+    { doit
+    ; best_alleles
+    ; best_positions
+    ; per_allele_llhd
     ; output_ws_array
     }
   in
@@ -1828,3 +1830,24 @@ let forward_pass_m ?insert_p ?max_number_mismatches ?band mode tlst read_length 
                       List.map_snd passes ~f:(fun p -> reducer p read read_prob)
                     in
                     MultiLoci.merge current state)
+
+(* TODO: Get rid of this function it belongs in `Mapper, `Reducer output. *)
+let output s final_likelihoods =
+  let o =
+    match s with
+    | `Pt pt ->
+        Array.mapi pt.allele_index.Alleles.to_allele
+          ~f:(fun i a -> final_likelihoods.(i), a)
+    | `Allele a ->
+        [| final_likelihoods.(0), a |]
+  in
+  let cmp (l1, a1) (l2, a2) =
+    if l2 < l1 then
+      -1
+    else if l2 > l1 then
+      1
+    else
+      compare a1 a2
+  in
+  Array.sort o ~cmp;
+  Array.iter o ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)

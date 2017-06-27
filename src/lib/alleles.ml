@@ -450,6 +450,7 @@ module Selection = struct
   (* Defined in this order to so that to apply multiple selections, we can sort
      the list and apply Regex's first to generate possibilities and then use
      reducing selectors like Without and Number afterwards. *)
+  (* TODO: The selector steps need to come before imputation! *)
   type t =
     | Regex of string
     | Specific of string
@@ -480,9 +481,10 @@ module Selection = struct
         else
           List.fold_left assoc ~init:[] ~f:(fun acc (allele, v) ->
             match Nomenclature.trim_suffix allele with
-            | Ok (allele, None)         -> (allele, v) :: acc
-            | Ok (allele, Some _suffix) -> acc                  (* Ignore suffixed! *)
-            | Error m -> failwith m)
+            | Ok (_a, None)         -> (allele, v) :: acc
+            | Ok (_a, Some _suffix) -> acc                  (* Ignore suffixed! *)
+            | Error m               -> failwith m)
+          (*|> List.rev *)
       in
       List.fold_left sorted ~init:assoc ~f:(fun acc -> function
         | Regex r             -> let p = Re_posix.compile_pat r in
@@ -490,7 +492,7 @@ module Selection = struct
         | Specific s          -> List.filter acc ~f:(fun (allele, _) -> allele = s)
         | Without e           -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
         | Number n            -> List.take acc n
-        | DoNotIgnoreSuffixed -> acc        (* No Op at this point *)
+        | DoNotIgnoreSuffixed -> acc        (* No-op at this point *)
         )
 
 end (* Selection. *)

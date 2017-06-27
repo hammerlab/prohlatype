@@ -75,11 +75,6 @@ let proc_g = function
                   `Reducer g
                  end
 
-let output_reducer alleles final_likelihoods =
-  List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
-  |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-  |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
-
 let output_mapper lst =
   printf "Reads: %d\n" (List.length lst);
   List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
@@ -102,14 +97,14 @@ let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
         (fun () ->
           let r =
             ParPHMM.forward_pass mode ?insert_p ?max_number_mismatches
-            ?band pt read_size
+              ?band pt read_size
           in
           match r with
           | `Reducer (u, f) ->
               `Reducer
                 { f   = to_reduce_update_f (f ~check_rc) add_ll
                 ; s   = u
-                ; fin = output_reducer pt.ParPHMM.alleles
+                ; fin = ParPHMM.output (`Pt pt)
                 }
           | `Mapper m ->
               `Mapper
@@ -130,7 +125,7 @@ let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
                 `Reducer
                   { f   = to_reduce_update_f (f ~check_rc) add_ll
                   ; s   = u
-                  ; fin = output_reducer [allele]
+                  ; fin = ParPHMM.output (`Allele allele)
                   }
             | `Mapper m ->
                 `Mapper
