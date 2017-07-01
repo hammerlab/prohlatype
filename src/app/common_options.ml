@@ -7,16 +7,15 @@ open Cmdliner
 let repo = "prohlatype"
 
 (*** Basic command line parsers and printers. ***)
-let positive_int_parser w =
-  fun s ->
-    try
-      let d = Scanf.sscanf s "%d" (fun x -> x) in
-      if d <= 0 then
-        Error (`Msg (s ^ " is not a positive integer"))
-      else
-        Ok (w d)
-    with Scanf.Scan_failure msg ->
-      Error (`Msg msg)
+let positive_int_parser w s =
+  try
+    let d = Scanf.sscanf s "%d" (fun x -> x) in
+    if d <= 0 then
+      Error (`Msg (s ^ " is not a positive integer"))
+    else
+      Ok (w d)
+  with Scanf.Scan_failure msg ->
+    Error (`Msg msg)
 
 let int_fprinter frmt =
   Format.fprintf frmt "%d"
@@ -24,6 +23,20 @@ let int_fprinter frmt =
 let positive_int =
   Arg.conv ~docv:"POSITIVE INTEGER"
     ((positive_int_parser (fun n -> n)), int_fprinter)
+
+let positive_float_parser s =
+    try
+      let f = Scanf.sscanf s "%f" (fun x -> x) in
+      if f <= 0. then
+        Error (`Msg (s ^ " is not a positive float"))
+      else
+        Ok f
+    with Scanf.Scan_failure msg ->
+      Error (`Msg msg)
+
+let positive_float =
+  Arg.conv ~docv:"POSITIVE FLOAT"
+    (positive_float_parser, fun frmt -> Format.fprintf frmt "%f")
 
 let greater_than_one =
   let docv = "natural number greater than 1" in
@@ -92,6 +105,7 @@ let regex_command_line_args = ["allele-regex"]
 let allele_command_line_args = ["spec-allele"]
 let without_command_line_args = ["without-allele"]
 let num_command_line_args = ["n"; "num-alt"]
+let do_not_ignore_suffixed_alleles_flags = ["do-not-ignore-suffixed-alleles"]
 
 let args_to_string lst =
   List.map lst ~f:(fun s -> (if String.length s = 1 then "-" else "--") ^ s)
@@ -171,6 +185,19 @@ let num_alt_arg =
   let nconv = conv ~docv (parser_, Alleles.Selection.pp) in
   (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
 
+let do_not_ignore_suffixed_alleles_flag =
+  let doc = "IMGT publishes alleles with suffixes ('N', 'L', 'S', 'C', 'A' or \
+            'Q') to indicate special conditions such as null alleles ('N') or \
+            questionable expression ('Q'). Often times, these alleles can \
+            complicate prohlatype as reads sometimes align suprisingly well \
+            to them (ex. HLA-A*11:50Q) as opposed to the true validated \
+            allele. For the purposes of having a clearer typing algorithm we \
+            exclude all such alleles from IMGT by default. For rare cases or \
+            diagnostic purposes one can pass this flag to bring them back \
+            into the analysis."
+  in
+  Arg.(value & flag & info ~doc do_not_ignore_suffixed_alleles_flags)
+
 (*** Other args. ***)
 (*
 let remove_reference_flag =
@@ -218,6 +245,18 @@ let to_input ?alignment_file ?merge_file ~distance ~impute () =
   | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
   | None,                None -> Error "Either a file or merge argument must be specified"
 
+let option_to_list o =
+  Option.value_map o ~default:[] ~f:(fun s -> [s])
+
+let aggregate_selectors ?number_alleles
+  ~regex_list ~specific_list ~without_list ~do_not_ignore_suffixed_alleles =
+    regex_list
+    @ specific_list
+    @ without_list
+    @ (option_to_list number_alleles)
+    @ (if do_not_ignore_suffixed_alleles then
+        [Alleles.Selection.DoNotIgnoreSuffixed] else [])
+
 let to_filename_and_graph_args
   (* Allele information source *)
   ?alignment_file ?merge_file ~distance ~impute
@@ -226,12 +265,13 @@ let to_filename_and_graph_args
     ~specific_list
     ~without_list
     ?number_alleles
+    ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
   ~join_same_sequence =
     to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
       let selectors =
-        regex_list @ specific_list @ without_list @
-          (match number_alleles with | None -> [] | Some s -> [s])
+        aggregate_selectors ~regex_list ~specific_list ~without_list
+          ?number_alleles ~do_not_ignore_suffixed_alleles
       in
       let arg = {Ref_graph.selectors; join_same_sequence } in
       let graph_arg = Cache.graph_args ~arg ~input in
@@ -378,3 +418,78 @@ let max_number_mismatches_arg =
               seen this many mismatches." in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv
         ["max-mismatches"])
+
+let read_size_override_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc = "Override the number of bases to calculate the likelihood over, \
+              instead of using the number of bases in the FASTQ." in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
+
+let map_flag =
+  let default = 5 in
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "This switch turns the typing logic into more of a diagnostic \
+             mode. The end user can see how individual reads are typed, \
+             and the best positions within the loci. Optionally specify a
+             positive integer to indicate the number of best alleles \
+             and positions to report. Defaults to %d."
+      default
+  in
+  Arg.(value & opt (some positive_int) None ~vopt:(Some default)
+             & info ~doc ~docv ["map"])
+
+(* Band arguments *)
+let not_band_flag =
+  let doc = "Calculate the full forward pass matrix." in
+  Arg.(value & flag & info ~doc ["do-not-band"])
+
+let band_warmup_arg =
+  let default = ParPHMM.(band_default.warmup) in
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "At which row in the forward pass to compute bands instead \
+              of the full pass. Defaults to: %d." default
+  in
+  Arg.(value
+        & opt positive_int default
+        & info ~doc ~docv ["band-warmup"])
+
+let number_bands_arg =
+  let default = ParPHMM.(band_default.number) in
+  let docv = "POSITIVE INTEGER" in
+  let doc  =
+    sprintf "Number of bands to calculate. Defaults to %d" default
+  in
+  Arg.(value
+        & opt positive_int default
+        & info ~doc ~docv ["number-bands"])
+
+let band_width_arg =
+  let default = ParPHMM.(band_default.width) in
+  let docv = "greater than 1" in
+  let doc  =
+    sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
+  in
+  Arg.(value
+        & opt greater_than_one default
+        & info ~doc ~docv ["band-width"])
+
+let forward_pass_accuracy_arg =
+  let docv = "POSITIVE DOUBLE" in
+  let doc  =
+    sprintf "Tweak the accuracy (and consequently speed) of the forward pass \
+      (larger -> less accurate but faster). The default value is %f. The \
+      implementation uses 63 bit floats which is more than sufficient for \
+      this calculation."
+      !ParPHMM.dx
+  in
+  Arg.(value & opt (some positive_float) None
+             & info ~doc ~docv ["numerical-accuracy"])
+
+let do_not_past_threshold_filter_flag =
+  let doc = "Do not use previously calculated likelihoods (ex. from other loci \
+             or considering the reverse complement alignment) as a threshold \
+             filter to short-circuit evaluations."
+  in
+  Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])

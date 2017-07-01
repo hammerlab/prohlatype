@@ -51,7 +51,9 @@ let to_update_f read_size ~f acc fqi =
     else
       match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
       | Result.Error e       -> ppe (Error.to_string_hum e)
-      | Result.Ok read_probs -> f acc fqi.Biocaml_unix.Fastq.name fqi.Biocaml_unix.Fastq.sequence read_probs)
+      | Result.Ok read_probs -> f acc ~name:fqi.Biocaml_unix.Fastq.name
+                                      ~seq:fqi.Biocaml_unix.Fastq.sequence
+                                      ~read_probs)
 
 type 'a g =
   { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
@@ -97,7 +99,7 @@ let output_mapped lst =
           sprintf "%s\t%s" name
             (ParPHMM.mapped_stats_to_string ~sep:'\t' ms)))))
 
-let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
+let to_set ?insert_p ~past_threshold_filter ?max_number_mismatches ?band mode rp read_size =
   let ptlst =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -105,28 +107,32 @@ let to_set ?insert_p ?max_number_mismatches ?band mode rp read_size =
   let g =
     time (sprintf "Allocating forward pass workspaces")
       (fun () ->
-        let r = ParPHMM.forward_pass_m ?insert_p ?max_number_mismatches ?band
-                mode ptlst read_size in
+        let r =
+          ParPHMM.forward_pass_m ?insert_p ?max_number_mismatches ?band
+            ~past_threshold_filter mode ptlst read_size
+        in
         match r with
         | `Mapper m ->
             `Mapper
-              { f   = to_update_f read_size ~f:(fun l n s r -> (n, m s r) :: l)
+              { f   = to_update_f read_size
+                          ~f:(fun l ~name ~seq ~read_probs ->
+                                (name, m seq read_probs) :: l)
               ; s   = []
               ; fin = begin fun lst ->
                         printf "Reads: %d\n" (List.length lst);
                         output_mapped (sort_mapped_output lst)
                       end
               }
-        | `Reporter (lst, ff) ->
+        | `Reporter (lst, r) ->
             `Reporter
-              { f   = to_update_f read_size ~f:(fun l _n s r -> ff s r l)
+              { f   = to_update_f read_size
+                          ~f:(fun l ~name ~seq ~read_probs ->
+                                r seq read_probs l)
               ; s   = lst
               ; fin = begin fun lst ->
                         List.iter2 ptlst lst ~f:(fun (name, pt) (_name, llhd) ->
                           printf "%s\n" name;
-                          List.mapi pt.ParPHMM.alleles ~f:(fun i a -> llhd.(i), a)
-                          |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-                          |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l))
+                          ParPHMM.output (`Pt pt) llhd)
                       end
               })
   in
@@ -137,15 +143,19 @@ let fin = function
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reporter g) -> g.fin g.s
 
-let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
-  ~specific_reads ?band mode file init =
+let across_fastq ?insert_p ?max_number_mismatches
+  ~past_threshold_filter
+  ?number_of_reads ~specific_reads ?band mode file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads ~init file
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set ?insert_p ?max_number_mismatches ?band mode rp read_size in
+                let `Set g =
+                  to_set ?insert_p ~past_threshold_filter
+                    ?max_number_mismatches ?band mode rp read_size
+                in
                 `Set (proc_g g fqi)
             | `Set g ->
                 `Set (proc_g g fqi))
@@ -163,6 +173,7 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     insert_p
+    do_not_past_threshold_filter
     max_number_mismatches
     read_size_override
     not_band
@@ -171,7 +182,10 @@ let type_
     width
   (* how are we typing *)
     map
+    forward_accuracy_opt
     =
+  Option.value_map forward_accuracy_opt ~default:()
+    ~f:(fun fa -> ParPHMM.dx := fa);
   let impute   = true in
   let band     =
     if not_band then
@@ -187,24 +201,27 @@ let type_
                 ; d // "C_gen.txt"
                 ], []
   in
+  let past_threshold_filter = not do_not_past_threshold_filter in
   let need_read_size_r =
     to_read_size_dependent
       ~alignment_files ~merge_files ~distance ~impute
       ~skip_disk_cache
   in
-  let mode = if map then `Mapper else `Reporter in
+  let mode = match map with | Some n -> `Mapper n | None -> `Reporter in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> to_set ~insert_p ?max_number_mismatches ?band mode need_read_size r
+      | Some r -> to_set ~insert_p ?max_number_mismatches
+                    ~past_threshold_filter ?band mode need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
     | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches
+                            ~past_threshold_filter
                             ?number_of_reads ~specific_reads
                             ?band mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
@@ -213,55 +230,6 @@ let type_
 let () =
   let open Cmdliner in
   let open Common_options in
-  let read_size_override_arg =
-    let docv = "POSITIVE INTEGER" in
-    let doc = "Override the number of bases to calculate the likelihood over, \
-               instead of using the number of bases in the FASTQ." in
-    Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
-  in
-  (* Band arguments *)
-  let not_band_flag =
-    let doc = "Calculate the full forward pass matrix." in
-    Arg.(value & flag & info ~doc ["do-not-band"])
-  in
-  let band_warmup_arg =
-    let default = ParPHMM.(band_default.warmup) in
-    let docv = "POSITIVE INTEGER" in
-    let doc =
-      sprintf "At which warmup in the forward pass to compute bands instead \
-               of the full pass. Defaults to: %d." default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["band-warmup"])
-  in
-  let number_bands_arg =
-    let default = ParPHMM.(band_default.number) in
-    let docv = "POSITIVE INTEGER" in
-    let doc  =
-      sprintf "Number of bands to calculate. Defaults to %d" default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["number-bands"])
-  in
-  let band_width_arg =
-    let default = ParPHMM.(band_default.width) in
-    let docv = "greater than 1" in
-    let doc  =
-      sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
-    in
-    Arg.(value
-          & opt greater_than_one default
-          & info ~doc ~docv ["band-width"])
-  in
-  let map_flag =
-    let doc = "Map (do not reduce) the typing of the individual reads." in
-    let docv = "This switch turns the typing logic into more of a diagnostic \
-                mode. The end user can see how individual reads are typed."
-    in
-    Arg.(value & flag & info ~doc ~docv ["map"])
-  in
   let files_arg =
     let docv = "FILE" in
     let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
@@ -338,6 +306,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ insert_probability_arg
+            $ do_not_past_threshold_filter_flag
             $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_band_flag
@@ -346,6 +315,7 @@ let () =
             $ band_width_arg
             (* How are we typing *)
             $ map_flag
+            $ forward_pass_accuracy_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ upto_kmer_hood_arg
