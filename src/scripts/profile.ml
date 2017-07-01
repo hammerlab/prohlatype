@@ -141,3 +141,22 @@ let best ~gene r k =
   let d = List.length cr in
   let n = List.length (List.filter cr ~f:(fun (_, l) -> List.hd_exn l < k)) in
   (n, d, (float n) /. (float d))
+
+let get_times fname =
+  let ic = open_in fname in
+  let rec loop acc =
+    try
+      loop (input_line ic :: acc)
+    with End_of_file ->
+      List.take acc 3
+  in
+  let last_three = loop [] in
+  close_in ic;
+  last_three
+
+let load_times ~dir ~fname_to_key =
+  Sys.readdir dir
+  |> Array.fold_left ~init:[] ~f:(fun acc file ->
+      let k = fname_to_key file in
+      let t = get_times (Filename.concat dir file) in
+      (k, t) :: acc)

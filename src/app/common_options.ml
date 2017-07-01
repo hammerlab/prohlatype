@@ -426,11 +426,18 @@ let read_size_override_arg =
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
 
 let map_flag =
-  let doc = "Map (do not reduce) the typing of the individual reads." in
-  let docv = "This switch turns the typing logic into more of a diagnostic \
-              mode. The end user can see how individual reads are typed."
+  let default = 5 in
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "This switch turns the typing logic into more of a diagnostic \
+             mode. The end user can see how individual reads are typed, \
+             and the best positions within the loci. Optionally specify a
+             positive integer to indicate the number of best alleles \
+             and positions to report. Defaults to %d."
+      default
   in
-  Arg.(value & flag & info ~doc ~docv ["map"])
+  Arg.(value & opt (some positive_int) None ~vopt:(Some default)
+             & info ~doc ~docv ["map"])
 
 (* Band arguments *)
 let not_band_flag =
@@ -479,3 +486,10 @@ let forward_pass_accuracy_arg =
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["numerical-accuracy"])
+
+let do_not_past_threshold_filter_flag =
+  let doc = "Do not use previously calculated likelihoods (ex. from other loci \
+             or considering the reverse complement alignment) as a threshold \
+             filter to short-circuit evaluations."
+  in
+  Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])
