@@ -450,21 +450,24 @@ module Selection = struct
   (* Defined in this order to so that to apply multiple selections, we can sort
      the list and apply Regex's first to generate possibilities and then use
      reducing selectors like Without and Number afterwards. *)
+  (* TODO: The selector steps need to come before imputation! *)
   type t =
     | Regex of string
     | Specific of string
     | Without of string
     | Number of int
+    | DoNotIgnoreSuffixed
     [@@ deriving eq, ord, show ]
     (* When ppx_deriving >4.1 hits:
     [@@ deriving eq, ord, show { with_path = false }] *)
 
   (* A bit more concise than show and easier for filenames.*)
   let to_string = function
-    | Regex r     -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
-    | Specific s  -> sprintf "S%s" s
-    | Without e   -> sprintf "W%s" e
-    | Number n    -> sprintf "N%d" n
+    | Regex r             -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
+    | Specific s          -> sprintf "S%s" s
+    | Without e           -> sprintf "W%s" e
+    | Number n            -> sprintf "N%d" n
+    | DoNotIgnoreSuffixed -> "DNIS"
 
   let list_to_string l =
     String.concat ~sep:"_" (List.map l ~f:(to_string))
@@ -472,12 +475,25 @@ module Selection = struct
   let apply_to_assoc lst =
     let sorted = List.sort ~cmp:compare lst in
     fun assoc ->
+      let assoc =
+        if List.mem DoNotIgnoreSuffixed ~set:sorted then
+          assoc
+        else
+          List.fold_left assoc ~init:[] ~f:(fun acc (allele, v) ->
+            match Nomenclature.trim_suffix allele with
+            | Ok (_a, None)         -> (allele, v) :: acc
+            | Ok (_a, Some _suffix) -> acc                  (* Ignore suffixed! *)
+            | Error m               -> failwith m)
+          (*|> List.rev *)
+      in
       List.fold_left sorted ~init:assoc ~f:(fun acc -> function
-        | Regex r    -> let p = Re_posix.compile_pat r in
-                        List.filter acc ~f:(fun (allele, _) -> Re.execp p allele)
-        | Specific s -> List.filter acc ~f:(fun (allele, _) -> allele = s)
-        | Without e  -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
-        | Number n   -> List.take acc n)
+        | Regex r             -> let p = Re_posix.compile_pat r in
+                                 List.filter acc ~f:(fun (allele, _) -> Re.execp p allele)
+        | Specific s          -> List.filter acc ~f:(fun (allele, _) -> allele = s)
+        | Without e           -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
+        | Number n            -> List.take acc n
+        | DoNotIgnoreSuffixed -> acc        (* No-op at this point *)
+        )
 
 end (* Selection. *)
 

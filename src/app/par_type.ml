@@ -17,13 +17,14 @@ let to_read_size_dependent
     ~specific_list
     ~without_list
     ?number_alleles
+    ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
     =
     Common_options.to_input ?alignment_file ?merge_file ~distance ~impute ()
       >>= fun input ->
         let selectors =
-          regex_list @ specific_list @ without_list @
-            (match number_alleles with | None -> [] | Some s -> [s])
+          Common_options.aggregate_selectors ~regex_list ~specific_list
+            ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
         in
         Ok (fun read_size ->
             let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
@@ -74,11 +75,6 @@ let proc_g = function
                   `Reducer g
                  end
 
-let output_reducer alleles final_likelihoods =
-  List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
-  |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-  |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
-
 let output_mapper lst =
   printf "Reads: %d\n" (List.length lst);
   List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
@@ -87,8 +83,8 @@ let output_mapper lst =
   |> List.iter ~f:(fun (n, s) ->
     printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
 
-let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
-  rp read_size =
+let to_set ?insert_p ?max_number_mismatches ~past_threshold_filter
+  mode specific_allele ~check_rc ?band rp read_size =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
@@ -101,14 +97,14 @@ let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
         (fun () ->
           let r =
             ParPHMM.forward_pass mode ?insert_p ?max_number_mismatches
-            ?band pt read_size
+              ~past_threshold_filter ?band pt read_size
           in
           match r with
           | `Reducer (u, f) ->
               `Reducer
                 { f   = to_reduce_update_f (f ~check_rc) add_ll
                 ; s   = u
-                ; fin = output_reducer pt.ParPHMM.alleles
+                ; fin = ParPHMM.output (`Pt pt)
                 }
           | `Mapper m ->
               `Mapper
@@ -129,7 +125,7 @@ let to_set ?insert_p ?max_number_mismatches mode specific_allele ~check_rc ?band
                 `Reducer
                   { f   = to_reduce_update_f (f ~check_rc) add_ll
                   ; s   = u
-                  ; fin = output_reducer [allele]
+                  ; fin = ParPHMM.output (`Allele allele)
                   }
             | `Mapper m ->
                 `Mapper
@@ -145,8 +141,9 @@ let fin = function
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reducer g) -> g.fin g.s
 
-let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
-    ~specific_reads ~check_rc specific_allele ?band mode file init =
+let across_fastq ?insert_p ?max_number_mismatches ~past_threshold_filter
+    ?number_of_reads ~specific_reads ~check_rc
+    specific_allele ?band mode file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
@@ -154,6 +151,7 @@ let across_fastq ?insert_p ?max_number_mismatches ?number_of_reads
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
                 let `Set g = to_set ?insert_p ?max_number_mismatches
+                                ~past_threshold_filter
                                 mode specific_allele ~check_rc ?band rp read_size in
                 `Set (proc_g g fqi)
             | `Set g ->
@@ -167,6 +165,7 @@ let type_
     alignment_file merge_file distance not_impute
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
+    do_not_ignore_suffixed_alleles
     specific_allele
   (* Process *)
     skip_disk_cache
@@ -174,6 +173,7 @@ let type_
     fastq_file_lst number_of_reads specific_reads
   (* options *)
     insert_p
+    do_not_past_threshold_filter
     max_number_mismatches
     read_size_override
     not_check_rc
@@ -199,23 +199,27 @@ let type_
     to_read_size_dependent
       ?alignment_file ?merge_file ~distance ~impute
       ~regex_list ~specific_list ~without_list ?number_alleles
+      ~do_not_ignore_suffixed_alleles
       ~skip_disk_cache
   in
+  let past_threshold_filter = not do_not_past_threshold_filter in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
-    let mode = if map then `Mapper else `Reducer in
+    let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
       | Some r -> to_set ~insert_p ?max_number_mismatches
+                    ~past_threshold_filter
                     mode specific_allele ~check_rc ?band need_read_size r
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
     | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches ?number_of_reads
-                          ~specific_reads ~check_rc ?band
+    | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches
+                          ~past_threshold_filter
+                          ?number_of_reads ~specific_reads ~check_rc ?band
                           specific_allele mode fastq init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
     end
@@ -267,6 +271,7 @@ let () =
             $ file_arg $ merge_arg $ distance_flag $ do_not_impute_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+            $ do_not_ignore_suffixed_alleles_flag
             $ spec_allele_arg
             (* What to do ? *)
             $ no_cache_flag
@@ -274,6 +279,7 @@ let () =
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             (* options. *)
             $ insert_probability_arg
+            $ do_not_past_threshold_filter_flag
             $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_check_rc_flag
