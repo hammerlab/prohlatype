@@ -206,7 +206,7 @@ let type_
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
-    let mode = if map then `Mapper else `Reducer in
+    let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
