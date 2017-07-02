@@ -6,15 +6,6 @@
 
 open Util
 
-let array_findi v a =
-  let n = Array.length a in
-  let rec loop i =
-    if i >= n then raise Not_found
-    else if a.(i) = v then i
-    else loop (i + 1)
-  in
-  loop 0
-
 (* What are the possible states of the alleles. *)
 module BaseState = struct
 

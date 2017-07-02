@@ -191,3 +191,12 @@ let manual_phred_llhd s1 s2 probability_of_error =
 let array_rev a =
   let n = Array.length a in
   Array.init n ~f:(fun i -> Array.unsafe_get a (n - i - 1))
+
+let array_findi v a =
+  let n = Array.length a in
+  let rec loop i =
+    if i >= n then raise Not_found
+    else if a.(i) = v then i
+    else loop (i + 1)
+  in
+  loop 0
