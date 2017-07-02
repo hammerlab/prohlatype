@@ -6,38 +6,11 @@
 
 open Util
 
-(* What are the possible states of the alleles. *)
-module BaseState = struct
-
-  (* Assume that we're working on fully imputed sequences, so no 'Unknown'
-     states for an allele. *)
-  type t =
-    | A
-    | C
-    | G
-    | T
-    [@@deriving show]
-
-  let of_char = function
-    | 'A' -> A
-    | 'C' -> C
-    | 'G' -> G
-    | 'T' -> T
-    |  c  -> invalid_argf "Unsupported base: %c" c
-
-  let to_char = function
-    | A       -> 'A'
-    | C       -> 'C'
-    | G       -> 'G'
-    | T       -> 'T'
-
-end (* BaseState *)
-
 type position_map = (Mas_parser.position * int) list
 
 (*** Construction
-  1. From Mas_parser.result -> Array of BaseState.t 's.
-    a. Figure out the BaseState.t of reference sequence and a position map
+  1. From Mas_parser.result -> Array of Base.t 's.
+    a. Figure out the Base.t of reference sequence and a position map
        (position in Mas_parser.result to index into final array)
        [initialize_base_array_and_position_map].
     b. Start Run-Length encoded lists and extend them with each alternate
@@ -46,7 +19,7 @@ type position_map = (Mas_parser.position * int) list
 
  ***)
 
-(* Figure out the BaseState.t of the reference and aggregate a position map:
+(* Figure out the Base.t of the reference and aggregate a position map:
    (position in Mas_parser.result * index into base_state array.) list.
 
   The mapping (position into base_state array) is then recovered by iterating
@@ -60,7 +33,7 @@ let initialize_base_array_and_position_map aset reference ref_elems =
     String.to_character_list s
     |> List.mapi ~f:(fun i c ->
         let p = if i = 0 then prev_state else -1 in
-        let b = BaseState.of_char c in
+        let b = Base.of_char c in
         [ref_set (), (b, p)])
     |> Array.of_list
   in
@@ -101,7 +74,7 @@ let reduce_position_map : position_map -> position_map = function
 
 (* Helper method to create an actual function for computing the index into
    the base state array. This is useful for debugging between the Mas_parser
-   positions and the index into BaseState array. Assumes a 'reduced' (via
+   positions and the index into Base array. Assumes a 'reduced' (via
    [reduce_position_map]) position map. *)
 let to_position_map : position_map -> (int -> int option) = function
   | [] -> invalid_arg "to_position_map: empty"
@@ -136,7 +109,7 @@ let add_alternate_allele aset ~reference ~position_map allele allele_instr arr =
   let module Aset = (val aset : Alleles.Set) in
   let base_and_offset b o (_, (bp,bo)) = b = bp && o = bo in
   let add_to_base_state i b o =
-    (*printf "adding base at %d %c %d\n" i (BaseState.to_char b) o; *)
+    (*printf "adding base at %d %c %d\n" i (Base.to_char b) o; *)
     match List.find arr.(i) ~f:(base_and_offset b o) with
     | None              -> let s = Aset.singleton allele in
                            (*printf "single cell at %d for %s \n"  i allele; *)
@@ -183,7 +156,7 @@ let add_alternate_allele aset ~reference ~position_map allele allele_instr arr =
         let noffset = add_to_reference_set offset lp ap in
         let fap, foffset =
           String.fold s ~init:(ap, noffset) ~f:(fun (p, o) c ->
-            add_to_base_state p (BaseState.of_char c) o;
+            add_to_base_state p (Base.of_char c) o;
             (p + 1, -1))
         in
         loop position_map fap ~offset:foffset t
@@ -403,7 +376,7 @@ module ForwardCalcs  (R : Ring) = struct
       else
         mismatch_p base_error
     in
-    let open BaseState in
+    let open Base in
     function
     | A -> compare_against 'A'
     | C -> compare_against 'C'
@@ -869,7 +842,7 @@ module ForwardSingleGen (R: Ring) = struct
   module W = SingleWorkspace(R)
   module Fc = ForwardCalcs(R)
 
-  type base = BaseState.t
+  type base = Base.t
 
   let recurrences ?insert_p tm read_length =
     let r = Fc.g ?insert_p tm read_length in
@@ -975,7 +948,7 @@ module ForwardMultipleGen (R : Ring)(Aset: Alleles.Set) = struct
 
   module W = MakeMultipleWorkspace(R)(Cm)
 
-  type base_emissions = (BaseState.t * int) Cm.t
+  type base_emissions = (Base.t * int) Cm.t
 
   (* offset and emission probabilties *)
   type 'a oeps = (int * 'a) Cm.t
@@ -1457,7 +1430,7 @@ type t =
   ; aset            : (module Alleles.Set)
   ; allele_index    : Alleles.index             (* Canonical order for alleles. *)
   ; merge_map       : (string * string) list
-  ; emissions_a     : (Alleles.set * (BaseState.t * int)) list array
+  ; emissions_a     : (Alleles.set * (Base.t * int)) list array
   ; increment_a     : (Alleles.set * int) list array
   }
 
