@@ -45,7 +45,7 @@ end (* BaseState *)
 type position_map = (Mas_parser.position * int) list
 
 (*** Construction
-  1. From Mas_parser.result -> Run-Length-Encoded-Lists Array of BaseState.t 's.
+  1. From Mas_parser.result -> Array of BaseState.t 's.
     a. Figure out the BaseState.t of reference sequence and a position map
        (position in Mas_parser.result to index into final array)
        [initialize_base_array_and_position_map].
@@ -62,9 +62,9 @@ type position_map = (Mas_parser.position * int) list
   over this position map as we move along Mas_parser.alignment_element's for
   the alleles. *)
 let initialize_base_array_and_position_map aset reference ref_elems =
-  let module AS = (val aset : Alleles.Set) in
+  let module Aset = (val aset : Alleles.Set) in
   let open Mas_parser in
-  let ref_set () = AS.singleton reference in
+  let ref_set () = Aset.singleton reference in
   let sequence_to_base_states_array prev_state s =
     String.to_character_list s
     |> List.mapi ~f:(fun i c ->
@@ -142,18 +142,18 @@ let rec position_and_advance sp (pos_map : position_map) =
 
 (* Add an allele's Mas_parser.sequence to the current run-length encoded state. *)
 let add_alternate_allele aset ~reference ~position_map allele allele_instr arr =
-  let module AS = (val aset : Alleles.Set) in
+  let module Aset = (val aset : Alleles.Set) in
   let base_and_offset b o (_, (bp,bo)) = b = bp && o = bo in
   let add_to_base_state i b o =
     (*printf "adding base at %d %c %d\n" i (BaseState.to_char b) o; *)
     match List.find arr.(i) ~f:(base_and_offset b o) with
-    | None              -> let s = AS.singleton allele in
+    | None              -> let s = Aset.singleton allele in
                            (*printf "single cell at %d for %s \n"  i allele; *)
                            arr.(i) <- (s, (b, o)) :: arr.(i)
-    | Some (s, (ab,ro)) -> (*printf "At: %d %s to %s\n"  i allele (AS.to_string s); *)
-                           ignore (AS.set s allele)
+    | Some (s, (ab,ro)) -> (*printf "At: %d %s to %s\n"  i allele (Aset.to_string s); *)
+                           ignore (Aset.set s allele)
   in
-  let has_reference_set (s, _) = AS.is_set s reference in
+  let has_reference_set (s, _) = Aset.is_set s reference in
   let add_to_reference_set offset start end_ =
     (*printf "adding reference set at %d %d %d\n" offset start end_; *)
     let rec loop i offset =
@@ -163,7 +163,7 @@ let add_alternate_allele aset ~reference ~position_map allele allele_instr arr =
                                loop (i + 1) (-1)  (* Offset becomes -1 after 1st use! *)
         | Some (s, (rb,ro)) ->
             if ro = offset then begin
-              ignore (AS.set s allele);
+              ignore (Aset.set s allele);
               loop (i + 1) (-1)
             end else begin
               add_to_base_state i rb offset;
