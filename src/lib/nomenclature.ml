@@ -62,6 +62,16 @@ type resolution =
   | Three of int * int * int
   | Four of int * int * int * int
 
+(* Ignore suffix for sorting *)
+let compare (r1,_) (r2,_) =
+  let to_quad = function
+    | One a           -> [ a; -1; -1; -1 ]
+    | Two (a,b)       -> [ a;  b; -1; -1 ]
+    | Three (a,b,c)   -> [ a;  b;  c; -1 ]
+    | Four (a,b,c,d)  -> [ a;  b;  c;  d ]
+  in
+  Pervasives.compare (to_quad r1) (to_quad r2)
+
 let parse_resolution s =
   trim_suffix s >>=
     fun (without_suffix, suffix_opt) ->

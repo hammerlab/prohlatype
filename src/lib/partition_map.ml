@@ -422,6 +422,8 @@ module Pm : sig
   val size_a : (ascending, 'a) t -> int
   val size_d : (descending, 'a) t -> int
 
+  val length : (_, 'a) t -> int
+
   val ascending : (descending, 'a) t -> (ascending, 'a) t
   val descending : (ascending, 'a) t -> (descending, 'a) t
 
@@ -493,6 +495,8 @@ end = struct
   let size_d l = match l with
     | []           -> 0
     | (s, _)  :: _ -> Interval.end_ s + 1
+
+  let length = List.length
 
   let add v l = match l with
     | []                       -> (Interval.make 0 0, v) :: []

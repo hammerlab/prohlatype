@@ -1024,6 +1024,9 @@ module ForwardMultipleGen (R : Ring) = struct
       let inserts = W.get ws ~i:(i-1) ~k       in
       let deletes = W.get ws ~i       ~k:(k-1) in
       let ems = to_em_set obsp emissions in
+      (*printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d \n%!"
+        i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
+            (Pm.length deletes); *)
       Pm.merge4 ems matches inserts deletes
         (fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
@@ -1457,13 +1460,22 @@ let construct input selectors =
     let open Mas_parser in
     Alleles.Input.construct input >>= fun (mp, merge_map) ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
-      let nalt_elems = Alleles.Selection.apply_to_assoc selectors alt_elems in
+      let nalt_elems =
+        Alleles.Selection.apply_to_assoc selectors alt_elems
+        (* TODO: move this logic into selection *)
+        |> List.map ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
+        |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) -> Nomenclature.compare n1 n2)
+        |> List.map ~f:(fun (_n, a, s) -> (a, s))
+      in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
       List.iter nalt_elems ~f:(fun (allele, allele_seq) ->
         add_alternate_allele pmap allele allele_seq
           base_arr state_a);
       let emissions_a = Array.map Pm.ascending state_a in
+      (*Array.iteri emissions_a ~f:(fun i p ->
+        printf "emissions: %d: %d %s\n%!" i (Pm.length p) (Pm.to_string p (function | None -> "none" | Some c -> sprintf "%c" (Base.to_char c))));
+      failwith "no"; *)
       let alleles =
         List.map nalt_elems ~f:(fun (s, _) ->
           s,
