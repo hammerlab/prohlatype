@@ -256,6 +256,61 @@ end*) = struct
     in
     loop 0
 
+  (* We either find an intersection or we find something that is 'before' any
+     intersection and should be discarded. *)
+  let split_inter_diff i1 i2 =
+    match inter_diff i1 i2 with
+    | After                                 -> None,        Some i2,     None,       Some i1,    None
+    | AfterBefore { after; inter; before }  -> None,        Some before, Some inter, Some after, None
+    | AfterEmpty { after; inter }           -> None,        None,        Some inter, Some after, None
+
+    | Before                                -> Some i1,     None,        None,       None,       Some i2
+    | BeforeAfter { before; inter; after }  -> Some before, None,        Some inter, None,       Some after
+    | BeforeEmpty { before; inter }         -> Some before, None,        Some inter, None,       None
+
+    | EmptyBefore { inter; before }         -> None,        Some before, Some inter, None,       None
+    | EmptySplit { inter; before; after }   -> None,        Some before, Some inter, None,       Some after
+    | EmptyAfter { inter; after }           -> None,        None,        Some inter, None,       Some after
+    | EmptyEmpty { inter }                  -> None,        None,        Some inter, None,       None
+
+    | SplitEmpty { before; after; inter }   -> Some before, None,        Some inter, Some after, None
+
+  let prepo p1 p2 = match p1, p2 with
+    | None,          None          -> None
+    | Some _,        None          -> p1
+    | None,          Some _        -> p2
+    | Some (s1, e1), Some (s2, e2) -> assert (e1 + 1 = s2);
+                                      Some (s1, e2)
+  let split_inter_diff3 i1 i2 i3 =
+    let b1, b2, i, a1, a2 = split_inter_diff i1 i2 in
+    match i with
+    | None     -> b1, b2, None, i, a1, a2, Some i3
+    | Some i12 ->
+      let b12, b3, i123, a12, a3 = split_inter_diff i12 i3 in
+      prepo b1 b12,
+      prepo b2 b12,
+      b3,
+      i123,
+      prepo a12 a1,
+      prepo a12 a2,
+      a3
+
+  let split_inter_diff4 i1 i2 i3 i4 =
+    let b1, b2, b3, i, a1, a2, a3 = split_inter_diff3 i1 i2 i3 in
+    match i with
+    | None      -> b1, b2, b3, None, i, a1, a2, a3, Some i4
+    | Some i123 ->
+      let b123, b4, i1234, a123, a4 = split_inter_diff i123 i4 in
+      prepo b1 b123,
+      prepo b2 b123,
+      prepo b3 b123,
+      b4,
+      i1234,
+      prepo a123 a1,
+      prepo a123 a2,
+      prepo a123 a3,
+      a4
+
   let aligned_inter_diff4 i1 i2 i3 i4 =
     let prep p =
       let s, _e = p in
@@ -272,7 +327,7 @@ end*) = struct
       | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
       | EmptyAfter { inter; after = a } -> inter, None,   Some a
       | EmptyEmpty { inter }            -> inter, None,   None
-      | AfterEmpty { inter; after = a } -> inter, Some a, None
+      | AfterEmpty { after = a; inter } -> inter, Some a, None
     in
     let i, m1, m2, m3 =
       match inter_diff i i3 with
@@ -283,7 +338,7 @@ end*) = struct
       | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
       | EmptyAfter { inter; after = a } -> inter, m1,        m2,        Some a
       | EmptyEmpty { inter }            -> inter, m1,        m2,        None
-      | AfterEmpty { inter; after = a } -> inter, prep a m1, prep a m2, None
+      | AfterEmpty { after = a; inter } -> inter, prep a m1, prep a m2, None
     in
     match inter_diff i i4 with
     | Before
@@ -318,28 +373,39 @@ module Set = struct
     in
     loop
 
+  let to_string s =
+    List.map s ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
+    |> String.concat ~sep:";"
+
+  let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
+
   let inside i l =
     List.exists l ~f:(Interval.inside i)
 
-  (* The elements in a set are ordered. *)
+  (* Should I make the sets a real pair? *)
+  let first_pos = function
+    | []      -> assert false
+    | s :: _  -> Interval.start s
+
+  (* The elements in a set are ordered.  *)
   let split_if_in ii l =
     assert (invariant l);
     let open Interval in
-    let found = ref false in
+    let before_r = ref None in
     let rec loop = function
       | []      -> l
       | h :: t  ->
           begin match inter_diff ii h with
           | Before                         -> l            (* l is ordered. *)
           | After                          -> h :: loop t
-          | EmptyAfter { after; _}         -> found := true;
+          | EmptyAfter { after; _}         -> before_r := Some [];
                                               after :: t
-          | EmptyBefore { before; _ }      -> found := true;
-                                              before :: t
-          | EmptyEmpty  _                  -> found := true;
+          | EmptyBefore { before; _ }      -> before_r := Some (of_interval before);
                                               t
-          | EmptySplit { before; after; _} -> found := true;
-                                              before :: after :: t
+          | EmptyEmpty  _                  -> before_r := Some [];
+                                              t
+          | EmptySplit { before; after; _} -> before_r := Some (of_interval before);
+                                              after :: t
           | BeforeAfter _
           | BeforeEmpty _
           | AfterEmpty _
@@ -347,64 +413,182 @@ module Set = struct
           | SplitEmpty _                   -> assert false
           end
     in
-    let s = loop l in
-    !found, s
+    let rest = loop l in
+    !before_r, rest
 
-  (* Should I make the sets a real pair? *)
-  let first_pos = function
-    | []      -> assert false
-    | s :: _  -> Interval.start s
-
-  let merge l1 l2 =
-    assert (invariant l1);
-    assert (invariant l2);
-    let rec loop ll1 ll2 =
-      match ll1 with
-      | []        -> ll2
-      | h1 :: t1  ->
-          begin match ll2 with
-          | []        -> ll1
-          | h2 :: t2  ->
-              begin match Interval.merge h1 h2 with
-              | Some m -> m :: loop t1 t2
-              | None   -> if Interval.before h1 h2 then
-                            h1 :: loop t1 ll2
-                          else (* after *)
-                            h2 :: loop ll1 t2
-              end
+  let merge_separate =
+    let open Interval in
+    let rec start l1 l2 = match l1, l2 with
+      | _,  []            -> l1
+      | [], _             -> l2
+      | h1 :: t1
+      , h2 :: t2 ->
+          begin match inter_diff h1 h2 with
+          | Before        -> loop h1 t1 l2
+          | After         -> loop h2 l1 t2
+          | BeforeAfter _
+          | BeforeEmpty _
+          | EmptyAfter _
+          | EmptyBefore _
+          | EmptyEmpty _
+          | EmptySplit _
+          | AfterEmpty _
+          | AfterBefore _
+          | SplitEmpty _  -> invalid_argf "Not separate!"
+          end
+    and loop ps l1 l2 = match l1, l2 with
+      | [],  []             ->  [ps]
+      | h1 :: t1, []        ->  begin match Interval.merge ps h1 with
+                                | None -> ps :: l1
+                                | Some m1 -> loop m1 t1 []
+                                end
+      | [],       h2 :: t2  ->  begin match Interval.merge ps h2 with
+                                | None -> ps :: l2
+                                | Some m2 -> loop m2 [] t2
+                                end
+      | h1 :: t1, h2 :: t2  ->
+          begin match inter_diff h1 h2 with
+          | Before          ->  begin match Interval.merge ps h1 with
+                                | None    -> ps :: loop h1 t1 l2
+                                | Some m1 -> loop m1 t1 l2
+                                end
+          | After           ->  begin match Interval.merge ps h2 with
+                                | None    -> ps :: loop h2 l1 t2
+                                | Some m2 -> loop m2 l1 t2
+                                end
+          | BeforeAfter _
+          | BeforeEmpty _
+          | EmptyAfter _
+          | EmptyBefore _
+          | EmptyEmpty _
+          | EmptySplit _
+          | AfterEmpty _
+          | AfterBefore _
+          | SplitEmpty _  -> invalid_argf "Not separate!"
           end
     in
-    let ml = loop l1 l2 in
-    assert (invariant ml);
-    ml
+    start
 
-  let inter_diff l1 l2 =
-    assert (invariant l1);
-    assert (invariant l2);
-    let rec loop ll1 ll2 =
-      match ll1 with
-      | []        -> ll2
-      | h1 :: t1  ->
-          begin match ll2 with
-          | []        -> ll1
-          | h2 :: t2  ->
-              begin match Interval.merge h1 h2 with
-              | Some m -> m :: loop t1 t2
-              | None   -> if Interval.before h1 h2 then
-                            h1 :: loop t1 ll2
-                          else (* after *)
-                            h2 :: loop ll1 t2
-              end
+  let all_intersections =
+    let open Interval in
+    let rec loop l1 l2 = match l1, l2 with
+      | _,  []                                   -> [],           l1,              l2
+      | [], _                                    -> [],           l1,              l2
+      | h1 :: t1
+      , h2 :: t2 ->
+          begin match inter_diff h1 h2 with
+          | Before                               -> let i, r1, r2 = loop t1 l2 in
+                                                    i,            (h1 :: r1),     r2
+          | After                                -> let i, r1, r2 = loop l1 t2 in
+                                                    i,            r1,             (h2 :: r2)
+
+          | BeforeAfter { before; inter; after } -> let i, r1, r2 = loop t1 (after :: t2) in
+                                                    (inter :: i), (before :: r1), r2
+          | BeforeEmpty { before; inter }        -> let i, r1, r2 = loop t1 t2 in
+                                                    (inter :: i), (before :: r1), r2
+
+          | EmptyAfter { inter; after }          -> let i, r1, r2 = loop t1 (after :: t2) in
+                                                    (inter :: i), r1,             r2
+          | EmptyBefore { inter; before }        -> let i, r1, r2 = loop t1 t2 in
+                                                    (inter :: i), r1,             (before :: r2)
+          | EmptyEmpty { inter }                 -> let i, r1, r2 = loop t1 t2 in
+                                                    (inter :: i), r1,             r2
+          | EmptySplit { before; after; inter }  -> let i, r1, r2 = loop t1 (after :: t2) in
+                                                    (inter :: i), r1,             (before :: r2)
+
+          | AfterEmpty { after; inter }          -> let i, r1, r2 = loop (after :: t1) t2 in
+                                                    (inter :: i), r1,             r2
+          | AfterBefore { after; inter; before } -> let i, r1, r2 = loop (after :: t1) t2 in
+                                                    (inter :: i), r1,             (before :: r2)
+          | SplitEmpty { after; before; inter }  -> let i, r1, r2 = loop (after :: t1) t2 in
+                                                    (inter :: i), (before :: r1), r2
           end
     in
-    let ml = loop l1 l2 in
-    assert (invariant ml);
-    ml
+    loop
+
+  let must_match_at_beginning s1 s2 =
+    match s1, s2 with
+    | [], []  -> invalid_argf "Empty sets!"
+    | [], s   -> invalid_argf "Different lengths! s2: %s" (to_string s)
+    | s , []  -> invalid_argf "Different lengths! s1: %s" (to_string s)
+    | h1 :: t1
+    , h2 :: t2 ->
+      let open Interval in
+      match inter_diff h1 h2 with
+      | Before        -> invalid_argf "First %s is Before second: %s"
+                          (Interval.to_string h1) (Interval.to_string h2)
+      | After         -> invalid_argf "Second %s is Before First: %s"
+                          (Interval.to_string h2) (Interval.to_string h1)
+
+      | BeforeAfter _
+      | BeforeEmpty _
+      | SplitEmpty _  -> invalid_argf "First %s is Partially Before Second : %s"
+                            (Interval.to_string h1) (Interval.to_string h2)
+
+      | AfterBefore _
+      | EmptyBefore _
+      | EmptySplit _  -> invalid_argf "Second %s is Partially Before First : %s"
+                            (Interval.to_string h2) (Interval.to_string h1)
+
+      | EmptyAfter { inter; after } -> let i, r1, r2 = all_intersections t1 (after :: t2) in
+                                       (inter :: i), r1, r2
+      | EmptyEmpty { inter }        -> let i, r1, r2 = all_intersections t1 t2 in
+                                       (inter :: i), r1, r2
+      | AfterEmpty { after; inter } -> let i, r1, r2 = all_intersections (after :: t1) t2 in
+                                       (inter :: i), r1, r2
+
+  let prepend_if_not_none o l =
+    match o with
+    | None -> l
+    | Some i -> i :: l
+
+  let all_intersections4 =
+    let open Interval in
+    let rec loop l1 l2 l3 l4 = match l1, l2, l3, l4 with
+      | [],  _,  _,  _
+      |  _, [],  _,  _
+      |  _,  _, [],  _
+      |  _,  _,  _, []  -> [], l1, l2, l3, l4
+      | h1 :: t1
+      , h2 :: t2
+      , h3 :: t3
+      , h4 :: t4        ->
+        let b1, b2, b3, b4, i, a1, a2, a3, a4 = split_inter_diff4 h1 h2 h3 h4 in
+        let nt1 = prepend_if_not_none a1 t1 in
+        let nt2 = prepend_if_not_none a2 t2 in
+        let nt3 = prepend_if_not_none a3 t3 in
+        let nt4 = prepend_if_not_none a4 t4 in
+        let il, r1, r2, r3,r4 = loop nt1 nt2 nt3 nt4 in
+        prepend_if_not_none i il
+        , prepend_if_not_none b1 r1
+        , prepend_if_not_none b2 r2
+        , prepend_if_not_none b3 r3
+        , prepend_if_not_none b4 r4
+    in
+    loop
+
+  let must_match_at_beginning4 s1 s2 s3 s4 =
+    match s1, s2, s3, s4 with
+    | [],  _,  _,  _ -> invalid_argf "Empty 1"
+    |  _, [],  _,  _ -> invalid_argf "Empty 2"
+    |  _,  _, [],  _ -> invalid_argf "Empty 3"
+    |  _,  _,  _, [] -> invalid_argf "Empty 4"
+    | h1 :: t1
+    , h2 :: t2
+    , h3 :: t3
+    , h4 :: t4 ->
+        let inter, ho1, ho2, ho3, ho4 = Interval.aligned_inter_diff4 h1 h2 h3 h4 in
+        let nt1 = prepend_if_not_none ho1 t1 in
+        let nt2 = prepend_if_not_none ho2 t2 in
+        let nt3 = prepend_if_not_none ho3 t3 in
+        let nt4 = prepend_if_not_none ho4 t4 in
+        let il, r1, r2, r3, r4 = all_intersections4 nt1 nt2 nt3 nt4 in
+        inter :: il, r1, r2, r3, r4
 
 end
 
-module Pm : sig
-  type order
+module type Pmt = sig
+
   type ascending
   type descending
 
@@ -451,9 +635,11 @@ module Pm : sig
 
   val map : ('c, 'a) t -> f:('a -> 'b) -> ('c, 'b) t
 
-  val iter_set : ('c, 'a) t -> f:(int -> 'a -> 'b) -> unit
+  val iter_set : ('c, 'a) t -> f:(int -> 'a -> unit) -> unit
 
-end = struct
+end (* Pmt *)
+
+module Pm : Pmt = struct
 
   type order
   type ascending = private order
@@ -486,11 +672,7 @@ end = struct
     |> String.concat ~sep:";"
 
   let size_a l =
-    let rec loop a = function
-      | []           -> a
-      | (i, _) :: tl -> loop (a + Interval.width i) tl
-    in
-    loop 0 l
+    List.fold_left l ~init:0 ~f:(fun a (i, _) -> a + Interval.width i)
 
   let size_d l = match l with
     | []           -> 0
@@ -613,7 +795,7 @@ end = struct
           | BeforeEmpty _
           | EmptyBefore _
           | EmptySplit _
-          | SplitEmpty _                -> invalid_argf "Different lengths!"
+          | SplitEmpty _                    -> invalid_argf "Different lengths!"
           | EmptyAfter { inter; after = a } -> (inter, f v1 v2) :: loop t1              ((a, v2) :: t2)
           | EmptyEmpty { inter }            -> (inter, f v1 v2) :: loop t1              t2
           | AfterEmpty { inter; after = a } -> (inter, f v1 v2) :: loop ((a, v1) :: t1) t2
@@ -667,3 +849,276 @@ end = struct
       Interval.iter s ~f:(fun i -> f i v))
 
 end (* Pm *)
+
+let assoc_remove_and_get el list =
+  let rec loop acc = function
+    | []                      -> None
+    | (e, v) :: t when e = el -> Some (v, (List.rev acc @ t))
+    | h :: t                  -> loop (h :: acc) t
+  in
+  loop [] list
+
+module Pm2 : Pmt = struct
+
+  type ascending (*= Ascending*)
+  type descending (*= Descending*)
+
+  (* Things start out in descending order when we construct the partition, but
+     when we 'reverse' it they are constructed into an ascending order that is
+     better for merging. *)
+
+  type +'a asc = (Set.t * 'a) list
+  type +'a desc = (Interval.t * 'a) list
+
+  type (_, +'a) t =
+    | Asc   : 'a asc -> (ascending, 'a) t
+    | Desc  : 'a desc -> (descending, 'a) t
+
+  let ascending_invariant =
+    let rec loop = function
+      | []           -> false             (* fail? don't expect empty lists *)
+      | (s, _) :: [] -> Set.invariant s
+      | (s1, _) :: (s2, v) :: t ->
+          Set.invariant s1
+          && Set.first_pos s1 < Set.first_pos s2
+          && loop ((s2, v) :: t)
+    in
+    loop
+
+  let invariant : type o a. (o, a) t -> bool =
+    function
+      | Asc la -> ascending_invariant la
+      | Desc _ -> true                               (* being a bit lazy atm. *)
+
+  (* Empty Constructors *)
+  let empty = Desc []
+  let place_holder = Asc []
+
+  (* Initializers *)
+  let first_d v =
+    let i = Interval.make 0 0 in
+    Desc [i, v]
+
+  let init size v =
+    let i = Interval.make 0 size in
+    Asc [Set.of_interval i, v]
+
+  let asc_to_string la to_s =
+    List.map la ~f:(fun (s, v) ->
+      sprintf "[%s]:%s" (Set.to_string s) (to_s v))
+    |> String.concat ~sep:"; "
+
+  let desc_to_string ld to_s =
+    List.map ld ~f:(fun (i, v) ->
+      sprintf "%s:%s" (Interval.to_string i) (to_s v))
+    |> String.concat ~sep:";"
+
+  let to_string: type o a. (o, a) t -> (a -> string) -> string =
+    fun t to_s -> match t with
+      | Asc la -> asc_to_string la to_s
+      | Desc ld -> desc_to_string ld to_s
+
+  let size_a = function
+    | Asc l ->
+        List.fold_left l ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
+
+  let size_d = function
+    | Desc []            -> 0
+    | Desc ((i, _) :: _) -> Interval.end_ i + 1
+
+  let length : type o a. (o, a) t -> int = function
+    | Asc l  -> List.length l
+    | Desc l -> List.length l
+
+  (* TODO: Expose the equality method.*)
+  let ascending = function
+    | Desc l ->
+        List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
+          match assoc_remove_and_get v acc with
+          | None           -> (v, Set.of_interval i) :: acc
+          | Some (s, nacc) -> (v, i :: s) :: nacc)        (* Set abstraction is leaky atm, this reverses. *)
+        |> List.map ~f:(fun (v, s) -> Set.first_pos s, s, v)
+        |> List.sort ~cmp:(fun (p1, _, _) (p2, _, _) -> compare p1 p2)
+        |> List.map ~f:(fun (_, s, v) -> (s,v))
+        |> fun l -> assert (ascending_invariant l); Asc l
+
+  let descending = function
+    | Asc l ->
+        List.map l ~f:(fun (s, v) -> List.map s ~f:(fun i -> i, v))
+        |> List.concat
+        |> List.sort ~cmp:(fun (i1, _) (i2, _) -> Interval.compare i2 i1)
+        |> fun l -> Desc l
+
+  let add v = function
+    | Desc []                         -> Desc ((Interval.make 0 0, v) :: [])
+    | Desc ((s, ov) :: t) when v = ov -> Desc ((Interval.extend_one s, v) :: t)
+    | Desc (((s, _) :: _) as l)       -> let e = 1 + Interval.end_ s in
+                                         Desc ((Interval.make e e, v) :: l)
+
+
+  let get t i = match t with
+    | Asc l ->
+        let rec loop = function
+          | []          -> raise Not_found      (* Need a better failure mode. *)
+          | (s, v) :: t ->
+              if Set.inside i s then
+                v
+              else
+                loop t
+        in
+        loop l
+
+  let set t i v = match t with
+    | Asc l ->
+      let open Interval in
+      let ii = make i i in
+      let rec loop l = match l with
+        | []      -> raise Not_found
+        | h :: t  ->
+            let s, ov = h in
+            if v = ov && Set.inside i s then              (* No use splitting *)
+              l
+            else
+              match Set.split_if_in ii s with
+              | None,    _     -> h :: loop t
+              | Some [], after -> (Set.of_interval ii, v) :: (after, ov) :: t
+              (* Technically this isn't scanning l again to find the
+                 appropriate set for {v}, we're just inserting it and maintaing
+                 the invariant that the sets inside are ordered.
+                 I'm not actually using this method in ParPHMM so I'll avoid
+                 a better implementation for now. *)
+              | Some be, after -> (be @ after, ov) :: (Set.of_interval ii, v) :: t
+      in
+      Asc (loop l)
+
+  let insert s v l =
+    let sl = Set.first_pos s in
+    let rec loop l = match l with
+      | []     -> [s, v]
+      | h :: t -> let so, _ = h in
+                  if sl < Set.first_pos so then
+                    (s, v) :: l
+                  else
+                    h :: loop t
+    in
+    loop l
+
+  let insert_if_not_empty s v l =
+    if s = [] then
+      l
+    else
+      insert s v l
+
+  let asc_sets_to_str s =
+    asc_to_string s (fun _ -> "")
+
+  let merge t1 t2 f =
+    assert (invariant t1);
+    assert (invariant t2);
+    let rec start l1 l2 = match l1, l2 with
+      | [],     []      -> []
+      | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+      |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+      | (s1, v1) :: t1
+      , (s2, v2) :: t2  ->
+          let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
+          let nt1 = insert_if_not_empty r1 v1 t1 in
+          let nt2 = insert_if_not_empty r2 v2 t2 in
+          loop intersect (f v1 v2) nt1 nt2
+    and loop ps pv l1 l2 = match l1, l2 with
+      | [],     []      -> [ps, pv]
+      | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+      |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+      | (s1, v1) :: t1
+      , (s2, v2) :: t2  ->
+          let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
+          let nt1 = insert_if_not_empty r1 v1 t1 in
+          let nt2 = insert_if_not_empty r2 v2 t2 in
+          let nv = f v1 v2 in
+          if nv = pv then begin
+            let mgd = Set.merge_separate ps intersect in
+            (*printf "merged %s with %s to get %s\n"
+              (Set.to_string ps) (Set.to_string intersect) (Set.to_string mgd); *)
+            loop mgd pv nt1 nt2
+          end else
+            (ps, pv) :: loop intersect nv nt1 nt2
+    in
+    match t1, t2 with
+    | (Asc l1), (Asc l2) -> Asc (start l1 l2)
+
+  let merge4 t1 t2 t3 t4 f =
+    assert (invariant t1);
+    assert (invariant t2);
+    assert (invariant t3);
+    assert (invariant t4);
+    let rec start l1 l2 l3 l4 =
+      (*printf "start in \nl1:\t%s\nl2:\t%s\nl3:\t%s\nl4:\t%s\n%!"
+        (asc_sets_to_str l1)
+        (asc_sets_to_str l2)
+        (asc_sets_to_str l3)
+        (asc_sets_to_str l4); *)
+      match l1, l2, l3, l4 with
+      | [],     [],     [],     []      -> []
+      | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+      |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+      |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
+      |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+      | (s1, v1) :: t1
+      , (s2, v2) :: t2
+      , (s3, v3) :: t3
+      , (s4, v4) :: t4                  ->
+          let intersect, r1, r2, r3, r4 = Set.must_match_at_beginning4 s1 s2 s3 s4 in
+          let nt1 = insert_if_not_empty r1 v1 t1 in
+          let nt2 = insert_if_not_empty r2 v2 t2 in
+          let nt3 = insert_if_not_empty r3 v3 t3 in
+          let nt4 = insert_if_not_empty r4 v4 t4 in
+          loop intersect (f v1 v2 v3 v4) nt1 nt2 nt3 nt4
+    and loop ps pv l1 l2 l3 l4 =
+      match l1, l2, l3, l4 with
+      | [],     [],     [],     []      -> [ps, pv]
+      | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+      |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+      |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
+      |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+      | (s1, v1) :: t1
+      , (s2, v2) :: t2
+      , (s3, v3) :: t3
+      , (s4, v4) :: t4                  ->
+          let intersect, r1, r2, r3, r4 = Set.must_match_at_beginning4 s1 s2 s3 s4 in
+          let nt1 = insert_if_not_empty r1 v1 t1 in
+          let nt2 = insert_if_not_empty r2 v2 t2 in
+          let nt3 = insert_if_not_empty r3 v3 t3 in
+          let nt4 = insert_if_not_empty r4 v4 t4 in
+          let nv = f v1 v2 v3 v4 in
+          if nv = pv then begin
+            let mgd = Set.merge_separate ps intersect in
+            (*printf "merged %s with %s to get %s\n"
+              (Set.to_string ps) (Set.to_string intersect) (Set.to_string mgd); *)
+            loop mgd pv nt1 nt2 nt3 nt4
+          end else
+            (ps, pv) :: loop intersect nv nt1 nt2 nt3 nt4
+    in
+    match t1, t2, t3, t4 with
+    | (Asc l1), (Asc l2), (Asc l3), (Asc l4) -> Asc (start l1 l2 l3 l4)
+
+  let fold : type o a. (o, a) t -> init:'b -> f:('b -> Interval.t -> a -> 'b) -> 'b =
+    fun l ~init ~f -> match l with
+      | Desc ld -> List.fold_left ld ~init ~f:(fun acc (i, v) -> f acc i v)
+      | Asc la  -> List.fold_left la ~init ~f:(fun acc (l, v) ->
+                    List.fold_left l ~f:(fun acc i -> f acc i v) ~init:acc)
+
+  let map : type o a. (o, a) t -> f:(a -> 'b) -> (o, 'b) t =
+    fun t ~f -> match t with
+      | Desc ld -> Desc (List.map_snd ld ~f)
+      | Asc la -> Asc (List.map_snd la ~f)
+
+  let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
+    fun t ~f -> match t with
+      | Desc ld ->
+          List.iter ld ~f:(fun (s, v) ->
+            Interval.iter s ~f:(fun i -> f i v))
+      | Asc la  ->
+          List.iter la ~f:(fun (l, v) ->
+            List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
+
+end (* Pm2 *)

@@ -22,7 +22,7 @@ the alleles.
 *)
 
 type gapped_bases = Base.t option          (* None -> the allele is in a gap. *)
-type base_emissions = (Pm.ascending, gapped_bases) Pm.t
+type base_emissions = (Pm2.ascending, gapped_bases) Pm2.t
 
 type position_map = (Mas_parser.position * int) list
 
@@ -102,24 +102,24 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 let init_state =
-  Array.map ~f:Pm.first_d
+  Array.map ~f:Pm2.first_d
 
 (* Add an allele's Mas_parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   let add_reference_value start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.add reference_arr.(i) arr.(i)
+      arr.(i) <- Pm2.add reference_arr.(i) arr.(i)
     done
   in
   let add_gap start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.add None arr.(i)
+      arr.(i) <- Pm2.add None arr.(i)
     done
   in
   let add_sequence start s =
     String.iteri s ~f:(fun i c ->
       let j = i + start in
-      arr.(j) <- Pm.add (some (Base.of_char c)) arr.(j))
+      arr.(j) <- Pm2.add (some (Base.of_char c)) arr.(j))
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
@@ -154,21 +154,9 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   | []           -> ia "Empty sequence!"
 
 let pos_to_string pm =
-  Partition_map.Pm.to_string pm
+  Partition_map.Pm2.to_string pm
     (function | None   -> "none"
               | Some c -> sprintf "some %c" (Base.to_char c))
-
-(* let setup () =
-  let a = Alleles.Input.AlignmentFile ("../foreign/IMGTHLA/alignments/A_gen.txt", true) in
-  let mp, merge_map = Alleles.Input.construct a |> unwrap_ok in
-  let ba, pmap = initialize_base_array_and_position_map mp.Mas_parser.ref_elems in
-  let arr = init_state ba in
-  let l al =
-      Option.value_exn (List.Assoc.get al mp.Mas_parser.alt_elems) ~msg:""
-  in
-  mp, merge_map, ba, arr, pmap, l,
-    fun al ->
-      add_alternate_allele pmap al (l al) ba arr *)
 
 (***** Forward Pass ***)
 
@@ -718,7 +706,7 @@ module SingleWorkspace (R : Ring) :
 
 end (* SingleWorkspace *)
 
-type 'a mt = (Pm.ascending, 'a) Pm.t
+type 'a mt = (Pm2.ascending, 'a) Pm2.t
 
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
 module MakeMultipleWorkspace (R : Ring) :
@@ -737,8 +725,8 @@ module MakeMultipleWorkspace (R : Ring) :
   type workspace_opt = int
 
   let generate number_alleles ~ref_length ~read_length =
-    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Pm.place_holder)
-    ; final     = Array.make ref_length Pm.place_holder
+    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Pm2.place_holder)
+    ; final     = Array.make ref_length Pm2.place_holder
     ; emission  = Array.make number_alleles R.zero
     ; read_length
     }
@@ -747,8 +735,8 @@ module MakeMultipleWorkspace (R : Ring) :
     let ref_length     = Array.length ws.final in
     let number_rows    = Array.length ws.forward in
     let number_alleles = Array.length ws.emission in
-    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Pm.place_holder);
-    ws.final   <- Array.make ref_length Pm.place_holder;
+    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Pm2.place_holder);
+    ws.final   <- Array.make ref_length Pm2.place_holder;
     Array.fill ws.emission ~pos:0 ~len:number_alleles R.zero
 
   let save ws =
@@ -966,10 +954,10 @@ module ForwardMultipleGen (R : Ring) = struct
 
   (* Eh... not the best place for it. *)
   let cam_max =
-    Pm.fold ~init:R.zero ~f:(fun m _s v -> R.max m v)
+    Pm2.fold ~init:R.zero ~f:(fun m _s v -> R.max m v)
 
   let cam_max_cell =
-    Pm.fold ~init:R.zero ~f:(fun m _s c -> R.max m c.match_)
+    Pm2.fold ~init:R.zero ~f:(fun m _s c -> R.max m c.match_)
 
   module W = MakeMultipleWorkspace(R)
 
@@ -1007,16 +995,19 @@ module ForwardMultipleGen (R : Ring) = struct
        the same lookup. *)
     let _eq = Fc.cells_close_enough in
     let to_em_set obsp emissions =
-      Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
+      Pm2.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
-    let zero_cell_pm = Pm.init (number_alleles - 1) Fc.zero_cell in
+    let zero_cell_pm = Pm2.init (number_alleles - 1) Fc.zero_cell in
     let start ws obsp base ~k =
       let ems = to_em_set obsp base in
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
-      Pm.merge ems prev_pm r.start
+      let m2 = Pm2.merge ems prev_pm r.start in
+      (*printf "start:k: %d pm_length: %d: %s\n%!" k (Pm2.length m2)
+        (Pm2.to_string m2 (cell_to_string R.to_string)); *)
+      m2
     in
     let fst_col ws obsp emissions ~i =
-      Pm.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k:0)
+      Pm2.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k:0)
         r.fst_col
     in
     let middle ws obsp emissions ~i ~k =
@@ -1025,18 +1016,18 @@ module ForwardMultipleGen (R : Ring) = struct
       let deletes = W.get ws ~i       ~k:(k-1) in
       let ems = to_em_set obsp emissions in
       (*printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d \n%!"
-        i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
-            (Pm.length deletes); *)
-      Pm.merge4 ems matches inserts deletes
+        i k (Pm2.length ems) (Pm2.length matches) (Pm2.length inserts)
+            (Pm2.length deletes); *)
+      Pm2.merge4 ems matches inserts deletes
         (fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
     in
     let end_ ws k =
-      Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_
+      Pm2.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_
     in
     let update_emission_from_cam em l =
       let open R in
-      Pm.iter_set l ~f:(fun i v -> em.(i) <- em.(i) + v)
+      Pm2.iter_set l ~f:(fun i v -> em.(i) <- em.(i) + v)
     in
     let final_e ws =
       let em = Array.make number_alleles R.zero in
@@ -1472,9 +1463,9 @@ let construct input selectors =
       List.iter nalt_elems ~f:(fun (allele, allele_seq) ->
         add_alternate_allele pmap allele allele_seq
           base_arr state_a);
-      let emissions_a = Array.map Pm.ascending state_a in
+      let emissions_a = Array.map Pm2.ascending state_a in
       (*Array.iteri emissions_a ~f:(fun i p ->
-        printf "emissions: %d: %d %s\n%!" i (Pm.length p) (Pm.to_string p (function | None -> "none" | Some c -> sprintf "%c" (Base.to_char c))));
+        printf "emissions: %d: %d %s\n%!" i (Pm2.length p) (Pm2.to_string p (function | None -> "none" | Some c -> sprintf "%c" (Base.to_char c))));
       failwith "no"; *)
       let alleles =
         List.map nalt_elems ~f:(fun (s, _) ->
@@ -1546,7 +1537,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   | Some allele_index ->
       let allele_a =
         Array.fold_left emissions_a ~init:[] ~f:(fun acc pm ->
-          match Pm.get pm allele_index with
+          match Pm2.get pm allele_index with
           | None   -> acc            (* Gap *)
           | Some b -> b :: acc)
         |> List.rev
