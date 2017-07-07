@@ -260,8 +260,8 @@ module Interval = struct
     | None,          None          -> None
     | Some _,        None          -> p1
     | None,          Some _        -> p2
-    | Some (s1, e1), Some (s2, e2) -> assert (e1 + 1 = s2);
-                                      Some (s1, e2)
+    | Some (s1, e1), Some (s2, e2) -> Some (s1, e2)                 (* assert (e1 + 1 = s2); *)
+
   let split_inter_diff3 i1 i2 i3 =
     let b1, b2, i, a1, a2 = split_inter_diff i1 i2 in
     match i with
@@ -297,7 +297,7 @@ module Interval = struct
       let s, _e = p in
       function
         | None         -> Some p
-        | Some (_s, e) -> (*assert (_e + 1 = _s);*) Some (s, e)
+        | Some (_s, e) -> Some (s, e)                               (* assert (_e + 1 = _s); *)
     in
     let i, m1, m2 =
       match inter_diff i1 i2 with
@@ -370,7 +370,6 @@ module Set = struct
 
   (* The elements in a set are ordered.  *)
   let split_if_in ii l =
-    assert (invariant l);
     let open Interval in
     let before_r = ref None in
     let rec loop = function
@@ -595,15 +594,15 @@ let invariant : type o a. (o, a) t -> bool =
     | Desc _ -> true                               (* being a bit lazy atm. *)
 
 (* Empty Constructors *)
-let empty = Desc []
-let place_holder = Asc []
+let empty_d = Desc []
+let empty_a = Asc []
 
 (* Initializers *)
-let first_d v =
+let init_first_d v =
   let i = Interval.make 0 0 in
   Desc [i, v]
 
-let init size v =
+let init_all_a ~size v =
   let i = Interval.make 0 size in
   Asc [Set.of_interval i, v]
 
@@ -622,13 +621,15 @@ let to_string: type o a. (o, a) t -> (a -> string) -> string =
     | Asc la -> asc_to_string la to_s
     | Desc ld -> desc_to_string ld to_s
 
-let size_a = function
-  | Asc l ->
-      List.fold_left l ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
+let size_a = List.fold_left ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
 
 let size_d = function
-  | Desc []            -> 0
-  | Desc ((i, _) :: _) -> Interval.end_ i + 1
+  | []            -> 0
+  | ((i, _) :: _) -> Interval.end_ i + 1
+
+let size : type o a. (o, a) t -> int = function
+  | Asc l  -> size_a l
+  | Desc l -> size_d l
 
 let length : type o a. (o, a) t -> int = function
   | Asc l  -> List.length l
@@ -652,7 +653,7 @@ let ascending = function
       |> List.map ~f:(fun (v, s) -> Set.first_pos s, s, v)
       |> List.sort ~cmp:(fun (p1, _, _) (p2, _, _) -> compare p1 p2)
       |> List.map ~f:(fun (_, s, v) -> (s,v))
-      |> fun l -> assert (ascending_invariant l); Asc l
+      |> fun l -> Asc l                               (* assert (ascending_invariant l); *)
 
 let descending = function
   | Asc l ->
@@ -725,8 +726,6 @@ let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
 let merge t1 t2 f =
-  (*assert (invariant t1);
-  assert (invariant t2); *)
   let rec start l1 l2 = match l1, l2 with
     | [],     []      -> []
     | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
@@ -757,10 +756,6 @@ let merge t1 t2 f =
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
 
 let merge4 t1 t2 t3 t4 f =
-  (*assert (invariant t1);
-  assert (invariant t2);
-  assert (invariant t3);
-  assert (invariant t4); *)
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
     | [],     [],     [],     []      -> []

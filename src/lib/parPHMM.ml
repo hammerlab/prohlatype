@@ -102,7 +102,7 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 let init_state =
-  Array.map ~f:Pm.first_d
+  Array.map ~f:Pm.init_first_d
 
 (* Add an allele's Mas_parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
@@ -725,8 +725,8 @@ module MakeMultipleWorkspace (R : Ring) :
   type workspace_opt = int
 
   let generate number_alleles ~ref_length ~read_length =
-    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Pm.place_holder)
-    ; final     = Array.make ref_length Pm.place_holder
+    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Pm.empty_a)
+    ; final     = Array.make ref_length Pm.empty_a
     ; emission  = Array.make number_alleles R.zero
     ; read_length
     }
@@ -735,8 +735,8 @@ module MakeMultipleWorkspace (R : Ring) :
     let ref_length     = Array.length ws.final in
     let number_rows    = Array.length ws.forward in
     let number_alleles = Array.length ws.emission in
-    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Pm.place_holder);
-    ws.final   <- Array.make ref_length Pm.place_holder;
+    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Pm.empty_a);
+    ws.final   <- Array.make ref_length Pm.empty_a;
     Array.fill ws.emission ~pos:0 ~len:number_alleles R.zero
 
   let save ws =
@@ -997,7 +997,7 @@ module ForwardMultipleGen (R : Ring) = struct
     let to_em_set obsp emissions =
       Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
-    let zero_cell_pm = Pm.init (number_alleles - 1) Fc.zero_cell in
+    let zero_cell_pm = Pm.init_all_a ~size:(number_alleles - 1) Fc.zero_cell in
     let start ws obsp base ~k =
       let ems = to_em_set obsp base in
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
@@ -1384,7 +1384,7 @@ module ForwardMultipleGen (R : Ring) = struct
       let banded_middle first_banded_column =
         let rec loop bands i =
           let new_bands_to_flatten, _last_em_map, _last_col_values =
-            List.fold_left bands ~init:([], PosMap.empty, Cm.empty)
+            List.fold_left bands ~init:([], PosMap.empty, Cm.empty_d)
               ~f:(fun (acc, em_map, col_values) b ->
                     let nb, nem_map =
                       fill_next emissions_a increment_a c recurrences em_map ws (a i) i b col_values
