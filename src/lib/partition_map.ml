@@ -725,6 +725,18 @@ let insert_if_not_empty s v l =
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
+let merge_or_add_to_end eq s v l =
+  let rec loop = function
+    | []     -> [s, v]
+    | h :: t ->
+        let s0, v0 = h in
+        if eq v v0 then
+          (Set.merge_separate s0 s, v0) :: t
+        else
+          h :: loop t
+  in
+  loop l
+
 let merge t1 t2 f =
   let rec start l1 l2 = match l1, l2 with
     | [],     []      -> []
@@ -737,7 +749,7 @@ let merge t1 t2 f =
         let nt2 = insert_if_not_empty r2 v2 t2 in
         loop intersect (f v1 v2) nt1 nt2
   and loop ps pv l1 l2 = match l1, l2 with
-    | [],     []      -> [ps, pv]
+    | [],     []      -> [ps, pv] (*acc *)
     | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
     |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
     | (s1, v1) :: t1
@@ -746,6 +758,18 @@ let merge t1 t2 f =
         let nt1 = insert_if_not_empty r1 v1 t1 in
         let nt2 = insert_if_not_empty r2 v2 t2 in
         let nv = f v1 v2 in
+        (* It is a bit surprising but in our use case: ~3k ref, 100 bp reads:
+           1. Using a smarter {eq} ala merge4, or
+           2. NOT performing this simple equality check
+              (ie. comparing 3 floats is too much) and
+           3. Making this function tail-rec and using merge_or_add_to_end to
+              merge {eq}ual values or add them at the end and avoiding the
+              List.rev at the end:
+           Do NOT make the total running time faster. None of the above either
+           reduce the branching sufficiently to merit the extra work. This kind
+           of make sense since you wouldn't expect this at the edge of the
+           PHMM forward-matrix. But still a bit disappointing that we can't
+           have uniformity. *)
         if nv = pv then begin
           let mgd = Set.merge_separate ps intersect in
           loop mgd pv nt1 nt2
@@ -755,7 +779,10 @@ let merge t1 t2 f =
   match t1, t2 with
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
 
-let merge4 t1 t2 t3 t4 f =
+(* This method is tail recursive, and we pay the cost of inserting an element,
+   at the end each time but hopefully, merging, due to {eq}, instead into the
+   accumulator. *)
+let merge4 ~eq t1 t2 t3 t4 f =
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
     | [],     [],     [],     []      -> []
@@ -772,10 +799,11 @@ let merge4 t1 t2 t3 t4 f =
         let nt2 = insert_if_not_empty r2 v2 t2 in
         let nt3 = insert_if_not_empty r3 v3 t3 in
         let nt4 = insert_if_not_empty r4 v4 t4 in
-        loop intersect (f v1 v2 v3 v4) nt1 nt2 nt3 nt4
-  and loop ps pv l1 l2 l3 l4 =
+        let acc = [intersect, (f v1 v2 v3 v4)] in
+        loop acc nt1 nt2 nt3 nt4
+  and loop acc l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
-    | [],     [],     [],     []      -> [ps, pv]
+    | [],     [],     [],     []      -> acc     (* We insert at the end, thereby preserving order *)
     | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
     |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
     |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
@@ -790,11 +818,15 @@ let merge4 t1 t2 t3 t4 f =
         let nt3 = insert_if_not_empty r3 v3 t3 in
         let nt4 = insert_if_not_empty r4 v4 t4 in
         let nv = f v1 v2 v3 v4 in
+        let nacc = merge_or_add_to_end eq intersect nv acc in
+        loop nacc nt1 nt2 nt3 nt4
+        (*
         if nv = pv then begin
           let mgd = Set.merge_separate ps intersect in
-          loop mgd pv nt1 nt2 nt3 nt4
+          loop acc mgd pv nt1 nt2 nt3 nt4
         end else
-          (ps, pv) :: loop intersect nv nt1 nt2 nt3 nt4
+          let nacc = (ps, pv) :: acc in
+          loop nacc intersect nv nt1 nt2 nt3 nt4 *)
   in
   match t1, t2, t3, t4 with
   | (Asc l1), (Asc l2), (Asc l3), (Asc l4) -> Asc (start l1 l2 l3 l4)

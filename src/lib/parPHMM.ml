@@ -993,7 +993,6 @@ module ForwardMultipleGen (R : Ring) = struct
        precompute or memoize this calculation. The # of base errors isn't
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
-    let _eq = Fc.cells_close_enough in
     let to_em_set obsp emissions =
       Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
@@ -1010,6 +1009,7 @@ module ForwardMultipleGen (R : Ring) = struct
       Pm.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k:0)
         r.fst_col
     in
+    let eq = Fc.cells_close_enough in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
       let inserts = W.get ws ~i:(i-1) ~k       in
@@ -1018,7 +1018,7 @@ module ForwardMultipleGen (R : Ring) = struct
       (*printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d \n%!"
         i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
             (Pm.length deletes); *)
-      Pm.merge4 ems matches inserts deletes
+      Pm.merge4 ~eq ems matches inserts deletes
         (fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
     in

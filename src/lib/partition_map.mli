@@ -37,14 +37,15 @@ val add : 'a -> (descending, 'a) t -> (descending, 'a) t
    @raise {Not_found} if [i] is outside the range [0, (size t)). *)
 val get : (ascending, 'a) t -> int -> 'a
 
-(* Merge partition maps. Technically these are {map}'s but they are purposefully
+(* Merge partition maps. Technically these are "map"'s but they are purposefully
   named merge since they're only implemented for {ascending} partition maps. *)
-val merge : (ascending, 'a) t
+val merge :(ascending, 'a) t
           -> (ascending, 'b) t
           -> ('a -> 'b -> 'c)
           -> (ascending, 'c) t
 
-val merge4 : (ascending, 'a) t
+val merge4 : eq:('e -> 'e -> bool)
+            -> (ascending, 'a) t
             -> (ascending, 'b) t
             -> (ascending, 'c) t
             -> (ascending, 'd) t
