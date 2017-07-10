@@ -396,6 +396,7 @@ module Set = struct
     let rest = loop l in
     !before_r, rest
 
+  (* Zip together two non-intersecting (separate) sets. *)
   let merge_separate =
     let open Interval in
     let rec start l1 l2 = match l1, l2 with
@@ -606,6 +607,7 @@ let init_all_a ~size v =
   let i = Interval.make 0 size in
   Asc [Set.of_interval i, v]
 
+(* Properties *)
 let asc_to_string la to_s =
   List.map la ~f:(fun (s, v) ->
     sprintf "[%s]:%s" (Set.to_string s) (to_s v))
@@ -643,7 +645,7 @@ let assoc_remove_and_get el list =
   in
   loop [] list
 
-(* TODO: Expose the equality method.*)
+(* Conversion *)
 let ascending = function
   | Desc l ->
       List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
@@ -662,6 +664,7 @@ let descending = function
       |> List.sort ~cmp:(fun (i1, _) (i2, _) -> Interval.compare i2 i1)
       |> fun l -> Desc l
 
+(* Getters/Setters *)
 let add v = function
   | Desc []                         -> Desc ((Interval.make 0 0, v) :: [])
   | Desc ((s, ov) :: t) when v = ov -> Desc ((Interval.extend_one s, v) :: t)
@@ -737,6 +740,7 @@ let merge_or_add_to_end eq s v l =
   in
   loop l
 
+(* The reason for all this logic. *)
 let merge t1 t2 f =
   let rec start l1 l2 = match l1, l2 with
     | [],     []      -> []
@@ -768,8 +772,10 @@ let merge t1 t2 f =
            Do NOT make the total running time faster. None of the above either
            reduce the branching sufficiently to merit the extra work. This kind
            of make sense since you wouldn't expect this at the edge of the
-           PHMM forward-matrix. But still a bit disappointing that we can't
-           have uniformity. *)
+           PHMM forward-matrix, where [merge] is mostly called. But still a bit
+           disappointing that we can't have uniformity in these methods; or
+           phrased another way that this logic isn't exposed in more
+           informative types. *)
         if nv = pv then begin
           let mgd = Set.merge_separate ps intersect in
           loop mgd pv nt1 nt2
@@ -781,7 +787,8 @@ let merge t1 t2 f =
 
 (* This method is tail recursive, and we pay the cost of inserting an element,
    at the end each time but hopefully, merging, due to {eq}, instead into the
-   accumulator. *)
+   accumulator will effectively constrain the size of the resulting accumulator
+   such that the cost is amortized. *)
 let merge4 ~eq t1 t2 t3 t4 f =
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
@@ -820,13 +827,6 @@ let merge4 ~eq t1 t2 t3 t4 f =
         let nv = f v1 v2 v3 v4 in
         let nacc = merge_or_add_to_end eq intersect nv acc in
         loop nacc nt1 nt2 nt3 nt4
-        (*
-        if nv = pv then begin
-          let mgd = Set.merge_separate ps intersect in
-          loop acc mgd pv nt1 nt2 nt3 nt4
-        end else
-          let nacc = (ps, pv) :: acc in
-          loop nacc intersect nv nt1 nt2 nt3 nt4 *)
   in
   match t1, t2, t3, t4 with
   | (Asc l1), (Asc l2), (Asc l3), (Asc l4) -> Asc (start l1 l2 l3 l4)
