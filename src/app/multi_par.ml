@@ -61,7 +61,7 @@ type 'a g =
   ; mutable s : 'a
   }
 
-let proc_g = function
+let apply = function
   | `Mapper g -> begin fun fqi ->
                   try
                     g.s <- g.f g.s fqi;
@@ -156,9 +156,9 @@ let across_fastq ?insert_p ?max_number_mismatches
                   to_set ?insert_p ~past_threshold_filter
                     ?max_number_mismatches ?band mode rp read_size
                 in
-                `Set (proc_g g fqi)
+                `Set (apply g fqi)
             | `Set g ->
-                `Set (proc_g g fqi))
+                `Set (apply g fqi))
     |> fin
   with PPE e ->
     eprintf "%s" e
