@@ -354,7 +354,7 @@ let join_filter f1 f2 =
 
 (** What are the values and equations that determine how probabilities are
     calculated in the forward pass. *)
-module ForwardCalcs  (R : Ring) = struct
+module ForwardCalcs (R : Ring) = struct
 
   let mismatch_p =
     R.times_one_third
@@ -384,6 +384,9 @@ module ForwardCalcs  (R : Ring) = struct
 
   let debug_ref = ref false
 
+  let max3 m i d =
+    R.max (R.max m i) d
+
   let g ?(insert_p=Phmm.default_insert_probability) tm read_length =
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
@@ -405,73 +408,122 @@ module ForwardCalcs  (R : Ring) = struct
 
     let insert_p = constant insert_p in
     let start_i = insert_p * t_s_i in
-    { start   = begin fun emission_p prev_c ->
-                  let r =
-                    if R.is_gap emission_p then
-                      prev_c
-                    else
-                      { match_ = emission_p * t_s_m
-                      ; insert = start_i
-                      ; delete = zero
-                      }
-                  in
-                  let () =
-                    if !debug_ref then
-                      printf "--------start: emission_p:%s\t insert_p%s:\n\tafter: %s\n"
-                        (R.to_string emission_p)
-                        (R.to_string insert_p)
-                        (cell_to_string R.to_string r)
-                  in
-                  r
-                end
-    ; fst_col = begin fun emission_p insert_c ->
-                  if R.is_gap emission_p then
-                    (* This is a weird case, for an allele there is a gap, in the first
-                      position. We'll 'fail' by propogating nan. *)
-                    { match_ = R.gap
-                    ; insert = start_i
-                    ; delete = R.gap
-                    }
-                  else
-                    { match_ = emission_p * ( t_m_m * zero
-                                            + t_i_m * zero
-                                            + t_d_m * zero)
-                    ; insert = insert_p   * ( t_m_i * insert_c.match_
-                                            + t_i_i * insert_c.insert)
-                    ; delete = (* one *  *) ( t_m_d * zero
-                                            + t_d_d * zero)
-                    }
-                end
-    ; middle  = begin fun emission_p ~match_c ~insert_c ~delete_c ->
-                  let r =
-                    if R.is_gap emission_p then
-                      delete_c
-                    else
-                      { match_ = emission_p * ( t_m_m * match_c.match_
-                                              + t_i_m * match_c.insert
-                                              + t_d_m * match_c.delete)
-                      ; insert = insert_p   * ( t_m_i * insert_c.match_
-                                              + t_i_i * insert_c.insert)
-                      ; delete = (* one *)    ( t_m_d * delete_c.match_
-                                              + t_d_d * delete_c.delete)
-                      }
-                  in
-                  let () =
-                    if !debug_ref then
-                      printf "--------middle: emission:%s \
-                            \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
-                        (R.to_string emission_p)
-                        (cell_to_string R.to_string match_c)
-                        (cell_to_string R.to_string insert_c)
-                        (cell_to_string R.to_string delete_c)
-                        (cell_to_string R.to_string r)
-                  in
-                  r
-                 end
-   ; end_    = begin fun cell ->
-                  cell.match_ * t_m_s + cell.insert * t_i_s
-               end
-   }
+    let start emission_p prev_c =
+      let r =
+        if R.is_gap emission_p then
+          prev_c
+        else
+          { match_ = emission_p * t_s_m
+          ; insert = start_i
+          ; delete = zero
+          }
+      in
+      let () =
+        if !debug_ref then
+          printf "--------start: emission_p:%s\t insert_p%s:\n\tafter: %s\n"
+            (R.to_string emission_p)
+            (R.to_string insert_p)
+            (cell_to_string R.to_string r)
+      in
+      r
+    in
+    let f = (* forward *)
+      let fst_col emission_p insert_c =
+        if R.is_gap emission_p then
+          (* This is a weird case, for an allele there is a gap, in the first
+              position. We'll 'fail' by propogating nan. *)
+          { match_ = R.gap
+          ; insert = start_i
+          ; delete = R.gap
+          }
+        else
+          { match_ = emission_p * ( t_m_m * zero
+                                  + t_i_m * zero
+                                  + t_d_m * zero)
+          ; insert = insert_p   * ( t_m_i * insert_c.match_
+                                  + t_i_i * insert_c.insert)
+          ; delete = (* one *  *) ( t_m_d * zero
+                                  + t_d_d * zero)
+          }
+      in
+      let middle emission_p ~match_c ~insert_c ~delete_c =
+        let r =
+          if R.is_gap emission_p then
+            delete_c
+          else
+            { match_ = emission_p * ( t_m_m * match_c.match_
+                                    + t_i_m * match_c.insert
+                                    + t_d_m * match_c.delete)
+            ; insert = insert_p   * ( t_m_i * insert_c.match_
+                                    + t_i_i * insert_c.insert)
+            ; delete = (* one *)    ( t_m_d * delete_c.match_
+                                    + t_d_d * delete_c.delete)
+            }
+        in
+        let () =
+          if !debug_ref then
+            printf "--------middle: emission:%s \
+                  \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+              (R.to_string emission_p)
+              (cell_to_string R.to_string match_c)
+              (cell_to_string R.to_string insert_c)
+              (cell_to_string R.to_string delete_c)
+              (cell_to_string R.to_string r)
+        in
+        r
+      in
+      let end_ cell = cell.match_ * t_m_s + cell.insert * t_i_s in
+      { start; fst_col; middle; end_ }
+    in
+    let v = (* viterbi *)
+      let fst_col emission_p insert_c =
+        if R.is_gap emission_p then
+          (* This is a weird case, for an allele there is a gap, in the first
+            position. We'll 'fail' by propogating nan. *)
+          { match_ = R.gap
+          ; insert = start_i
+          ; delete = R.gap
+          }
+        else
+          { match_ = emission_p * (max3 (t_m_m * zero)
+                                        (t_i_m * zero)
+                                        (t_d_m * zero))
+          ; insert = insert_p   * (R.max (t_m_i * insert_c.match_)
+                                         (t_i_i * insert_c.insert))
+          ; delete = (* one *  *) (R.max (t_m_d * zero)
+                                         (t_d_d * zero))
+          }
+      in
+      let middle emission_p ~match_c ~insert_c ~delete_c =
+        let r =
+          if R.is_gap emission_p then
+            delete_c
+          else
+            { match_ = emission_p * (max3 (t_m_m * match_c.match_)
+                                          (t_i_m * match_c.insert)
+                                          (t_d_m * match_c.delete))
+            ; insert = insert_p   * (R.max (t_m_i * insert_c.match_)
+                                           (t_i_i * insert_c.insert))
+            ; delete = (* one *)    (R.max (t_m_d * delete_c.match_)
+                                           (t_d_d * delete_c.delete))
+            }
+        in
+        let () =
+          if !debug_ref then
+            printf "--------middle: emission:%s \
+                  \n\tmatch_: %s\n\tinsert: %s\n\tdelete: %s\n\tafter : %s\n"
+              (R.to_string emission_p)
+              (cell_to_string R.to_string match_c)
+              (cell_to_string R.to_string insert_c)
+              (cell_to_string R.to_string delete_c)
+              (cell_to_string R.to_string r)
+        in
+        r
+      in
+      let end_ cell = R.max (cell.match_ * t_m_s) (cell.insert * t_i_s) in
+      { start; fst_col; middle; end_ }
+    in
+    f, v
 
   let zero_cell =
     { match_ = R.zero
@@ -483,6 +535,14 @@ module ForwardCalcs  (R : Ring) = struct
     R.close_enough c1.match_ c2.match_
     && R.close_enough c1.insert c2.insert
     && R.close_enough c1.delete c2.delete
+
+end (* ForwardCalcs *)
+
+module ForwardFilters  (R : Ring) = struct
+
+  module Fc = ForwardCalcs(R)
+
+  let debug_ref = ref false
 
   (* Filters. TODO: These deserve their own module, functor, that takes R. *)
   let past_threshold_filter threshold of_entry =
@@ -512,9 +572,9 @@ module ForwardCalcs  (R : Ring) = struct
      error are at the front of the list. In this model/calculation there are
      only transitions between match states, so we don't need to scale by
      transition probabilities such as t_m_m. *)
-  let path_prob number_mismatches errors =
+  let ungapped_path_prob number_mismatches errors =
     let to_emission_p n e =
-      if n < number_mismatches then mismatch_p e else match_p e
+      if n < number_mismatches then Fc.mismatch_p e else Fc.match_p e
     in
     let rec loop n p l =
       match l with
@@ -536,7 +596,7 @@ module ForwardCalcs  (R : Ring) = struct
                   e :: (insert error t)
 
   let match_filter ~number_mismatches of_entry =
-    let path_prob = path_prob number_mismatches in
+    let path_prob = ungapped_path_prob number_mismatches in
     (* Called at the start of each base *)
     let base (errors, max_value) (_base, base_error) =
       let threshold = path_prob errors in
@@ -558,7 +618,7 @@ module ForwardCalcs  (R : Ring) = struct
     ; entry
     }
 
-end (* ForwardCalcs *)
+end (* ForwardFilters *)
 
 (* Layout logic:
    The dynamic array consists of values for each base in the read in a row
@@ -709,6 +769,81 @@ module SingleWorkspace (R : Ring) :
 
 end (* SingleWorkspace *)
 
+type path =
+  | M of char * Base. t   (* Store the read pair, that _may_ have 'N', and Base *)
+  | I of int * char                       (* index into read and read base pair *)
+  | D of int * char * Base.t
+
+let path_to_string = function
+  | M (b, r)    ->  sprintf "M%c%c" b (Base.to_char r)
+  | I (p, b)    ->  sprintf "I%d%c" p b
+  | D (p, b, r) ->  sprintf "D%d%c%c" p b (Base.to_char r)
+
+let path_list_to_strings =
+  let to_pair = function
+    | M (b, r)    -> (b, Base.to_char r)
+    | I (_, b)    -> (b, '_')
+    | D (_, b, r) -> (b, Base.to_char r)
+  in
+  let rec loop refa reada = function
+    | []      -> List.rev refa |> String.of_character_list
+                 , List.rev reada |> String.of_character_list
+    | p :: tl -> let a, b = to_pair p in
+                 loop (a :: refa) (b :: reada) tl
+  in
+  loop [] []
+
+module SingleViterbiWorkspace (R : Ring) :
+  (Workspace_intf with type entry = R.t cell * path list
+                   and type final_entry = R.t * path list
+                   and type final_emission = R.t * path list
+                   and type workspace_opt = unit) = struct
+
+  module Fc = ForwardCalcs(R)
+
+  type entry = R.t cell * path list
+  type final_entry = R.t * path list
+  type final_emission = R.t * path list
+
+  include CommonWorkspace
+  type t = (entry, final_entry, final_emission) w
+
+  type workspace_opt = unit
+
+  let empty_entry = Fc.zero_cell, []
+  let empty_final_entry = R.zero, []
+  let empty_final_emission = R.zero, []
+
+  let generate () ~ref_length ~read_length =
+    { forward  = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length empty_entry)
+    ; final    = Array.make ref_length empty_final_entry
+    ; emission = empty_final_emission
+    ; read_length
+    }
+
+  let clear ws =
+    let ref_length  = Array.length ws.final in
+    let number_rows = Array.length ws.forward in
+    ws.forward  <- Array.init number_rows ~f:(fun _ -> Array.make ref_length empty_entry);
+    ws.final    <- Array.make ref_length empty_final_entry;
+    ws.emission <- empty_final_emission
+
+  let save ws =
+    let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
+    let oc = open_out fname in
+    Marshal.to_channel oc ws [];
+    close_out oc;
+    printf "Saved workspace to %s\n" fname
+
+  let load fname =
+    let ic = open_in fname in
+    let ws : t = Marshal.from_channel ic in
+    close_in ic;
+    ws
+
+end (* SingleViterbiWorkspace *)
+
+
 type 'a mt = (Pm.ascending, 'a) Pm.t
 
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
@@ -855,12 +990,16 @@ let completed = function
 module ForwardSingleGen (R: Ring) = struct
 
   module W = SingleWorkspace(R)
+  module V = SingleViterbiWorkspace(R)
   module Fc = ForwardCalcs(R)
+  module Ff = ForwardFilters(R)
+
+  let debug_ref = ref false
 
   type base = Base.t
 
   let recurrences ?insert_p tm read_length =
-    let r = Fc.g ?insert_p tm read_length in
+    let r, _ = Fc.g ?insert_p tm read_length in
     let start ws obsp base ~k =
       let prev_c = if k = 0 then Fc.zero_cell else (W.get ws ~i:0 ~k:(k-1)) in
       r.start (Fc.to_match_prob obsp base) prev_c
@@ -903,13 +1042,93 @@ module ForwardSingleGen (R: Ring) = struct
     | Some number_mismatches ->
         begin fun ~read ->
           let of_entry c = c.match_ in
-          let filter = Fc.match_filter ~number_mismatches of_entry in
+          let filter = Ff.match_filter ~number_mismatches of_entry in
           try
             Fp.full_f ~filter ws recurrences ~reference ~read;
             Completed ()
           with PastThreshold msg ->
             Filtered msg
         end
+
+  (* Viterbi *)
+  let viterbi_recurrences ?insert_p tm read_length =
+    let _, r = Fc.g ?insert_p tm read_length in
+    let cell_to_path i b r c =
+      if c.match_ >= c.insert then begin
+        if c.match_ >= c.delete then
+          M (b, r)
+        else
+          D (i, b, r)
+      end else (* c.match_ < c.insert *) begin
+        if c.insert >= c.delete then
+          I (i,b)
+        else
+          D (i,b, r)
+      end
+    in
+    let start ws obsp base ~k =
+      let prev_c =
+        if k = 0 then
+          Fc.zero_cell
+        else
+          fst (V.get ws ~i:0 ~k:(k-1)) (* Ignore the path of the previous cell;
+                                          not an actual transitin. *)
+      in
+      let nc = r.start (Fc.to_match_prob obsp base) prev_c in
+      nc, (cell_to_path 0 (fst obsp) base nc :: [])
+    in
+    let fst_col ws obsp base ~i =
+      let pc, pl = V.get ws ~i:(i-1) ~k:0 in
+      let nc = r.fst_col (Fc.to_match_prob obsp base) pc in
+      nc, (cell_to_path i (fst obsp) base nc :: pl)
+    in
+    let middle ws obsp base ~i ~k =
+      let emp = Fc.to_match_prob obsp base in
+      let ks = k-1 in
+      let insert_c, ilst = V.get ws ~i:(i-1) ~k in
+      let match_c, mlst = V.get ws ~i:(i-1) ~k:ks in
+      let delete_c, dlst = V.get ws ~i ~k:ks in
+      let nc = r.middle emp ~insert_c ~delete_c ~match_c in
+      let pt = cell_to_path i (fst obsp) base nc in
+      if !debug_ref then
+        printf "at i: %d k: %d nc: %s pt: %s (%d,%d,%d)\n"
+          i k (cell_to_string R.to_string nc)
+            (path_to_string pt)
+            (List.length mlst)
+            (List.length ilst)
+            (List.length dlst);
+      let pl =
+        match pt with         (* Don't track _all_ paths, choose one here *)
+        | M _ -> pt :: mlst
+        | I _ -> pt :: ilst
+        | D _ -> pt :: dlst
+      in
+      nc, pl
+    in
+    let end_ ws k =
+      let en, lst = V.get ws ~i:(read_length-1) ~k in
+      r.end_ en, lst    (* The list contains best because we chose at middle. *)
+    in
+    let final_e ws =
+      let open R in
+      V.fold_over_final ws ~init:(zero, [])
+        ~f:(fun ((be, _) as b) ((fe, _) as e)->
+              if fe > be then e else b)
+    in
+    { start ; fst_col ; middle ; end_ ; final_e }
+
+  module Fpv = ForwardPass(V)
+
+  let fullv ?insert_p ?transition_ref_length ~read_length ws allele_a =
+    let tm =
+      let ref_length = Option.value transition_ref_length
+        ~default:(Array.length allele_a)
+      in
+      Phmm.TransitionMatrix.init ~ref_length read_length in
+    let recurrences = viterbi_recurrences ?insert_p tm read_length in
+    let reference k = allele_a.(k) in
+    fun ~read ->
+      Fpv.full ws recurrences ~reference ~read
 
 end (* ForwardSingleGen *)
 
@@ -988,9 +1207,10 @@ module ForwardMultipleGen (R : Ring) = struct
     Array.make len R.one
 
   module Fc = ForwardCalcs(R)
+  module Ff = ForwardFilters(R)
 
   let recurrences ?insert_p tm read_length number_alleles =
-    let r = Fc.g ?insert_p tm read_length in
+    let r, _ = Fc.g ?insert_p tm read_length in
 
    (* TODO: I could imagine some scenario's where it makes sense to cache,
        precompute or memoize this calculation. The # of base errors isn't
@@ -1580,6 +1800,39 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       ; maximum_match
       }
 
+let setup_single_allele_viterbi_pass ?insert_p t read_length ~allele =
+  let { emissions_a; alleles; _ } = t in
+  (* Recover allele's base sequence, aka, emission. *)
+  match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
+  | None              ->
+      invalid_argf "%s not found among the list of alleles!" allele
+  | Some allele_index ->
+      let allele_a =
+        Array.fold_left emissions_a ~init:[] ~f:(fun acc pm ->
+          match Pm.get pm allele_index with
+          | None   -> acc            (* Gap *)
+          | Some b -> b :: acc)
+        |> List.rev
+        |> Array.of_list
+      in
+      let ref_length = Array.length allele_a in
+      let ws = ForwardSLogSpace.V.generate () ~ref_length ~read_length in
+      let transition_ref_length = Array.length emissions_a in
+      let pass =
+        ForwardSLogSpace.fullv ?insert_p ~transition_ref_length ~read_length
+          ws allele_a
+      in
+      fun rd rd_errors ->
+        pass (access true rd rd_errors);
+        let reg_emission, reg_path = ForwardSLogSpace.V.get_emission ws in
+        pass (access false rd rd_errors);
+        let comp_emission, comp_path = ForwardSLogSpace.V.get_emission ws in
+        if reg_emission >= comp_emission then
+          true, reg_emission, List.rev reg_path
+        else
+          false, comp_emission, List.rev comp_path
+
+
 (* Return
   1. a function to process one read
   2. the workspace that it uses
@@ -1636,16 +1889,16 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           unfiltered ()
       | None,                   Some threshold  ->
           let of_entry = F.cam_max_cell in
-          let filter = F.Fc.past_threshold_filter threshold of_entry in
+          let filter = F.Ff.past_threshold_filter threshold of_entry in
           filtered ~filter
       | Some number_mismatches, None            ->
           let of_entry = F.cam_max_cell in
-          let filter = F.Fc.match_filter ~number_mismatches of_entry in
+          let filter = F.Ff.match_filter ~number_mismatches of_entry in
           filtered ~filter
       | Some number_mismatches, Some threshold  ->
           let of_entry = F.cam_max_cell in
-          let filter1 = F.Fc.past_threshold_filter threshold of_entry in
-          let filter2 = F.Fc.match_filter ~number_mismatches of_entry in
+          let filter1 = F.Ff.past_threshold_filter threshold of_entry in
+          let filter2 = F.Ff.match_filter ~number_mismatches of_entry in
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
