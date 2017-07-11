@@ -28,10 +28,12 @@ let to_correct_map data =
         let l = try Smap.find k smap with Not_found -> [] in
        Smap.add k ((gene, nc) :: l) smap)
 
+let tab_character = '\t'
+
 let load_prohlatype fname =
-  let separator = '\t' in
+  let separator = tab_character in
   let sep = sprintf "%c" separator in
-  Csv.load ~separator:'\t' fname
+  Csv.load ~separator fname
   |> List.filter_map ~f:(function
     | a :: r -> begin match Nomenclature.parse a with
                 | Ok (gene, res) -> Some (gene, (res, r))
@@ -164,3 +166,123 @@ let load_times ~dir ~fname_to_key =
 let user_times =
   List.map ~f:(fun (sample_name, lst) ->
     sample_name,  Scanf.sscanf (List.nth_exn lst 1) "user\t%dm%fs" (fun m s -> (float m *. 60. +. s))) ;;
+
+(*** Parsing mapped files *)
+let key_to_gene = function
+  | "AF_A_gen_true" -> "A"
+  | "AF_B_gen_true" -> "B"
+  | "AF_C_gen_true" -> "C"
+  | s               -> invalid_argf "unrecognized gene: %s" s
+
+type map_res =
+  { alleles   : (string * float) list
+  ; positions : (int * float) list
+  }
+
+let split_on_semicolon s =
+  String.split ~on:(`Character ';') s
+
+let split_on_colon s =
+  String.split ~on:(`Character ':') s
+
+let parse_allele_and_likelihood s =
+  split_on_colon s
+  |> List.rev
+  |> function
+      | lklhd :: reverse_me_for_allele ->
+          (List.rev reverse_me_for_allele |> String.concat ~sep:":"),
+          (float_of_string lklhd)
+      | _   ->
+          invalid_argf "cant parse alleles: %s" s
+
+let parse_positions s =
+  Scanf.sscanf s "%d:%f" (fun p l -> p, l)
+
+let parse_res lst =
+  match lst with
+  | al :: pl :: tl ->
+      { alleles = split_on_semicolon al |> List.map ~f:parse_allele_and_likelihood
+      ; positions = split_on_semicolon pl |> List.map ~f:parse_positions
+      } , tl
+  | _ -> invalid_arg "Not enough elements"
+
+let rec parse_gene lst =
+  match lst with
+  | "C" :: tl ->
+      let map, tl = parse_res tl in
+      (`C map), tl
+  | "R" :: tl ->
+      let map, tl = parse_res tl in
+      (`R map), tl
+  | "F" :: msg :: tl ->
+      (`F msg), tl
+  | s :: _ ->
+      invalid_argf "unrecongized output: %s" s
+  | []      ->
+      invalid_arg "empty"
+
+
+let parse_map_line_result l =
+  try
+    let split = String.split ~on:(`Character tab_character) l in
+    match split with
+    | "" :: gene_s :: rest ->
+        let gene = key_to_gene gene_s in
+        let r1, rest = parse_gene rest in
+        let r2, rest = parse_gene rest in
+        if rest = [] then
+          Ok (gene, r1, r2)
+        else
+          error "extra stuff"
+    | _ -> error "unrecognized map line: %s" l
+  with Invalid_argument e -> error "%s" e
+
+let load_maps fname =
+  let ic = open_in fname in
+  let rec until_reads () =
+    let s = input_line ic in
+    if String.compare_substring ("Reads", 0, 5) (s, 0, 5) = 0 then
+      grab_reads []
+    else
+      until_reads ()
+  and grab_reads acc =
+    try
+      let read_line = input_line ic in
+      let a_line = input_line ic in
+      let b_line = input_line ic in
+      let c_line = input_line ic in
+      match
+        parse_map_line_result a_line >>= fun a ->
+          parse_map_line_result b_line >>= fun b ->
+            parse_map_line_result c_line >>= fun c -> Ok (a,b, c)
+      with
+      | Ok (a,b,c) -> grab_reads ((read_line, a, b, c) :: acc)
+      | Error e ->
+          eprintf "for read %s: %s" read_line e;
+          acc
+    with End_of_file ->
+      List.rev acc
+  in
+  until_reads ()
+
+let tcl (_, o, _) =
+  match o with
+  | `C mp -> List.hd_exn mp.alleles |> snd
+  | `R mp -> List.hd_exn mp.alleles |> snd
+  | `F _  -> neg_infinity
+
+let best (_, a, b, c) =
+  let la = tcl a in
+  let lb = tcl b in
+  let lc = tcl c in
+  if la > lb then begin
+    if la > lc then
+      `A
+    else
+      `C
+  end else begin
+    if lb > lc then
+      `B
+    else
+      `C
+  end
