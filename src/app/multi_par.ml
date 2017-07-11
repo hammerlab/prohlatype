@@ -139,7 +139,7 @@ let to_set ?insert_p ~past_threshold_filter ?max_number_mismatches ?band mode rp
   `Set g
 
 let fin = function
-  | `Setup _ -> eprintf "Didn't fine any reads."
+  | `Setup _ -> eprintf "Didn't find any reads."
   | `Set (`Mapper g)  -> g.fin g.s
   | `Set (`Reporter g) -> g.fin g.s
 
