@@ -367,7 +367,10 @@ module ForwardCalcs  (R : Ring) = struct
       instead for the quality calc. *)
   let to_match_prob (base, base_error) =
     let compare_against c =
-      if base = c then
+      if base = 'N' then begin
+        (*printf "Spotted an N with %f\n%!" base_error; *)
+        R.one
+      end else if base = c then
         match_p base_error
       else
         mismatch_p base_error
