@@ -772,24 +772,31 @@ end (* SingleWorkspace *)
 type path =
   | M of char * Base. t   (* Store the read pair, that _may_ have 'N', and Base *)
   | I of int * char                       (* index into read and read base pair *)
-  | D of int * char * Base.t
+  | D of int * Base.t
 
 let path_to_string = function
-  | M (b, r)    ->  sprintf "M%c%c" b (Base.to_char r)
-  | I (p, b)    ->  sprintf "I%d%c" p b
-  | D (p, b, r) ->  sprintf "D%d%c%c" p b (Base.to_char r)
+  | M (b, r) ->  sprintf "M%c%c" b (Base.to_char r)
+  | I (p, b) ->  sprintf "I%d%c" p b
+  | D (p, r) ->  sprintf "D%d%c" p (Base.to_char r)
+
+type path_strings =
+  { reference : string
+  ; read : string
+  }
 
 let path_list_to_strings =
+  let g = '_' in
   let to_pair = function
-    | M (b, r)    -> (b, Base.to_char r)
-    | I (_, b)    -> (b, '_')
-    | D (_, b, r) -> (b, Base.to_char r)
+    | M (b, r) -> (b, Base.to_char r)
+    | I (_, b) -> (b, g)
+    | D (_, r) -> (g, Base.to_char r)
   in
-  let rec loop refa reada = function
-    | []      -> List.rev refa |> String.of_character_list
-                 , List.rev reada |> String.of_character_list
+  let rec loop reada refa = function
+    | []      -> { reference = List.rev refa |> String.of_character_list
+                 ; read = List.rev reada |> String.of_character_list
+                 }
     | p :: tl -> let a, b = to_pair p in
-                 loop (a :: refa) (b :: reada) tl
+                 loop (a :: reada) (b :: refa) tl
   in
   loop [] []
 
@@ -1058,12 +1065,12 @@ module ForwardSingleGen (R: Ring) = struct
         if c.match_ >= c.delete then
           M (b, r)
         else
-          D (i, b, r)
+          D (i, r)
       end else (* c.match_ < c.insert *) begin
         if c.insert >= c.delete then
           I (i,b)
         else
-          D (i,b, r)
+          D (i, r)
       end
     in
     let start ws obsp base ~k =

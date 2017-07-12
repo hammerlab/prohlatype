@@ -54,11 +54,13 @@ let apply c fqi =
   c
 
 let write_paths_to_stdout =
+  let open ParPHMM in
   List.iter ~f:(fun (read_name, (rc, emission, path_list)) ->
-    let ref, read = ParPHMM.path_list_to_strings path_list in
+    let { reference; read } = path_list_to_strings path_list in
     printf "%s:\t %b: %f %d\n%s\n"
       read_name rc emission (List.length path_list)
-        (manual_comp_display ~width:100 ~labels:("ref ", "read ") ref read))
+        (manual_comp_display ~width:120 ~labels:("ref ", "read ")
+            reference read))
 
 let to_comp ?insert_p allele rp read_size =
   let pt =
