@@ -231,7 +231,7 @@ let parse_map_line_result l =
         let r1, rest = parse_gene rest in
         let r2, rest = parse_gene rest in
         if rest = [] then
-          Ok (gene, r1, r2)
+          Ok (gene, (r1, r2))
         else
           error "extra stuff"
     | _ -> error "unrecognized map line: %s" l
@@ -248,15 +248,15 @@ let load_maps fname =
   and grab_reads acc =
     try
       let read_line = input_line ic in
-      let a_line = input_line ic in
-      let b_line = input_line ic in
-      let c_line = input_line ic in
+      let line1 = input_line ic in
+      let line2 = input_line ic in
+      let line3 = input_line ic in
       match
-        parse_map_line_result a_line >>= fun a ->
-          parse_map_line_result b_line >>= fun b ->
-            parse_map_line_result c_line >>= fun c -> Ok (a,b, c)
+        parse_map_line_result line1 >>= fun l1 ->
+          parse_map_line_result line2 >>= fun l2 ->
+            parse_map_line_result line3 >>= fun l3 -> Ok [l1; l2; l3]
       with
-      | Ok (a,b,c) -> grab_reads ((read_line, a, b, c) :: acc)
+      | Ok l -> grab_reads ((read_line, l) :: acc)
       | Error e ->
           eprintf "for read %s: %s" read_line e;
           acc
@@ -265,24 +265,53 @@ let load_maps fname =
   in
   until_reads ()
 
-let tcl (_, o, _) =
+let tcl (o, _) =
   match o with
   | `C mp -> List.hd_exn mp.alleles |> snd
   | `R mp -> List.hd_exn mp.alleles |> snd
   | `F _  -> neg_infinity
 
-let best (_, a, b, c) =
-  let la = tcl a in
-  let lb = tcl b in
-  let lc = tcl c in
-  if la > lb then begin
-    if la > lc then
-      `A
+let get_gene gene glst =
+  List.Assoc.get gene glst
+  |> Option.value_exn ~msg:(sprintf "missing: %s" gene)
+
+let mbest (_, l) =
+  let la = get_gene "A" l in
+  let lb = get_gene "B" l in
+  let lc = get_gene "C" l in
+  let ta = tcl la in
+  let tb = tcl lb in
+  let tc = tcl lc in
+  if ta > tb then begin
+    if ta > tc then
+      `A la
     else
-      `C
+      `C lc
   end else begin
-    if lb > lc then
-      `B
+    if tb > tc then
+      `B lb
     else
-      `C
+      `C lc
   end
+
+let mjust a m =
+  List.filter_map m ~f:(fun q ->
+    match a, mbest q with
+    | `A, `A (`R mp, _) -> Some (fst q, mp, true)
+    | `A, `A (`C mp, _) -> Some (fst q, mp, false)
+    | `A, `A (`F _, _)  -> invalid_arg "mapped to filter!"
+    | `A,  _            -> None
+
+    | `B, `B (`R mp, _) -> Some (fst q, mp, true)
+    | `B, `B (`C mp, _) -> Some (fst q, mp, false)
+    | `B, `B (`F _, _)  -> invalid_arg "mapped to filter!"
+    | `B,  _            -> None
+
+    | `C, `C (`R mp, _) -> Some (fst q, mp, true)
+    | `C, `C (`C mp, _) -> Some (fst q, mp, false)
+    | `C, `C (`F _, _)  -> invalid_arg "mapped to filter!"
+    | `C,  _            -> None)
+
+let msorted l =
+  List.sort ~cmp:(fun (_, mp1, _) (_, mp2, _) ->
+      compare (List.hd_exn mp2.alleles |> snd) (List.hd_exn mp1.alleles |> snd)) l
