@@ -229,20 +229,20 @@ module Reducer = struct
       to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
         read_length pt
     in
-    let state = proc.init_global_state () in
     let past_threshold_filter =
       Option.bind past_threshold_filter
         ~f:(function | true -> Some `Start | false -> None)
     in
     let r = reducer ?check_rc ?past_threshold_filter proc in
-    let apply fqi =
+    let rec t = { state ; apply ; output }
+    and state = proc.init_global_state ()
+    and apply fqi =
       let n = Array.length allele_arr in
       fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
         r read read_probs
-        |> add_log_likelihoods n state)
-    in
-    let output = output_i allele_arr state in
-    { state ; apply ; output }
+        |> add_log_likelihoods n t.state)
+    and output oc = output_i allele_arr t.state oc in
+    t
 
   let apply fqi t =
     t.apply fqi
