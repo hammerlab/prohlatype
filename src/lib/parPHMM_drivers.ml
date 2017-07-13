@@ -531,8 +531,8 @@ module Multiple_mapper = struct
       |> List.iter ~f:(fun (read, lst) ->
         fprintf oc "%s\n\t%s\n"
           read (String.concat ~sep:"\n\t"
-                  (List.map lst ~f:(fun (name, ms) ->
-                    sprintf "%s\t%s"
+            (List.map (List.sort ~cmp:compare lst) (* Sort by name too *)
+              ~f:(fun (name, ms) -> sprintf "%s\t%s"
                       name (mapped_stats_to_string ~sep:'\t' ms)))))
     and apply fqi =
       match past_threshold_filter with
