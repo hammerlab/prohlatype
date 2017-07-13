@@ -69,8 +69,8 @@ let to_comp ?insert_p allele rp read_size =
   in
   time (sprintf "Allocating viterbi pass workspaces")
     (fun () ->
-      let f = ParPHMM.setup_single_allele_viterbi_pass ?insert_p pt read_size
-                ~allele in
+      let f = ParPHMM.setup_single_allele_viterbi_pass ?insert_p read_size
+                ~allele pt in
       { f   = to_read_proc f
       ; s   = []
       ; fin = write_paths_to_stdout
