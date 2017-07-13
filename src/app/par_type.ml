@@ -53,6 +53,30 @@ let across_fastq conf mode
   with ParPHMM_drivers.Read_error_parsing e ->
     eprintf "%s" e
 
+let across_paired conf mode
+    (* Fastq specific arguments. *)
+    ?number_of_reads ~specific_reads file1 file2 init =
+  try
+    Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init
+      ~f:(fun acc fq1 fq2 ->
+            match acc with
+            | `Setup rp ->
+                let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+                let c = to_comp conf rp read_size mode in
+                `Set (Pdsl.paired c fq1 fq2; c)
+            | `Set c ->
+                `Set (Pdsl.paired c fq1 fq2; c))
+    |> function
+        | `BothFinished o
+        | `OneReadPairedFinished (_, o)
+        | `StoppedByFilter o
+        | `DesiredReads o ->
+            match o with
+            | `Setup _ -> eprintf "Didn't find any reads."
+            | `Set c   -> Pdsl.output c stdout
+  with ParPHMM_drivers.Read_error_parsing e ->
+    eprintf "%s" e
+
 let type_
   (* Allele information source *)
     alignment_file merge_file distance not_impute
@@ -115,9 +139,10 @@ let type_
         in
         begin match fastq_file_lst with
         | []              -> invalid_argf "Cmdliner lied!"
-        | [read1; read2]  -> invalid_argf "implement pairs!"
         | [fastq]         -> across_fastq conf mode
                                 ?number_of_reads ~specific_reads fastq init
+        | [read1; read2]  -> across_paired conf mode
+                                ?number_of_reads ~specific_reads read1 read2 init
         | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
         end
 

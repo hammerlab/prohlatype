@@ -86,7 +86,10 @@ let rec same cmp l1 l2 =
   in
   double_loop l2 [] l1
 
-let fold_paired ?number_of_reads ?(specific_reads=[]) file1 file2 ~f ~init to_key =
+let name_as_key a = a.Biocaml_unix.Fastq.name
+
+let fold_paired ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
+  file1 file2 ~f ~init =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
   let filt = to_filter specific_reads in
@@ -146,11 +149,10 @@ let unwrap_cr_ok = function
     | Result.Ok a    -> a
 
 let read_from_pair ~name file1 file2 =
-  let to_key a = a.Biocaml_unix.Fastq.name in
   let res =
     fold_paired
       ~init:None ~f:(fun _ q1 q2 -> Some (q1, q2)) ~specific_reads:[name]
-        file1 file2 to_key
+        file1 file2
   in
   let opt =
     match res with

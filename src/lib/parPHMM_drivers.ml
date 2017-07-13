@@ -48,10 +48,6 @@ let pass_result_to_stat = function
   | Completed s -> fst (List.hd_exn s.positions)
   | Filtered _  -> neg_infinity
 
-let best_stat ms =
-  max (pass_result_to_stat ms.regular)
-      (pass_result_to_stat ms.complement)
-
 let or_neg_inf =
   Option.value ~default:neg_infinity
 
@@ -63,6 +59,19 @@ let new_threshold proc prev_threshold =
 let latest_threshold_of_pass_result prev_threshold proc = function
   | Filtered _  -> or_neg_inf prev_threshold
   | Completed _ -> new_threshold proc prev_threshold
+
+type reducer_stat =
+  { comp       : bool
+  ; likelihood : float array
+  }
+
+let single reverse_complement proc read read_prob =
+  match proc.doit reverse_complement read read_prob with
+  | Filtered m    ->
+      Filtered m
+  | Completed ()  ->
+      let likelihood = proc.per_allele_llhd () in
+      Completed { comp = reverse_complement; likelihood }
 
 let both ?past_threshold_filter pass_res_to_stat proc read read_prob =
   let do_work prev_threshold rc =
@@ -105,11 +114,6 @@ let compare_emissions e1 e2 =
   let r2 = max_arr e2 in
   r1 >= r2
 
-type reducer_stat =
-  { comp       : bool
-  ; likelihood : float array
-  }
-
 let most_likely_between_rc = function
   | Filtered mr, Filtered mc -> Filtered (sprintf "Both! %s, %s" mr mc)
   | Filtered _r, Completed c -> Completed c
@@ -130,14 +134,8 @@ let reducer proc ?(check_rc=true) ?past_threshold_filter read read_prob =
         proc read read_prob
     in
     most_likely_between_rc (mp.regular, mp.complement)
-  end else begin
-    match proc.doit false read read_prob with
-    | Filtered m    ->
-        Filtered m
-    | Completed ()  ->
-        let likelihood = proc.per_allele_llhd () in
-        Completed { comp = false; likelihood }
-  end
+  end else
+    single false proc read read_prob
 
 exception Read_error_parsing of string
 
@@ -145,12 +143,25 @@ let repf fmt =
   ksprintf (fun s -> raise (Read_error_parsing s)) fmt
 
 let fqi_to_read_and_probs fqi ~k =
-  let name = fqi.Biocaml_unix.Fastq.name in
-  time (sprintf "updating on %s" name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
+  let open Core_kernel.Std in
+  let open Biocaml_unix.Fastq in
+  time (sprintf "updating on %s" fqi.name) (fun () ->
+    match Fastq.phred_log_probs fqi.qualities with
     | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-    | Result.Ok read_probs -> k name fqi.Biocaml_unix.Fastq.sequence read_probs)
+    | Result.Ok read_probs -> k fqi.name fqi.sequence read_probs)
+
+let fqi2_to_read_and_probs fq1 fq2 ~k =
+  let open Biocaml_unix.Fastq in
+  let open Core_kernel.Std in
+  assert (fq1.name = fq2.name);
+  time (sprintf "updating on %s" fq1.name) (fun () ->
+    match Fastq.phred_log_probs fq1.Biocaml_unix.Fastq.qualities with
+    | Result.Error e       -> repf "%s" (Error.to_string_hum e)
+    | Result.Ok rp1 ->
+        match Fastq.phred_log_probs fq2.Biocaml_unix.Fastq.qualities with
+        | Result.Error e       -> repf "%s" (Error.to_string_hum e)
+        | Result.Ok rp2 ->
+            k fq1.name fq1.sequence rp1 fq2.sequence rp2)
 
 type single_conf =
   { allele                : string option
@@ -182,6 +193,7 @@ module Reducer = struct
   type t =
     { state   : float array  (* Need to track the per allele likelihoods *)
     ; apply   : Biocaml_unix.Fastq.item -> unit
+    ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output  : out_channel -> unit
     }
 
@@ -211,7 +223,6 @@ module Reducer = struct
                   ?max_number_mismatches read_length allele pt in
       proc, [| allele |]
 
-
   let add_log_likelihoods n state = function
     | Filtered _  -> ()                     (* Should we warn about ignoring a read? *)
     | Completed r ->
@@ -232,32 +243,65 @@ module Reducer = struct
       Option.bind past_threshold_filter
         ~f:(function | true -> Some `Start | false -> None)
     in
+    let n = Array.length allele_arr in
     let r = reducer ?check_rc ?past_threshold_filter proc in
-    let rec t = { state ; apply ; output }
+    let rec t = { state; apply; paired; output }
     and state = proc.init_global_state ()
     and apply fqi =
-      let n = Array.length allele_arr in
       fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
         r read read_probs
         |> add_log_likelihoods n t.state)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
+        let r1 = r rd1 rp1 in
+        let r2 =
+          match r1 with
+          | Filtered _  -> r rd2 rp2 (* Filtered so check both conf *)
+          | Completed c -> single (not c.comp) proc rd2 rp2
+        in
+        add_log_likelihoods n t.state r1;
+        add_log_likelihoods n t.state r2)
     and output oc = output_i allele_arr t.state oc in
     t
 
   let apply fqi t =
     t.apply fqi
 
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
+
   let output oc t =
     t.output oc
 
 end (* Reducer *)
 
+type 'a single_or_paired =
+  | Single of 'a
+  | Paired of ('a * 'a)
+
 (* A mapper maps the information from each read into a summarization of how
    a specific HLA-loci aligns the read. *)
 module Mapper = struct
 
+  type mp = mapped_stats single_or_paired
+
+  let best_stat_rc ms =
+    max (pass_result_to_stat ms.regular)
+        (pass_result_to_stat ms.complement)
+
+  let best_stat = function
+    | Single ms         -> best_stat_rc ms
+    | Paired (ms1, ms2) -> max (best_stat_rc ms1) (best_stat_rc ms2)
+
+  let mp_to_string = function
+    | Single ms         -> mapped_stats_to_string ~sep:'\t' ms
+    | Paired (ms1, ms2) -> sprintf "%s\t%s"
+                            (mapped_stats_to_string ~sep:'\t' ms1)
+                            (mapped_stats_to_string ~sep:'\t' ms2)
   type t =
-    { mutable state : (string * mapped_stats) list
+    { mutable state : (string * mp) list
     ; apply         : Biocaml_unix.Fastq.item -> unit
+    ; paired        : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output        : out_channel -> unit
     }
 
@@ -286,23 +330,31 @@ module Mapper = struct
       | Some _ -> (* Ignore since we do want to map *)
           mapper ~n proc
     in
-    let rec t = { state = [] ; apply ; output }
+    let rec t = { state = []; apply; paired; output }
     and apply =
       fqi_to_read_and_probs ~k:(fun name read read_probs ->
         let rc = m read read_probs in
-        t.state <- (name, rc) :: t.state)
+        t.state <- (name, Single rc) :: t.state)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun name rd1 rp1 rd2 rp2 ->
+        let rc1 = m rd1 rp1 in
+        let rc2 = m rd2 rp2 in
+        t.state <- (name, (Paired (rc1, rc2))) :: t.state)
     and output oc =
       fprintf oc "Reads: %d\n" (List.length t.state);
       List.sort t.state ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
         compare (best_stat ms1) (best_stat ms2))
       |> List.rev
-      |> List.iter ~f:(fun (n, s) ->
-          fprintf oc "%s\t%s\n" n (mapped_stats_to_string ~sep:'\t' s))
+      |> List.iter ~f:(fun (n, mp) ->
+          fprintf oc "%s\t%s\n" n (mp_to_string mp))
     in
     t
 
   let apply fqi t =
     t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
 
   let output oc t =
     t.output oc
@@ -327,9 +379,17 @@ module Viterbi = struct
       reverse_complement emission (List.length path_list)
         (manual_comp_display ~width ~labels reference read)
 
+  type vr = viterbi_result single_or_paired
+
+  let vr_to_string ~labels = function
+    | Single v -> viterbi_result_to_string ~labels v
+    | Paired (v1, v2) -> sprintf "%s\n%s" (viterbi_result_to_string ~labels v1)
+                                          (viterbi_result_to_string ~labels v2)
+
   type t =
-    { mutable state : (string * viterbi_result) list
+    { mutable state : (string * vr) list
     ; apply         : Biocaml_unix.Fastq.item -> unit
+    ; paired        : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output        : out_channel -> unit
     }
 
@@ -339,21 +399,31 @@ module Viterbi = struct
     (* Relying on reference being first. *)
     let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
     let v = setup_single_allele_viterbi_pass ?insert_p ~allele read_length pt in
+    let vr read read_probs =
+      let (reverse_complement, emission, path_list) = v read read_probs in
+      { reverse_complement; emission; path_list}
+    in
     let labels = allele ^ " ", "read " in
-    let rec t = { state = []; apply; output }
+    let rec t = { state = []; apply; paired; output }
     and apply =
       fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
-        let (reverse_complement, emission, path_list) = v read read_probs in
-        t.state <-
-          (read_name, {reverse_complement; emission; path_list}) :: t.state)
+        t.state <- (read_name, Single (vr read read_probs)) :: t.state)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+        let v1 = vr rd1 rp1 in
+        let v2 = vr rd2 rp2 in
+        t.state <- (read_name, Paired (v1, v2)) :: t.state)
     and output oc =
       List.iter t.state ~f:(fun (read_name, vr ) ->
-        fprintf oc "%s:\n%s\n" read_name (viterbi_result_to_string ~labels vr))
+        fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
     in
     t
 
   let apply fqi t =
     t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
 
   let output oc t =
     t.output oc
@@ -383,12 +453,17 @@ module Single_loci = struct
   let apply t fqi = match t with
     | Reducer r -> Reducer.apply fqi r
     | Mapper m  -> Mapper.apply fqi m
-    | Viterbi m -> Viterbi.apply fqi m
+    | Viterbi v -> Viterbi.apply fqi v
+
+  let paired t fq1 fq2 = match t with
+    | Reducer r -> Reducer.paired fq1 fq2 r
+    | Mapper m  -> Mapper.paired fq1 fq2 m
+    | Viterbi v -> Viterbi.paired fq1 fq2 v
 
   let output t oc = match t with
     | Reducer r -> Reducer.output oc r
     | Mapper m  -> Mapper.output oc m
-    | Viterbi m -> Viterbi.output oc m
+    | Viterbi v -> Viterbi.output oc v
 
 end (* Single_loci *)
 
@@ -507,7 +582,7 @@ module Multiple_mapper = struct
 
   let sort_mapped_output lst =
     let highest_llhd l =
-      List.map l ~f:(fun (_name, s) -> best_stat s)
+      List.map l ~f:(fun (_name, s) -> Mapper.best_stat_rc s)
       |> List.reduce ~f:max
     in
     List.sort lst ~cmp:(fun (_rn1, nlst1) (_rn2, nlst2) ->
