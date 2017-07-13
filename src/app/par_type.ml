@@ -3,12 +3,6 @@ open Util
 
 let app_name = "par_type"
 
-let time s f =
-  let n = Sys.time () in
-  let r = f () in
-  Printf.printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
-  r
-
 let to_read_size_dependent
   (* Allele information source *)
   ?alignment_file ?merge_file ~distance ~impute
@@ -30,134 +24,33 @@ let to_read_size_dependent
             let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
             Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
-exception PPE of string
+module Pdsl = ParPHMM_drivers.Single_loci
 
-let add_log_likelihoods n =
-  let open ParPHMM in
-  fun ~into ->
-    function
-    | Filtered _   -> ()
-    | Completed rs ->
-      for i = 0 to n - 1 do into.(i) <- into.(i) +. rs.likelihood.(i) done
-
-let to_reduce_update_f perform_forward_pass add_ll update_me fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        let nl = perform_forward_pass fqi.Biocaml_unix.Fastq.sequence read_probs in
-        add_ll ~into:update_me nl;
-        update_me)
-
-let to_map_update_f f acc fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        let t = f fqi.Biocaml_unix.Fastq.sequence read_probs in
-        (fqi.Biocaml_unix.Fastq.name, t) :: acc)
-
-type 'a g =
-  { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
-  ; mutable s : 'a
-  ; fin       : 'a -> unit
-  }
-
-let apply = function
-  | `Mapper g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Mapper g
-                 end
-  | `Reducer g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Reducer g
-                 end
-
-let output_mapper lst =
-  printf "Reads: %d\n" (List.length lst);
-  List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
-    ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
-  |> List.rev
-  |> List.iter ~f:(fun (n, s) ->
-    printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
-
-let to_set ?insert_p ?max_number_mismatches ~past_threshold_filter
-  mode specific_allele ~check_rc ?band rp read_size =
+let to_comp conf rp read_size mode =
   let pt =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
   in
-  let g =
-    match specific_allele with
-    | None ->
-      let add_ll = add_log_likelihoods pt.ParPHMM.number_alleles in
-      time (sprintf "Allocating forward pass workspaces")
-        (fun () ->
-          let r =
-            ParPHMM.forward_pass mode ?insert_p ?max_number_mismatches
-              ~past_threshold_filter ?band pt read_size
-          in
-          match r with
-          | `Reducer (u, f) ->
-              `Reducer
-                { f   = to_reduce_update_f (f ~check_rc) add_ll
-                ; s   = u
-                ; fin = ParPHMM.output (`Pt pt)
-                }
-          | `Mapper m ->
-              `Mapper
-                { f   = to_map_update_f m
-                ; s   = []
-                ; fin = output_mapper
-                })
-    | Some allele ->
-        let add_ll = add_log_likelihoods 1 in
-        time (sprintf "Allocating forward pass workspaces")
-          (fun () ->
-            let r =
-              ParPHMM.single_allele_forward_pass ?insert_p ?max_number_mismatches
-              mode pt read_size allele
-            in
-            match r with
-            | `Reducer (u, f) ->
-                `Reducer
-                  { f   = to_reduce_update_f (f ~check_rc) add_ll
-                  ; s   = u
-                  ; fin = ParPHMM.output (`Allele allele)
-                  }
-            | `Mapper m ->
-                `Mapper
-                  { f   = to_map_update_f m
-                  ; s   = []
-                  ; fin = output_mapper
-                  })
-  in
-  `Set g
+  time "Allocating forward pass workspace"
+    (fun () -> Pdsl.init conf read_size pt mode)
 
-let fin = function
-  | `Setup _ -> eprintf "Didn't find any reads."
-  | `Set (`Mapper g)  -> g.fin g.s
-  | `Set (`Reducer g) -> g.fin g.s
-
-let across_fastq ?insert_p ?max_number_mismatches ~past_threshold_filter
-    ?number_of_reads ~specific_reads ~check_rc
-    specific_allele ?band mode file init =
+let across_fastq conf mode
+    (* Fastq specific arguments. *)
+    ?number_of_reads ~specific_reads file init =
   try
     Fastq.fold ?number_of_reads ~specific_reads file ~init
       ~f:(fun acc fqi ->
             match acc with
             | `Setup rp ->
                 let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set ?insert_p ?max_number_mismatches
-                                ~past_threshold_filter
-                                mode specific_allele ~check_rc ?band rp read_size in
-                `Set (apply g fqi)
-            | `Set g ->
-                `Set (apply g fqi))
-    |> fin
-  with PPE e ->
+                let c = to_comp conf rp read_size mode in
+                `Set (Pdsl.apply c fqi; c)
+            | `Set c ->
+                `Set (Pdsl.apply c fqi; c))
+    |> function
+        | `Setup _ -> eprintf "Didn't find any reads."
+        | `Set c   -> Pdsl.output c stdout
+  with ParPHMM_drivers.Read_error_parsing e ->
     eprintf "%s" e
 
 let type_
@@ -166,7 +59,7 @@ let type_
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
     do_not_ignore_suffixed_alleles
-    specific_allele
+    allele
   (* Process *)
     skip_disk_cache
   (* What to do? *)
@@ -188,41 +81,39 @@ let type_
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
   let impute   = not not_impute in
-  let check_rc = not not_check_rc in
-  let band     =
-    if not_band then
-      None
-    else
-      Some { ParPHMM.warmup; number; width }
-  in
-  let need_read_size_r =
-    to_read_size_dependent
-      ?alignment_file ?merge_file ~distance ~impute
-      ~regex_list ~specific_list ~without_list ?number_alleles
-      ~do_not_ignore_suffixed_alleles
-      ~skip_disk_cache
-  in
-  let past_threshold_filter = not do_not_past_threshold_filter in
-  match need_read_size_r with
-  | Error e           -> eprintf "%s" e
-  | Ok need_read_size ->
-    let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
-    let init =
-      match read_size_override with
-      | None   -> `Setup need_read_size
-      | Some r -> to_set ~insert_p ?max_number_mismatches
-                    ~past_threshold_filter
-                    mode specific_allele ~check_rc ?band need_read_size r
-    in
-    begin match fastq_file_lst with
-    | []              -> invalid_argf "Cmdliner lied!"
-    | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ~insert_p ?max_number_mismatches
-                          ~past_threshold_filter
-                          ?number_of_reads ~specific_reads ~check_rc ?band
-                          specific_allele mode fastq init
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-    end
+  to_read_size_dependent
+    ?alignment_file ?merge_file ~distance ~impute
+    ~regex_list ~specific_list ~without_list ?number_alleles
+    ~do_not_ignore_suffixed_alleles
+    ~skip_disk_cache
+  |> function
+      | Error e           -> eprintf "%s" e       (* Construction args don't make sense.*)
+      | Ok need_read_size ->
+        (* Rename some arguments to clarify logic. *)
+        let band     =
+          if not_band then
+              None
+            else
+              Some { ParPHMM.warmup; number; width }
+          in
+        let check_rc = not not_check_rc in
+        let past_threshold_filter = not do_not_past_threshold_filter in
+        let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
+        let conf = Pdsl.conf ?allele ~insert_p ?band ?max_number_mismatches
+                              ~past_threshold_filter ~check_rc ()
+        in
+        let init =
+          match read_size_override with
+          | None   -> `Setup need_read_size
+          | Some r -> `Set (to_comp conf need_read_size r mode)
+        in
+        begin match fastq_file_lst with
+        | []              -> invalid_argf "Cmdliner lied!"
+        | [read1; read2]  -> invalid_argf "implement pairs!"
+        | [fastq]         -> across_fastq conf mode
+                                ?number_of_reads ~specific_reads fastq init
+        | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+        end
 
 let () =
   let open Cmdliner in
