@@ -174,7 +174,6 @@ type single_conf =
   (** Compare against the reverse complement of a read and take the best likelihood. *)
   }
 
-
 (* A reducer reduces the information from a set of reads into a per allele
    likelihood state. We can construct reducers that operate on just a single
    allele. *)
@@ -483,7 +482,7 @@ module Multiple_reducer = struct
             List.fold_left paa ~init:(`Start, neg_infinity, [])
               ~f:(fun (past_threshold_filter, pt, acc) (name, (p, _, _)) ->
                     let m = reducer ~past_threshold_filter p read read_probs in
-                    let nt = max pt (p.maximum_match ()) in
+                    let nt = new_threshold p (Some pt) in
                     (`Set nt, nt, (name, m) :: acc))
             |> function _, _, acc ->
                   merge t.state acc)
@@ -547,7 +546,7 @@ module Multiple_mapper = struct
             List.fold_left procs ~init:(`Start, neg_infinity, [])
               ~f:(fun (past_threshold_filter, pt, acc) (name, p) ->
                     let m = mapper ~n ~past_threshold_filter p read read_probs in
-                    let nt = max pt (p.maximum_match ()) in
+                    let nt = new_threshold p (Some pt) in
                     (`Set nt, nt, (name, m) :: acc))
             |> function _, _, acc ->
                   t.state <- (read_name, acc) :: t.state)
