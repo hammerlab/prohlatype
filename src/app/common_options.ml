@@ -425,19 +425,18 @@ let read_size_override_arg =
               instead of using the number of bases in the FASTQ." in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
 
-let map_flag =
-  let default = 5 in
+let map_depth_argument = "map-depth"
+let map_depth_default = 5
+
+let map_depth_arg =
   let docv = "POSITIVE INTEGER" in
   let doc =
-    sprintf "This switch turns the typing logic into more of a diagnostic \
-             mode. The end user can see how individual reads are typed, \
-             and the best positions within the loci. Optionally specify a
-             positive integer to indicate the number of best alleles \
+    sprintf "Specify a positive integer to indicate the number of best alleles \
              and positions to report. Defaults to %d."
-      default
+      map_depth_default
   in
-  Arg.(value & opt (some positive_int) None ~vopt:(Some default)
-             & info ~doc ~docv ["map"])
+  Arg.(value & opt positive_int map_depth_default
+             & info ~doc ~docv [map_depth_argument])
 
 (* Band arguments *)
 let not_band_flag =

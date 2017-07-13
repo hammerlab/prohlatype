@@ -73,7 +73,8 @@ let type_
     number
     width
   (* how are we typing *)
-    map
+    map_depth
+    mode
     forward_accuracy_opt
     =
   Option.value_map forward_accuracy_opt ~default:()
@@ -102,7 +103,11 @@ let type_
       ~alignment_files ~merge_files ~distance ~impute
       ~skip_disk_cache
   in
-  let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
+  let mode =
+    match mode with
+    | `Reducer -> `Reducer
+    | `Mapper  -> `Mapper map_depth
+  in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
@@ -165,6 +170,25 @@ let () =
     Arg.(value & opt (some positive_int) None & info ~doc ~docv
           ["max-mismatches"])
   in
+  let mode_flag =
+    let open Arg in
+    let modes =
+      [ ( `Reducer
+        , info ~doc:"Aggregate read data into per allele likelihoods, \
+                    default. Each read's likelihood is added only to the most \
+                    likely loci's."
+          [ "reducer" ])
+      ; ( `Mapper
+        , info ~doc:
+            (sprintf "Map each read into the most likely alleles and \
+                     positions, across loci. Specify the %S argument to change
+                     the number of elements that are reported."
+              map_depth_argument)
+          [ "map" ])
+      ]
+    in
+    value & vflag `Reducer  modes
+  in
   let class1gen_arg =
     let docv  = "DIRECTORY" in
     let doc   = "Short-cut argument that expands the given dir to look for \
@@ -206,7 +230,8 @@ let () =
             $ number_bands_arg
             $ band_width_arg
             (* How are we typing *)
-            $ map_flag
+            $ map_depth_arg
+            $ mode_flag
             $ forward_pass_accuracy_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg

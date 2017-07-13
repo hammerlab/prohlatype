@@ -310,6 +310,57 @@ module Mapper = struct
 
 end (* Mapper *)
 
+(* A map of reads to a Viterbi decoded path *)
+module Viterbi = struct
+
+  open ParPHMM
+
+  type viterbi_result =
+    { reverse_complement : bool       (* Was the reverse complement best? *)
+    ; emission           : float      (* Final emission likelihood *)
+    ; path_list          : path list
+    }
+
+  let viterbi_result_to_string ?(width=120) ?(labels=("reference ", "read "))
+    {reverse_complement; emission; path_list} =
+    let { reference; read } = path_list_to_strings path_list in
+    sprintf "Reverse complement: %b, final emission: %f, path length: %d\n%s"
+      reverse_complement emission (List.length path_list)
+        (manual_comp_display ~width ~labels reference read)
+
+  type t =
+    { mutable state : (string * viterbi_result) list
+    ; apply         : Biocaml_unix.Fastq.item -> unit
+    ; output        : out_channel -> unit
+    }
+
+  let init conf read_length pt =
+    let { allele; insert_p; _ } = conf in
+    let open ParPHMM in
+    (* Relying on reference being first. *)
+    let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
+    let v = setup_single_allele_viterbi_pass ?insert_p ~allele read_length pt in
+    let labels = allele ^ " ", "read " in
+    let rec t = { state = []; apply; output }
+    and apply =
+      fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
+        let (reverse_complement, emission, path_list) = v read read_probs in
+        t.state <-
+          (read_name, {reverse_complement; emission; path_list}) :: t.state)
+    and output oc =
+      List.iter t.state ~f:(fun (read_name, vr ) ->
+        fprintf oc "%s:\n%s\n" read_name (viterbi_result_to_string ~labels vr))
+    in
+    t
+
+  let apply fqi t =
+    t.apply fqi
+
+  let output oc t =
+    t.output oc
+
+end (* Viterbi *)
+
 (** Single Loci Drivers **)
 module Single_loci = struct
 
@@ -321,22 +372,24 @@ module Single_loci = struct
   type t =
     | Reducer of Reducer.t
     | Mapper of Mapper.t
+    | Viterbi of Viterbi.t
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer ->
-          Reducer (Reducer.init conf read_length pt)
-      | `Mapper n ->
-          Mapper (Mapper.init conf read_length n pt)
+      | `Reducer  -> Reducer (Reducer.init conf read_length pt)
+      | `Mapper n -> Mapper (Mapper.init conf read_length n pt)
+      | `Viterbi  -> Viterbi (Viterbi.init conf read_length pt)
 
   (* fqi = FastQ Item *)
   let apply t fqi = match t with
     | Reducer r -> Reducer.apply fqi r
     | Mapper m  -> Mapper.apply fqi m
+    | Viterbi m -> Viterbi.apply fqi m
 
   let output t oc = match t with
     | Reducer r -> Reducer.output oc r
     | Mapper m  -> Mapper.output oc m
+    | Viterbi m -> Viterbi.output oc m
 
 end (* Single_loci *)
 

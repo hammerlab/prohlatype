@@ -75,7 +75,8 @@ let type_
     number
     width
   (* how are we typing *)
-    map
+    map_depth
+    mode
     forward_accuracy_opt
     =
   Option.value_map forward_accuracy_opt ~default:()
@@ -98,7 +99,12 @@ let type_
           in
         let check_rc = not not_check_rc in
         let past_threshold_filter = not do_not_past_threshold_filter in
-        let mode = match map with | Some n -> `Mapper n | None -> `Reducer in
+        let mode =
+          match mode with
+          | `Reducer -> `Reducer
+          | `Mapper  -> `Mapper map_depth
+          | `Viterbi -> `Viterbi
+        in
         let conf = Pdsl.conf ?allele ~insert_p ?band ?max_number_mismatches
                               ~past_threshold_filter ~check_rc ()
         in
@@ -133,13 +139,38 @@ let () =
     in
     Arg.(value & flag & info ~doc ["do-not-impute"])
   in
+  let specific_allele_argument = "allele" in
   let spec_allele_arg =
     let docv = "ALLELE" in
     let doc  = "Use a faster mode where we measure the likelihood for just \
                 the passed allele. The allele must be found in the alignment \
                 or merge file." in
     Arg.(value & opt (some string) None
-               & info ~doc ~docv ["allele"])
+               & info ~doc ~docv [specific_allele_argument])
+  in
+  let mode_flag =
+    let open Arg in
+    let modes =
+      [ ( `Reducer
+        , info ~doc:"Aggregate read data into per allele likelihoods, default."
+          [ "reducer" ])
+      ; ( `Mapper
+        , info ~doc:
+            (sprintf "Map each read into the most likely alleles and \
+                     positions. Specify the %S argument to change the number \
+                     of elements that are reported."
+              map_depth_argument)
+          [ "map" ])
+      ; ( `Viterbi
+        , info ~doc:
+            (sprintf "Map each read into the viterbi decoded path against a \
+                      specified allele. Specify the allele with %S \
+                      argument, defaults to using the reference of the loci."
+              specific_allele_argument)
+          [ "viterbi" ])
+      ]
+    in
+    value & vflag `Reducer  modes
   in
   let type_ =
     let version = "0.0.0" in
@@ -179,7 +210,8 @@ let () =
             $ number_bands_arg
             $ band_width_arg
             (* How are we typing *)
-            $ map_flag
+            $ map_depth_arg
+            $ mode_flag
             $ forward_pass_accuracy_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
