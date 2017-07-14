@@ -144,6 +144,45 @@ let best ~gene r k =
   let n = List.length (List.filter cr ~f:(fun (_, l) -> List.hd_exn l < k)) in
   (n, d, (float n) /. (float d))
 
+let join_runs r1 r2 =
+  let flatten_to_alleles lst =
+    List.fold_left lst ~init:[] ~f:(fun acc (rg : result_group) ->
+      acc @ List.map rg.alleles ~f:(fun nr -> nr, rg.likelihood))
+      |> List.sort ~cmp:compare   (* sort by allele *)
+  in
+  let regroup acc =
+    group_by_assoc acc                                                           (* group by the same likelihoods *)
+    |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
+    |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
+      (pos + List.length alleles, { alleles; pos; likelihood } :: acc))
+    |> snd                                                                               (* discard index count. *)
+    |> List.rev                                                                (* reverse to make lookup easier. *)
+  in
+  Smap.merge r1 r2 ~f:(fun k v1 v2 ->
+    match v1, v2 with
+    | None, None  -> assert false
+    | None, _     -> printf "%s missing first record\n" k; v2
+    | _,    None  -> printf "%s missing second record\n" k; v1
+    | Some a1, Some a2 ->
+        assert (a1.correct_alleles = a2.correct_alleles);
+        let l =
+          List.map2 (List.sort ~cmp:compare a1.allele_likelihoods)
+                    (List.sort ~cmp:compare a2.allele_likelihoods) (* align genes *)
+            ~f:(fun (g1, g1list) (g2, g2list) ->
+                  assert (g1 = g2);
+                  let al1 = flatten_to_alleles g1list in
+                  let al2 = flatten_to_alleles g2list in
+                  let al =
+                    List.map2 al1 al2 ~f:(fun (a1, l1) (a2, l2) ->
+                      assert (a1 = a2);
+                      (l1 +. l2), a1)
+                    |> regroup
+                  in
+                  g1, al)
+        in
+        Some {a1 with allele_likelihoods = l})
+
+(* Running time analysis *)
 let get_times fname =
   let ic = open_in fname in
   let rec loop acc =
