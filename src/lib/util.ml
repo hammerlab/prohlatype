@@ -206,3 +206,9 @@ let manual_phred_llhd_lst s1 s2 probability_of_error =
 let manual_phred_llhd s1 s2 probability_of_error =
   manual_phred_llhd_lst s1 s2 probability_of_error
   |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)
+
+let time s f =
+  let n = Sys.time () in
+  let r = f () in
+  printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
+  r

@@ -669,7 +669,7 @@ let add v = function
   | Desc []                         -> Desc ((Interval.make 0 0, v) :: [])
   | Desc ((s, ov) :: t) when v = ov -> Desc ((Interval.extend_one s, v) :: t)
   | Desc (((s, _) :: _) as l)       -> let e = 1 + Interval.end_ s in
-                                        Desc ((Interval.make e e, v) :: l)
+                                       Desc ((Interval.make e e, v) :: l)
 
 
 let get t i = match t with

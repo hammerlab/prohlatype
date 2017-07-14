@@ -850,7 +850,6 @@ module SingleViterbiWorkspace (R : Ring) :
 
 end (* SingleViterbiWorkspace *)
 
-
 type 'a mt = (Pm.ascending, 'a) Pm.t
 
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
@@ -1742,23 +1741,35 @@ let access rc read read_prob =
 (*** Full Forward Pass *)
 
 type proc =
-  (* Allocate the right size for global state*)
   { init_global_state : unit -> float array
-  (* Perform a forward pass. *)
+  (* Allocate the right size for global state of the per allele likelihoods. *)
+
   ; doit            : ?prev_threshold:float
                       -> bool -> string -> float array
                       -> unit pass_result
+  (* Perform a forward pass. We purposefully only signal whether we fully
+     completed the pass or were filtered, because we may have different uses
+     for the result of a pass. The accessors below allow the user to extract
+     more purposeful information. *)
+
   ; best_alleles    : int -> (float * string) list
   ; best_positions  : int -> (float * int) list
-  (* Get the calculated likelihoods. *)
-  ; per_allele_llhd : unit -> float array                     (* Pass'es output. *)
-  (* Get a possible threshold value for future passes. *)
+  (* After we perform a forward pass we might be interested in either some
+     diagnostic information such as which were the best alleles or where
+     was the best alignment in the loci? These support a mode where we
+     want to see how the reads "map" for different loci. *)
+
+  ; per_allele_llhd : unit -> float array
+  (* If we're not interested in diagnostics, but just the end result, we want
+     the per allele likelihood: *)
+
   ; maximum_match   : unit -> float
+  (* We might also want to get a possible threshold value for future passes. *)
   }
 
 (* Single, for one allele, forward pass *)
 let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
-  t read_length allele =
+  read_length allele t =
   let { emissions_a; alleles; _ } = t in
   (* Recover allele's base sequence, aka, emission. *)
   match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
@@ -1807,7 +1818,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       ; maximum_match
       }
 
-let setup_single_allele_viterbi_pass ?insert_p t read_length ~allele =
+let setup_single_allele_viterbi_pass ?insert_p read_length ~allele t =
   let { emissions_a; alleles; _ } = t in
   (* Recover allele's base sequence, aka, emission. *)
   match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
@@ -1940,284 +1951,4 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   | Some c when c.warmup >= last_read_index -> normal ()
   | Some c                                  -> banded c
 
-(**** Aggregations of the passes. *)
 
-type stats =
-  { per_allele : (float * string) list
-  ; positions  : (float * int) list
-  }
-
-let stats_to_strings ?(sep='\t') s =
-  let l_to_s fmt l =
-    String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf fmt  a l))
-  in
-  let al_to_s l = l_to_s "%s:%0.2f" l in
-  let pl_to_s l = l_to_s "%d:%0.2f" l in
-  sprintf "%s%c%s" (al_to_s s.per_allele) sep (pl_to_s s.positions)
-
-type 'a rc_states =
-  { regular         : 'a pass_result
-  ; complement      : 'a pass_result
-  ; last_threshold  : float
-  }
-
-type mapped_stats = stats rc_states
-
-(* The output is ordered so that the left most stat is the most likely.
-   We add characters 'R', 'C', 'F' as little annotations. *)
-let mapped_stats_to_string ?(sep='\t') ms =
-  match ms.regular, ms.complement with
-  | Completed r, Completed c ->
-    if fst (List.hd_exn r.positions) > fst (List.hd_exn c.positions) then
-      sprintf "R%c%s%cC%c%s"
-        sep (stats_to_strings ~sep r)
-        sep sep (stats_to_strings ~sep c)
-    else
-      sprintf "C%c%s%cR%c%s"
-        sep (stats_to_strings ~sep c)
-        sep sep (stats_to_strings ~sep r)
-  | Completed r, Filtered m ->
-      sprintf "R%c%s%cF%c%s" sep (stats_to_strings ~sep r) sep sep m
-  | Filtered m, Completed c ->
-      sprintf "C%c%s%cF%c%s" sep (stats_to_strings ~sep c) sep sep m
-  | Filtered mr, Filtered mc ->
-      sprintf "F%c%s%cF%c%s" sep mr sep sep mc
-
-let pass_result_to_stat = function
-  | Completed s -> fst (List.hd_exn s.positions)
-  | Filtered _  -> neg_infinity
-
-let best_stat ms =
-  max (pass_result_to_stat ms.regular)
-      (pass_result_to_stat ms.complement)
-
-let max_arr = Array.fold_left ~init:neg_infinity ~f:max
-
-let or_neg_inf =
-  Option.value ~default:neg_infinity
-
-let new_threshold proc prev_threshold =
-  let r = proc.maximum_match () in
-  let p = or_neg_inf prev_threshold in
-  max r p
-
-let latest_threshold_of_pass_result prev_threshold proc = function
-  | Filtered _  -> or_neg_inf prev_threshold
-  | Completed _ -> new_threshold proc prev_threshold
-
-let both ?past_threshold_filter pass_res_to_stat proc read read_prob =
-  let do_work prev_threshold rc =
-    match proc.doit ?prev_threshold rc read read_prob with
-    | Filtered m   -> Filtered m
-    | Completed () -> Completed (pass_res_to_stat rc proc)
-  in
-  let reg_prev_threshold, comp_prev_threshold =
-    match past_threshold_filter with
-    | None          -> None,    false
-    | Some `Start   -> None,    true
-    | Some (`Set v) -> Some v,  true
-  in
-  let regular = do_work reg_prev_threshold false in
-  let comp_prev_threshold =
-    if comp_prev_threshold then
-      Some (latest_threshold_of_pass_result reg_prev_threshold
-              proc regular)
-    else
-      None
-  in
-  let complement = do_work comp_prev_threshold true in
-  let last_threshold =
-    latest_threshold_of_pass_result comp_prev_threshold
-      proc complement
-  in
-  { regular; complement; last_threshold }
-
-let mapper ~n ?past_threshold_filter =
-  both ?past_threshold_filter
-    (fun _rc proc ->
-      { per_allele = proc.best_alleles n
-      ; positions  = proc.best_positions n
-      })
-
-let compare_emissions e1 e2 =
-  let r1 = max_arr e1 in
-  let r2 = max_arr e2 in
-  r1 >= r2
-
-type reducer_stat =
-  { comp       : bool
-  ; likelihood : float array
-  }
-
-let most_likely_between_rc = function
-  | Filtered mr, Filtered mc -> Filtered (sprintf "Both! %s, %s" mr mc)
-  | Filtered _r, Completed c -> Completed c
-  | Completed r, Filtered _c -> Completed r
-  | Completed r, Completed c ->
-    if compare_emissions r.likelihood c.likelihood then
-      Completed r
-    else
-      Completed c
-
-let reducer proc ?(check_rc=true) ?past_threshold_filter read read_prob =
-  if check_rc then begin
-    let mp =
-      both ?past_threshold_filter
-        (fun comp proc ->
-            let likelihood = proc.per_allele_llhd () in
-            { comp ; likelihood })
-        proc read read_prob
-    in
-    most_likely_between_rc (mp.regular, mp.complement)
-  end else begin
-    match proc.doit false read read_prob with
-    | Filtered m    ->
-        Filtered m
-    | Completed ()  ->
-        let likelihood = proc.per_allele_llhd () in
-        Completed { comp = false; likelihood }
-  end
-
-let single_allele_forward_pass ?insert_p ?max_number_mismatches mode pt
-  read_length allele =
-  let proc =
-    setup_single_allele_forward_pass ?insert_p ?max_number_mismatches pt
-    read_length allele
-  in
-  match mode with
-  | `Mapper n -> `Mapper (mapper ~n proc)
-  | `Reducer  -> `Reducer (proc.init_global_state ()
-                          , reducer proc)
-
-let forward_pass ?insert_p ?max_number_mismatches ?past_threshold_filter
-  ?band mode t read_length =
-  let proc =
-    setup_single_pass ?insert_p ?max_number_mismatches ?band read_length t in
-  let past_threshold_filter =
-    Option.bind past_threshold_filter
-      ~f:(function | true -> Some `Start | false -> None)
-  in
-  match mode with
-  | `Mapper n -> `Mapper (mapper ~n ?past_threshold_filter proc)
-  | `Reducer  -> `Reducer (proc.init_global_state ()
-                          , reducer ?past_threshold_filter proc)
-
-(* Combine results from multiple loci. *)
-module MultiLoci = struct
-
-  type best_state =
-    { name  : string
-    ; rspr  : reducer_stat pass_result
-    ; maxl  : float
-    }
-
-  let pr_to_llhd = function
-    | Filtered _  -> neg_infinity
-    | Completed c -> max_arr c.likelihood
-
-  let to_bs (name, rspr) =
-    { name; rspr; maxl = pr_to_llhd rspr}
-
-  let best_bs bs1 bs2 =
-    (*printf "%s %f vs %s %f\n%!" bs1.name bs1.maxl bs2.name bs2.maxl; *)
-    if bs1.maxl >= bs2.maxl then bs1 else bs2
-
-  let best = function
-    | []          -> invalid_argf "Can't select best from empty!"
-    | h :: t ->
-        let init = to_bs h in
-        List.fold_left t ~init ~f:(fun bs p ->
-          best_bs bs (to_bs p))
-
-  let add_log_likelihoods ~into = function
-    | Filtered _  -> ()                     (* Should we warn about ignoring a read? *)
-    | Completed r ->
-        let n = Array.length into in
-        for i = 0 to n - 1 do
-          into.(i) <- into.(i) +. r.likelihood.(i)
-        done
-
-  let merge state current =
-    let b = best current in
-    List.iter state ~f:(fun (n, into) ->
-      if n = b.name then add_log_likelihoods ~into b.rspr);
-    state
-
-end (* MultiLoci *)
-
-let forward_pass_m ?insert_p ?max_number_mismatches ?past_threshold_filter
-  ?band mode tlst read_length =
-  let make_passes = setup_single_pass ?insert_p ?max_number_mismatches ?band read_length in
-  let passes = List.map_snd tlst ~f:make_passes in
-  match mode with
-  | `Mapper n ->
-      let mapper = mapper ~n in
-      let multi_mapper read read_prob =
-        match past_threshold_filter with
-        | None
-        | Some false ->
-            List.map_snd passes ~f:(fun p -> mapper p read read_prob)
-        | Some true ->
-            begin match passes with
-            | []             -> invalid_argf "No passes!"
-            | (name, hp) :: tl ->
-                let m = mapper ~past_threshold_filter:`Start hp read read_prob in
-                List.fold_left tl ~init:([name,m], m.last_threshold)
-                  ~f:(fun (acc, t) (name, p) ->
-                        let m =
-                            mapper ~past_threshold_filter:(`Set t) p read read_prob
-                        in
-                        (name, m) :: acc, m.last_threshold)
-                |> fst
-                (* TODO: Worth recovering original named ordered ?*)
-                |> List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2)
-            end
-      in
-      `Mapper multi_mapper
-  | `Reporter ->
-      let multi_reporter read read_prob state =
-        begin match past_threshold_filter with
-        | None
-        | Some false ->
-            List.map_snd passes ~f:(fun p -> reducer p read read_prob)
-        | Some true ->
-            begin match passes with
-            | []             -> invalid_argf "No passes!"
-            | (name, hp) :: tl ->
-                let m = reducer ~past_threshold_filter:`Start hp read read_prob in
-                let t = hp.maximum_match () in
-                List.fold_left tl ~init:([name,m], t) ~f:(fun (acc, t) (n, p) ->
-                  let m = reducer ~past_threshold_filter:(`Set t) p read read_prob in
-                  let nt = max t (p.maximum_match ()) in
-                  (n,m) :: acc, nt)
-                |> fst
-                (* TODO: Worth recovering original named ordered ?*)
-                |> List.sort ~cmp:(fun (n1, _) (n2, _) -> compare n1 n2)
-
-            end
-        end
-        |> MultiLoci.merge state
-      in
-      `Reporter ( List.map_snd passes ~f:(fun proc -> proc.init_global_state ())
-                , multi_reporter)
-
-(* TODO: Get rid of this function it belongs in `Mapper, `Reducer output. *)
-let output s final_likelihoods =
-  let o =
-    match s with
-    | `Pt pt ->
-        Array.mapi pt.alleles
-          ~f:(fun i (a, _) -> final_likelihoods.(i), a)
-    | `Allele a ->
-        [| final_likelihoods.(0), a |]
-  in
-  let cmp (l1, a1) (l2, a2) =
-    if l2 < l1 then
-      -1
-    else if l2 > l1 then
-      1
-    else
-      compare a1 a2
-  in
-  Array.sort o ~cmp;
-  Array.iter o ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
