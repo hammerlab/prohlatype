@@ -13,9 +13,28 @@ module NList = struct
 
 end (* NList *)
 
-include (Nonstd : module type of Nonstd with module List := NList)
+module NArray = struct
+  include Nonstd.Array
+
+  let rev a =
+    let n = Array.length a in
+    Array.init n (fun i -> Array.unsafe_get a (n - i - 1))
+
+  let findi a ~f =
+    let n = Array.length a in
+    let rec loop i =
+      if i >= n then None
+      else if f a.(i) then Some i
+      else loop (i + 1)
+    in
+    loop 0
+
+end (* NArray *)
+include (Nonstd : module type of Nonstd with module List := NList
+                                         and module Array := NArray)
 
 module List = NList
+module Array = NArray
 
 let invalid_argf ?(prefix="") fmt =
   ksprintf invalid_arg ("%s" ^^ fmt) prefix
@@ -187,7 +206,3 @@ let manual_phred_llhd_lst s1 s2 probability_of_error =
 let manual_phred_llhd s1 s2 probability_of_error =
   manual_phred_llhd_lst s1 s2 probability_of_error
   |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)
-
-let array_rev a =
-  let n = Array.length a in
-  Array.init n ~f:(fun i -> Array.unsafe_get a (n - i - 1))

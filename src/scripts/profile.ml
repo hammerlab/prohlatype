@@ -160,3 +160,7 @@ let load_times ~dir ~fname_to_key =
       let k = fname_to_key file in
       let t = get_times (Filename.concat dir file) in
       (k, t) :: acc)
+
+let user_times =
+  List.map ~f:(fun (sample_name, lst) ->
+    sample_name,  Scanf.sscanf (List.nth_exn lst 1) "user\t%dm%fs" (fun m s -> (float m *. 60. +. s))) ;;
