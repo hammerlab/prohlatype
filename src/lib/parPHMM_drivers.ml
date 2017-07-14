@@ -3,12 +3,12 @@
 open Util
 open ParPHMM
 
-type stats =
+type mapper_stats =
   { per_allele : (float * string) list
   ; positions  : (float * int) list
   }
 
-let stats_to_strings ?(sep='\t') s =
+let mapper_stats_to_string ?(sep='\t') s =
   let l_to_s fmt l =
     String.concat ~sep:";" (List.map l ~f:(fun (l,a) -> sprintf fmt  a l))
   in
@@ -19,90 +19,86 @@ let stats_to_strings ?(sep='\t') s =
 type 'a rc_states =
   { regular         : 'a pass_result
   ; complement      : 'a pass_result
-  ; last_threshold  : float
   }
 
-type mapped_stats = stats rc_states
+type mapped_complement_stats = mapper_stats rc_states
 
 (* The output is ordered so that the left most stat is the most likely.
    We add characters 'R', 'C', 'F' as little annotations. *)
-let mapped_stats_to_string ?(sep='\t') ms =
+let mapped_complement_stats_to_string ?(sep='\t') ms =
   match ms.regular, ms.complement with
   | Completed r, Completed c ->
     if fst (List.hd_exn r.positions) > fst (List.hd_exn c.positions) then
       sprintf "R%c%s%cC%c%s"
-        sep (stats_to_strings ~sep r)
-        sep sep (stats_to_strings ~sep c)
+        sep (mapper_stats_to_string ~sep r)
+        sep sep (mapper_stats_to_string ~sep c)
     else
       sprintf "C%c%s%cR%c%s"
-        sep (stats_to_strings ~sep c)
-        sep sep (stats_to_strings ~sep r)
+        sep (mapper_stats_to_string ~sep c)
+        sep sep (mapper_stats_to_string ~sep r)
   | Completed r, Filtered m ->
-      sprintf "R%c%s%cF%c%s" sep (stats_to_strings ~sep r) sep sep m
+      sprintf "R%c%s%cF%c%s" sep (mapper_stats_to_string ~sep r) sep sep m
   | Filtered m, Completed c ->
-      sprintf "C%c%s%cF%c%s" sep (stats_to_strings ~sep c) sep sep m
+      sprintf "C%c%s%cF%c%s" sep (mapper_stats_to_string ~sep c) sep sep m
   | Filtered mr, Filtered mc ->
       sprintf "F%c%s%cF%c%s" sep mr sep sep mc
 
-let pass_result_to_stat = function
-  | Completed s -> fst (List.hd_exn s.positions)
-  | Filtered _  -> neg_infinity
-
-let or_neg_inf =
-  Option.value ~default:neg_infinity
-
-let new_threshold proc prev_threshold =
-  let r = proc.maximum_match () in
-  let p = or_neg_inf prev_threshold in
-  max r p
-
-let latest_threshold_of_pass_result prev_threshold proc = function
-  | Filtered _  -> or_neg_inf prev_threshold
-  | Completed _ -> new_threshold proc prev_threshold
-
-type reducer_stat =
+type reducer_stats =
   { comp       : bool
   ; likelihood : float array
   }
 
-let single reverse_complement proc read read_prob =
-  match proc.doit reverse_complement read read_prob with
-  | Filtered m    ->
-      Filtered m
-  | Completed ()  ->
-      let likelihood = proc.per_allele_llhd () in
-      Completed { comp = reverse_complement; likelihood }
+let proc_to_reducer_stat proc comp =
+  { comp ; likelihood = proc.per_allele_llhd ()}
 
-let both ?past_threshold_filter pass_res_to_stat proc read read_prob =
-  let do_work prev_threshold rc =
-    match proc.doit ?prev_threshold rc read read_prob with
-    | Filtered m   -> Filtered m
-    | Completed () -> Completed (pass_res_to_stat rc proc)
-  in
-  let reg_prev_threshold, comp_prev_threshold =
-    match past_threshold_filter with
-    | None          -> None,    false
-    | Some `Start   -> None,    true
-    | Some (`Set v) -> Some v,  true
-  in
-  let regular = do_work reg_prev_threshold false in
-  let comp_prev_threshold =
-    if comp_prev_threshold then
-      Some (latest_threshold_of_pass_result reg_prev_threshold
-              proc regular)
-    else
-      None
-  in
-  let complement = do_work comp_prev_threshold true in
-  let last_threshold =
-    latest_threshold_of_pass_result comp_prev_threshold
-      proc complement
-  in
-  { regular; complement; last_threshold }
+(* Consider a single orientation: either regular or reverse complement. *)
+let single ?prev_threshold proc pass_result_map reverse_complement read read_prob =
+  match proc.doit ?prev_threshold reverse_complement read read_prob with
+  | Filtered m    -> Filtered m
+  | Completed ()  -> Completed (pass_result_map proc reverse_complement)
 
-let mapper ~n ?past_threshold_filter =
-  both ?past_threshold_filter
-    (fun _rc proc ->
+let new_threshold prev_threshold proc =
+  max prev_threshold (proc.maximum_match ())
+
+let update_threshold prev_threshold proc = function
+  | Filtered _  -> prev_threshold
+  | Completed _ -> new_threshold prev_threshold proc
+
+let init_past_threshold = function
+  | None
+  | Some false  -> `Don't
+  | Some true   -> `Start
+
+(* Consider both orientations. *)
+let both pt pass_result_map proc read read_prob =
+  let do_work ?prev_threshold rc =
+    single ?prev_threshold proc pass_result_map rc read read_prob
+  in
+  match pt with
+  | `Don't ->
+      let regular = do_work false in
+      let complement = do_work true in
+      { regular; complement }, None
+  | `Start ->
+      let regular = do_work false in
+      let prev_threshold = update_threshold neg_infinity proc regular in
+      let complement = do_work ~prev_threshold true in
+      let last_threshold = update_threshold prev_threshold proc complement in
+      { regular; complement }, Some (last_threshold)
+  | `Set v ->
+      let regular = do_work ~prev_threshold:v false in
+      let prev_threshold = update_threshold v proc regular in
+      let complement = do_work ~prev_threshold true in
+      let last_threshold = update_threshold prev_threshold proc complement in
+      { regular; complement; }, Some (last_threshold)
+
+let update_pt = function
+  | None   -> `Start
+  | Some v -> `Set v
+
+let mapper ~n past_threshold =
+  both past_threshold
+    (fun proc _rc ->
       { per_allele = proc.best_alleles n
       ; positions  = proc.best_positions n
       })
@@ -124,18 +120,19 @@ let most_likely_between_rc = function
     else
       Completed c
 
-let reducer proc ?(check_rc=true) ?past_threshold_filter read read_prob =
+let reducer ?(check_rc=true) past_threshold proc read read_prob =
   if check_rc then begin
-    let mp =
-      both ?past_threshold_filter
-        (fun comp proc ->
+    let mp, pt =
+      both past_threshold
+        (fun proc comp ->
             let likelihood = proc.per_allele_llhd () in
             { comp ; likelihood })
         proc read read_prob
     in
-    most_likely_between_rc (mp.regular, mp.complement)
+    most_likely_between_rc (mp.regular, mp.complement), pt
   end else
-    single false proc read read_prob
+    (* Can't care about previous threshold! *)
+    single proc proc_to_reducer_stat false read read_prob, None
 
 exception Read_error_parsing of string
 
@@ -239,12 +236,10 @@ module Reducer = struct
       to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
         read_length pt
     in
-    let past_threshold_filter =
-      Option.bind past_threshold_filter
-        ~f:(function | true -> Some `Start | false -> None)
-    in
+    let past_threshold = init_past_threshold past_threshold_filter in
     let n = Array.length allele_arr in
-    let r = reducer ?check_rc ?past_threshold_filter proc in
+    (* Discard resulting past threshold *)
+    let r rd rp = fst (reducer ?check_rc past_threshold proc rd rp) in
     let rec t = { state; apply; paired; output }
     and state = proc.init_global_state ()
     and apply fqi =
@@ -257,7 +252,7 @@ module Reducer = struct
         let r2 =
           match r1 with
           | Filtered _  -> r rd2 rp2 (* Filtered so check both conf *)
-          | Completed c -> single (not c.comp) proc rd2 rp2
+          | Completed c -> single proc proc_to_reducer_stat (not c.comp) rd2 rp2
         in
         add_log_likelihoods n t.state r1;
         add_log_likelihoods n t.state r2)
@@ -283,21 +278,25 @@ type 'a single_or_paired =
    a specific HLA-loci aligns the read. *)
 module Mapper = struct
 
-  type mp = mapped_stats single_or_paired
+  type mp = mapped_complement_stats single_or_paired
+
+  let pass_result_to_comparable_likelihood = function
+    | Completed s -> fst (List.hd_exn s.positions)
+    | Filtered _  -> neg_infinity
 
   let best_stat_rc ms =
-    max (pass_result_to_stat ms.regular)
-        (pass_result_to_stat ms.complement)
+    max (pass_result_to_comparable_likelihood ms.regular)
+        (pass_result_to_comparable_likelihood ms.complement)
 
   let best_stat = function
     | Single ms         -> best_stat_rc ms
     | Paired (ms1, ms2) -> max (best_stat_rc ms1) (best_stat_rc ms2)
 
   let mp_to_string = function
-    | Single ms         -> mapped_stats_to_string ~sep:'\t' ms
+    | Single ms         -> mapped_complement_stats_to_string ~sep:'\t' ms
     | Paired (ms1, ms2) -> sprintf "%s\t%s"
-                            (mapped_stats_to_string ~sep:'\t' ms1)
-                            (mapped_stats_to_string ~sep:'\t' ms2)
+                            (mapped_complement_stats_to_string ~sep:'\t' ms1)
+                            (mapped_complement_stats_to_string ~sep:'\t' ms2)
   type t =
     { mutable state : (string * mp) list
     ; apply         : Biocaml_unix.Fastq.item -> unit
@@ -322,13 +321,10 @@ module Mapper = struct
       in
       match allele with
       | None ->
-          let past_threshold_filter =
-            Option.bind past_threshold_filter
-              ~f:(function | true -> Some `Start | false -> None)
-          in
-          mapper ~n ?past_threshold_filter proc
+          let pt = init_past_threshold past_threshold_filter in
+          fun rd rp -> fst (mapper ~n pt proc rd rp)
       | Some _ -> (* Ignore since we do want to map *)
-          mapper ~n proc
+          fun rd rp -> fst (mapper ~n `Don't proc rd rp)
     in
     let rec t = { state = []; apply; paired; output }
     and apply =
@@ -491,7 +487,7 @@ module Multiple_reducer = struct
 
   type best_state =
     { name  : string
-    ; rspr  : reducer_stat pass_result
+    ; rspr  : reducer_stats pass_result single_or_paired
     ; maxl  : float
     }
 
@@ -499,8 +495,12 @@ module Multiple_reducer = struct
     | Filtered _  -> neg_infinity
     | Completed c -> max_arr c.likelihood
 
+  let sp_to_llhd = function
+    | Single s        -> pr_to_llhd s
+    | Paired (p1, p2) -> max (pr_to_llhd p1) (pr_to_llhd p2)
+
   let to_bs (name, rspr) =
-    { name; rspr; maxl = pr_to_llhd rspr}
+    { name; rspr; maxl = sp_to_llhd rspr}
 
   let best_bs bs1 bs2 =
     (*printf "%s %f vs %s %f\n%!" bs1.name bs1.maxl bs2.name bs2.maxl; *)
@@ -513,14 +513,20 @@ module Multiple_reducer = struct
         List.fold_left t ~init ~f:(fun bs p ->
           best_bs bs (to_bs p))
 
+  let add_log_likelihoods n lklhd_arr = function
+    | Single r        -> Reducer.add_log_likelihoods n lklhd_arr r
+    | Paired (r1, r2) -> Reducer.add_log_likelihoods n lklhd_arr r1;
+                         Reducer.add_log_likelihoods n lklhd_arr r2
+
   let merge state current =
     let b = best current in
     List.iter state ~f:(fun (name, n, lklhd_arr) ->
-      if name = b.name then Reducer.add_log_likelihoods n lklhd_arr b.rspr)
+      if name = b.name then add_log_likelihoods n lklhd_arr b.rspr)
 
-  type t =
+  type t =      (* loci, # alleles, likelihoods *)
     { state   : (string * int * float array) list
     ; apply   : Biocaml_unix.Fastq.item -> unit
+    ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output  : out_channel -> unit
     }
 
@@ -536,7 +542,8 @@ module Multiple_reducer = struct
         let n = Array.length allele_arr in
         proc, allele_arr, n)
     in
-    let rec t = { state; apply; output }
+    let pt = init_past_threshold past_threshold_filter in
+    let rec t = { state; apply; paired; output }
     and state =
       List.map paa ~f:(fun (name, (p, _, n)) -> name, n, p.init_global_state ())
     and output oc =
@@ -545,27 +552,52 @@ module Multiple_reducer = struct
               fprintf oc "%s\n" name;
               Reducer.output_i allele_arr lkld_arr oc)
     and apply fqi =
-      match past_threshold_filter with
-      | None
-      | Some false  ->
+      match pt with
+      | `Don't ->
           fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
-            List.map_snd paa ~f:(fun (p, _, n) -> reducer p read read_probs)
+            List.map_snd paa ~f:(fun (p, _, _) -> Single (fst (reducer pt p read read_probs)))
             |> merge t.state)
-      | Some true   ->
-          (* Now we have to take into account previous filter results. *)
+      | `Start ->
           fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
-            List.fold_left paa ~init:(`Start, neg_infinity, [])
-              ~f:(fun (past_threshold_filter, pt, acc) (name, (p, _, _)) ->
-                    let m = reducer ~past_threshold_filter p read read_probs in
-                    let nt = new_threshold p (Some pt) in
-                    (`Set nt, nt, (name, m) :: acc))
-            |> function _, _, acc ->
-                  merge t.state acc)
+          List.fold_left paa ~init:(pt, [])
+            ~f:(fun (pt, acc) (name, (p, _, _)) ->
+                  let m, npto = reducer pt p read read_probs in
+                  let npt = update_pt npto in
+                  (npt, (name, Single m) :: acc))
+          |> function _, acc ->
+                merge t.state acc)
+    and paired fq1 fq2 =
+      match pt with
+      | `Don't ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
+            List.map_snd paa ~f:(fun (p, _, _) ->
+              let r1 = fst (reducer `Don't p rd1 rp1) in
+              let r2 =
+                match r1 with
+                | Filtered _  -> fst (reducer `Don't p rd2 rp2) (* Filtered so check both conf *)
+                | Completed c -> single p proc_to_reducer_stat (not c.comp) rd2 rp2
+              in
+              Paired (r1, r2))
+            |> merge t.state)
+      | `Start ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
+            List.fold_left paa ~init:(pt, pt, [])
+              ~f:(fun (pt1, pt2, acc) (name, (p, _, _)) ->
+                    let m1, npto1 = reducer pt1 p rd1 rp1 in
+                    let npt1 = update_pt npto1 in
+                    let m2, npto2 = reducer pt2 p rd2 rp2 in
+                    let npt2 = update_pt npto2 in
+                    let nacc = (name, Paired (m1, m2)) :: acc in
+                    (npt1, npt2, nacc)))
+            |> function _, _, nacc -> merge t.state nacc
     in
     t
 
   let apply fqi t =
     t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
 
   let output oc t =
     t.output oc
@@ -575,14 +607,15 @@ end (* Multiple_reducer *)
 module Multiple_mapper = struct
 
   type t =
-    { mutable state : (string * (string * mapped_stats) list) list
+    { mutable state : (string * (string * Mapper.mp) list) list
     ; apply         : Biocaml_unix.Fastq.item -> unit
+    ; paired        : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output        : out_channel -> unit
     }
 
   let sort_mapped_output lst =
     let highest_llhd l =
-      List.map l ~f:(fun (_name, s) -> Mapper.best_stat_rc s)
+      List.map l ~f:(fun (_name, mp) -> Mapper.best_stat mp)
       |> List.reduce ~f:max
     in
     List.sort lst ~cmp:(fun (_rn1, nlst1) (_rn2, nlst2) ->
@@ -597,7 +630,8 @@ module Multiple_mapper = struct
       List.map_snd pt_lst ~f:(fun pt ->
         Mapper.to_proc ?insert_p ?max_number_mismatches ?band read_length pt)
     in
-    let rec t = { state; apply; output }
+    let pt = init_past_threshold past_threshold_filter in
+    let rec t = { state; apply; paired; output }
     and state = []
     and output oc =
       fprintf oc "Reads: %d\n" (List.length t.state);
@@ -606,23 +640,47 @@ module Multiple_mapper = struct
         fprintf oc "%s\n\t%s\n"
           read (String.concat ~sep:"\n\t"
             (List.map (List.sort ~cmp:compare lst) (* Sort by name too *)
-              ~f:(fun (name, ms) -> sprintf "%s\t%s"
-                      name (mapped_stats_to_string ~sep:'\t' ms)))))
+              ~f:(fun (name, mp) -> sprintf "%s\t%s"
+                      name (Mapper.mp_to_string mp)))))
     and apply fqi =
-      match past_threshold_filter with
-      | None
-      | Some false  ->
+      match pt with
+      | `Don't  ->
           fqi_to_read_and_probs fqi ~k:(fun read_name read read_probs ->
-            let r = List.map_snd procs ~f:(fun p -> mapper ~n p read read_probs) in
+            let r = List.map_snd procs ~f:(fun p ->
+                      Single (fst (mapper ~n `Don't p read read_probs)))
+            in
             t.state <- (read_name, r) :: t.state)
-      | Some true   ->
+      | `Start  ->
           (* Now we have to take into account previous filter results. *)
           fqi_to_read_and_probs fqi ~k:(fun read_name read read_probs ->
-            List.fold_left procs ~init:(`Start, neg_infinity, [])
-              ~f:(fun (past_threshold_filter, pt, acc) (name, p) ->
-                    let m = mapper ~n ~past_threshold_filter p read read_probs in
-                    let nt = new_threshold p (Some pt) in
-                    (`Set nt, nt, (name, m) :: acc))
+            List.fold_left procs ~init:(`Start, [])
+              ~f:(fun (pt, acc) (name, p) ->
+                    let m, npto = mapper ~n pt p read read_probs in
+                    let npt = update_pt npto in
+                    (npt, (name, Single m) :: acc))
+            |> function _, acc ->
+                  t.state <- (read_name, acc) :: t.state)
+    and paired fq1 fq2 =
+      match pt with
+      | `Don't ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+            let r = List.map_snd procs ~f:(fun p ->
+              let m1, _ = mapper `Don't ~n p rd1 rp1 in
+              let m2, _ = mapper `Don't ~n p rd2 rp2 in
+              Paired (m1, m2))
+            in
+            t.state <- (read_name, r) :: t.state)
+      | `Start ->
+          (* Now we have to take into account previous filter results. *)
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+            List.fold_left procs ~init:(`Start, `Start, [])
+              ~f:(fun (pt1, pt2, acc) (name, p) ->
+                    let m1, npto1 = mapper ~n pt1 p rd1 rp1 in
+                    let npt1 = update_pt npto1 in
+                    let m2, npto2 = mapper ~n pt2 p rd2 rp2 in
+                    let npt2 = update_pt npto2 in
+                    let nacc = (name, Paired (m1, m2)) :: acc in
+                    (npt1, npt2, nacc))
             |> function _, _, acc ->
                   t.state <- (read_name, acc) :: t.state)
     in
@@ -630,6 +688,9 @@ module Multiple_mapper = struct
 
   let apply fqi t =
     t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
 
   let output oc t =
     t.output oc
@@ -656,6 +717,10 @@ module Mulitple_loci = struct
   let apply t fqi = match t with
     | Reducer r -> Multiple_reducer.apply fqi r
     | Mapper m  -> Multiple_mapper.apply fqi m
+
+  let paired t fq1 fq2 = match t with
+    | Reducer r -> Multiple_reducer.paired fq1 fq2 r
+    | Mapper m  -> Multiple_mapper.paired fq1 fq2 m
 
   let output t oc = match t with
     | Reducer r -> Multiple_reducer.output oc r

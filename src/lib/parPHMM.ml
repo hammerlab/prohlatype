@@ -1741,18 +1741,30 @@ let access rc read read_prob =
 (*** Full Forward Pass *)
 
 type proc =
-  (* Allocate the right size for global state*)
   { init_global_state : unit -> float array
-  (* Perform a forward pass. *)
+  (* Allocate the right size for global state of the per allele likelihoods. *)
+
   ; doit            : ?prev_threshold:float
                       -> bool -> string -> float array
                       -> unit pass_result
+  (* Perform a forward pass. We purposefully only signal whether we fully
+     completed the pass or were filtered, because we may have different uses
+     for the result of a pass. The accessors below allow the user to extract
+     more purposeful information. *)
+
   ; best_alleles    : int -> (float * string) list
   ; best_positions  : int -> (float * int) list
-  (* Get the calculated likelihoods. *)
-  ; per_allele_llhd : unit -> float array                     (* Pass'es output. *)
-  (* Get a possible threshold value for future passes. *)
+  (* After we perform a forward pass we might be interested in either some
+     diagnostic information such as which were the best alleles or where
+     was the best alignment in the loci? These support a mode where we
+     want to see how the reads "map" for different loci. *)
+
+  ; per_allele_llhd : unit -> float array
+  (* If we're not interested in diagnostics, but just the end result, we want
+     the per allele likelihood: *)
+
   ; maximum_match   : unit -> float
+  (* We might also want to get a possible threshold value for future passes. *)
   }
 
 (* Single, for one allele, forward pass *)
