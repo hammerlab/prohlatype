@@ -178,6 +178,8 @@ type single_conf =
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
+  ; joined_pairs          : bool option
+
   ; check_rc              : bool option
   (** Compare against the reverse complement of a read and take the best likelihood. *)
   }
@@ -390,30 +392,63 @@ module Viterbi = struct
     }
 
   let init conf read_length pt =
-    let { allele; insert_p; _ } = conf in
+    let { allele; insert_p; joined_pairs; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first. *)
     let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
-    let v = setup_single_allele_viterbi_pass ?insert_p ~allele read_length pt in
-    let vr read read_probs =
+    let labels = allele ^ " ", "read " in
+    let of_triple v read read_probs =
       let (reverse_complement, emission, path_list) = v read read_probs in
       { reverse_complement; emission; path_list}
     in
-    let labels = allele ^ " ", "read " in
-    let rec t = { state = []; apply; paired; output }
-    and apply =
-      fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
-        t.state <- (read_name, Single (vr read read_probs)) :: t.state)
-    and paired fq1 fq2 =
-      fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
-        let v1 = vr rd1 rp1 in
-        let v2 = vr rd2 rp2 in
-        t.state <- (read_name, Paired (v1, v2)) :: t.state)
-    and output oc =
-      List.iter t.state ~f:(fun (read_name, vr ) ->
-        fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
-    in
-    t
+    match joined_pairs with
+    | Some true ->
+      begin
+        let length = read_length in
+        let read_length = read_length * 2 in
+        let v = setup_single_allele_viterbi_pass ?insert_p ~allele read_length pt in
+        let vr = of_triple v in
+        let rec t = { state = []; apply; paired; output }
+        and apply =
+          fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
+            t.state <- (read_name, Single (vr read read_probs)) :: t.state)
+        and paired fq1 fq2 =
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+            let rd = String.make read_length 'A' in
+            String.blit ~src:rd1 ~src_index:0 ~dst:rd ~dst_index:0 ~length;
+            let rc = reverse_complement rd2 in
+            String.blit ~src:rc ~src_index:0 ~dst:rd ~dst_index:length ~length;
+            let rp = Array.create_float read_length in
+            Array.blit ~src:rp1 ~src_pos:0 ~dst:rp ~dst_pos:0 ~len:length;
+            for i = 0 to length - 1 do
+              rp.(length + i) <- rp2.(length - 1 - i)
+            done;
+            let v = vr rd rp in
+            t.state <- (read_name, Single v) :: t.state)
+        and output oc =
+          List.iter t.state ~f:(fun (read_name, vr ) ->
+            fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
+        in
+      t
+      end
+    | _ ->
+      let v = setup_single_allele_viterbi_pass ?insert_p ~allele
+                read_length pt in
+      let vr = of_triple v in
+      let rec t = { state = []; apply; paired; output }
+      and apply =
+        fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
+          t.state <- (read_name, Single (vr read read_probs)) :: t.state)
+      and paired fq1 fq2 =
+        fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+          let v1 = vr rd1 rp1 in
+          let v2 = vr rd2 rp2 in
+          t.state <- (read_name, Paired (v1, v2)) :: t.state)
+      and output oc =
+        List.iter t.state ~f:(fun (read_name, vr ) ->
+          fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
+      in
+      t
 
   let apply fqi t =
     t.apply fqi
@@ -429,10 +464,11 @@ end (* Viterbi *)
 (** Single Loci Drivers **)
 module Single_loci = struct
 
-  let conf ?allele ?insert_p ?band ?max_number_mismatches ?past_threshold_filter
-    ?check_rc () =
-    { allele; insert_p; band; max_number_mismatches; past_threshold_filter
-    ; check_rc }
+  let conf ?allele ?insert_p ?band ?max_number_mismatches
+    ?joined_pairs ?past_threshold_filter ?check_rc () =
+    { allele; insert_p; band; max_number_mismatches
+    ; joined_pairs ; past_threshold_filter ; check_rc
+    }
 
   type t =
     | Reducer of Reducer.t

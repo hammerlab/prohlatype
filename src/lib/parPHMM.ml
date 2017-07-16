@@ -1818,7 +1818,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       ; maximum_match
       }
 
-let setup_single_allele_viterbi_pass ?insert_p read_length ~allele t =
+let setup_single_allele_viterbi_pass ?insert_p read_length ~allele
+  t =
   let { emissions_a; alleles; _ } = t in
   (* Recover allele's base sequence, aka, emission. *)
   match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
@@ -1834,8 +1835,8 @@ let setup_single_allele_viterbi_pass ?insert_p read_length ~allele t =
         |> Array.of_list
       in
       let ref_length = Array.length allele_a in
-      let ws = ForwardSLogSpace.V.generate () ~ref_length ~read_length in
       let transition_ref_length = Array.length emissions_a in
+      let ws = ForwardSLogSpace.V.generate () ~ref_length ~read_length in
       let pass =
         ForwardSLogSpace.fullv ?insert_p ~transition_ref_length ~read_length
           ws allele_a

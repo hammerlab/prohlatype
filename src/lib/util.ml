@@ -1,5 +1,5 @@
 include MoreLabels
-module String = Sosa.Native_string
+module String = Sosa.Native_bytes
 
 module NList = struct
   include Nonstd.List

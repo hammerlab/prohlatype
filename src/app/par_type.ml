@@ -100,6 +100,7 @@ let type_
     width
   (* how are we typing *)
     map_depth
+    joined_pairs
     mode
     forward_accuracy_opt
     =
@@ -130,7 +131,7 @@ let type_
           | `Viterbi -> `Viterbi
         in
         let conf = Pdsl.conf ?allele ~insert_p ?band ?max_number_mismatches
-                              ~past_threshold_filter ~check_rc ()
+                        ~joined_pairs ~past_threshold_filter ~check_rc ()
         in
         let init =
           match read_size_override with
@@ -172,6 +173,10 @@ let () =
                 or merge file." in
     Arg.(value & opt (some string) None
                & info ~doc ~docv [specific_allele_argument])
+  in
+  let joined_pairs_flag =
+    let doc = "Join paired reads into one." in
+    Arg.(value & flag & info ~doc ["join-pairs"])
   in
   let mode_flag =
     let open Arg in
@@ -236,6 +241,7 @@ let () =
             $ band_width_arg
             (* How are we typing *)
             $ map_depth_arg
+            $ joined_pairs_flag
             $ mode_flag
             $ forward_pass_accuracy_arg
             (* $ map_allele_arg
