@@ -52,8 +52,8 @@ let proc_to_reducer_stat proc comp =
   { comp ; likelihood = proc.per_allele_llhd ()}
 
 (* Consider a single orientation: either regular or reverse complement. *)
-let single ?prev_threshold proc pass_result_map reverse_complement read read_prob =
-  match proc.doit ?prev_threshold reverse_complement read read_prob with
+let single ?prev_threshold proc pass_result_map reverse_complement read read_errors =
+  match proc.single ?prev_threshold ~reverse_complement ~read ~read_errors with
   | Filtered m    -> Filtered m
   | Completed ()  -> Completed (pass_result_map proc reverse_complement)
 
@@ -70,9 +70,9 @@ let init_past_threshold = function
   | Some true   -> `Start
 
 (* Consider both orientations. *)
-let both pt pass_result_map proc read read_prob =
+let both pt pass_result_map proc read read_errors =
   let do_work ?prev_threshold rc =
-    single ?prev_threshold proc pass_result_map rc read read_prob
+    single ?prev_threshold proc pass_result_map rc read read_errors
   in
   match pt with
   | `Don't ->
@@ -272,10 +272,6 @@ module Reducer = struct
 
 end (* Reducer *)
 
-type 'a single_or_paired =
-  | Single of 'a
-  | Paired of ('a * 'a)
-
 (* A mapper maps the information from each read into a summarization of how
    a specific HLA-loci aligns the read. *)
 module Mapper = struct
@@ -363,29 +359,52 @@ end (* Mapper *)
 module Viterbi = struct
 
   open ParPHMM
+  open Path
 
-  type viterbi_result =
-    { reverse_complement : bool       (* Was the reverse complement best? *)
-    ; emission           : float      (* Final emission likelihood *)
-    ; path_list          : path list
-    }
+  let center_justify str size =
+    let n = String.length str in
+    let rem = size - n in
+    if rem <= 0 then
+      str
+    else
+      let l = rem / 2 in
+      let r = if (rem mod 2) = 1 then l + 1 else l in
+      sprintf "%*s%s%*s" l "" str r ""
 
-  let viterbi_result_to_string ?(width=120) ?(labels=("reference ", "read "))
+  let viterbi_result_to_string ?(width=250) ?(labels=("reference ", "read "))
     {reverse_complement; emission; path_list} =
-    let { reference; read } = path_list_to_strings path_list in
-    sprintf "Reverse complement: %b, final emission: %f, path length: %d\n%s"
-      reverse_complement emission (List.length path_list)
+    let separate ?(from="") rc { reference; read; start; end_ } =
+      sprintf "Reverse complement: %b, final emission: %f, path length: %d from %d to %d %s\n%s"
+        rc emission (List.length path_list) start end_ from
         (manual_comp_display ~width ~labels reference read)
-
-  type vr = viterbi_result single_or_paired
-
-  let vr_to_string ~labels = function
-    | Single v -> viterbi_result_to_string ~labels v
-    | Paired (v1, v2) -> sprintf "%s\n%s" (viterbi_result_to_string ~labels v1)
-                                          (viterbi_result_to_string ~labels v2)
+    in
+    match to_strings path_list with
+    | Single s        -> separate reverse_complement s
+    | Paired (r1, r2) ->
+        let s1, rc1, f1, s2, rc2, f2 =
+          if r1.start < r2.start then
+            r1, reverse_complement, "read 1", r2, not reverse_complement, "read 2"
+          else
+            r2, not reverse_complement, "read2", r1, reverse_complement, "read 1"
+        in
+        let inner_distance = s2.start - s1.end_ in
+        if inner_distance < 0 then
+          sprintf "Negative Inner distance:\n%s\n%s"
+            (separate ~from:f1 rc1 s1) (separate ~from:f2 rc2 s2)
+        else
+          let idmsg = sprintf " inner: %d " inner_distance in
+          let allele_i = center_justify idmsg inner_distance in
+          let actual_size = String.length allele_i in
+          let read_i = String.make actual_size '=' in
+          let reference = s1.reference ^ allele_i ^ s2.reference in
+          let read = s1.read ^ read_i ^ s2.read in
+          let msm_offset = - actual_size in
+          sprintf "Reverse complement: %b, final emission: %f, path length: %d from %d to %d %s->%s\n%s"
+            rc1 emission (List.length path_list) s1.start s2.end_ f1 f2
+            (manual_comp_display ~msm_offset ~width ~labels reference read)
 
   type t =
-    { mutable state : (string * vr) list
+    { mutable state : (string * viterbi_result) list
     ; apply         : Biocaml_unix.Fastq.item -> unit
     ; paired        : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output        : out_channel -> unit
@@ -397,58 +416,22 @@ module Viterbi = struct
     (* Relying on reference being first. *)
     let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
     let labels = allele ^ " ", "read " in
-    let of_triple v read read_probs =
-      let (reverse_complement, emission, path_list) = v read read_probs in
-      { reverse_complement; emission; path_list}
+    let s, p =
+      setup_single_allele_viterbi_pass ?insert_p ~allele
+        read_length pt
     in
-    match joined_pairs with
-    | Some true ->
-      begin
-        let length = read_length in
-        let read_length = read_length * 2 in
-        let v = setup_single_allele_viterbi_pass ?insert_p ~allele read_length pt in
-        let vr = of_triple v in
-        let rec t = { state = []; apply; paired; output }
-        and apply =
-          fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
-            t.state <- (read_name, Single (vr read read_probs)) :: t.state)
-        and paired fq1 fq2 =
-          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
-            let rd = String.make read_length 'A' in
-            String.blit ~src:rd1 ~src_index:0 ~dst:rd ~dst_index:0 ~length;
-            let rc = reverse_complement rd2 in
-            String.blit ~src:rc ~src_index:0 ~dst:rd ~dst_index:length ~length;
-            let rp = Array.create_float read_length in
-            Array.blit ~src:rp1 ~src_pos:0 ~dst:rp ~dst_pos:0 ~len:length;
-            for i = 0 to length - 1 do
-              rp.(length + i) <- rp2.(length - 1 - i)
-            done;
-            let v = vr rd rp in
-            t.state <- (read_name, Single v) :: t.state)
-        and output oc =
-          List.iter t.state ~f:(fun (read_name, vr ) ->
-            fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
-        in
-      t
-      end
-    | _ ->
-      let v = setup_single_allele_viterbi_pass ?insert_p ~allele
-                read_length pt in
-      let vr = of_triple v in
-      let rec t = { state = []; apply; paired; output }
-      and apply =
-        fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
-          t.state <- (read_name, Single (vr read read_probs)) :: t.state)
-      and paired fq1 fq2 =
-        fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
-          let v1 = vr rd1 rp1 in
-          let v2 = vr rd2 rp2 in
-          t.state <- (read_name, Paired (v1, v2)) :: t.state)
-      and output oc =
-        List.iter t.state ~f:(fun (read_name, vr ) ->
-          fprintf oc "%s:\n%s\n" read_name (vr_to_string ~labels vr))
-      in
-      t
+    let rec t = { state = []; apply; paired; output }
+    and apply =
+      fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
+        t.state <- (read_name, s read read_probs) :: t.state)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 re1 rd2 re2 ->
+        t.state <- (read_name, p rd1 re1 rd2 re2) :: t.state)
+    and output oc =
+      List.iter t.state ~f:(fun (read_name, vr ) ->
+        fprintf oc "%s:\n%s\n" read_name (viterbi_result_to_string ~labels vr))
+    in
+  t
 
   let apply fqi t =
     t.apply fqi
