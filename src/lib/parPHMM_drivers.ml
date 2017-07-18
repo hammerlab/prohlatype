@@ -176,8 +176,6 @@ type single_conf =
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
-  ; joined_pairs          : bool
-
   ; check_rc              : bool
   (** Compare against the reverse complement of a read and take the best likelihood. *)
   }
@@ -429,7 +427,7 @@ module Viterbi = struct
     }
 
   let init conf read_length pt =
-    let { allele; insert_p; joined_pairs; _ } = conf in
+    let { allele; insert_p; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first. *)
     let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
@@ -466,9 +464,9 @@ end (* Viterbi *)
 module Single_loci = struct
 
   let conf ?allele ?insert_p ?band ?max_number_mismatches
-    ~joined_pairs ~past_threshold_filter ~check_rc () =
+    ~past_threshold_filter ~check_rc () =
     { allele; insert_p; band; max_number_mismatches
-    ; joined_pairs ; past_threshold_filter ; check_rc
+    ; past_threshold_filter ; check_rc
     }
 
   type t =
