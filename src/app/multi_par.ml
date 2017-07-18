@@ -99,6 +99,7 @@ let type_
     likelihood_first
   (* how are we typing *)
     map_depth
+    not_incremental_pairs
     mode
     forward_accuracy_opt
     =
@@ -120,8 +121,9 @@ let type_
                 ], []
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
+  let incremental_pairs = not not_incremental_pairs in
   let conf = Pdml.conf ~insert_p ?band ?max_number_mismatches
-                    ~past_threshold_filter ()
+                    ~past_threshold_filter ~incremental_pairs ()
   in
   let need_read_size_r =
     to_read_size_dependent
@@ -222,6 +224,15 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
   in
+  let do_not_use_incremental_pairs_flag =
+    let doc   = "By default when performing paired typing, we use the first \
+                 (as specified by the read found in the first file on the \
+                 command line) pair, to determine which loci is the most \
+                 likely. This is faster but potentially less accurate. \
+                 To use both pairs pass this flag. "
+    in
+    Arg.(value & flag & info ~doc ["do-not-incremental-pair"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -258,6 +269,7 @@ let () =
             $ likelihood_first_flag
             (* How are we typing *)
             $ map_depth_arg
+            $ do_not_use_incremental_pairs_flag
             $ mode_flag
             $ forward_pass_accuracy_arg
             (* $ map_allele_arg

@@ -120,13 +120,7 @@ let most_likely_between_rc = function
 
 let reducer ?(check_rc=true) past_threshold proc read read_prob =
   if check_rc then begin
-    let mp, pt =
-      both past_threshold
-        (fun proc comp ->
-            let likelihood = proc.per_allele_llhd () in
-            { comp ; likelihood })
-        proc read read_prob
-    in
+    let mp, pt = both past_threshold proc_to_reducer_stat proc read read_prob in
     most_likely_between_rc (mp.regular, mp.complement), pt
   end else
     (* Can't care about previous threshold! *)
@@ -515,6 +509,11 @@ type multiple_conf =
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
+  ; incremental_pairs : bool
+  (* This option only applies to paired typing. Instead of naively modeling
+     the two read pairs at the same time, use the first as guidance of which
+     loci is the best, and then apply the second read to only the best loci.
+     The default should be true. *)
   }
 
 (* Reduce to multiple loci. *)
@@ -558,6 +557,22 @@ module Multiple_reducer = struct
     List.iter state ~f:(fun (name, n, lklhd_arr) ->
       if name = b.name then add_log_likelihoods n lklhd_arr b.rspr)
 
+  let reduce_to_best_loci ~init ~f ~c = function
+    | [] -> invalid_argf "Empty loci list"
+    | (name, (proc, _, _)) :: tl ->
+        let acc, m = f init proc in
+        let rec loop acc bl best = function
+          | []  -> best
+          | (name, (proc, _, _)) :: t ->
+              let nacc, m = f acc proc in
+              let l = c m in
+              if l > bl then
+                loop nacc l (name, proc, m) t
+              else
+                loop nacc bl best t
+        in
+        loop acc (c m) (name, proc, m) tl
+
   type t =      (* loci, # alleles, likelihoods *)
     { state   : (string * int * float array) list
     ; apply   : Biocaml_unix.Fastq.item -> unit
@@ -566,7 +581,7 @@ module Multiple_reducer = struct
     }
 
   let init conf likelihood_first read_length pt_lst =
-    let { insert_p; band; max_number_mismatches; past_threshold_filter } = conf in
+    let { insert_p; band; max_number_mismatches; _ } = conf in
     let open ParPHMM in
     let paa =
       List.map_snd pt_lst ~f:(fun pt ->
@@ -577,7 +592,7 @@ module Multiple_reducer = struct
         let n = Array.length allele_arr in
         proc, allele_arr, n)
     in
-    let pt = init_past_threshold past_threshold_filter in
+    let pt = init_past_threshold conf.past_threshold_filter in
     let rec t = { state; apply; paired; output }
     and state =
       List.map paa ~f:(fun (name, (p, _, n)) -> name, n, p.init_global_state ())
@@ -602,29 +617,65 @@ module Multiple_reducer = struct
           |> function _, acc ->
                 merge t.state acc)
     and paired fq1 fq2 =
+      let add_to_state best_name m1 m2 =
+        List.iter t.state ~f:(fun (name, n, lklhd_arr) ->
+          if name = best_name then begin
+            Reducer.add_log_likelihoods n lklhd_arr m1;
+            Reducer.add_log_likelihoods n lklhd_arr m2
+         end)
+      in
       match pt with
       | `Don't ->
           fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
-            List.map_snd paa ~f:(fun (p, _, _) ->
-              let r1 = fst (reducer `Don't p rd1 rp1) in
-              let r2 =
-                match r1 with
-                | Filtered _  -> fst (reducer `Don't p rd2 rp2) (* Filtered so check both conf *)
-                | Completed c -> single p proc_to_reducer_stat (not c.comp) rd2 rp2
+            if conf.incremental_pairs then
+              let best_name, best_proc, m1 =
+                reduce_to_best_loci paa ~init:()
+                  ~f:(fun () p -> (), fst (reducer `Don't p rd1 rp1))
+                  ~c:pr_to_llhd
               in
-              Paired (r1, r2))
-            |> merge t.state)
+              let m2 =
+                match m1 with
+                | Filtered  _ -> fst (reducer `Don't best_proc rd2 rp2)
+                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 rp2
+              in
+              add_to_state best_name m1 m2
+            else
+              List.map_snd paa ~f:(fun (p, _, _) ->
+                let r1 = fst (reducer `Don't p rd1 rp1) in
+                let r2 =
+                  match r1 with
+                  | Filtered _  -> fst (reducer `Don't p rd2 rp2) (* Filtered so check both conf *)
+                  | Completed c -> single p proc_to_reducer_stat (not c.comp) rd2 rp2
+                in
+                Paired (r1, r2))
+              |> merge t.state)
       | `Start ->
           fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
-            List.fold_left paa ~init:(pt, pt, [])
-              ~f:(fun (pt1, pt2, acc) (name, (p, _, _)) ->
-                    let m1, npto1 = reducer pt1 p rd1 rp1 in
-                    let npt1 = update_pt npto1 in
-                    let m2, npto2 = reducer pt2 p rd2 rp2 in
-                    let npt2 = update_pt npto2 in
-                    let nacc = (name, Paired (m1, m2)) :: acc in
-                    (npt1, npt2, nacc)))
-            |> function _, _, nacc -> merge t.state nacc
+            if conf.incremental_pairs then
+              let best_name, best_proc, m1 =
+                reduce_to_best_loci paa ~init:`Start
+                  ~f:(fun pt proc ->
+                        let m1, npto = reducer pt proc rd1 rp1 in
+                        update_pt npto, m1)
+                  ~c:pr_to_llhd
+              in
+              let m2 =
+                match m1 with
+                | Filtered  _ -> fst (reducer `Don't best_proc rd2 rp2)
+                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 rp2
+              in
+              (*let m2 = fst (reducer `Don't best_proc rd2 rp2) in *)
+              add_to_state best_name m1 m2
+            else
+              List.fold_left paa ~init:(`Start, `Start, [])
+                ~f:(fun (pt1, pt2, acc) (name, (p, _, _)) ->
+                      let m1, npto1 = reducer pt1 p rd1 rp1 in
+                      let npt1 = update_pt npto1 in
+                      let m2, npto2 = reducer pt2 p rd2 rp2 in
+                      let npt2 = update_pt npto2 in
+                      let nacc = (name, Paired (m1, m2)) :: acc in
+                      (npt1, npt2, nacc))
+              |> function _, _, nacc -> merge t.state nacc)
     in
     t
 
@@ -734,8 +785,10 @@ end (* Multiple_mapper *)
 
 module Mulitple_loci = struct
 
-  let conf ?insert_p ?band ?max_number_mismatches ~past_threshold_filter () =
-    { insert_p; band; max_number_mismatches; past_threshold_filter }
+  let conf ?insert_p ?band ?max_number_mismatches ~past_threshold_filter
+    ~incremental_pairs () =
+    { insert_p; band; max_number_mismatches; past_threshold_filter
+    ; incremental_pairs }
 
   type t =
     | Reducer of Multiple_reducer.t
