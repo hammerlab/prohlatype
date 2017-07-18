@@ -47,14 +47,6 @@ let load_prohlatype fname =
         | None -> (gene, [r]) :: acc
         | Some (nr, nacc) -> (gene, r :: nr) :: nacc)
 
-let group_by_assoc l =
-  let insert assoc (k, v) =
-    match List.Assoc.remove_and_get k assoc with
-    | None              -> (k,[v]) :: assoc
-    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
-  in
-  List.fold_left ~init:[] ~f:insert l
-
 type nr = Nomenclature.resolution * Nomenclature.suffix option
 type gene = string
 (* Since prohlatype can report the same likelihood for multiple alleles,
@@ -71,7 +63,7 @@ let hla_likelihoods lst =
   List.map lst ~f:(fun (gene, llhd) ->
     let likelihoods =
       List.map llhd ~f:(fun (allele, l) -> (List.hd_exn l |> float_of_string, allele))  (* parse likelihood value. *)
-      |> group_by_assoc                                                           (* group by the same likelihoods *)
+      |> Util.group_by_assoc                                                      (* group by the same likelihoods *)
       |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
       |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
           (pos + List.length alleles, { alleles; pos; likelihood } :: acc))
@@ -151,7 +143,7 @@ let join_runs r1 r2 =
       |> List.sort ~cmp:compare   (* sort by allele *)
   in
   let regroup acc =
-    group_by_assoc acc                                                           (* group by the same likelihoods *)
+    Util.group_by_assoc acc                                                     (* group by the same likelihoods *)
     |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
     |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
       (pos + List.length alleles, { alleles; pos; likelihood } :: acc))

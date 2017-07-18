@@ -492,3 +492,10 @@ let do_not_past_threshold_filter_flag =
              filter to short-circuit evaluations."
   in
   Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])
+
+let likelihood_first_flag =
+  let doc = "When printing the final per-allele likelihoods, print ordered \
+              by likelihood first. This will print all of the alleles, in a \
+              compressed format following the likelihood."
+  in
+  Arg.(value & flag & info ~doc ["likelihood-first"; "llhdfst"])

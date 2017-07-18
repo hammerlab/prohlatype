@@ -212,3 +212,11 @@ let time s f =
   let r = f () in
   printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
   r
+
+let group_by_assoc l =
+  let insert assoc (k, v) =
+    match List.Assoc.remove_and_get k assoc with
+    | None              -> (k,[v]) :: assoc
+    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
+  in
+  List.fold_left ~init:[] ~f:insert l

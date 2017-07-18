@@ -96,6 +96,7 @@ let type_
     warmup
     number
     width
+    likelihood_first
   (* how are we typing *)
     map_depth
     mode
@@ -129,7 +130,7 @@ let type_
   in
   let mode =
     match mode with
-    | `Reducer -> `Reducer
+    | `Reducer -> `Reducer likelihood_first
     | `Mapper  -> `Mapper map_depth
   in
   match need_read_size_r with
@@ -254,6 +255,7 @@ let () =
             $ band_warmup_arg
             $ number_bands_arg
             $ band_width_arg
+            $ likelihood_first_flag
             (* How are we typing *)
             $ map_depth_arg
             $ mode_flag

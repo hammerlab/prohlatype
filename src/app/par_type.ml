@@ -98,6 +98,7 @@ let type_
     warmup
     number
     width
+    likelihood_first
   (* how are we typing *)
     map_depth
     joined_pairs
@@ -126,7 +127,7 @@ let type_
         let past_threshold_filter = not do_not_past_threshold_filter in
         let mode =
           match mode with
-          | `Reducer -> `Reducer
+          | `Reducer -> `Reducer likelihood_first
           | `Mapper  -> `Mapper map_depth
           | `Viterbi -> `Viterbi
         in
@@ -200,7 +201,7 @@ let () =
           [ "viterbi" ])
       ]
     in
-    value & vflag `Reducer  modes
+    value & vflag `Reducer modes
   in
   let type_ =
     let version = "0.0.0" in
@@ -239,6 +240,7 @@ let () =
             $ band_warmup_arg
             $ number_bands_arg
             $ band_width_arg
+            $ likelihood_first_flag
             (* How are we typing *)
             $ map_depth_arg
             $ joined_pairs_flag

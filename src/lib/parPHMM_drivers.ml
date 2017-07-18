@@ -196,7 +196,7 @@ module Reducer = struct
     ; output  : out_channel -> unit
     }
 
-  let output_i allele_arr final_likelihoods =
+  let output_allele_first allele_arr final_likelihoods =
     let o = Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a) in
     let cmp (l1, a1) (l2, a2) =
       if l2 < l1 then
@@ -209,6 +209,25 @@ module Reducer = struct
     Array.sort o ~cmp;
     fun oc ->
       Array.iter o ~f:(fun (l,a) -> fprintf oc "%10s\t%0.20f\n" a l)
+
+  let output_likelihood_first allele_arr final_likelihoods =
+    let o =
+      Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a)
+      |> Array.to_list
+      |> group_by_assoc
+      |> List.map ~f:(fun (l, alst) ->
+            let clst = Alleles.CompressNames.f alst in
+            l, String.concat ~sep:";" clst)
+      |> List.sort ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1) (* higher fst *)
+    in
+    fun oc ->
+      List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%s\n" l a)
+
+  let output_i likelihood_first allele_arr final_likelihoods =
+    if likelihood_first then
+      output_likelihood_first allele_arr final_likelihoods
+    else
+      output_allele_first allele_arr final_likelihoods
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
     read_length pt =
@@ -229,7 +248,7 @@ module Reducer = struct
           state.(i) <- state.(i) +. r.likelihood.(i)
         done
 
-  let init conf read_length pt =
+  let init conf likelihood_first read_length pt =
     let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
         ; check_rc } = conf
     in
@@ -258,7 +277,7 @@ module Reducer = struct
         in
         add_log_likelihoods n t.state r1;
         add_log_likelihoods n t.state r2)
-    and output oc = output_i allele_arr t.state oc in
+    and output oc = output_i likelihood_first allele_arr t.state oc in
     t
 
   let apply fqi t =
@@ -460,9 +479,9 @@ module Single_loci = struct
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer  -> Reducer (Reducer.init conf read_length pt)
-      | `Mapper n -> Mapper (Mapper.init conf read_length n pt)
-      | `Viterbi  -> Viterbi (Viterbi.init conf read_length pt)
+      | `Reducer lfst -> Reducer (Reducer.init conf lfst read_length pt)
+      | `Mapper n     -> Mapper (Mapper.init conf read_length n pt)
+      | `Viterbi      -> Viterbi (Viterbi.init conf read_length pt)
 
   (* fqi = FastQ Item *)
   let apply t fqi = match t with
@@ -549,7 +568,7 @@ module Multiple_reducer = struct
     ; output  : out_channel -> unit
     }
 
-  let init conf read_length pt_lst =
+  let init conf likelihood_first read_length pt_lst =
     let { insert_p; band; max_number_mismatches; past_threshold_filter } = conf in
     let open ParPHMM in
     let paa =
@@ -569,7 +588,7 @@ module Multiple_reducer = struct
       List.iter2 paa t.state
         ~f:(fun (_, (_, allele_arr, _)) (name, _, lkld_arr) ->
               fprintf oc "%s\n" name;
-              Reducer.output_i allele_arr lkld_arr oc)
+              Reducer.output_i likelihood_first allele_arr lkld_arr oc)
     and apply fqi =
       match pt with
       | `Don't ->
@@ -727,8 +746,8 @@ module Mulitple_loci = struct
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer ->
-          Reducer (Multiple_reducer.init conf read_length pt)
+      | `Reducer lfst ->
+          Reducer (Multiple_reducer.init conf lfst read_length pt)
       | `Mapper n ->
           Mapper (Multiple_mapper.init conf read_length n pt)
 
