@@ -292,6 +292,34 @@ module Interval = struct
       prepo a123 a3,
       a4
 
+  let aligned_inter_diff3 i1 i2 i3 =
+    let prep p =
+      let s, _e = p in
+      function
+        | None         -> Some p
+        | Some (_s, e) -> Some (s, e)                               (* assert (_e + 1 = _s); *)
+    in
+    let i, m1, m2 =
+      match inter_diff i1 i2 with
+      | Before
+      | After
+      | AfterBefore _ | BeforeAfter _
+      | BeforeEmpty _ | EmptyBefore _
+      | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
+      | EmptyAfter { inter; after = a } -> inter, None,   Some a
+      | EmptyEmpty { inter }            -> inter, None,   None
+      | AfterEmpty { after = a; inter } -> inter, Some a, None
+    in
+    match inter_diff i i3 with
+    | Before
+    | After
+    | AfterBefore _ | BeforeAfter _
+    | BeforeEmpty _ | EmptyBefore _
+    | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
+    | EmptyAfter { inter; after = a } -> inter, m1,        m2,        Some a
+    | EmptyEmpty { inter }            -> inter, m1,        m2,        None
+    | AfterEmpty { after = a; inter } -> inter, prep a m1, prep a m2, None
+
   let aligned_inter_diff4 i1 i2 i3 i4 =
     let prep p =
       let s, _e = p in
@@ -525,6 +553,41 @@ module Set = struct
     | None -> l
     | Some i -> i :: l
 
+  let all_intersections3 =
+    let rec loop l1 l2 l3 = match l1, l2, l3 with
+      | [],  _,  _
+      |  _, [],  _
+      |  _,  _, []  -> [], l1, l2, l3
+      | h1 :: t1
+      , h2 :: t2
+      , h3 :: t3    ->
+        let b1, b2, b3, i, a1, a2, a3 = Interval.split_inter_diff3 h1 h2 h3 in
+        let nt1 = prepend_if_not_none a1 t1 in
+        let nt2 = prepend_if_not_none a2 t2 in
+        let nt3 = prepend_if_not_none a3 t3 in
+        let il, r1, r2, r3 = loop nt1 nt2 nt3 in
+        prepend_if_not_none i il
+        , prepend_if_not_none b1 r1
+        , prepend_if_not_none b2 r2
+        , prepend_if_not_none b3 r3
+    in
+    loop
+
+  let must_match_at_beginning3 s1 s2 s3 =
+    match s1, s2, s3 with
+    | [],  _,  _  -> invalid_argf "Empty 1"
+    |  _, [],  _  -> invalid_argf "Empty 2"
+    |  _,  _, []  -> invalid_argf "Empty 3"
+    | h1 :: t1
+    , h2 :: t2
+    , h3 :: t3    ->
+        let inter, ho1, ho2, ho3 = Interval.aligned_inter_diff3 h1 h2 h3 in
+        let nt1 = prepend_if_not_none ho1 t1 in
+        let nt2 = prepend_if_not_none ho2 t2 in
+        let nt3 = prepend_if_not_none ho3 t3 in
+        let il, r1, r2, r3 = all_intersections3 nt1 nt2 nt3 in
+        inter :: il, r1, r2, r3
+
   let all_intersections4 =
     let rec loop l1 l2 l3 l4 = match l1, l2, l3, l4 with
       | [],  _,  _,  _
@@ -540,7 +603,7 @@ module Set = struct
         let nt2 = prepend_if_not_none a2 t2 in
         let nt3 = prepend_if_not_none a3 t3 in
         let nt4 = prepend_if_not_none a4 t4 in
-        let il, r1, r2, r3,r4 = loop nt1 nt2 nt3 nt4 in
+        let il, r1, r2, r3, r4 = loop nt1 nt2 nt3 nt4 in
         prepend_if_not_none i il
         , prepend_if_not_none b1 r1
         , prepend_if_not_none b2 r2
@@ -796,6 +859,43 @@ let merge t1 t2 f =
   in
   match t1, t2 with
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
+
+let merge3 ~eq t1 t2 t3 f =
+  let rec start l1 l2 l3 =
+    match l1, l2, l3 with
+    | [],     [],     []  -> []
+    | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+    | (s1, v1) :: t1
+    , (s2, v2) :: t2
+    , (s3, v3) :: t3      ->
+        let intersect, r1, r2, r3 = Set.must_match_at_beginning3 s1 s2 s3 in
+        let nt1 = insert_if_not_empty r1 v1 t1 in
+        let nt2 = insert_if_not_empty r2 v2 t2 in
+        let nt3 = insert_if_not_empty r3 v3 t3 in
+        let acc = [intersect, (f v1 v2 v3)] in
+        loop acc nt1 nt2 nt3
+  and loop acc l1 l2 l3 =
+    match l1, l2, l3 with
+    | [],     [],     []  -> acc     (* We insert at the end, thereby preserving order *)
+    | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+    | (s1, v1) :: t1
+    , (s2, v2) :: t2
+    , (s3, v3) :: t3      ->
+        let intersect, r1, r2, r3 = Set.must_match_at_beginning3 s1 s2 s3 in
+        let nt1 = insert_if_not_empty r1 v1 t1 in
+        let nt2 = insert_if_not_empty r2 v2 t2 in
+        let nt3 = insert_if_not_empty r3 v3 t3 in
+        let nv = f v1 v2 v3 in
+        let nacc = merge_or_add_to_end eq intersect nv acc in
+        loop nacc nt1 nt2 nt3
+  in
+  match t1, t2, t3 with
+  | (Asc l1), (Asc l2), (Asc l3) -> Asc (start l1 l2 l3)
+
 
 (* This method is tail recursive, and we pay the cost of inserting an element,
    at the end each time but hopefully, merging, due to {eq}, instead into the
