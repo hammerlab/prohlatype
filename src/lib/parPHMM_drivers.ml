@@ -64,10 +64,8 @@ let update_threshold prev_threshold proc = function
   | Filtered _  -> prev_threshold
   | Completed _ -> new_threshold prev_threshold proc
 
-let init_past_threshold = function
-  | None
-  | Some false  -> `Don't
-  | Some true   -> `Start
+let init_past_threshold b =
+  if b then `Start else `Don't
 
 (* Consider both orientations. *)
 let both pt pass_result_map proc read read_errors =
@@ -174,13 +172,13 @@ type single_conf =
   (* Max number of allowable mismatches to use a threshold filter for the
      forward pass. *)
 
-  ; past_threshold_filter : bool option
+  ; past_threshold_filter : bool
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
-  ; joined_pairs          : bool option
+  ; joined_pairs          : bool
 
-  ; check_rc              : bool option
+  ; check_rc              : bool
   (** Compare against the reverse complement of a read and take the best likelihood. *)
   }
 
@@ -216,6 +214,7 @@ module Reducer = struct
       |> Array.to_list
       |> group_by_assoc
       |> List.map ~f:(fun (l, alst) ->
+        (* TODO: Convert these back to sets to allow us to say "Everything" *)
             let clst = Alleles.CompressNames.f alst in
             l, String.concat ~sep:";" clst)
       |> List.sort ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1) (* higher fst *)
@@ -260,7 +259,7 @@ module Reducer = struct
     let past_threshold = init_past_threshold past_threshold_filter in
     let n = Array.length allele_arr in
     (* Discard resulting past threshold *)
-    let r rd rp = fst (reducer ?check_rc past_threshold proc rd rp) in
+    let r rd rp = fst (reducer ~check_rc past_threshold proc rd rp) in
     let rec t = { state; apply; paired; output }
     and state = proc.init_global_state ()
     and apply fqi =
@@ -467,7 +466,7 @@ end (* Viterbi *)
 module Single_loci = struct
 
   let conf ?allele ?insert_p ?band ?max_number_mismatches
-    ?joined_pairs ?past_threshold_filter ?check_rc () =
+    ~joined_pairs ~past_threshold_filter ~check_rc () =
     { allele; insert_p; band; max_number_mismatches
     ; joined_pairs ; past_threshold_filter ; check_rc
     }
@@ -514,7 +513,7 @@ type multiple_conf =
   (* Max number of allowable mismatches to use a threshold filter for the
      forward pass. *)
 
-  ; past_threshold_filter : bool option
+  ; past_threshold_filter : bool
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
@@ -737,7 +736,7 @@ end (* Multiple_mapper *)
 
 module Mulitple_loci = struct
 
-  let conf ?insert_p ?band ?max_number_mismatches ?past_threshold_filter () =
+  let conf ?insert_p ?band ?max_number_mismatches ~past_threshold_filter () =
     { insert_p; band; max_number_mismatches; past_threshold_filter }
 
   type t =
