@@ -18,9 +18,9 @@ type ('o, +'a) t
 val empty_d : (descending, 'a) t
 val empty_a : (ascending, 'a) t
 
-(* Initializers. These take a value and either assume a entry (the 'first' one in
-   the descending case) or all of them (pass the size of the partition) in the
-   ascending case. *)
+(* Initializers. These take a value and either assume an entry (the 'first' one
+   in the descending case) or all of them (pass the size of the partition, the
+   resulting [t] has indices [[0,size)] ) in the ascending case. *)
 val init_first_d : 'a -> (descending, 'a) t
 val init_all_a : size:int -> 'a -> (ascending, 'a) t
 
@@ -64,12 +64,20 @@ val fold_values : (_, 'a) t
                 -> f:('b -> 'a -> 'b)
                 -> 'b
 
+(** Fold over the indices [0,size) and values. *)
+val fold_indices_and_values : (_, 'a) t
+                            -> init:'b
+                            -> f:('b -> int -> 'a -> 'b)
+                            -> 'b
+
 (* Map the values, the internal storage doesn't change. *)
 val map : ('o, 'a) t -> f:('a -> 'b) -> ('o, 'b) t
 
 (* Iterate over the entries and values. *)
 val iter_set : ('o, 'a) t -> f:(int -> 'a -> unit) -> unit
 
+(* Return the values, in ascending order, in an array. *)
+val to_array : (ascending, 'a) t -> 'a array
 
 (** Diagnostic methods. These are not strictly necessary for the operations of
     the Parametric PHMM but are exposed here for interactive use. *)

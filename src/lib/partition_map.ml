@@ -334,6 +334,11 @@ module Interval = struct
   let iter (s, e) ~f =
     for i = s to e do f i done
 
+  let fold (s, e) ~init ~f =
+    let acc = ref init in
+    for i = s to e do acc := f !acc i done;
+    !acc
+
 end (* Interval *)
 
 module Set = struct
@@ -562,6 +567,13 @@ module Set = struct
         let il, r1, r2, r3, r4 = all_intersections4 nt1 nt2 nt3 nt4 in
         inter :: il, r1, r2, r3, r4
 
+  let fold t ~init ~f =
+    List.fold_left t ~init ~f:(fun init interval ->
+      Interval.fold interval ~init ~f)
+
+  let iter t ~f =
+    fold t ~init:() ~f:(fun () i -> f i)
+
 end (* Set *)
 
 type ascending (*= Ascending*)
@@ -604,7 +616,7 @@ let init_first_d v =
   Desc [i, v]
 
 let init_all_a ~size v =
-  let i = Interval.make 0 size in
+  let i = Interval.make 0 (size - 1) in
   Asc [Set.of_interval i, v]
 
 (* Properties *)
@@ -836,6 +848,15 @@ let fold_values : type o a. (o, a) t -> init:'b -> f:('b -> a -> 'b) -> 'b =
     | Desc ld -> List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
     | Asc la  -> List.fold_left la ~init ~f:(fun acc (_l, v) -> f acc v)
 
+let fold_indices_and_values :
+  type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =
+  fun l ~init ~f -> match l with
+    | Desc ld -> List.fold_left ld ~init ~f:(fun init (l, v) ->
+                    Interval.fold l ~init ~f:(fun acc i -> f acc i v))
+    | Asc la  -> List.fold_left la ~init ~f:(fun init (s, v) ->
+                    Set.fold s ~init ~f:(fun acc i -> f acc i v))
+
+
 let map : type o a. (o, a) t -> f:(a -> 'b) -> (o, 'b) t =
   fun t ~f -> match t with
     | Desc ld -> Desc (List.map_snd ld ~f)
@@ -849,3 +870,15 @@ let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
     | Asc la  ->
         List.iter la ~f:(fun (l, v) ->
           List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
+
+let to_array = function | Asc la ->
+  match la with
+  | []  -> [||]
+  | h :: t ->
+      let s, v = h in
+      let n = List.fold_left la ~init:0 ~f:(fun a (s, _) -> a + Set.size s) in
+      let r = Array.make n v in
+      let fill s v = Set.iter s ~f:(fun i -> r.(i) <- v) in
+      fill s v;
+      List.iter t ~f:(fun (s, v) -> fill s v);
+      r
