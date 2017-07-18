@@ -92,8 +92,8 @@ let index_string s index =
 
 let _pair_of_empty_strings = String.empty, String.empty
 (** Compare two strings and display vertical bars for mismatches. *)
-let manual_comp_display ?width ?(labels=_pair_of_empty_strings) s1 s2 =
-  let msm = ref 0 in
+let manual_comp_display ?(msm_offset=0) ?width ?(labels=_pair_of_empty_strings) s1 s2 =
+  let msm = ref msm_offset in
   let mismatch_string =
     String.mapi s1 ~f:(fun index c1 ->
       match String.get s2 ~index with
