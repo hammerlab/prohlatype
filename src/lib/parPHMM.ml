@@ -391,8 +391,6 @@ module ForwardCalcs (R : Ring) = struct
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
     let open Phmm.TransitionMatrix in
-    (* TODO: Add logic to resize the constants when we consider a smaller
-       subset of the locus as occurs for the second read. *)
     let t_s_m = constant (tm StartOrEnd Match) in
     let t_s_i = constant (tm StartOrEnd Insert) in
     let t_m_m = constant (tm Match Match) in
@@ -546,7 +544,6 @@ module ForwardFilters  (R : Ring) = struct
 
   let debug_ref = ref false
 
-  (* Filters. TODO: These deserve their own module, functor, that takes R. *)
   let past_threshold_filter threshold of_entry =
     let base (threshold, best_seen_entry) _base_doesnt_matter =
       if best_seen_entry <> R.zero && best_seen_entry < threshold then
