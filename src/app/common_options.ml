@@ -499,3 +499,13 @@ let likelihood_first_flag =
               compressed format following the likelihood."
   in
   Arg.(value & flag & info ~doc ["likelihood-first"; "llhdfst"])
+
+let do_not_finish_singles_flag =
+  let doc   = "Paired FASTQ files that may be created by downstream analysis \
+                may not guarantee that all of the reads are paired. When in \
+                paired mode (2 FASTQ files are passed), by default we'll \
+                continue evaluating the unpaired reads as if they were \
+                single. By passing this flag we'll skip them entirely and use \
+                only the paired reads."
+  in
+  Arg.(value & flag & info ~doc ["do-not-finish-singles"])

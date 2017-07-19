@@ -36,40 +36,55 @@ let to_comp conf read_size rp mode =
   time "Allocating forward pass workspaces"
     (fun () -> Pdml.init conf read_size ptlst mode)
 
+let to_apply conf mode =
+  fun acc fqi ->
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+        let c = to_comp conf read_size rp mode in
+        `Set (Pdml.apply c fqi; c)
+    | `Set c ->
+        `Set (Pdml.apply c fqi; c)
+
+let to_paired conf mode =
+  fun acc fq1 fq2 ->
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+        let c = to_comp conf read_size rp mode in
+        `Set (Pdml.paired c fq1 fq2; c)
+    | `Set c ->
+        `Set (Pdml.paired c fq1 fq2; c)
+
 let across_fastq conf mode
   (* Fastq specific arguments. *)
   ?number_of_reads ~specific_reads file init =
+  let f = to_apply conf mode in
   try
-    Fastq.fold ?number_of_reads ~specific_reads ~init file
-      ~f:(fun acc fqi ->
-            match acc with
-            | `Setup rp ->
-                let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let c = to_comp conf read_size rp mode in
-                `Set (Pdml.apply c fqi; c)
-            | `Set c ->
-                `Set (Pdml.apply c fqi; c))
+    Fastq.fold ?number_of_reads ~specific_reads ~init file ~f
     |> function
         | `Setup _  -> eprintf "Didn't find any reads."
         | `Set c    -> Pdml.output c stdout
   with ParPHMM_drivers.Read_error_parsing e ->
     eprintf "%s" e
 
-let across_paired conf mode
+let across_paired ~finish_singles conf mode
     (* Fastq specific arguments. *)
     ?number_of_reads ~specific_reads file1 file2 init =
+  let f = to_paired conf mode in
   try
-    Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init
-      ~f:(fun acc fq1 fq2 ->
-            match acc with
-            | `Setup rp ->
-                let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
-                let c = to_comp conf read_size rp mode in
-                `Set (Pdml.paired c fq1 fq2; c)
-            | `Set c ->
-                `Set (Pdml.paired c fq1 fq2; c))
+    begin
+      if finish_singles then
+        let ff = to_apply conf mode in
+        let fs = ff in
+        Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+          ~init ~f ~ff ~fs
+      else
+        Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+    end
     |> function
         | `BothFinished o
+        | `FinishedSingle o
         | `OneReadPairedFinished (_, o)
         | `StoppedByFilter o
         | `DesiredReads o ->
@@ -87,6 +102,7 @@ let type_
     skip_disk_cache
   (* What to do? *)
     fastq_file_lst number_of_reads specific_reads
+    do_not_finish_singles
   (* options *)
     insert_p
     do_not_past_threshold_filter
@@ -122,6 +138,7 @@ let type_
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let incremental_pairs = not not_incremental_pairs in
+  let finish_singles = not do_not_finish_singles in
   let conf = Pdml.conf ~insert_p ?band ?max_number_mismatches
                     ~past_threshold_filter ~incremental_pairs ()
   in
@@ -147,9 +164,10 @@ let type_
     | []              -> invalid_argf "Cmdliner lied!"
     | [fastq]         -> across_fastq conf mode
                             ?number_of_reads ~specific_reads fastq init
-    | [read1; read2]  -> across_paired conf mode
+    | [read1; read2]  -> across_paired ~finish_singles conf mode
                             ?number_of_reads ~specific_reads read1 read2 init
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
+    | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                           (List.length lst)
     end
 
 let () =
@@ -257,6 +275,7 @@ let () =
             $ no_cache_flag
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
+            $ do_not_finish_singles_flag
             (* options. *)
             $ insert_probability_arg
             $ do_not_past_threshold_filter_flag

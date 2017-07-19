@@ -35,11 +35,12 @@ let fold (type a) ?number_of_reads ?(specific_reads=[]) file ~f ~(init : a) =
         else
           match oe with
           | Error e -> eprintf "%s\n" (Error.to_string_hum e); (c, acc)
-          | Ok fqi  -> match filt fqi.Biocaml_unix.Fastq.name with
-                      | true,  true  -> raise (M.Fin (f acc fqi))
-                      | false, true  -> raise (M.Fin acc)
-                      | true,  false -> c + 1, f acc fqi
-                      | false, false -> c, acc))
+          | Ok fqi  -> let display, stop = filt fqi.Biocaml_unix.Fastq.name in
+                       match display, stop with
+                       | true,        true  -> raise (M.Fin (f acc fqi))
+                       | false,       true  -> raise (M.Fin acc)
+                       | true,        false -> c + 1, f acc fqi
+                       | false,       false -> c, acc))
     |> snd
   with M.Fin m -> m
 
@@ -88,8 +89,8 @@ let rec same cmp l1 l2 =
 
 let name_as_key a = a.Biocaml_unix.Fastq.name
 
-let fold_paired ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
-  file1 file2 ~f ~init =
+let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
+   ~f ~init ?ff ?fs file1 file2 =
   let open Biocaml_unix in
   let stop = to_stop number_of_reads in
   let filt = to_filter specific_reads in
@@ -102,18 +103,54 @@ let fold_paired ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
       (* Avoid circular dep *)
       let fr1 = Biocaml_unix.Fastq.read rdr1 in
       let fr2 = Biocaml_unix.Fastq.read rdr2 in
-      let rec two_pipe_fold c s1 s2 acc =
+      let rec single_pipe_fold fr f2 acc =
+        Pipe.read fr >>= fun r ->
+          match r with
+          | `Eof          -> return (`FinishedSingle acc)
+          | `Ok (Error e) -> eprintf "%s\n" (Error.to_string_hum e);
+                             single_pipe_fold fr f2 acc
+          | `Ok (Ok a)    -> single_pipe_fold fr f2 (f2 acc a)
+      and two_pipe_fold c s1 s2 acc =
         if stop c then
           return (`DesiredReads acc)
         else
           Pipe.read fr1 >>= fun r1 ->
             Pipe.read fr2 >>= fun r2 ->
               match r1, r2 with
-              | `Eof, `Eof                      -> return (`BothFinished acc)
-              (* TODO: Add continuations to finish off the rest of the sequence as
-                single read. *)
-              | `Eof, _                         -> return (`OneReadPairedFinished (1, acc))
-              | _   , `Eof                      -> return (`OneReadPairedFinished (2, acc))
+              | `Eof, `Eof                      ->
+                  return (`BothFinished acc)
+              | `Eof, `Ok eb                    ->
+                  let nacc =
+                    Option.value_map ff ~default:acc
+                      ~f:(fun ff -> List.fold s1 ~init:acc ~f:ff)
+                  in
+                  begin match fs with
+                  | None -> return (`OneReadPairedFinished (1, nacc))
+                  | Some fs ->
+                      let nacc = List.fold s2 ~init:nacc ~f:fs in
+                      begin match eb with
+                      | Error e -> eprintf "%s\n" (Error.to_string_hum e);
+                                   single_pipe_fold fr2 fs nacc
+                      | Ok b    -> single_pipe_fold fr2 fs (fs nacc b)
+                      end
+                   end
+              | `Ok ea, `Eof                    ->
+                  let nacc =
+                    Option.value_map fs ~default:acc
+                      ~f:(fun fs -> List.fold s2 ~init:acc ~f:fs)
+                  in
+                  begin match ff with
+                  | None -> return (`OneReadPairedFinished (2, acc))
+                  | Some ff ->
+                      let nacc = List.fold s2 ~init:nacc ~f:ff in
+                      begin match ea with
+                      | Error e ->
+                        eprintf "%s\n" (Error.to_string_hum e);
+                        single_pipe_fold fr2 ff nacc
+                      | Ok a ->
+                        single_pipe_fold fr2 ff (ff nacc a)
+                      end
+                  end
               | `Ok (Error ea), `Ok (Error eb)  ->
                   eprintf "%s\n" (Error.to_string_hum ea);
                   eprintf "%s\n" (Error.to_string_hum eb);
@@ -135,14 +172,18 @@ let fold_paired ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
                         filter_pass r1 r2 c ns1 ns2 acc
                     | None ->
                         two_pipe_fold c ns1 ns2 acc
-        and filter_pass a b c s1 s2 acc =
-          match filt a.Biocaml_unix.Fastq.name with
-          | true,  true  -> `StoppedByFilter (f acc a b)
-          | false, true  -> `StoppedByFilter acc
-          | true, false  -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
-          | false, false -> two_pipe_fold c s1 s2 acc
+      and filter_pass a b c s1 s2 acc =
+        let display, stop = filt a.Biocaml_unix.Fastq.name in
+        match display, stop with
+        | true,        true  -> `StoppedByFilter (f acc a b)
+        | false,       true  -> `StoppedByFilter acc
+        | true,        false -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
+        | false,       false -> two_pipe_fold c s1 s2 acc
       in
       two_pipe_fold 0 [] [] init))
+
+let fold_paired ?to_key ?number_of_reads ?specific_reads file1 file2 ~f ~init =
+    fold_paired_both ?to_key ?number_of_reads ?specific_reads file1 file2 ~f ~init
 
 let unwrap_cr_ok = function
     | Result.Error _ -> invalid_arg "unwrap_cr_ok: " (*Error.to_string_hum e*)
@@ -158,6 +199,7 @@ let read_from_pair ~name file1 file2 =
     match res with
     | `BothFinished o
     | `OneReadPairedFinished (_, o)
+    | `FinishedSingle o
     | `StoppedByFilter o
     | `DesiredReads o -> o
   in
@@ -168,3 +210,21 @@ let read_from_pair ~name file1 file2 =
                  , (phred_probabilities r1.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok)
                  , r2.Biocaml_unix.Fastq.sequence
                  , (phred_probabilities r2.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok))
+
+type paired_reading =
+  { both    : (Biocaml_unix.Fastq.item * Biocaml_unix.Fastq.item) list
+  ; first   : Biocaml_unix.Fastq.item list
+  ; second  : Biocaml_unix.Fastq.item list
+  }
+
+let read_both file1 file2 =
+  fold_paired_both file1 file2 ~init:([],[],[])
+    ~f:(fun (lb, l1, l2) p1 p2  -> (p1,p2) :: lb, l1, l2)
+    ~ff:(fun (lb, l1, l2) p1    -> lb, (p1 :: l1), l2)
+    ~fs:(fun (lb, l1, l2) p2    -> lb, l1, (p2 :: l2))
+  |> function
+      | `BothFinished (both, first, second)
+      | `FinishedSingle (both, first, second) -> { both; first; second}
+      | `OneReadPairedFinished _  -> failwith "Didn't read the rest!"
+      | `StoppedByFilter _
+      | `DesiredReads _           -> assert false
