@@ -7,7 +7,6 @@ alternatives. We take special care of keeping track of gaps in the reference so
 that positions, when parsing the alternatives, are annotated with regard to
 the reference positions.
 
-We return
 *)
 
 open Util
@@ -15,8 +14,12 @@ open Util
 (* This refers to the alignment position.  *)
 type position = int
 
-(* We'll parse N as a nucleotide. *)
-let is_nucleotide = function 'A' | 'C' | 'G' | 'T' | 'N' -> true | _ -> false
+(* We'll parse N as a nucleotide, but why does IMGT report this! *)
+let is_nucleotide allele  = function
+  | 'A' | 'C' | 'G' | 'T' -> true
+  | 'N' -> eprintf "IMGT reports that %s has an 'N'as a base!" allele; true
+  | _   -> false
+
 let is_amino_acid =
   function
   | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
@@ -148,8 +151,8 @@ let insert_nuc c ps =
 let insert_unknown ps =
   next ps NotData (fun _position sequence -> sequence)
 
-let update ~dna ~fail_on_same ps s =
-  let is_nuc = if dna then is_nucleotide else is_amino_acid in
+let update ~allele ~dna ~fail_on_same ps s =
+  let is_nuc = if dna then is_nucleotide allele else is_amino_acid in
   let rec to_ref_seq_elems_char ps = function
     | []                    -> ps
     | '|' :: t              -> to_ref_seq_elems_char (insert_boundary ps) t
@@ -158,7 +161,7 @@ let update ~dna ~fail_on_same ps s =
     | '.' :: t              -> to_ref_seq_elems_char (insert_gap ps) t
     | '-' :: t              -> to_ref_seq_elems_char (insert_same ~fail_on_same ps) t
     | c :: t when is_nuc c  -> to_ref_seq_elems_char (insert_nuc c ps) t
-    | x :: _                -> invalid_argf "Unrecognized char %c in %s" x (where ps)
+    | x :: _                -> invalid_argf "Unrecognized char '%c' in %s" x (where ps)
   in
   to_ref_seq_elems_char ps (String.to_character_list s)
 
@@ -265,11 +268,10 @@ let from_in_channel ic =
     | Position (dna, p) -> assert (x.dna = dna); x
     | Dash              -> x (* ignore dashes *)
     | SeqData (allele, s) ->
+      let fold = update ~allele ~dna:x.dna in
       if x.ref = allele then begin
         (*let prev_pos = x.ref_ps.position in *)
-        let nref_ps =
-          List.fold_left ~f:(update ~dna:x.dna ~fail_on_same:true) ~init:x.ref_ps s
-        in
+        let nref_ps = List.fold_left ~f:(fold ~fail_on_same:true) ~init:x.ref_ps s in
         latest_reference_position := nref_ps.position;
         { x with ref       = allele
                ; ref_ps    = nref_ps
@@ -279,9 +281,7 @@ let from_in_channel ic =
           try Hashtbl.find x.alg_htbl allele
           with Not_found -> init_ps allele x.start_pos
         in
-        let new_ps =
-          List.fold_left ~f:(update ~dna:x.dna ~fail_on_same:false) ~init:cur_ps s
-        in
+        let new_ps = List.fold_left ~f:(fold ~fail_on_same:false) ~init:cur_ps s in
         (* Can't make this into an assertion because of sequences such as
             C*04:09N that have sequences extending after the end of the
             reference. *)
