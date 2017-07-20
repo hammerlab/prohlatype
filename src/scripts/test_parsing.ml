@@ -2,7 +2,7 @@
    sequences:
     - All sequences have a Start, with only Gaps and Boundaries before the start
     - All sequences have an End that may be followed only by Boundaries and Gaps
-    - There is an end for every start
+    - There is an End for every Start
     - Sequence elements are different from previous
 
 ex:
@@ -146,15 +146,15 @@ let () =
   if !Sys.interactive then
     ()
   else
-    let fname = if n <= 1 then None else Some (Sys.argv.(2)) in
+    let fname = if n <= 1 then None else Some (Sys.argv.(1)) in
     to_fnames ?fname (imgthla_dir // "alignments")
     |> List.fold_left ~init:0 ~f:(fun s f ->
         try
           let p = Mas_parser.from_file f in
           test_result p;
-          printf "parsed and checked %s\n" f;
+          printf "parsed and checked %s\n%!" f;
           s
         with e ->
-          eprintf "failed to parse %s\n" f;
+          eprintf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
           -1)
     |> exit
