@@ -51,7 +51,7 @@ module AverageExon = struct
         a +. mismatches)
 
   let one ref_allele reference ~candidates ~allele =
-    let open Mas_parser in
+    let open MSA_parser in
     let dist_to_ref = allele_distances ~reference ~allele in
     let ref_mask =
       List.map dist_to_ref ~f:(fun s ->
@@ -67,7 +67,7 @@ module AverageExon = struct
     let all_distances =
       StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
         let dlst =
-          Mas_parser.allele_distances_between
+          MSA_parser.allele_distances_between
             ~reference ~allele1:allele ~allele2
           |> List.map ~f:(fun s ->
               match s.allele_relationships with

@@ -44,7 +44,7 @@ let to_fnames ?fname ?suffix dir =
   |> List.map ~f:(Filename.concat dir)
 
 let starts_with_start =
-  let open Mas_parser in
+  let open MSA_parser in
   "All sequences have a Start, with only Gaps and Boundaries before the start.",
   fun _allele lst ->
     let rec test_loop = function
@@ -58,7 +58,7 @@ let starts_with_start =
     test_loop lst
 
 let ends_with_end =
-  let open Mas_parser in
+  let open MSA_parser in
   "All sequences have an End that may be followed only by Boundaries and Gaps.",
   fun _allele lst ->
     let rec test_loop = function
@@ -73,7 +73,7 @@ let ends_with_end =
 exception Double of string
 
 let theres_an_end_for_every_start =
-  let open Mas_parser in
+  let open MSA_parser in
   "There is an end for every start",
   fun _allele lst ->
     try
@@ -91,7 +91,7 @@ let theres_an_end_for_every_start =
       false
 
 let sequence_have_diff_elemns =
-  let open Mas_parser in
+  let open MSA_parser in
   "Sequence elements are different from previous",
   fun _allele lst ->
     match lst with
@@ -111,7 +111,7 @@ let sequence_have_diff_elemns =
         |> fst
 
 let we_can_parse_the_allele_name =
-  let open Mas_parser in
+  let open MSA_parser in
   "We can parse the allele name",
   fun allele _lst ->
     match Nomenclature.parse allele with
@@ -127,7 +127,7 @@ let check (desc, pred) allele lst =
     raise (TestFailed (sprintf "%s failed for %s" desc allele))
 
 let all_sequences_in_result f r =
-  let open Mas_parser in
+  let open MSA_parser in
   check f r.reference r.ref_elems;
   List.iter ~f:(fun (al, el) -> check f al el) r.alt_elems
 
@@ -150,7 +150,7 @@ let () =
     to_fnames ?fname (imgthla_dir // "alignments")
     |> List.fold_left ~init:0 ~f:(fun s f ->
         try
-          let p = Mas_parser.from_file f in
+          let p = MSA_parser.from_file f in
           test_result p;
           printf "parsed and checked %s\n%!" f;
           s

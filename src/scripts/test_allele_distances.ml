@@ -4,7 +4,7 @@ open Common
 
 let () =
   if !Sys.interactive then () else
-    let open Mas_parser in
+    let open MSA_parser in
     let n = Array.length Sys.argv in
     let file = if n < 2 then "A_gen" else Sys.argv.(1) in
     let mp = from_file (Common.to_alignment_file file) in

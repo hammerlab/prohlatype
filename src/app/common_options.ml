@@ -354,7 +354,7 @@ let reduce_resolution_arg =
   value & opt (some one_to_three) None & info ~doc ["reduce-resolution"]
 
 let to_distance_targets_and_candidates alignment_file_opt merge_opt =
-  let open Mas_parser in
+  let open MSA_parser in
   match alignment_file_opt, merge_opt with
   | _, (Some prefix) ->
       let gen = from_file (prefix ^ "_gen.txt") in

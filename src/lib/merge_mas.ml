@@ -74,7 +74,7 @@ but sometimes we mean exon vs intron we should label the parts accordingly.
 *)
 
 open Util
-open Mas_parser
+open MSA_parser
 
 let supported_genes = [ "A"; "B"; "C"]
 
@@ -770,7 +770,7 @@ let do_it_spec ?verbose ~gen_mp ~nuc_mp dl =
                         map_lst @ diff_map_lst)
 
 let split_al_els pos including e =
-  let open Mas_parser in
+  let open MSA_parser in
   match e with
   | Start p
   | End p        -> if including && pos = p then
@@ -833,7 +833,7 @@ let impute_seq ~bigger ~smaller =
 (* TODO: Implement Distances Logic via the name-Trie and expose the distance
          logic argument. *)
 let naive_impute mp =
-  let open Mas_parser in
+  let open MSA_parser in
   let reflength = sequence_length mp.ref_elems in
   let to_fill, full = List.partition_map mp.alt_elems ~f:(fun (a, s) ->
     let l = sequence_length s in

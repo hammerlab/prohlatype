@@ -9,18 +9,18 @@ let gen_mp, nuc_mp, instr =
   |> unwrap_ok ;;
 
 let ref_instr =
-  Merge_mas.map_instr_to_alignments nuc_mp.Mas_parser.reference
-    ~gen:gen_mp.Mas_parser.ref_elems
-    ~nuc:nuc_mp.Mas_parser.ref_elems instr |> unwrap_ok ;;
+  Merge_mas.map_instr_to_alignments nuc_mp.MSA_parser.reference
+    ~gen:gen_mp.MSA_parser.ref_elems
+    ~nuc:nuc_mp.MSA_parser.ref_elems instr |> unwrap_ok ;;
 
 let new_ref_elems =
   Merge_mas.align_reference ref_instr ;;
 
 let ref_position_check =
-  Merge_mas.reference_positions_align ~seq:("reference:" ^ gen_mp.Mas_parser.reference) ;;
+  Merge_mas.reference_positions_align ~seq:("reference:" ^ gen_mp.MSA_parser.reference) ;;
 
-let gen_assoc = gen_mp.Mas_parser.alt_elems ;;
-let nuc_assoc = nuc_mp.Mas_parser.alt_elems ;;
+let gen_assoc = gen_mp.MSA_parser.alt_elems ;;
+let nuc_assoc = nuc_mp.MSA_parser.alt_elems ;;
 let same, just_gen, just_nuc = Merge_mas.same_and_diff ~gen_assoc ~nuc_assoc ;;
 
 let nallele = "B*15:128";;
@@ -28,7 +28,7 @@ let nallele = "B*15:128";;
 let (alt_inst, alt_als) = Merge_mas.same_alts instr same |> unwrap_ok ;;
 
 let rdiff = Merge_mas.reference_as_diff ref_instr ;;
-let instr_assoc = (gen_mp.Mas_parser.reference, rdiff) :: alt_inst ;;
+let instr_assoc = (gen_mp.MSA_parser.reference, rdiff) :: alt_inst ;;
 let (trie, rmap) = Merge_mas.init_trie_and_map instr_assoc |> unwrap_ok ;;
 
                 (* Add the alleles with just nucleic data. *)

@@ -1,4 +1,6 @@
-(* How this works:
+(* Multiple Sequences Alignment ... parser.
+
+How this works:
 
 This is a line based format. For our purposes, there are three types of lines
 as determined by {type line}, where `SeqData` has most of the actual alignment
