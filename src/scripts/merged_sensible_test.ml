@@ -3,11 +3,12 @@ open Common
 open Util
 
 let to_input prefix =
+  let impute = false in
   let open Alleles.Input in function
-  | `MergeTrie      -> MergeFromPrefix (to_merge_prefix prefix, Distances.Trie, false)
-  | `MergeAveExon   -> MergeFromPrefix (to_merge_prefix prefix, Distances.AverageExon, false)
-  | `Genetic        -> AlignmentFile (to_alignment_file (prefix ^ "_gen"), false)
-  | `Nuclear        -> AlignmentFile (to_alignment_file (prefix ^ "_nuc"), false)
+  | `MergeTrie      -> merge (to_merge_prefix prefix) ~distance:Distances.Trie ~impute
+  | `MergeAveExon   -> merge (to_merge_prefix prefix) ~distance:Distances.AverageExon ~impute
+  | `Genetic        -> alignment (to_alignment_file (prefix ^ "_gen")) ~impute
+  | `Nuclear        -> alignment (to_alignment_file (prefix ^ "_nuc")) ~impute
 
 let load prefix t =
   let arg = Ref_graph.default_construction_arg in

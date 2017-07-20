@@ -39,7 +39,7 @@ let convert ofile ifile merge_file distance =
         let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
         Some (against_mp mp out)
     | Some p, _    ->
-        match Merge_mas.do_it p distance with
+        match Alleles.Input.MergeConstruction.do_it p [] distance with
         | Error e             -> failwith (sprintf "%s\n" e)
         | Ok (mp, merge_assoc) ->
           let ofiledefault =

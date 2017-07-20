@@ -10,10 +10,10 @@ let to_read_size_dependent
     ~alignment_files ~merge_files ~distance ~impute
     ~skip_disk_cache =
     let als =
-      List.map alignment_files ~f:(Common_options.input_alignments ~impute)
+      List.map alignment_files ~f:(Alleles.Input.alignment ~impute)
     in
     let mls =
-      List.map merge_files ~f:(Common_options.input_merges ~distance ~impute)
+      List.map merge_files ~f:(Alleles.Input.merge ~distance ~impute)
     in
     match als @ mls with
     | []     -> Error "Neither a merge nor alignment file specified!"

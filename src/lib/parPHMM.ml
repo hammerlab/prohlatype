@@ -1765,19 +1765,13 @@ type t =
   }
 
 let construct input selectors =
-  if not (Alleles.Input.imputed input) then
+  if not (Alleles.Input.is_imputed input) then
     invalid_argf "Allele input MUST be imputed!"
   else begin
     let open Mas_parser in
     Alleles.Input.construct input >>= fun (mp, merge_map) ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
-      let nalt_elems =
-        Alleles.Selection.apply_to_assoc selectors alt_elems
-        (* TODO: move this logic into selection *)
-        |> List.map ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
-        |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) -> Nomenclature.compare n1 n2)
-        |> List.map ~f:(fun (_n, a, s) -> (a, s))
-      in
+      let nalt_elems = Alleles.Selectors.apply_to_assoc selectors alt_elems in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
       List.iter nalt_elems ~f:(fun (allele, allele_seq) ->

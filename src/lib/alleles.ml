@@ -445,7 +445,7 @@ module MakeMap (I: Index) : Map = struct
 end (* MakeMap *)
 
 (* Different logic of how we choose which alleles to include in the analysis. *)
-module Selection = struct
+module Selectors = struct
 
   (* Defined in this order to so that to apply multiple selections, we can sort
      the list and apply Regex's first to generate possibilities and then use
@@ -472,7 +472,12 @@ module Selection = struct
   let list_to_string l =
     String.concat ~sep:"_" (List.map l ~f:(to_string))
 
-  let apply_to_assoc lst =
+  let sort_by_nomenclature lst =
+    List.map lst ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
+    |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) -> Nomenclature.compare n1 n2)
+    |> List.map ~f:(fun (_n, a, s) -> (a, s))
+
+  let apply_to_assoc ?(sort_to_nomenclature_order=true) lst =
     let sorted = List.sort ~cmp:compare lst in
     fun assoc ->
       let assoc =
@@ -492,48 +497,117 @@ module Selection = struct
         | Specific s          -> List.filter acc ~f:(fun (allele, _) -> allele = s)
         | Without e           -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
         | Number n            -> List.take acc n
-        | DoNotIgnoreSuffixed -> acc        (* No-op at this point *)
-        )
+        | DoNotIgnoreSuffixed -> acc        (* No-op at this point *))
+      |> fun l ->
+          if sort_to_nomenclature_order then sort_by_nomenclature l else l
 
-end (* Selection. *)
+  let apply_to_mp lst mp =
+    let open Mas_parser in
+    { mp with alt_elems = apply_to_assoc lst mp.alt_elems }
+
+end (* Selectors. *)
 
 (* Where do we get the allele information? *)
 module Input = struct
 
   type t =
-    | AlignmentFile
-          of (string            (* path to file (ex. ../alignments/A_nuc.txt) *)
-             * bool)                                               (* impute? *)
-    | MergeFromPrefix
-          of (string                   (* path to prefix (ex ../alignments/A) *)
-             * Distances.logic                   (* how to measure distances. *)
-             * bool)                                               (* impute? *)
+    | AlignmentFile of
+        { path      : string    (* path to file (ex. ../alignments/A_nuc.txt) *)
+        ; selectors : Selectors.t list
+        ; impute    : bool                                         (* impute? *)
+        }
+    | MergeFromPrefix of
+        { prefix_path : string         (* path to prefix (ex ../alignments/A) *)
+        ; selectors   : Selectors.t list
+        ; drop_sv     : bool                          (* drop splice variants *)
+        ; distance    : Distances.logic          (* how to measure distances. *)
+        ; impute      : bool                                       (* impute? *)
+        }
 
-  let imputed = function
-    | AlignmentFile (_, i)      -> i
-    | MergeFromPrefix (_, _, i) -> i
+  let alignment ?(selectors=[]) ~impute path =
+    AlignmentFile { path; impute ; selectors }
+
+  let merge ?(selectors=[]) ?(drop_sv=true) ~distance ~impute prefix_path =
+    MergeFromPrefix {prefix_path; distance; impute; selectors; drop_sv}
+
+  let is_imputed = function
+    | AlignmentFile { impute; _ }
+    | MergeFromPrefix { impute; _} -> impute
 
   let to_string = function
-    | AlignmentFile (path, i)   -> sprintf "AF_%s_%b"
-                                    (Filename.chop_extension
-                                      (Filename.basename path))
-                                      i
-    | MergeFromPrefix (p, d, i) -> sprintf "MGD_%s_%s_%b"
-                                    (Filename.basename p)
-                                    (Distances.show_logic d)
-                                    i
+    | AlignmentFile { path; selectors; impute } ->
+        sprintf "AF_%s_%s_%b"
+          (Filename.chop_extension (Filename.basename path))
+          (Selectors.list_to_string selectors)
+          impute
+    | MergeFromPrefix { prefix_path; selectors; drop_sv; distance; impute} ->
+        sprintf "MGD_%s_%s_%b_%s_%b"
+          (Filename.basename prefix_path)
+          (Selectors.list_to_string selectors)
+          drop_sv
+          (Distances.show_logic distance)
+          impute
+
+  module MergeConstruction = struct
+
+    (* IMGT alignment format, (nor the XML) provide a robust way to detect splice
+      variants and their respective start/stop positions with respect to the
+      global alignmnet. In the past, I've hard-coded transformations that perform
+      the appropriate adjustment. This solution isn't feasible in the long term,
+      and is abandonded to the comments above. This association list
+      (locus -> alleles) provides a quick way to just remove those alleles from
+      the graph.
+
+      To try creating the graph without them set ~drop_known_splice_variants to
+      false *)
+    let splice_variants =
+      [ "A", [ "A*01:11N" ; "A*29:01:01:02N" ; "A*26:01:01:03N" ; "A*03:01:01:02N" ]
+      ; "B", [ "B*15:01:01:02N"; "B*44:02:01:02S"; "B*07:44N" ]
+      ; "C", [ "C*04:09N" ]
+      ]
+
+    let splice_variant_filter p =
+      match List.Assoc.get p splice_variants with
+      | None      -> eprintf "Splice variant filter not implemented for %s\n" p;
+                     fun l -> l
+      | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
+
+    let do_it ?verbose ?(drop_known_splice_variants=true) prefix selectors dl =
+      let open Mas_parser in
+      let gen_mp = from_file (prefix ^ "_gen.txt") in
+      let nuc_mp = from_file (prefix ^ "_nuc.txt") in
+      if gen_mp.reference <> nuc_mp.reference then
+        error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
+      else if gen_mp.align_date <> nuc_mp.align_date then
+        error "Align dates don't match %s vs %s" gen_mp.align_date nuc_mp.align_date
+      else
+        let gen_mp, nuc_mp =
+          if drop_known_splice_variants then begin
+            let f = splice_variant_filter (Filename.basename prefix) in
+            { gen_mp with alt_elems = f gen_mp.alt_elems},
+            { nuc_mp with alt_elems = f nuc_mp.alt_elems}
+          end else
+            gen_mp, nuc_mp
+        in
+        let gen_mp = Selectors.apply_to_mp selectors gen_mp in
+        let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
+        Merge_mas.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
+
+  end (* MergeConstruction *)
 
   let construct = function
-    | AlignmentFile (file, impute) ->
-        let mp = Mas_parser.from_file file in
+    | AlignmentFile { path; selectors; impute} ->
+        let mp = Mas_parser.from_file path in
+        let smp = Selectors.apply_to_mp selectors mp in
         if impute then
-          Merge_mas.naive_impute mp
+          Merge_mas.naive_impute smp
         else
-          Ok (mp, []) (* empty merge_map *)
-    | MergeFromPrefix (prefix, distance_logic, impute) ->
-        if impute then
-          failwith "Imputation and merging not implemented!"
-        else
-          Merge_mas.do_it prefix distance_logic
+          Ok (smp, []) (* empty merge_map *)
+    | MergeFromPrefix
+        { prefix_path; selectors; drop_sv; distance; impute } ->
+          if impute then
+            failwith "Imputation and merging not implemented!"
+          else
+            MergeConstruction.do_it prefix_path selectors distance
 
 end (* Input *)

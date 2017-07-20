@@ -123,9 +123,9 @@ let regex_arg =
   in
   let open Arg in
   let parser_ = parser_of_kind_of_string ~kind:docv
-    (fun s -> Some (Alleles.Selection.Regex s))
+    (fun s -> Some (Alleles.Selectors.Regex s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv regex_command_line_args
 
 let allele_arg =
@@ -143,9 +143,9 @@ let allele_arg =
   let open Arg in
   let parser_ =
     parser_of_kind_of_string ~kind:docv
-      (fun s -> Some (Alleles.Selection.Specific s))
+      (fun s -> Some (Alleles.Selectors.Specific s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv allele_command_line_args
 
 let without_arg =
@@ -163,9 +163,9 @@ let without_arg =
   let open Arg in
   let parser_ =
     parser_of_kind_of_string ~kind:docv
-      (fun s -> Some (Alleles.Selection.Without s))
+      (fun s -> Some (Alleles.Selectors.Without s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv without_command_line_args
 
 let num_alt_arg =
@@ -181,8 +181,8 @@ let num_alt_arg =
 
   in
   let open Arg in
-  let parser_ = (positive_int_parser (fun d -> Alleles.Selection.Number d)) in
-  let nconv = conv ~docv (parser_, Alleles.Selection.pp) in
+  let parser_ = (positive_int_parser (fun d -> Alleles.Selectors.Number d)) in
+  let nconv = conv ~docv (parser_, Alleles.Selectors.pp) in
   (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
 
 let do_not_ignore_suffixed_alleles_flag =
@@ -212,12 +212,6 @@ let remove_reference_flag =
   Arg.(value & flag & info ~doc ["no-reference"])
   *)
 
-let impute_flag =
-  let doc  = "Fill in the missing segments of alleles with an iterative \
-              algorithm that picks the closest allele with full length."
-  in
-  Arg.(value & flag & info ~doc ["impute"])
-
 let no_cache_flag =
   let doc =
     sprintf "Do not use a disk cache (in %s sub directory of the current \
@@ -233,17 +227,14 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let input_alignments ~impute file =
-  Alleles.Input.AlignmentFile (file, impute)
-
-let input_merges ~distance ~impute prefix =
-  Alleles.Input.MergeFromPrefix (prefix, distance, impute)
-
-let to_input ?alignment_file ?merge_file ~distance ~impute () =
-  match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (input_merges ~distance ~impute prefix)
-  | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
-  | None,                None -> Error "Either a file or merge argument must be specified"
+let to_allele_input ?alignment_file ?merge_file ~distance ~impute =
+  let open Alleles.Input in
+  match merge_file with
+  | Some prefix     -> Ok (merge ~distance ~impute prefix)
+  | None  ->
+      match alignment_file with
+      | (Some path) -> Ok (alignment ~impute path)
+      | None        -> Error "Neither a file or merge argument were specified"
 
 let option_to_list o =
   Option.value_map o ~default:[] ~f:(fun s -> [s])
@@ -255,7 +246,7 @@ let aggregate_selectors ?number_alleles
     @ without_list
     @ (option_to_list number_alleles)
     @ (if do_not_ignore_suffixed_alleles then
-        [Alleles.Selection.DoNotIgnoreSuffixed] else [])
+        [Alleles.Selectors.DoNotIgnoreSuffixed] else [])
 
 let to_filename_and_graph_args
   (* Allele information source *)
@@ -268,15 +259,16 @@ let to_filename_and_graph_args
     ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
   ~join_same_sequence =
-    to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
-      let selectors =
-        aggregate_selectors ~regex_list ~specific_list ~without_list
-          ?number_alleles ~do_not_ignore_suffixed_alleles
-      in
-      let arg = {Ref_graph.selectors; join_same_sequence } in
-      let graph_arg = Cache.graph_args ~arg ~input in
-      let option_based_fname = Cache.graph_args_to_string graph_arg in
-      Ok (option_based_fname, graph_arg)
+    to_allele_input ?alignment_file ?merge_file ~distance ~impute
+      >>= fun input ->
+        let selectors =
+          aggregate_selectors ~regex_list ~specific_list ~without_list
+            ?number_alleles ~do_not_ignore_suffixed_alleles
+        in
+        let arg = {Ref_graph.selectors; join_same_sequence } in
+        let graph_arg = Cache.graph_args ~arg ~input in
+        let option_based_fname = Cache.graph_args_to_string graph_arg in
+        Ok (option_based_fname, graph_arg)
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in

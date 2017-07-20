@@ -101,6 +101,12 @@ let () =
     let doc = "Do not insert newliens into a list of alleles." in
     Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
+  let impute_flag =
+    let doc  = "Fill in the missing segments of alleles with an iterative \
+                algorithm that picks the closest allele with full length."
+    in
+    Arg.(value & flag & info ~doc ["impute"])
+  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in

@@ -1207,7 +1207,7 @@ let create_adjacents_arr g aset amap offset posarr bounds =
     {edge_node_set; seen_alleles})
 
 type construction_arg =
-  { selectors           : Alleles.Selection.t list
+  { selectors           : Alleles.Selectors.t list
   ; join_same_sequence  : bool
   }
 
@@ -1219,7 +1219,7 @@ let default_construction_arg =
 let construction_arg_to_string
   { selectors; join_same_sequence } =
     sprintf "%s_%b"
-      (Alleles.Selection.list_to_string selectors)
+      (Alleles.Selectors.list_to_string selectors)
       join_same_sequence
 
 let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
@@ -1227,7 +1227,7 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let { selectors ; join_same_sequence; } = arg in
   let { align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2) alt_elems in
-  let alt_alleles = Alleles.Selection.apply_to_assoc selectors alt_elems in
+  let alt_alleles = Alleles.Selectors.apply_to_assoc selectors alt_elems in
   let num_alleles = List.length alt_alleles in
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in

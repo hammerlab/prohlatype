@@ -24,10 +24,12 @@ let kmer_table_from_fasta ~k file =
 
 let create_kmer_counts ~k file =
   let fasta_kt, fasta_seqs = kmer_table_from_fasta ~k (to_fasta_file file) in
-  let arg = Ref_graph.{ default_construction_arg
-                with selectors = [ Alleles.Selection.DoNotIgnoreSuffixed]}
+  let  selectors = [ Alleles.Selectors.DoNotIgnoreSuffixed] in
+  let arg = Ref_graph.{ default_construction_arg with selectors } in
+  let input =
+    Alleles.Input.alignment (to_alignment_file file) ~impute:false
+      ~selectors
   in
-  let input = Alleles.Input.AlignmentFile (to_alignment_file file, false) in
   let gm = Cache.(graph (graph_args ~input ~arg)) in
   let graph_kt = Index.kmer_counts ~biological:true ~k gm in
   let idx = Index.create ~k gm in

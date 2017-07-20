@@ -169,17 +169,10 @@ let zip_align ~gen ~nuc =
   | (bm, _) :: _ -> let next_boundary_pos = bm.position in
                     loop next_boundary_pos [] gen nuc
 
-let prefix_from_f s =
-  match String.split s ~on:(`Character '_') with
-  | [p; _] -> p
-  | _      -> invalid_argf "Missing '_' in %s" s
-
-let align_from_prefix prefix_path =
-  let gen_mp = from_file (prefix_path ^ "_gen.txt") in
-  let nuc_mp = from_file (prefix_path ^ "_nuc.txt") in
+let align_mp_into_instructions ~gen_mp ~nuc_mp =
   let gen = Boundaries.bounded gen_mp.ref_elems in
   let nuc = Boundaries.bounded nuc_mp.ref_elems in
-  zip_align ~gen ~nuc >>= fun i -> Ok (gen_mp, nuc_mp, i)
+  zip_align ~gen ~nuc
 
 let end_position = end_position String.length
 
@@ -735,80 +728,46 @@ let merge_mp_to_dc_inputs ~gen ~nuc =
           else
             cm)
 
-(* IMGT alignment format, (nor the XML) provide a robust way to detect splice
-   variants and their respective start/stop positions with respect to the
-   global alignmnet. In the past, I've hard-coded transformations that perform
-   the appropriate adjustment. This solution isn't feasible in the long term,
-   and is abandonded to the comments above. This association list
-   (locus -> alleles) provides a quick way to just remove those alleles from
-   the graph.
-
-   To try creating the graph without them set ~drop_known_splice_variants to
-   false *)
-let splice_variants =
-  [ "A", [ "A*01:11N" ; "A*29:01:01:02N" ; "A*26:01:01:03N" ; "A*03:01:01:02N" ]
-  ; "B", [ "B*15:01:01:02N"; "B*44:02:01:02S"; "B*07:44N" ]
-  ; "C", [ "C*04:09N" ]
-  ]
-
-let splice_variant_filter p =
-  match List.Assoc.get p splice_variants with
-  | None      -> fun l -> l
-  | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
-
-let do_it ?verbose ?(drop_known_splice_variants=true) prefix dl =
-       align_from_prefix prefix >>= fun (gen_mp, nuc_mp, instr) ->
-    if gen_mp.reference <> nuc_mp.reference then
-      error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
-    else if gen_mp.align_date <> nuc_mp.align_date then
-      error "Align dates don't match %s vs %s" gen_mp.align_date nuc_mp.align_date
-    else
-      let gen_mp, nuc_mp =
-        if drop_known_splice_variants then begin
-          let f = splice_variant_filter (Filename.basename prefix) in
-          { gen_mp with alt_elems = f gen_mp.alt_elems},
-          { nuc_mp with alt_elems = f nuc_mp.alt_elems}
-        end else
-          gen_mp, nuc_mp
-      in
-      let nuc = nuc_mp.ref_elems in
-      let gen = gen_mp.ref_elems in
-      map_instr_to_alignments ?verbose nuc_mp.reference ~gen ~nuc instr >>= fun ref_instr ->
-        let new_ref_elems = align_reference ref_instr in
-        reference_positions_align ~seq:("reference:" ^ gen_mp.reference)
-          new_ref_elems >>= fun _ref_position_check ->
-            let same, just_gen, just_nuc =
-              same_and_diff ~gen_assoc:gen_mp.alt_elems ~nuc_assoc:nuc_mp.alt_elems
+let do_it_spec ?verbose ~gen_mp ~nuc_mp dl =
+  align_mp_into_instructions ~gen_mp ~nuc_mp >>= fun instr ->
+    let nuc = nuc_mp.ref_elems in
+    let gen = gen_mp.ref_elems in
+    map_instr_to_alignments ?verbose nuc_mp.reference ~gen ~nuc instr >>= fun ref_instr ->
+      let new_ref_elems = align_reference ref_instr in
+      reference_positions_align ~seq:("reference:" ^ gen_mp.reference)
+        new_ref_elems >>= fun _ref_position_check ->
+          let same, just_gen, just_nuc =
+            same_and_diff ~gen_assoc:gen_mp.alt_elems ~nuc_assoc:nuc_mp.alt_elems
+          in
+          let () =
+            if just_gen <> [] then
+              eprintf "Found these alleles with only genetic data: %s\n"
+                (String.concat ~sep:"; " (List.map just_gen ~f:fst))
+          in
+          (* Add the same, alleles with both genetic and nucleic data.*)
+          same_alts ?verbose instr same >>= fun (alt_inst, alt_als) ->
+            let rdiff = reference_as_diff ref_instr in
+            let rmap = List.fold_left ((gen_mp.reference, rdiff) :: alt_inst)
+              ~init:StringMap.empty ~f:(fun m (al,inst) -> StringMap.add al inst m)
             in
-            let () =
-              if just_gen <> [] then
-                eprintf "Found these alleles with only genetic data: %s\n"
-                  (String.concat ~sep:"; " (List.map just_gen ~f:fst))
+            (* TODO: Clear up this logic since we're computing distances for
+                a larger set than necessary. *)
+            let targets, candidates =
+              merge_mp_to_dc_inputs ~gen:gen_mp ~nuc:nuc_mp
             in
-            (* Add the same, alleles with both genetic and nucleic data.*)
-            same_alts ?verbose instr same >>= fun (alt_inst, alt_als) ->
-              let rdiff = reference_as_diff ref_instr in
-              let rmap = List.fold_left ((gen_mp.reference, rdiff) :: alt_inst)
-                ~init:StringMap.empty ~f:(fun m (al,inst) -> StringMap.add al inst m)
-              in
-              (* TODO: Clear up this logic since we're computing distances for
-                 a larger set than necessary. *)
-              let targets, candidates =
-                merge_mp_to_dc_inputs ~gen:gen_mp ~nuc:nuc_mp
-              in
-              Distances.compute nuc_mp.reference nuc_mp.ref_elems
-                  ~targets ~candidates dl >>= fun dmap ->
-                diff_alts ?verbose ~na:just_nuc dmap rmap >>=
-                    fun (diff_alt_lst, diff_map_lst) ->
-                      let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
-                      if Option.value ~default:false verbose then
-                        printf "Finished merging!\n%!";
-                      Ok ({ align_date = gen_mp.align_date
-                          ; reference  = gen_mp.reference
-                          ; ref_elems  = new_ref_elems
-                          ; alt_elems  = alt_als @ diff_alt_lst
-                          } ,
-                          map_lst @ diff_map_lst)
+            Distances.compute nuc_mp.reference nuc_mp.ref_elems
+                ~targets ~candidates dl >>= fun dmap ->
+              diff_alts ?verbose ~na:just_nuc dmap rmap >>=
+                  fun (diff_alt_lst, diff_map_lst) ->
+                    let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
+                    if Option.value ~default:false verbose then
+                      printf "Finished merging!\n%!";
+                    Ok ({ align_date = gen_mp.align_date
+                        ; reference  = gen_mp.reference
+                        ; ref_elems  = new_ref_elems
+                        ; alt_elems  = alt_als @ diff_alt_lst
+                        } ,
+                        map_lst @ diff_map_lst)
 
 let split_al_els pos including e =
   let open Mas_parser in
@@ -904,4 +863,3 @@ let naive_impute mp =
                 StringMap.bindings
                 (StringMap.remove mp.reference merged_alleles)}
           , merge_assoc)
-

@@ -14,7 +14,7 @@ let to_read_size_dependent
     ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
     =
-    Common_options.to_input ?alignment_file ?merge_file ~distance ~impute ()
+    Common_options.to_allele_input ?alignment_file ?merge_file ~distance ~impute
       >>= fun input ->
         let selectors =
           Common_options.aggregate_selectors ~regex_list ~specific_list
