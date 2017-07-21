@@ -7,13 +7,13 @@ let (//) = Filename.concat
 
 let to_read_size_dependent
   (* Allele information source *)
-    ~alignment_files ~merge_files ~distance ~impute
+    ~alignment_files ~merge_files ~distance
     ~skip_disk_cache =
     let als =
-      List.map alignment_files ~f:(Alleles.Input.alignment ~impute)
+      List.map alignment_files ~f:(Alleles.Input.alignment ~distance)
     in
     let mls =
-      List.map merge_files ~f:(Alleles.Input.merge ~distance ~impute)
+      List.map merge_files ~f:(Alleles.Input.merge ~distance)
     in
     match als @ mls with
     | []     -> Error "Neither a merge nor alignment file specified!"
@@ -121,7 +121,6 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
-  let impute   = true in
   let band     =
     if not_band then
       None
@@ -144,7 +143,7 @@ let type_
   in
   let need_read_size_r =
     to_read_size_dependent
-      ~alignment_files ~merge_files ~distance ~impute
+      ~alignment_files ~merge_files ~distance
       ~skip_disk_cache
   in
   let mode =
@@ -243,7 +242,7 @@ let () =
     Term.(const type_
             (* Allele information source *)
             $ class1gen_arg
-            $ files_arg $ merges_arg $ distance_flag
+            $ files_arg $ merges_arg $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag
             (* What are we typing *)

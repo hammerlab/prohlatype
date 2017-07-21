@@ -39,7 +39,7 @@ let () =
             (* Allele set construction args *)
             $ file_arg $ merge_arg
             (* How to measure distances. *)
-            $ distance_flag
+            $ defaulting_distance_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval allele_distances with

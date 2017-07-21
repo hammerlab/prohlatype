@@ -5,7 +5,7 @@ let app_name = "par_type"
 
 let to_read_size_dependent
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance ~impute
+  ?alignment_file ?merge_file ~distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -14,7 +14,7 @@ let to_read_size_dependent
     ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
     =
-    Common_options.to_allele_input ?alignment_file ?merge_file ~distance ~impute
+    Common_options.to_allele_input ?alignment_file ?merge_file ~distance ()
       >>= fun input ->
         let selectors =
           Common_options.aggregate_selectors ~regex_list ~specific_list
@@ -94,7 +94,7 @@ let across_paired ~finish_singles conf mode
 
 let type_
   (* Allele information source *)
-    alignment_file merge_file distance not_impute
+    alignment_file merge_file distance
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
     do_not_ignore_suffixed_alleles
@@ -122,9 +122,8 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
-  let impute   = not not_impute in
   to_read_size_dependent
-    ?alignment_file ?merge_file ~distance ~impute
+    ?alignment_file ?merge_file ~distance
     ~regex_list ~specific_list ~without_list ?number_alleles
     ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
@@ -171,17 +170,6 @@ let () =
   let not_check_rc_flag =
     let doc = "Do not check the reverse complement." in
     Arg.(value & flag & info ~doc ["not-check-rc"])
-  in
-  let do_not_impute_flag =
-    let doc  = "Do NOT fill in the missing segments of alleles with an \
-                iterative algorithm that picks the closest allele with full \
-                length. The default behavior is to impute the sequences, \
-                so that (1) the per-allele likelihoods are comparable \
-                (the default behavior of unknown sequences biases reads \
-                to map correctly in that region) and (2) this limits the \
-                actual branching of transitions inside the PPHMM."
-    in
-    Arg.(value & flag & info ~doc ["do-not-impute"])
   in
   let specific_allele_argument = "allele" in
   let spec_allele_arg =
@@ -234,7 +222,7 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
-            $ file_arg $ merge_arg $ distance_flag $ do_not_impute_flag
+            $ file_arg $ merge_arg $ defaulting_distance_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
             $ do_not_ignore_suffixed_alleles_flag

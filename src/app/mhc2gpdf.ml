@@ -3,7 +3,7 @@ open Util
 
 let construct
   (* input *)
-  alignment_file merge_file distance impute
+  alignment_file merge_file distance
   (* output *)
   ofile
   (* allele selection. *)
@@ -20,7 +20,7 @@ let construct
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
     Common_options.to_filename_and_graph_args
-      ?alignment_file ?merge_file ~distance ~impute
+      ?alignment_file ?merge_file ?distance
       ~specific_list ~regex_list ~without_list ?number_alleles
       ~do_not_ignore_suffixed_alleles
       ~join_same_sequence
@@ -101,12 +101,6 @@ let () =
     let doc = "Do not insert newliens into a list of alleles." in
     Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
-  let impute_flag =
-    let doc  = "Fill in the missing segments of alleles with an iterative \
-                algorithm that picks the closest allele with full length."
-    in
-    Arg.(value & flag & info ~doc ["impute"])
-  in
   let construct =
     let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
@@ -124,7 +118,7 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg $ distance_flag $ impute_flag
+            $ file_arg $ merge_arg $ optional_distance_flag
             (* output file *)
             $ output_fname_arg
             (* allele selection. *)

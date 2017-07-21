@@ -6,10 +6,11 @@ open MSA
 (* The set of genes for which I've tested these algorithms. *)
 let supported_genes = [ "A"; "B"; "C"]
 
+(* Filter out the string sequence elements. *)
 let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
 
+(* Specify string containers. *)
 let end_position = end_position String.length
-
 
 module Impute = struct
 
@@ -74,15 +75,16 @@ module Impute = struct
     let _before_smaller_start, at_smaller_start = split_at smaller ~acc:[] ~f:at_start in
     start_merging [] ~smaller:at_smaller_start ~bigger
 
-  (* TODO: Implement Distances Logic via the name-Trie and expose the distance
-          logic argument. *)
-  let do_it mp =
+  let do_it logic mp =
     let open Parser in
     let reflength = sequence_length mp.ref_elems in
     let to_fill, full = List.partition_map mp.alt_elems ~f:(fun (a, s) ->
       let l = sequence_length s in
       if l < reflength then `Fst (l, a, s) else `Snd (a, s))
     in
+    (* Strip the sequences from the reference since for alternate alleles
+       they represent a difference to the reference; therefore without the
+       sequences the reference has no difference to itself. *)
     let init = StringMap.singleton mp.reference (no_sequences mp.ref_elems) in
     let candidates =
       List.fold_left full ~init ~f:(fun m (key, data) ->
@@ -90,13 +92,13 @@ module Impute = struct
     in
     let merge_assoc = List.map full ~f:(fun (a, _) -> (a, a)) in
     let to_distances =
-      Distances.(one ~reference:mp.reference ~reference_sequence:mp.ref_elems
-                  WeightedPerSegment)
+      Distances.one ~reference:mp.reference ~reference_sequence:mp.ref_elems
+        logic
     in
-    List.sort to_fill ~cmp:(fun (l1,_,_) (l2,_,_) -> compare l1 l2)
+    List.sort to_fill ~cmp:(fun (l1,_,_) (l2,_,_) -> compare l2 l1)
     |> list_fold_ok ~init:(candidates, merge_assoc)
       ~f:(fun (candidates, ma) (_length, a_name, a_seq) ->
-            to_distances ~candidates ~allele:a_seq >>= function
+            to_distances ~candidates ~allele:(a_name, a_seq) >>= function
               | []            -> error "Did not return _any_ distances to %s allele" a_name
               | (key, d) :: _ -> (*printf "for %s merging %s\n" a_name key; *)
                                 let bigger = StringMap.find key candidates in

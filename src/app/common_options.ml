@@ -229,13 +229,13 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_allele_input ?alignment_file ?merge_file ~distance ~impute =
+let to_allele_input ?alignment_file ?merge_file ?distance () =
   let open Alleles.Input in
   match merge_file with
-  | Some prefix     -> Ok (merge ~distance ~impute prefix)
+  | Some prefix     -> Ok (merge ?distance prefix)
   | None  ->
       match alignment_file with
-      | (Some path) -> Ok (alignment ~impute path)
+      | (Some path) -> Ok (alignment ?distance path)
       | None        -> Error "Neither a file or merge argument were specified"
 
 let option_to_list o =
@@ -252,7 +252,7 @@ let aggregate_selectors ?number_alleles
 
 let to_filename_and_graph_args
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance ~impute
+  ?alignment_file ?merge_file ?distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -261,7 +261,7 @@ let to_filename_and_graph_args
     ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
   ~join_same_sequence =
-    to_allele_input ?alignment_file ?merge_file ~distance ~impute
+    to_allele_input ?alignment_file ?merge_file ?distance ()
       >>= fun input ->
         let selectors =
           aggregate_selectors ~regex_list ~specific_list ~without_list
@@ -296,16 +296,33 @@ let num_reads_arg =
   let doc = "Number of reads to take from the front of the FASTA file" in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["reads"])
 
-let distance_flag =
+let optional_distance_flag, defaulting_distance_flag =
   let open Distances in
-  let d = "How to compute the distance between alleles: " in
-  Arg.(value & vflag Trie
+  let opts =
     [ Trie
-      , info ~doc:(d ^ "trie based off of allele names.") ["trie"]
+      , "trie based off of allele names."
+      , false
+      , "trie"
     ; WeightedPerSegment
-      , info ~doc:(d ^ "smallest shared weighted per segment distance.")
-          ["weighted-segment"]
-    ])
+    , "smallest shared weighted per segment distance."
+    , true
+    , "weighted-segment"
+    ]
+  in
+  let r default =
+    fun s ->
+    sprintf "How to compute the distance between alleles: %s.%s"
+      s (if default then "default" else "")
+  in
+  let o = sprintf "How to compute the distance between alleles: %s. \
+             Specifying a distance argument will turn on imputation for
+             alleles over their missing segments."
+  in
+  let open Arg in
+  value & vflag None
+    (List.map opts ~f:(fun (opt,m,_,c) -> (Some opt, info ~doc:(o m) [c])))
+  , value & vflag WeightedPerSegment
+      (List.map opts ~f:(fun (opt,m,d,c) -> (opt, info ~doc:(r d m) [c])))
 
 let print_top_flag =
   let doc = "Print only the specified number (positive integer) of alleles" in

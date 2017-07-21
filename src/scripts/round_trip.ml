@@ -64,8 +64,7 @@ let test_sequences file =
   let selectors = [ Alleles.Selectors.DoNotIgnoreSuffixed ] in
   let all_args =
     Cache.graph_args
-      ~input:(Alleles.Input.alignment (to_alignment_file file)
-                ~selectors ~impute:false)
+      ~input:(Alleles.Input.alignment (to_alignment_file file) ~selectors)
       ~arg:Ref_graph.{ default_construction_arg with selectors = selectors }
   in
   let gall = Cache.graph all_args in

@@ -177,6 +177,10 @@ module StringMap = Map.Make (struct
   type t = string [@@deriving ord]
 end)
 
+let string_map_of_assoc asc =
+  List.fold_left asc ~init:StringMap.empty
+    ~f:(fun acc (key, data) -> StringMap.add ~key ~data acc)
+
 let remove_and_assoc el list =
   let rec loop acc = function
     | []                      -> raise Not_found
@@ -184,6 +188,14 @@ let remove_and_assoc el list =
     | h :: t                  -> loop (h :: acc) t
   in
   loop [] list
+
+let group_by_assoc l =
+  let insert assoc (k, v) =
+    match List.Assoc.remove_and_get k assoc with
+    | None              -> (k,[v]) :: assoc
+    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
+  in
+  List.fold_left ~init:[] ~f:insert l
 
 let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
@@ -216,11 +228,3 @@ let time s f =
   let r = f () in
   printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
   r
-
-let group_by_assoc l =
-  let insert assoc (k, v) =
-    match List.Assoc.remove_and_get k assoc with
-    | None              -> (k,[v]) :: assoc
-    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
-  in
-  List.fold_left ~init:[] ~f:insert l

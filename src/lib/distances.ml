@@ -97,13 +97,14 @@ type alignment_sequence = string MSA.alignment_sequence
 
 let one ~reference ~reference_sequence ~allele ~candidates = function
   | Trie               ->
-      (* A bit wasteful, but better than not supporting this method at all. *)
-      let dummy_allele_name = "dummy" in
-      let targets = StringMap.singleton dummy_allele_name allele in
+      let aname, aseq = allele in
+      let targets = StringMap.singleton aname aseq in
       Trie_distances.f ~targets ~candidates >>= fun m ->
-        Ok (StringMap.find dummy_allele_name m)
+        Ok (StringMap.find aname m)
   | WeightedPerSegment ->
-      Ok (Weighted_per_segment.one ~reference ~reference_sequence ~candidates ~allele)
+      let _aname, aseq = allele in
+      Ok (Weighted_per_segment.one ~reference ~reference_sequence ~candidates
+            ~allele:aseq)
 
 let compute ~reference ~reference_sequence ~targets ~candidates = function
   | Trie               ->

@@ -514,39 +514,45 @@ module Input = struct
     | AlignmentFile of
         { path      : string    (* path to file (ex. ../alignments/A_nuc.txt) *)
         ; selectors : Selectors.t list
-        ; impute    : bool                                         (* impute? *)
+        ; distance  : Distances.logic option
+        (* How to measure distances, if specified than we impute. *)
         }
     | MergeFromPrefix of
         { prefix_path : string         (* path to prefix (ex ../alignments/A) *)
         ; selectors   : Selectors.t list
         ; drop_sv     : bool                          (* drop splice variants *)
-        ; distance    : Distances.logic          (* how to measure distances. *)
-        ; impute      : bool                                       (* impute? *)
+        ; distance    : Distances.logic (* How to measure distances, always impute! *)
         }
 
-  let alignment ?(selectors=[]) ~impute path =
-    AlignmentFile { path; impute ; selectors }
+  let alignment ?(selectors=[]) ?distance path =
+    AlignmentFile { path; selectors; distance }
 
-  let merge ?(selectors=[]) ?(drop_sv=true) ~distance ~impute prefix_path =
-    MergeFromPrefix {prefix_path; distance; impute; selectors; drop_sv}
+  let merge ?(selectors=[]) ?(drop_sv=true)
+    ?(distance=Distances.WeightedPerSegment) prefix_path =
+    MergeFromPrefix {prefix_path; selectors; distance; drop_sv}
 
   let is_imputed = function
-    | AlignmentFile { impute; _ }
-    | MergeFromPrefix { impute; _} -> impute
+    | AlignmentFile { distance; _ } ->
+        begin match distance with
+        | None    -> false
+        | Some _  -> true
+        end
+    | MergeFromPrefix _ -> true
 
   let to_string = function
-    | AlignmentFile { path; selectors; impute } ->
-        sprintf "AF_%s_%s_%b"
+    | AlignmentFile { path; selectors; distance } ->
+        sprintf "AF_%s_%s_%s"
           (Filename.chop_extension (Filename.basename path))
           (Selectors.list_to_string selectors)
-          impute
-    | MergeFromPrefix { prefix_path; selectors; drop_sv; distance; impute} ->
-        sprintf "MGD_%s_%s_%b_%s_%b"
+          (match distance with
+           | None -> "false"
+           | Some dl -> Distances.show_logic dl)
+    | MergeFromPrefix { prefix_path; selectors; drop_sv; distance } ->
+        sprintf "MGD_%s_%s_%b_%s"
           (Filename.basename prefix_path)
           (Selectors.list_to_string selectors)
           drop_sv
           (Distances.show_logic distance)
-          impute
 
   module MergeConstruction = struct
 
@@ -596,18 +602,15 @@ module Input = struct
   end (* MergeConstruction *)
 
   let construct = function
-    | AlignmentFile { path; selectors; impute} ->
+    | AlignmentFile { path; selectors; distance } ->
         let mp = MSA.Parser.from_file path in
         let smp = Selectors.apply_to_mp selectors mp in
-        if impute then
-          Alter_MSA.Impute.do_it smp
-        else
-          Ok (smp, []) (* empty merge_map *)
+        begin match distance with
+        | None    -> Ok (smp, []) (* empty merge_map *)
+        | Some dl -> Alter_MSA.Impute.do_it dl smp
+        end
     | MergeFromPrefix
-        { prefix_path; selectors; drop_sv; distance; impute } ->
-          if impute then
-            failwith "Imputation and merging not implemented!"
-          else
-            MergeConstruction.do_it prefix_path selectors distance
+        { prefix_path; selectors; drop_sv; distance } ->
+          MergeConstruction.do_it prefix_path selectors distance
 
 end (* Input *)

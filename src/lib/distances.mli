@@ -27,17 +27,17 @@ val pp_logic : Format.formatter -> logic -> unit
 val show_logic : logic -> string
 
 (** Compute the distances for one specific allele. *)
-val one : reference:string
-        -> reference_sequence:alignment_sequence
-        -> allele:alignment_sequence
-        -> candidates:alignment_sequence StringMap.t
+val one : reference : string
+        -> reference_sequence : alignment_sequence
+        -> allele : (string * alignment_sequence)
+        -> candidates : alignment_sequence StringMap.t
         -> logic
         -> ((string * float) list, string) result
 
 (** Compute the distances for all the alleles [targets]. *)
-val compute : reference:string
-            -> reference_sequence:alignment_sequence
-            -> targets:alignment_sequence StringMap.t
-            -> candidates:alignment_sequence StringMap.t
+val compute : reference : string
+            -> reference_sequence : alignment_sequence
+            -> targets : alignment_sequence StringMap.t
+            -> candidates : alignment_sequence StringMap.t
             -> logic
             -> ((string * float) list StringMap.t, string) result
