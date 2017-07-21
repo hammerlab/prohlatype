@@ -169,6 +169,10 @@ let list_map_consecutives f lst =
   in
   loop [] lst
 
+module StringSet = Set.Make (struct
+  type t = string [@@deriving ord]
+end)
+
 module StringMap = Map.Make (struct
   type t = string [@@deriving ord]
 end)

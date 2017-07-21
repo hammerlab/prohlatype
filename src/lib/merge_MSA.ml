@@ -718,22 +718,18 @@ let reference_as_diff lst =
           ; genetic = { genetic with sequence = no_sequences genetic.sequence }
           })
 
-module Aset = Set.Make (struct
-  type t = string [@@deriving ord]
-end)
-
 let merge_mp_to_dc_inputs ~gen ~nuc =
   let open Parser in
   let candidate_s =
-    List.fold_left gen.alt_elems ~init:Aset.empty
-      ~f:(fun s (allele, alst) -> Aset.add allele s)
+    List.fold_left gen.alt_elems ~init:StringSet.empty
+      ~f:(fun s (allele, alst) -> StringSet.add allele s)
   in
   (* we want the sequences from _nuc *)
   List.fold_left nuc.alt_elems
     ~init:(StringMap.empty, StringMap.singleton nuc.reference nuc.ref_elems)
     ~f:(fun (tm, cm) (allele, alst) ->
           StringMap.add ~key:allele ~data:alst tm,
-          if Aset.mem allele candidate_s then
+          if StringSet.mem allele candidate_s then
             StringMap.add ~key:allele ~data:alst cm
           else
             cm)
