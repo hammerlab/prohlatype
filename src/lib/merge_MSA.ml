@@ -1,11 +1,14 @@
-(* Merging of alignment element sequences.
+(* Merging of cDNA and gDNA alignment sequences.
 
-Problem: There are many (10x) more nucleic allele sequences than genetic ones.
-But the genetic sequences allow us to match many more reads. We would like to
-"impute" sequences for (and hence a graph containing) all of the alleles for
-which we have nucleic sequence data. To accomplish this, we use the current
-nucleic sequences as scaffolding around which we append information from the
-genetic ones.
+Problem: There are many (10x) more cDNA derived (occasionally referred to as
+nucleic following IMGT's naming these alignment files Locus_gen.txt) allele
+sequences than gDNA (occasionally referred to as genetic also following IMGT's
+convention of naming these alignment files Locus_nuc.tt) ones.  But the since
+the gDNA sequences are longer they allow us to match more reads.  We would like
+to "impute" sequences for (and hence a graph containing) all of the alleles for
+which we have some cNDA sequence data. To accomplish this, we use the current
+cDNA sequences as scaffolding around which we append information from the gDNA
+ones.
 
 The algorithm proceeds in several steps. At a high level for a given gene
 (ex. HLA-A) we:
@@ -13,9 +16,9 @@ The algorithm proceeds in several steps. At a high level for a given gene
   1. Use the reference allele to construct a set of instructions for how to
      zip the exons into the introns.
   2. Afterwards we use those instructions to, merge the reference.
-  3. Merge all alleles where we have both nucleic and genetic data.
-  4. Finally for the other alleles we use the same instructions to merge the
-     them with the closest allele for which we have genetic data.
+  3. Merge all alleles where we have both cDNA and gDNA.
+  4. Finally for the other alleles we use the same instructions to merge them
+     with the closest allele for which we have gDNA data.
 
 At a lower level:
 
@@ -26,55 +29,61 @@ At a lower level:
      (aka FillFromGenetic). This step also calculates all of the necessary
      offsetting logic so that alignment elements that are contained in these
      instructions can be moved to the appropriate position for a consistent
-     merged alignment.
+     merging alignment.
 
-  2. Merging the reference is fairly straightforward. First we map the
-     simple instructions by grabbing the appropriate alignment elements
-     from their nucleic and genetic sequences [map_instr_to_alignments]
-     and then we "execute" the previous instructions taking into account
-     offsets [align_reference]. There is a check, [reference_positions_align]
-     to make sure that there are no gaps in subsequent alignment instructions.
+  2. Merging the reference is fairly straightforward, but one might object as
+     to WHY we would even need to merge them! Specifically shouldn't we have
+     the same data for the reference? We have the same _sequence_ information
+     for the reference, but the position of the gaps, with respect to the
+     global alignment is different. When we're in an exon we want to use the
+     cDNA global alignment but switch to the gDNA alignment in an intron/UTR.
+     
+     First we map the simple instructions by grabbing the appropriate alignment
+     elements from their cDNA and gDNA sequences [map_instr_to_alignments] and
+     then we "execute" the previous instructions taking into account offsets
+     [align_reference]. There is a check, [reference_positions_align] to make
+     sure that there are no gaps in subsequent alignment instructions.
 
   3. Before merging the other alleles we separate them into 3 cases using
       [same_and_diff]:
-      - Alleles where we have both nucleic and genetic data (4).
-      - Alleles where we have only genetic data (5).
-      - Alleles where we have only nucleic data (6).
+      - Alleles where we have both cDNA and gDNA data (4).
+      - Alleles where we have only gDNA data (5).
+      - Alleles where we have only cDNA data (6).
 
-  4. Merging the alleles where we have both genetic and nucleic data
-     [same_alts]. We take the instructions formed from the reference and
-     replace sequence elements with those of from the genetic and nucleic data
+  4. Merging the alleles where we have both gDNA and cDNA data [same_alts].
+     We take the instructions formed from the reference and replace sequence
+     elements with those of from the gDNA and cDNA data
      ([map_instr_to_alignments]). And similarly to the reference, we also
      execute them  with [align_same]. [align_same] is much more complicated
      than [align_reference] because it has to:
       - Actually deal with different merging sequences.
       - Maintain graph invariants such as start and end differences.
 
-  5. It would be surprising if we had alleles where we have only genetic data,
+  5. It would be surprising if we had alleles where we have only gDNA data,
      (since one could presumably infer the nucleic components), so an error
-     message is written, but no action is taken!
+     message is written, but no action is taken.
 
-  6. Finally, for alleles where we only have nucleic data we follow a slight
+  6. Finally, for alleles where we only have cDNA data we follow a slight
     variant of step 4 [diff_alts]. We first use Distances.compute to find a
-    map of allele to closest substitute (allele where we have genetic data)
+    map of allele to closest substitute (allele where we have gDNA data)
     and what we'll use for imputation.
 
     Once we choose the imputation allele, we take the instructions that we used
     for that allele (the result of [map_instr_to_alignments]) and now add
-    the nucleic allele's exons into the [MergeFromNuclear] instructions of
-    the genetic/imputation allele [merge_different_nuc_into_alignment].
+    the cDNA allele's exons into the [MergeFromNuclear] instructions of
+    the gDNA/imputation allele [merge_different_nuc_into_alignment].
     Afterwards we use [align_different] to execute those instructions. The
     main difficulty with this method, besides those present in [align_same], is
-    knowing when to merge from the nucleic (exon) part of imputation allele
-    because the original nucleic-only allele is missing data. We also have to
+    knowing when to merge from the cDNA (exon) part of imputation allele
+    because the original cDNA-only allele is missing data. We also have to
     deal with Start's and End's of 3 sequences!
 
-TODO: This nuclear vs genetic distinction is stupid it may be redundant
-but sometimes we mean exon vs intron we should label the parts accordingly.
 *)
 
 open Util
-open MSA_parser
+open MSA
+
+module Boundaries = Boundaries
 
 let supported_genes = [ "A"; "B"; "C"]
 
@@ -170,8 +179,8 @@ let zip_align ~gen ~nuc =
                     loop next_boundary_pos [] gen nuc
 
 let align_mp_into_instructions ~gen_mp ~nuc_mp =
-  let gen = Boundaries.bounded gen_mp.ref_elems in
-  let nuc = Boundaries.bounded nuc_mp.ref_elems in
+  let gen = Boundaries.bounded gen_mp.Parser.ref_elems in
+  let nuc = Boundaries.bounded nuc_mp.Parser.ref_elems in
   zip_align ~gen ~nuc
 
 let end_position = end_position String.length
@@ -714,6 +723,7 @@ module Aset = Set.Make (struct
 end)
 
 let merge_mp_to_dc_inputs ~gen ~nuc =
+  let open Parser in
   let candidate_s =
     List.fold_left gen.alt_elems ~init:Aset.empty
       ~f:(fun s (allele, alst) -> Aset.add allele s)
@@ -729,6 +739,7 @@ let merge_mp_to_dc_inputs ~gen ~nuc =
             cm)
 
 let do_it_spec ?verbose ~gen_mp ~nuc_mp dl =
+  let open Parser in
   align_mp_into_instructions ~gen_mp ~nuc_mp >>= fun instr ->
     let nuc = nuc_mp.ref_elems in
     let gen = gen_mp.ref_elems in
@@ -770,7 +781,7 @@ let do_it_spec ?verbose ~gen_mp ~nuc_mp dl =
                         map_lst @ diff_map_lst)
 
 let split_al_els pos including e =
-  let open MSA_parser in
+  let open Parser in
   match e with
   | Start p
   | End p        -> if including && pos = p then
@@ -833,7 +844,7 @@ let impute_seq ~bigger ~smaller =
 (* TODO: Implement Distances Logic via the name-Trie and expose the distance
          logic argument. *)
 let naive_impute mp =
-  let open MSA_parser in
+  let open Parser in
   let reflength = sequence_length mp.ref_elems in
   let to_fill, full = List.partition_map mp.alt_elems ~f:(fun (a, s) ->
     let l = sequence_length s in

@@ -312,7 +312,7 @@ let add_reference_elems g aset allele ref_elems =
     `Started (st, sequence_node) :: lst
   in
   List.fold_left ref_elems ~init:[] ~f:(fun state e ->
-    let open MSA_parser in
+    let open MSA in
     match state, e with
     | []            , Start start_pos               -> add_start start_pos state
     | `Ended _ :: _ , Start start_pos               -> add_start start_pos state
@@ -334,7 +334,7 @@ let add_reference_elems g aset allele ref_elems =
   |> List.sort ~cmp:(fun s1 s2 -> compare_start s1.start s2.start)
 
 let test_consecutive_elements allele =
-  let open MSA_parser in
+  let open MSA in
   let open Nodes in
   function
   | `Gap close_pos      ->
@@ -381,7 +381,7 @@ let next_node_along g aset allele ~from =
 
 let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc) allele alt_lst =
   let module AS = (val aset : Alleles.Set) in
-  let open MSA_parser in
+  let open MSA in
   let open Nodes in
   let first_start_node = S first_start in
   let last_end_node = E last_end in
@@ -1223,9 +1223,9 @@ let construction_arg_to_string
       join_same_sequence
 
 let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
-  let open MSA_parser in
+  let open MSA in
   let { selectors ; join_same_sequence; } = arg in
-  let { align_date; reference; ref_elems; alt_elems} = r in
+  let { Parser.align_date; reference; ref_elems; alt_elems} = r in
   let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2) alt_elems in
   let alt_alleles = Alleles.Selectors.apply_to_assoc selectors alt_elems in
   let num_alleles = List.length alt_alleles in

@@ -1,5 +1,6 @@
-(* Parse (or Lex, I don't want to get into the details of the exact difference)
-   HLA alignment as provided by IMGT. The file looks a this:
+(* Multiple Sequence Alignment
+
+   .... files (as provided by IMGT) looks a this:
 
 ---------------------------START FILE ------------------------------------------
 HLA-A Genomic Sequence Alignments
@@ -28,7 +29,8 @@ Please see http://hla.alleles.org/terms.html for terms of use.
 Please see http://hla.alleles.org/terms.html for terms of use.
 ---------------------------END FILE --------------------------------------------
 
-*)
+We provide facilities for parsing them and generally working with
+representations of this data.  *)
 
 (** We keep track of all {alignment_element}'s with regard to their position,
     character by character, in the alignment. *)
@@ -36,7 +38,7 @@ type position = int
 
 (** Elements that describe alignment sequence.
 
-    All positions are given reletive to reference. *)
+    All positions are given relative the global alignment. *)
 type 'sr sequence = { start : position; s : 'sr }
 and gap = { gstart : position; length : int }
 and boundary = { idx : int; pos : position }
@@ -64,50 +66,54 @@ val start_position : 'a alignment_element -> position
 
 val end_position : ('a -> int) -> 'a alignment_element -> position
 
-(** [al_el_to_string] converts a alignment element to string. *)
+(** [al_el_to_string] converts an alignment element to string. *)
 val al_el_to_string : string alignment_element -> string
 
 val is_sequence : 'a alignment_element -> bool
-val is_gap : 'a alignment_element -> bool
-val is_end : 'a alignment_element -> bool
-val is_start : 'a alignment_element -> bool
+val is_gap      : 'a alignment_element -> bool
+val is_end      : 'a alignment_element -> bool
+val is_start    : 'a alignment_element -> bool
 
-(** [parse_align_date] parses an in channel of an alignment file up to the
-    alignment date, or returns None if it is not found. *)
-val parse_align_date : in_channel -> string option
+module Parser : sig
 
-type result =
-  { align_date  : string
-  (** When the sequences were aligned by IMGT. *)
+  (** [find_align_date] parses an in channel of an alignment file up to the
+      alignment date, or returns None if it is not found. *)
+  val find_align_date : in_channel -> string option
 
-  ; reference : string
-  (** The name of the reference allele *)
+  type result =
+    { align_date  : string
+    (** When the sequences were aligned by IMGT. *)
 
-  ; ref_elems : string alignment_element list
-  (** The sequence elements of the reference. *)
+    ; reference   : string
+    (** The name of the reference allele *)
 
-  ; alt_elems : (string * string alignment_element list) list
-  (** Sequence elements of alternative alleles in an associated list.*)
-  }
+    ; ref_elems   : string alignment_element list
+    (** The sequence elements of the reference. *)
 
-(* Report invariant parsing violations to stdout. *)
-val report : bool ref
+    ; alt_elems   : (string * string alignment_element list) list
+    (** Sequence elements of alternative alleles in an associated list.*)
+    }
 
-(** Parse an input channel. *)
-val from_in_channel : in_channel -> result
+  (* Report invariant parsing violations to stdout. *)
+  val report : bool ref
 
-(** Parse an alignment file. *)
-val from_file : string -> result
+  (** Parse an input channel. *)
+  val from_in_channel : in_channel -> result
 
-val sequence_length : 'a alignment_element list -> int
+  (** Parse an alignment file. *)
+  val from_file : string -> result
+
+  val sequence_length : 'a alignment_element list -> int
+
+end (* Parser *)
 
 module Boundaries : sig
 
   type marker =
-    { index       : int     (* Which segment? *)
-    ; position    : int     (* Position of the boundary marker. *)
-    ; length      : int     (* Length to next boundary, or 1 + the total
-                               length of the following segment. *)
+    { index       : int                                    (** Which segment? *)
+    ; position    : position             (** Position of the boundary marker. *)
+    ; length      : int            (** Length to next boundary, or 1 + the total
+                                             length of the following segment. *)
     ; seq_length  : int
     }
 
@@ -119,7 +125,7 @@ module Boundaries : sig
 
   val bounded : string alignment_element list -> (marker * string) list
 
-end
+end (* Boundaries *)
 
 val split_sequence : string sequence -> pos:position -> string sequence * string sequence
 
@@ -141,28 +147,34 @@ val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
   string alignment_element list -> string
 
 (** Will return the sequence of the reference. *)
-val reference_sequence : ?boundary_char:char -> result -> string
+val reference_sequence : ?boundary_char:char -> Parser.result -> string
 
 val split_by_boundaries_rev : ' a alignment_element list ->
   'a alignment_element list list
 
-type allele_segment_relationship =
-  | Missing
-  | Partial of int    (* sequence length *)
-  | Full of int       (* sequence length, might be > reference length *)
+(* Segments are parts of a DNA sequence that have relevant biological
+   interpretation, specifically: UTR, intron and exons. We want to measure
+   things (such as string distance) on a per-segment basis. *)
+module Segments : sig
 
-type 'a segment =
-  { reference_seq_length  : int
-  ; mismatches            : int
-  ; allele_relationships  : 'a
-  }
+  type relationship =
+    | Missing
+    | Partial of int    (* sequence length *)
+    | Full of int       (* sequence length, might be > reference length *)
 
-val allele_distances : reference:string alignment_element list ->
-  allele:string alignment_element list ->
-    allele_segment_relationship segment list
+  type 'a t =
+    { seq_length    : int
+    ; mismatches    : int
+    ; relationship  : 'a
+    }
 
-val allele_distances_between :
-  reference:string alignment_element list ->
-  allele1:string alignment_element list ->
-  allele2:string alignment_element list ->
-    (allele_segment_relationship * allele_segment_relationship) segment list
+  val distances : reference:string alignment_element list
+                -> allele:string alignment_element list
+                -> relationship t list
+
+  val distances_between : reference:string alignment_element list
+                        -> allele1:string alignment_element list
+                        -> allele2:string alignment_element list
+                        -> (relationship * relationship) t list
+
+end (* Segments *)

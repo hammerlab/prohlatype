@@ -5,7 +5,8 @@ open Common_options
 let app_name = "align2fasta"
 
 let against_mp ?merge_assoc mp out =
-  let open MSA_parser in
+  let open MSA in
+  let open MSA.Parser in
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
   let a =
@@ -30,7 +31,7 @@ let against_mp ?merge_assoc mp out =
   close_out oc
 
 let convert ofile ifile merge_file distance =
-  let open MSA_parser in
+  let open MSA.Parser in
   begin match merge_file, ifile with
     | None, None   -> None
     | None, Some f ->

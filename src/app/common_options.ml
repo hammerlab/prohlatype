@@ -79,7 +79,7 @@ let merge_arg =
     let s = Filename.basename path in
     let n = path ^ "_nuc.txt" in
     let g = path ^ "_gen.txt" in
-    if not (List.mem ~set:Merge_mas.supported_genes s) then
+    if not (List.mem ~set:Merge_MSA.supported_genes s) then
       `Error ("gene not supported: " ^ s)
     else if not (Sys.file_exists n) then
       `Error ("Nuclear alignment file doesn't exist: " ^ n)
@@ -89,14 +89,14 @@ let merge_arg =
       `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-  let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
+  let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_MSA.supported_genes) in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
              prefix path. Currently only supports %s genes. The argument must \
              be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
              Overrides the file arguments. The set of alleles is defined by the
              ones in the nuc file."
-      (String.concat ~sep:", " Merge_mas.supported_genes)
+      (String.concat ~sep:", " Merge_MSA.supported_genes)
   in
   Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
 
@@ -354,12 +354,12 @@ let reduce_resolution_arg =
   value & opt (some one_to_three) None & info ~doc ["reduce-resolution"]
 
 let to_distance_targets_and_candidates alignment_file_opt merge_opt =
-  let open MSA_parser in
+  let open MSA.Parser in
   match alignment_file_opt, merge_opt with
   | _, (Some prefix) ->
       let gen = from_file (prefix ^ "_gen.txt") in
       let nuc = from_file (prefix ^ "_nuc.txt") in
-      let t, c = Merge_mas.merge_mp_to_dc_inputs ~gen ~nuc in
+      let t, c = Merge_MSA.merge_mp_to_dc_inputs ~gen ~nuc in
       Ok (nuc.reference, nuc.ref_elems, t, c)
   | Some af, None ->
       let mp = from_file af in

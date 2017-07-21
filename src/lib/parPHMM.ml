@@ -7,24 +7,24 @@ open Util
 module Pm = Partition_map
 
 (* Construction
-  1. From MSA_parser.result -> Array of Base.t option 's.
+  1. From MSA.Parser.result -> Array of Base.t option 's.
       None if allele is in a gap.
     a. Figure out the Base.t of reference sequence and a position map
-       (position in MSA_parser.result to index into final array)
+       (position in MSA.Parser.result to index into final array)
        [initialize_base_array_and_position_map].
     b. Start Partition_map descending lists so that we can extend them with
        each alternate allele.
   2. Extend the array with each new allele.
 
 The mapping (position into base_state array) is then recovered by iterating
-over this position map as we move along MSA_parser.alignment_element's for
+over this position map as we move along MSA.Parser.alignment_element's for
 the alleles.
 *)
 
 type gapped_bases = Base.t option          (* None -> the allele is in a gap. *)
 type base_emissions = (Pm.ascending, gapped_bases) Pm.t
 
-type position_map = (MSA_parser.position * int) list
+type position_map = (MSA.position * int) list
 
 let some x = Some x
 
@@ -36,7 +36,7 @@ let initialize_base_array_and_position_map ref_elems =
     |> Array.of_list
   in
   let gap_to_base_states_array len = Array.make len None in
-  let open MSA_parser in
+  let open MSA in
   let prefix = "initialize_base_array_and_position_map: " in
   let ia fmt = invalid_argf ~prefix fmt in
   let rec loop lkmp p pp pacc acc = function
@@ -70,7 +70,7 @@ let reduce_position_map : position_map -> position_map = function
       |> List.rev
 
 (* Helper method to create an actual function for computing the index into
-   the base state array. This is useful for debugging between the MSA_parser
+   the base state array. This is useful for debugging between the MSA.Parser
    positions and the index into Base array. Assumes a 'reduced' (via
    [reduce_position_map]) position map. *)
 let to_position_map : position_map -> (int -> int option) = function
@@ -104,7 +104,7 @@ let rec position_and_advance sp (pos_map : position_map) =
 let init_state =
   Array.map ~f:Pm.init_first_d
 
-(* Add an allele's MSA_parser.sequence to the state. *)
+(* Add an allele's MSA.Parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   let add_reference_value start end_ =
     for i = start to end_ - 1 do
@@ -123,7 +123,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
-  let open MSA_parser in
+  let open MSA in
   let rec loop pmap lp = function
     | End p :: []                 ->
         let ap, _position_map = position_and_advance p pmap in
@@ -1768,7 +1768,7 @@ let construct input selectors =
   if not (Alleles.Input.is_imputed input) then
     invalid_argf "Allele input MUST be imputed!"
   else begin
-    let open MSA_parser in
+    let open MSA.Parser in
     Alleles.Input.construct input >>= fun (mp, merge_map) ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
       let nalt_elems = Alleles.Selectors.apply_to_assoc selectors alt_elems in

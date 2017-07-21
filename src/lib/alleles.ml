@@ -502,7 +502,7 @@ module Selectors = struct
           if sort_to_nomenclature_order then sort_by_nomenclature l else l
 
   let apply_to_mp lst mp =
-    let open MSA_parser in
+    let open MSA.Parser in
     { mp with alt_elems = apply_to_assoc lst mp.alt_elems }
 
 end (* Selectors. *)
@@ -573,7 +573,7 @@ module Input = struct
       | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
 
     let do_it ?verbose ?(drop_known_splice_variants=true) prefix selectors dl =
-      let open MSA_parser in
+      let open MSA.Parser in
       let gen_mp = from_file (prefix ^ "_gen.txt") in
       let nuc_mp = from_file (prefix ^ "_nuc.txt") in
       if gen_mp.reference <> nuc_mp.reference then
@@ -591,16 +591,16 @@ module Input = struct
         in
         let gen_mp = Selectors.apply_to_mp selectors gen_mp in
         let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
-        Merge_mas.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
+        Merge_MSA.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
 
   end (* MergeConstruction *)
 
   let construct = function
     | AlignmentFile { path; selectors; impute} ->
-        let mp = MSA_parser.from_file path in
+        let mp = MSA.Parser.from_file path in
         let smp = Selectors.apply_to_mp selectors mp in
         if impute then
-          Merge_mas.naive_impute smp
+          Merge_MSA.naive_impute smp
         else
           Ok (smp, []) (* empty merge_map *)
     | MergeFromPrefix
