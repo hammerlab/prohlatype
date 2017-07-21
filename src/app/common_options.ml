@@ -298,8 +298,11 @@ let distance_flag =
   let open Distances in
   let d = "How to compute the distance between alleles: " in
   Arg.(value & vflag Trie
-    [ Trie,        info ~doc:(d ^ "trie based off of allele names.") ["trie"]
-    ; AverageExon, info ~doc:(d ^ "smallest shared exon distance.") ["ave-exon"]
+    [ Trie
+      , info ~doc:(d ^ "trie based off of allele names.") ["trie"]
+    ; WeightedPerSegment
+      , info ~doc:(d ^ "smallest shared weighted per segment distance.")
+          ["weighted-segment"]
     ])
 
 let print_top_flag =

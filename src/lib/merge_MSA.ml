@@ -762,7 +762,8 @@ let do_it_spec ?verbose ~gen_mp ~nuc_mp dl =
             let targets, candidates =
               merge_mp_to_dc_inputs ~gen:gen_mp ~nuc:nuc_mp
             in
-            Distances.compute nuc_mp.reference nuc_mp.ref_elems
+            Distances.compute ~reference:nuc_mp.reference
+                ~reference_sequence:nuc_mp.ref_elems
                 ~targets ~candidates dl >>= fun dmap ->
               diff_alts ?verbose ~na:just_nuc dmap rmap >>=
                   fun (diff_alt_lst, diff_map_lst) ->
@@ -852,7 +853,10 @@ let naive_impute mp =
       StringMap.add ~key ~data m)
   in
   let merge_assoc = List.map full ~f:(fun (a, _) -> (a, a)) in
-  let to_distances = Distances.one mp.reference mp.ref_elems Distances.AverageExon in
+  let to_distances =
+    Distances.(one ~reference:mp.reference ~reference_sequence:mp.ref_elems
+                WeightedPerSegment)
+  in
   List.sort to_fill ~cmp:(fun (l1,_,_) (l2,_,_) -> compare l1 l2)
   |> list_fold_ok ~init:(candidates, merge_assoc)
     ~f:(fun (candidates, ma) (_length, a_name, a_seq) ->

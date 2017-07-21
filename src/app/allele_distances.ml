@@ -5,9 +5,9 @@ let app_name = "allele_distances"
 
 let allele_distances alignment_file_opt merge_opt distance_logic =
   Common_options.to_distance_targets_and_candidates alignment_file_opt merge_opt >>=
-    begin fun (ref_allele, reference, targets, candidates) ->
-      Distances.compute ref_allele reference ~targets ~candidates distance_logic
-        >>= fun dmap ->
+    begin fun (reference, reference_sequence, targets, candidates) ->
+      Distances.compute ~reference ~reference_sequence ~targets ~candidates
+        distance_logic >>= fun dmap ->
           printf "allele, closests alleles \n";
           Ok (StringMap.iter dmap ~f:(fun ~key ~data ->
               let allst = List.map data ~f:(fun (s,d) -> sprintf "%s,%f" s d) in

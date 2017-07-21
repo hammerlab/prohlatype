@@ -1,9 +1,9 @@
 (** Measure distances between different alleles from (at the moment) parsed
-    multiple alignment files. *)
+    Multiple Sequence Alignment files. *)
 
 open Util
 
-module TrieDistances = struct
+module Trie_distances = struct
 
   let init_trie elems =
     let open Nomenclature in
@@ -21,9 +21,9 @@ module TrieDistances = struct
           let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
           Ok (StringMap.add ~key:ta ~data:[(closest_allele_str, 1.)] m))
 
-end
+end (* Trie_distances *)
 
-module AverageExon = struct
+module Weighted_per_segment = struct
 
   let against_mask ~init ~f =
     List.fold_left ~init ~f:(fun a -> function
@@ -50,9 +50,9 @@ module AverageExon = struct
       else
         a +. mismatches)
 
-  let one ref_allele reference ~candidates ~allele =
+  let one ~reference ~reference_sequence ~candidates ~allele =
     let open MSA.Segments in
-    let dist_to_ref = distances ~reference ~allele in
+    let dist_to_ref = distances ~reference:reference_sequence ~allele in
     let ref_mask =
       List.map dist_to_ref ~f:(fun s ->
         match s.relationship with
@@ -67,7 +67,7 @@ module AverageExon = struct
     let all_distances =
       StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
         let dlst =
-          distances_between ~reference ~allele1:allele ~allele2
+          distances_between ~reference:reference_sequence ~allele1:allele ~allele2
           |> List.map ~f:(fun s ->
               match s.relationship with
               | (Full _), (Full _) ->
@@ -79,24 +79,34 @@ module AverageExon = struct
         | None      -> acc
         | Some dist -> (al2, dist) :: acc)
     in
-    let with_reference = (ref_allele, ref_diff) :: all_distances in
+    let with_reference = (reference, ref_diff) :: all_distances in
     List.sort with_reference ~cmp:(fun (_,d1) (_,(d2:float)) -> compare d1 d2)
 
-  let f ref_allele reference ~targets ~candidates =
-    let c = one ref_allele reference ~candidates in
+  let f ~reference ~reference_sequence ~targets ~candidates =
+    let c = one ~reference ~reference_sequence ~candidates in
     StringMap.mapi targets ~f:(fun _al1 allele -> c allele)
 
-end
+end (* Weighted_per_segment *)
 
 type logic =
   | Trie
-  | AverageExon
+  | WeightedPerSegment
   [@@deriving show]
 
-let one ref_allele reference ~allele ~candidates = function
-  | Trie        -> Error "Distance for one allele using Trie not implemented."
-  | AverageExon -> Ok (AverageExon.one ref_allele reference ~candidates ~allele)
+type aligned_sequence = string MSA.alignment_element list
 
-let compute ref_allele reference ~targets ~candidates = function
-  | Trie        -> TrieDistances.f ~targets ~candidates
-  | AverageExon -> Ok (AverageExon.f ref_allele reference ~targets ~candidates)
+let one ~reference ~reference_sequence ~allele ~candidates = function
+  | Trie               ->
+      (* A bit wasteful, but better than not supporting this method at all. *)
+      let dummy_allele_name = "dummy" in
+      let targets = StringMap.singleton dummy_allele_name allele in
+      Trie_distances.f ~targets ~candidates >>= fun m ->
+        Ok (StringMap.find dummy_allele_name m)
+  | WeightedPerSegment ->
+      Ok (Weighted_per_segment.one ~reference ~reference_sequence ~candidates ~allele)
+
+let compute ~reference ~reference_sequence ~targets ~candidates = function
+  | Trie               ->
+      Trie_distances.f ~targets ~candidates
+  | WeightedPerSegment ->
+      Ok (Weighted_per_segment.f ~reference ~reference_sequence ~targets ~candidates)
