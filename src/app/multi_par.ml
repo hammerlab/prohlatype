@@ -182,33 +182,6 @@ let () =
                 the most likely (highest likelihood)." in
     Arg.(value & opt_all file [] & info ~doc ~docv ["f"; "file"])
   in
-  let merges_arg =
-    let parser_ path =
-      let s = Filename.basename path in
-      let n = path ^ "_nuc.txt" in
-      let g = path ^ "_gen.txt" in
-      if not (List.mem ~set:Merge_MSA.supported_genes s) then
-        `Error ("gene not supported: " ^ s)
-      else if not (Sys.file_exists n) then
-        `Error ("Nuclear alignment file doesn't exist: " ^ n)
-      else if not (Sys.file_exists g) then
-        `Error ("Genetic alignment file doesn't exist: " ^ n)
-      else
-        `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
-    in
-    let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-    let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_MSA.supported_genes) in
-    let doc  =
-      sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
-              prefix path. Currently only supports %s genes. The argument must \
-              be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
-              Combines with the file arguments to determine the set of loci to \
-              type at the same time.. The set of alleles is defined by the \
-              ones in the nuc file."
-        (String.concat ~sep:", " Merge_MSA.supported_genes)
-    in
-    Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
-  in
   let max_number_mismatches_arg =
     let docv = "POSITIVE INTEGER" in
     let doc = "Setup a filter on the reads to cancel evaluation once we've \

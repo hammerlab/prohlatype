@@ -591,7 +591,7 @@ module Input = struct
         in
         let gen_mp = Selectors.apply_to_mp selectors gen_mp in
         let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
-        Merge_MSA.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
+        Alter_MSA.Merge.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
 
   end (* MergeConstruction *)
 
@@ -600,7 +600,7 @@ module Input = struct
         let mp = MSA.Parser.from_file path in
         let smp = Selectors.apply_to_mp selectors mp in
         if impute then
-          Merge_MSA.naive_impute smp
+          Alter_MSA.Impute.do_it smp
         else
           Ok (smp, []) (* empty merge_map *)
     | MergeFromPrefix
