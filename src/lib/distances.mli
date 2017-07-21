@@ -8,7 +8,7 @@
 
 open Util
 
-type aligned_sequence = string MSA.alignment_element list
+type alignment_sequence = string MSA.alignment_sequence
 
 (** The two types of distance logic that we currently support. *)
 type logic =
@@ -18,26 +18,26 @@ type logic =
       the closest allele in the Trie is returned. *)
 
   | WeightedPerSegment
-  (** Break apart alleles, as presented via their [aligned_sequence] into their
-      segments (biologically relevant components: UTR, Exon & Intron).
-      Distance is the number of mismatches between two alleles in a given segment
-      weighted by segment sequence length. *)
+  (** Break apart alleles, as presented via their [alignment_sequence] into
+      their segments (biologically relevant components: UTR, Exon & Intron).
+      Distance is the number of mismatches between two alleles in a given
+      segment weighted by segment sequence length. *)
 
 val pp_logic : Format.formatter -> logic -> unit
 val show_logic : logic -> string
 
 (** Compute the distances for one specific allele. *)
 val one : reference:string
-        -> reference_sequence:aligned_sequence
-        -> allele:aligned_sequence
-        -> candidates:aligned_sequence StringMap.t
+        -> reference_sequence:alignment_sequence
+        -> allele:alignment_sequence
+        -> candidates:alignment_sequence StringMap.t
         -> logic
         -> ((string * float) list, string) result
 
 (** Compute the distances for all the alleles [targets]. *)
 val compute : reference:string
-            -> reference_sequence:aligned_sequence
-            -> targets:aligned_sequence StringMap.t
-            -> candidates:aligned_sequence StringMap.t
+            -> reference_sequence:alignment_sequence
+            -> targets:alignment_sequence StringMap.t
+            -> candidates:alignment_sequence StringMap.t
             -> logic
             -> ((string * float) list StringMap.t, string) result

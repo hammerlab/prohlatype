@@ -93,7 +93,7 @@ type logic =
   | WeightedPerSegment
   [@@deriving show]
 
-type aligned_sequence = string MSA.alignment_element list
+type alignment_sequence = string MSA.alignment_sequence
 
 let one ~reference ~reference_sequence ~allele ~candidates = function
   | Trie               ->

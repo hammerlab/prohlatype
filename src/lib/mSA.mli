@@ -74,6 +74,8 @@ val is_gap      : 'a alignment_element -> bool
 val is_end      : 'a alignment_element -> bool
 val is_start    : 'a alignment_element -> bool
 
+type 'a alignment_sequence = 'a alignment_element list
+
 module Parser : sig
 
   (** [find_align_date] parses an in channel of an alignment file up to the
@@ -87,10 +89,10 @@ module Parser : sig
     ; reference   : string
     (** The name of the reference allele *)
 
-    ; ref_elems   : string alignment_element list
+    ; ref_elems   : string alignment_sequence
     (** The sequence elements of the reference. *)
 
-    ; alt_elems   : (string * string alignment_element list) list
+    ; alt_elems   : (string * string alignment_sequence) list
     (** Sequence elements of alternative alleles in an associated list.*)
     }
 
@@ -103,7 +105,8 @@ module Parser : sig
   (** Parse an alignment file. *)
   val from_file : string -> result
 
-  val sequence_length : 'a alignment_element list -> int
+  (** The number of positions between (all) [Start]'s and [End]'s. *)
+  val sequence_length : 'a alignment_sequence -> int
 
 end (* Parser *)
 
@@ -123,7 +126,7 @@ module Boundaries : sig
 
   val to_boundary : offset:int -> marker -> 'a alignment_element
 
-  val bounded : string alignment_element list -> (marker * string) list
+  val bounded : string alignment_sequence -> (marker * string) list
 
 end (* Boundaries *)
 
@@ -131,8 +134,8 @@ val split_sequence : string sequence -> pos:position -> string sequence * string
 
 val split_gap : gap -> pos:position -> gap * gap
 
-val allele_sequences : reference:string alignment_element list ->
-  allele:string alignment_element list -> (Boundaries.marker * string) list
+val allele_sequences : reference:string alignment_sequence ->
+  allele:string alignment_sequence -> (Boundaries.marker * string) list
 
 (** [allele_sequence boundary_character reference allele ()] will convert the
     reference and allele alignment elements into a string representing the
@@ -140,17 +143,17 @@ val allele_sequences : reference:string alignment_element list ->
 
     @param boundary_char if specified will be inserted into the resulting
     sequence.*)
-val allele_sequence : ?boundary_char:char -> reference:string alignment_element list ->
-    allele:string alignment_element list -> unit -> string
+val allele_sequence : ?boundary_char:char -> reference:string alignment_sequence ->
+    allele:string alignment_sequence -> unit -> string
 
 val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
-  string alignment_element list -> string
+  string alignment_sequence -> string
 
 (** Will return the sequence of the reference. *)
 val reference_sequence : ?boundary_char:char -> Parser.result -> string
 
-val split_by_boundaries_rev : ' a alignment_element list ->
-  'a alignment_element list list
+val split_by_boundaries_rev : ' a alignment_sequence ->
+  'a alignment_sequence list
 
 (* Segments are parts of a DNA sequence that have relevant biological
    interpretation, specifically: UTR, intron and exons. We want to measure
@@ -168,13 +171,13 @@ module Segments : sig
     ; relationship  : 'a
     }
 
-  val distances : reference:string alignment_element list
-                -> allele:string alignment_element list
+  val distances : reference:string alignment_sequence
+                -> allele:string alignment_sequence
                 -> relationship t list
 
-  val distances_between : reference:string alignment_element list
-                        -> allele1:string alignment_element list
-                        -> allele2:string alignment_element list
+  val distances_between : reference:string alignment_sequence
+                        -> allele1:string alignment_sequence
+                        -> allele2:string alignment_sequence
                         -> (relationship * relationship) t list
 
 end (* Segments *)

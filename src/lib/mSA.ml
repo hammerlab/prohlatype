@@ -81,6 +81,8 @@ let is_gap      = function | Gap _      -> true | _ -> false
 let is_end      = function | End _      -> true | _ -> false
 let is_start    = function | Start _    -> true | _ -> false
 
+type 'a alignment_sequence = 'a alignment_element list
+
 (* How this works:
 
   This is a line based format. For our purposes, there are three types of lines
