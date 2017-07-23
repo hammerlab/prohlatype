@@ -1755,11 +1755,9 @@ module ForwardSLogSpace = ForwardSingleGen(LogProbabilities)
 module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
 module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
 
-type merge_info = string
-
 type t =
   { align_date      : string
-  ; alleles         : (string * merge_info) array           (* Canonical order.*)
+  ; alleles         : (string * Alter_MSA.info) array     (* Canonical order. *)
   ; number_alleles  : int
   ; emissions_a     : base_emissions array
   }
@@ -1771,21 +1769,17 @@ let construct input selectors =
     let open MSA.Parser in
     Alleles.Input.construct input >>= fun (mp, merge_map) ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
-      let nalt_elems = Alleles.Selectors.apply_to_assoc selectors alt_elems in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
-      List.iter nalt_elems ~f:(fun (allele, allele_seq) ->
+      List.iter alt_elems ~f:(fun (allele, allele_seq) ->
         add_alternate_allele pmap allele allele_seq
           base_arr state_a);
       let emissions_a = Array.map Pm.ascending state_a in
-      (*Array.iteri emissions_a ~f:(fun i p ->
-        printf "emissions: %d: %d %s\n%!" i (Pm.length p) (Pm.to_string p (function | None -> "none" | Some c -> sprintf "%c" (Base.to_char c))));
-      failwith "no"; *)
       let alleles =
-        List.map nalt_elems ~f:(fun (s, _) ->
-          s,
-          Option.value_exn ~msg:"missing merge info?" (List.Assoc.get s merge_map))
-        |> fun l -> (reference, reference) :: l
+        (reference, Alter_MSA.FullSequence) ::
+         (List.map alt_elems ~f:(fun (a,_) -> a,
+           List.Assoc.get a merge_map
+           |> Option.value_exn ~msg:(sprintf "couldn't find %s in merge_map" a)))
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in

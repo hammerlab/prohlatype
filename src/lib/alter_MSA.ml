@@ -12,6 +12,10 @@ let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
 (* Specify string containers. *)
 let end_position = end_position String.length
 
+type info =
+  | FullSequence                         (* Nothing added same as original. *)
+  | Added of string * float
+
 module Impute = struct
 
   let split_al_els pos including e =
@@ -90,7 +94,7 @@ module Impute = struct
       List.fold_left full ~init ~f:(fun m (key, data) ->
         StringMap.add ~key ~data m)
     in
-    let merge_assoc = List.map full ~f:(fun (a, _) -> (a, a)) in
+    let merge_assoc = List.map full ~f:(fun (a, _) -> (a, FullSequence)) in
     let to_distances =
       Distances.one ~reference:mp.reference ~reference_sequence:mp.ref_elems
         logic
@@ -99,14 +103,14 @@ module Impute = struct
     |> list_fold_ok ~init:(candidates, merge_assoc)
       ~f:(fun (candidates, ma) (_length, a_name, a_seq) ->
             to_distances ~candidates ~allele:(a_name, a_seq) >>= function
-              | []            -> error "Did not return _any_ distances to %s allele" a_name
-              | (key, d) :: _ -> (*printf "for %s merging %s\n" a_name key; *)
-                                let bigger = StringMap.find key candidates in
-                                let merged = impute_seq ~smaller:a_seq ~bigger in
-                                let merge_name = sprintf "%s %f" key d in
-                                let nma = (a_name, merge_name) :: ma in
-                                Ok (StringMap.add ~key:a_name ~data:merged candidates
-                                    , nma))
+              | []            ->
+                  error "Did not return _any_ distances to %s allele" a_name
+              | (key, d) :: _ ->
+                  let bigger = StringMap.find key candidates in
+                  let merged = impute_seq ~smaller:a_seq ~bigger in
+                  let merge_info = Added (key, d) in
+                  let nma = (a_name, merge_info) :: ma in
+                  Ok (StringMap.add ~key:a_name ~data:merged candidates, nma))
       >>= fun (merged_alleles, merge_assoc) ->
         Ok ({ mp with alt_elems =
                   StringMap.bindings
@@ -784,8 +788,9 @@ module Merge = struct
           | alg ->
             merge_different_nuc_into_alignment nallele nuc alg >>= fun instr ->
             let new_alts = align_different ?verbose name instr in
+            let merge_info = Added (closest_allele, dist) in
             Ok ((nallele, new_alts) :: alt_acc
-              , (nallele, closest_allele) :: map_acc))
+              , (nallele, merge_info) :: map_acc))
 
   (* TODO: Figure out a way around this special case. Maybe when we do our
     own alignment? *)
@@ -875,7 +880,7 @@ module Merge = struct
                   ~targets ~candidates dl >>= fun dmap ->
                 diff_alts ?verbose ~na:just_nuc dmap rmap >>=
                     fun (diff_alt_lst, diff_map_lst) ->
-                      let map_lst = List.map same ~f:(fun (a, _, _) -> (a,a)) in
+                      let map_lst = List.map same ~f:(fun (a, _, _) -> (a,FullSequence)) in
                       if Option.value ~default:false verbose then
                         printf "Finished merging!\n%!";
                       Ok ({ align_date = gen_mp.align_date

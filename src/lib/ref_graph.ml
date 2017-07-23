@@ -144,9 +144,8 @@ type t =
   ; posarr        : by_position_array
   ; adjacents_arr : adjacent_info array
   ; offset        : int
-  ; merge_map     : (string * string) list  (* Left empty if not a merged|imputed graph *)
-  (* TODO: Type the merge_map logic. Strings are too loose and the impute -> merge logic
-           isn't uniform. *)
+  ; merge_map     : (string * Alter_MSA.info) list
+  (* Left empty if not a merged|imputed graph *)
   }
 
 (** Output **)

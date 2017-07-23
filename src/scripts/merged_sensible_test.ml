@@ -121,15 +121,17 @@ let () =
     let genetic_graph = load prefix `Genetic in
     let nuclear_graph = load prefix `Nuclear in
     let comp merged_graph =
-      List.iter merged_graph.Ref_graph.merge_map ~f:(fun ((nuc, gen) as p) ->
-        printf "comparing %s vs %s %!" nuc gen;
+      List.iter merged_graph.Ref_graph.merge_map ~f:(fun (nuc, gen_merge_info) ->
         Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
-          Ref_graph.sequence ~boundaries:true genetic_graph gen >>= fun genetic_seq ->
-            if nuc = gen then
-              test_same ~merged_seq ~genetic_seq nuc
-            else
-              Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
-                test_diff ~merged_seq ~genetic_seq ~nuclear_seq p
+          match gen_merge_info with
+          | Alter_MSA.FullSequence ->
+              printf "%s FullSequence %!" nuc;
+              Ref_graph.sequence ~boundaries:true genetic_graph nuc >>= fun genetic_seq ->
+                test_same ~merged_seq ~genetic_seq nuc
+          | Alter_MSA.Added (gen, _dist) ->
+              Ref_graph.sequence ~boundaries:true genetic_graph nuc >>= fun genetic_seq ->
+                  Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
+                    test_diff ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen)
         end
         |> function
           | Ok () -> printf "equal\n"
