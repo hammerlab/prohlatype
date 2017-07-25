@@ -174,19 +174,110 @@ type single_conf =
   (** Compare against the reverse complement of a read and take the best likelihood. *)
   }
 
+module Zygosity_likelihood_array = struct
+
+  (* Not exactly the triangular number, T_(n-1);
+     just have less subtractions this way. *)
+  let triangular_number n =
+    n * (n - 1) / 2
+
+  let triangular_inverse t =
+    let tf = float t in
+    (truncate (sqrt (1.0 +. 8.0 *. tf)) - 1) / 2
+
+  let k_n n i j =
+    triangular_number n - triangular_number (n - i) + j - i - 1
+
+  let kinv_n n k =
+    let tn = triangular_number n in
+    let i  = n - 1 - (triangular_inverse (tn - k - 1)) - 1 in
+    let j  = k + i + 1 - triangular_number n + triangular_number (n - i) in
+    i, j
+
+  (* Test the k <-> i, j mapping logic. *)
+  let test n =
+    let kn = k_n n in
+    let ki = kinv_n n in
+    for i = 0 to n - 2 do
+      for j = i + 1 to n - 1 do
+        let k = kn i j in
+        let ni, nj = ki k in
+        printf "i: %d\tj: %d\t:k: %d\ ---- ni: %d\tnk: %d %b\n"
+          i j k ni nj (i = ni && j = nj)
+      done
+    done
+
+  (* Top triangle of pair wise comparison *)
+  type t =
+    { n : int
+    ; l : float array
+    }
+
+  let storage_size number_alleles =
+    triangular_number number_alleles                               (* T_(n-1) *)
+
+  let init number_alleles =
+    let s = storage_size number_alleles in
+    { n = number_alleles
+    ; l = Array.make s 0.
+    }
+
+  let add t ~allele1 ~allele2 likelihood =
+    let i = min allele1 allele2 in
+    let j = max allele1 allele2 in
+    let k = k_n t.n i j in
+    t.l.(k) <- t.l.(k) +. likelihood
+
+  let best ?size t = (* TODO: Figure out the k -> i,j map *)
+    let max_size = max 1 (Option.value size ~default:(storage_size t.n)) in
+    let sorted_insert big_enough ((l, _, _) as p) lst =
+      let rec insert lst = match lst with
+        | []     -> [p]
+        | h :: t ->
+            let hl, _, _ = h in
+            if hl < l then
+              h :: insert t
+            else
+              p :: lst
+      in
+      if big_enough then begin
+        match lst with
+        | []            -> assert false        (* Be big enough and be empty? *)
+        | (hl,_,_) :: t ->
+          if l > hl then
+            insert t
+          else
+            lst
+      end else
+        insert lst
+    in
+    let _fk, res =
+      Array.fold_left t.l ~init:(0, [])
+        ~f:(fun (k, acc) l ->
+              let i, j = kinv_n t.n k in
+              let p = l, i, j in
+              let big_enough = k >= max_size in
+              let nacc = sorted_insert big_enough p acc in
+              (k + 1, nacc))
+    in
+    res
+
+end
+
 (* A reducer reduces the information from a set of reads into a per allele
    likelihood state. We can construct reducers that operate on just a single
    allele. *)
 module Reducer = struct
 
   type t =
-    { state   : float array  (* Need to track the per allele likelihoods *)
-    ; apply   : Biocaml_unix.Fastq.item -> unit
-    ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
-    ; output  : out_channel -> unit
+    { state     : float array  (* Need to track the per allele likelihoods *)
+    ; zygosity  : Zygosity_likelihood_array.t
+    ; apply     : Biocaml_unix.Fastq.item -> unit
+    ; paired    : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
+    ; output    : out_channel -> unit
     }
 
-  let output_allele_first allele_arr final_likelihoods =
+  let output_allele_first allele_arr final_likelihoods oc =
     let o = Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a) in
     let cmp (l1, a1) (l2, a2) =
       if l2 < l1 then
@@ -197,10 +288,9 @@ module Reducer = struct
         compare a1 a2 (* Sort by the nomenclature order, not strings. *)
     in
     Array.sort o ~cmp;
-    fun oc ->
-      Array.iter o ~f:(fun (l,a) -> fprintf oc "%10s\t%0.20f\n" a l)
+    Array.iter o ~f:(fun (l,a) -> fprintf oc "%10s\t%0.20f\n" a l)
 
-  let output_likelihood_first allele_arr final_likelihoods =
+  let output_likelihood_first allele_arr final_likelihoods oc =
     let o =
       Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a)
       |> Array.to_list
@@ -211,14 +301,22 @@ module Reducer = struct
             l, String.concat ~sep:";" clst)
       |> List.sort ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1) (* higher fst *)
     in
-    fun oc ->
-      List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%s\n" l a)
+    List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%s\n" l a)
 
-  let output_i likelihood_first allele_arr final_likelihoods =
+  let output_zygosity ?(size=10) allele_arr zt oc =
+    Zygosity_likelihood_array.best ~size zt
+    |> List.iter ~f:(fun (l, i, j) ->
+        fprintf oc "%0.20f\t%s\t%s\n" l allele_arr.(i) allele_arr.(j))
+
+  let output_i likelihood_first allele_arr final_likelihoods oc =
     if likelihood_first then
-      output_likelihood_first allele_arr final_likelihoods
+      output_likelihood_first allele_arr final_likelihoods oc
     else
-      output_allele_first allele_arr final_likelihoods
+      output_allele_first allele_arr final_likelihoods oc
+
+  let output_zi likelihood_first allele_arr final_likelihoods zt oc =
+    output_i likelihood_first allele_arr final_likelihoods oc;
+    output_zygosity allele_arr zt oc
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
     read_length pt =
@@ -239,6 +337,19 @@ module Reducer = struct
           state.(i) <- state.(i) +. r.likelihood.(i)
         done
 
+  let add_log_likelihoods_andz n state zygosity = function
+    | Filtered _  -> ()                     (* Should we warn about ignoring a read? *)
+    | Completed r ->
+        for i = 0 to n - 1 do
+          state.(i) <- state.(i) +. r.likelihood.(i)
+        done;
+        for allele1 = 0 to n - 2 do
+          for allele2 = allele1 + 1 to n - 1 do
+            Zygosity_likelihood_array.add zygosity ~allele1 ~allele2
+              (max r.likelihood.(allele1) r.likelihood.(allele2)) ;
+          done
+        done
+
   let init conf likelihood_first read_length pt =
     let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
         ; check_rc } = conf
@@ -252,12 +363,13 @@ module Reducer = struct
     let n = Array.length allele_arr in
     (* Discard resulting past threshold *)
     let r rd rp = fst (reducer ~check_rc past_threshold proc rd rp) in
-    let rec t = { state; apply; paired; output }
+    let rec t = { state; zygosity; apply; paired; output }
     and state = proc.init_global_state ()
+    and zygosity = Zygosity_likelihood_array.init n
     and apply fqi =
       fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
         r read read_probs
-        |> add_log_likelihoods n t.state)
+        |> add_log_likelihoods_andz n t.state t.zygosity)
     and paired fq1 fq2 =
       fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
         let r1 = r rd1 rp1 in
@@ -266,9 +378,9 @@ module Reducer = struct
           | Filtered _  -> r rd2 rp2 (* Filtered so check both conf *)
           | Completed c -> single proc proc_to_reducer_stat (not c.comp) rd2 rp2
         in
-        add_log_likelihoods n t.state r1;
-        add_log_likelihoods n t.state r2)
-    and output oc = output_i likelihood_first allele_arr t.state oc in
+        add_log_likelihoods_andz n t.state t.zygosity r1;
+        add_log_likelihoods_andz n t.state t.zygosity r2)
+    and output oc = output_zi likelihood_first allele_arr t.state t.zygosity oc in
     t
 
   let apply fqi t =
@@ -547,15 +659,24 @@ module Multiple_reducer = struct
         List.fold_left t ~init ~f:(fun bs p ->
           best_bs bs (to_bs p))
 
-  let add_log_likelihoods n lklhd_arr = function
-    | Single r        -> Reducer.add_log_likelihoods n lklhd_arr r
-    | Paired (r1, r2) -> Reducer.add_log_likelihoods n lklhd_arr r1;
-                         Reducer.add_log_likelihoods n lklhd_arr r2
+  type per_loci =
+    { loci           : string
+    ; number_alleles : int
+    ; likelihood     : float array
+    ; zygosity       : Zygosity_likelihood_array.t
+    }
+
+  let add_log_likelihoods  { number_alleles; likelihood; zygosity; _} = function
+    | Single r        ->
+        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r
+    | Paired (r1, r2) ->
+        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r1;
+        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r2
 
   let merge state current =
     let b = best current in
-    List.iter state ~f:(fun (name, n, lklhd_arr) ->
-      if name = b.name then add_log_likelihoods n lklhd_arr b.rspr)
+    List.iter state ~f:(fun pl ->
+      if pl.loci = b.name then add_log_likelihoods pl b.rspr)
 
   let reduce_to_best_loci ~init ~f ~c = function
     | [] -> invalid_argf "Empty loci list"
@@ -573,8 +694,8 @@ module Multiple_reducer = struct
         in
         loop acc (c m) (name, proc, m) tl
 
-  type t =      (* loci, # alleles, likelihoods *)
-    { state   : (string * int * float array) list
+  type t =
+    { state   : per_loci list
     ; apply   : Biocaml_unix.Fastq.item -> unit
     ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
     ; output  : out_channel -> unit
@@ -595,12 +716,16 @@ module Multiple_reducer = struct
     let pt = init_past_threshold conf.past_threshold_filter in
     let rec t = { state; apply; paired; output }
     and state =
-      List.map paa ~f:(fun (name, (p, _, n)) -> name, n, p.init_global_state ())
+      List.map paa ~f:(fun (loci, (p, _, number_alleles)) ->
+        { loci; number_alleles
+        ; likelihood = p.init_global_state ()
+        ; zygosity = Zygosity_likelihood_array.init number_alleles
+        })
     and output oc =
       List.iter2 paa t.state
-        ~f:(fun (_, (_, allele_arr, _)) (name, _, lkld_arr) ->
-              fprintf oc "%s\n" name;
-              Reducer.output_i likelihood_first allele_arr lkld_arr oc)
+        ~f:(fun (_, (_, allele_arr, _)) { loci; likelihood; zygosity; _} ->
+              fprintf oc "%s\n" loci;
+              Reducer.output_zi likelihood_first allele_arr likelihood zygosity oc)
     and apply fqi =
       match pt with
       | `Don't ->
@@ -618,10 +743,10 @@ module Multiple_reducer = struct
                 merge t.state acc)
     and paired fq1 fq2 =
       let add_to_state best_name m1 m2 =
-        List.iter t.state ~f:(fun (name, n, lklhd_arr) ->
-          if name = best_name then begin
-            Reducer.add_log_likelihoods n lklhd_arr m1;
-            Reducer.add_log_likelihoods n lklhd_arr m2
+        List.iter t.state ~f:(fun {loci; number_alleles; likelihood; zygosity} ->
+          if loci = best_name then begin
+            Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity m1;
+            Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity m2
          end)
       in
       match pt with
