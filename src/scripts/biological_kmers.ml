@@ -1,5 +1,16 @@
 (* Compare the Kmer table generate via Index vs a manually created one over
-   the allele fasta file. *)
+   the allele fasta file.
+
+
+TODO: The FASTA files have no way of signaling that some part of the sequence
+is missing and will just concatenate across such a region (ex. G*01:01:01:08's
+Exon 6, the skinny one ATTGA). Therefore when looking at the sequences in a
+fasta file we'll generate wrong k-mers (with respect to our limited knowledge).
+Solutions:
+  1. Change Index.kmer_counts to create kmers across these boundaries:
+     unpleasant.
+  2. Separte method to generate these specific kmers?
+*)
 
 
 open Util
