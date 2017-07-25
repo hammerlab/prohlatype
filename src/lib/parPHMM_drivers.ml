@@ -260,7 +260,7 @@ module Zygosity_likelihood_array = struct
               let nacc = sorted_insert big_enough p acc in
               (k + 1, nacc))
     in
-    res
+    List.rev res
 
 end
 
