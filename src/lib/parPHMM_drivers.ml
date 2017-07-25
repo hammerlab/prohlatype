@@ -303,12 +303,23 @@ module Reducer = struct
     in
     List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%s\n" l a)
 
-  let output_zygosity ?(size=10) allele_arr zt oc =
-    Zygosity_likelihood_array.best ~size zt
-    |> List.iter ~f:(fun (l, i, j) ->
-        fprintf oc "%0.20f\t%s\t%s\n" l allele_arr.(i) allele_arr.(j))
+  let output_zygosity ?(size=10) likelihood_first aa zt oc =
+    fprintf oc "Zygosity:\n";
+    let zb = Zygosity_likelihood_array.best ~size zt in
+    if likelihood_first then
+      List.map zb ~f:(fun (l, i, j) -> l, (i, j))
+      |> group_by_assoc
+      |> List.iter ~f:(fun (l, ijlist) ->
+          let alleles_str =
+            List.map ijlist ~f:(fun (i,j) -> sprintf "%s,%s" aa.(i) aa.(j))
+            |> String.concat ~sep:"\t"
+          in
+          fprintf oc "%0.20f\t%s\n" l alleles_str)
+    else
+      List.iter zb ~f:(fun (l, i, j) -> fprintf oc "%s\t%s\t%0.20f\n" aa.(i) aa.(j) l)
 
   let output_i likelihood_first allele_arr final_likelihoods oc =
+    fprintf oc "Likelihood:\n";
     if likelihood_first then
       output_likelihood_first allele_arr final_likelihoods oc
     else
@@ -316,7 +327,7 @@ module Reducer = struct
 
   let output_zi likelihood_first allele_arr final_likelihoods zt oc =
     output_i likelihood_first allele_arr final_likelihoods oc;
-    output_zygosity allele_arr zt oc
+    output_zygosity likelihood_first allele_arr zt oc
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
     read_length pt =
