@@ -590,7 +590,7 @@ module MakeZip (R : Data_projection) = struct
           | Some ((started, acc, allele_lst), b, _m) ->
                 let new_state =
                   { start_pos = b.pos
-                  ; end_pos = b.pos + 1
+                  ; end_pos = b.pos
                   ; project = R.of_boundary ~in_ref:true started b
                   ; started
                   }
