@@ -98,7 +98,7 @@ let () =
     Arg.(value & flag & info ~doc ["do-not-compress-start"])
   in
   let do_not_insert_newlines_flag =
-    let doc = "Do not insert newliens into a list of alleles." in
+    let doc = "Do not insert newlines into a list of alleles." in
     Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
   let construct =
