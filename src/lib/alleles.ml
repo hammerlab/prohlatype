@@ -461,10 +461,14 @@ module Selectors = struct
     (* When ppx_deriving >4.1 hits:
     [@@ deriving eq, ord, show { with_path = false }] *)
 
+  let fname_suitable = function
+    | '*' | ':' | '\\' -> false
+    | _ -> true
+
   (* A bit more concise than show and easier for filenames.*)
   let to_string = function
     | Regex r             -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
-    | Specific s          -> sprintf "S%s" s
+    | Specific s          -> sprintf "S%s" (String.filter ~f:fname_suitable s)
     | Without e           -> sprintf "W%s" e
     | Number n            -> sprintf "N%d" n
     | DoNotIgnoreSuffixed -> "DNIS"
