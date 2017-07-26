@@ -36,6 +36,10 @@ representations of this data.  *)
     character by character, in the alignment. *)
 type position = int
 
+val equal_position : position -> position -> bool
+val compare_position : position -> position -> int
+val pp_position : Format.formatter -> position -> unit
+
 (** Elements that describe alignment sequence.
 
     All positions are given relative the global alignment. *)

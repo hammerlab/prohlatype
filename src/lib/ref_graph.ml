@@ -7,30 +7,29 @@ open Graph
   - Turn fold_succ_e from O(n) into something better
 *)
 
-type alignment_position = int [@@deriving eq, ord, show]
 type start =
-  alignment_position * (Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare])
+  MSA.position *
+  (Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare])
     [@@deriving eq, ord]
-type end_ = alignment_position [@@deriving eq, ord]
 type sequence = string [@@deriving eq, ord, show]
 
 (* start end pairs *)
-type sep = { start : start ; end_ : end_ } [@@deriving eq, ord]
+type sep = { start : start ; end_ : MSA.position } [@@deriving eq, ord]
 
 module Nodes = struct
 
   type t =
     | S of start
-    | E of end_
-    | B of alignment_position * int       (* Boundary of position and count *)
-    | N of alignment_position * sequence  (* Sequences *)
+    | E of MSA.position
+    | B of MSA.position * int               (* Boundary of position and count *)
+    | N of MSA.position * sequence                               (* Sequences *)
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
     | S (n, s)  -> sprintf "S%d-%s" n s
     | E n       -> sprintf "E%d" n
     | B (p, n)  -> sprintf "B%d-%d" n p
-    | N (n, s)  -> sprintf "%d%s" n (if short then short_seq s else s)
+    | N (p, s)  -> sprintf "%d%s" p (if short then short_seq s else s)
 
   let position = function
     | S (p, _) | E p | B (p, _) | N (p, _)  -> p
@@ -48,6 +47,14 @@ module Nodes = struct
     if r = 0 then compare n1 n2 else r
 
   let hash = Hashtbl.hash
+
+  let is_boundary = function
+    | B _             -> true
+    | N _ | S _ | E _ -> false
+
+  let is_seq = function
+    | N _             -> true
+    | S _ | E _ | B _ -> false
 
   let is_seq_or_boundary = function
     | N _ | B _ -> true
@@ -80,12 +87,15 @@ let between g start stop =
   add_from start;
   ng
 
+(* We want to be able to have a 'by-position' array of all the nodes of the
+   graph that intersect that position. Since some positions might contain the
+   same set of nodes we distinguish two cases: *)
 type by_position =
-  | NL of Nodes.t list  (* A list of nodes that start at a given position. *)
-  | Redirect of int     (* A redirect (index into array - NOT position) of where
-                           to find the previous Node list. In
-                           [by_position_array] below, that location should
-                           contain the nodes that span this position. *)
+  | NL of Nodes.t list     (* A list of nodes that start at a given position. *)
+  | Redirect of int        (* A redirect (index into array - NOT position) of
+                              where to find the previous Node list. In
+                              [by_position_array] below, that location should
+                              contain the nodes that span this position. *)
 
 and by_position_array = by_position array
 
@@ -135,26 +145,23 @@ type adjacent_info =
 
 type t =
   { align_date    : string                   (* When the alignment was created by IMGT. *)
-  ; reference     : string
+  ; reference     : string                                (* Name of reference allelle. *)
   ; g             : G.t                                            (* The actual graph. *)
   ; aindex        : Alleles.index               (* The allele index, for Sets and Maps. *)
   ; aset          : (module Alleles.Set)
   ; amap          : (module Alleles.Map)
   ; bounds        : sep list Alleles.map    (* Map of where the alleles start and stop. *)
-  ; posarr        : by_position_array
+  ; posarr        : by_position_array                          (* Per position lookups. *)
   ; adjacents_arr : adjacent_info array
   ; offset        : int
-  ; merge_map     : (string * Alter_MSA.info) list
-  (* Left empty if not a merged|imputed graph *)
+  ; merge_map     : (string * Alter_MSA.info) list   (* Information about how an allele's
+                                                        alignment_sequence was created. *)
   }
 
-(** Output **)
+(** Some accessors that are necessary for output (and construction) but placed
+    here for convenience. *)
 
-(* TODO:
-  - When constructing the dot files, it would be nice if the alleles (edges),
-    were in some kind of consistent order. *)
-
-(** [starts_by_position g] returns an associated list of alignment_position and
+(** [starts_by_position g] returns an associated list of positions and
     an a set of alleles that start at that position. *)
 let starts_by_position { bounds; amap; aset; _ } =
   let module AS = (val aset : Alleles.Set) in
@@ -199,6 +206,12 @@ let create_compressed_starts t =
     end);
   { t with g = ng }
 
+(** Output
+
+     TODO: When constructing the dot files, it would be nice if the alleles (edges), were
+           in some kind of consistent order. *)
+
+
 let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
   let module AS = (val t.aset : Alleles.Set) in
@@ -238,7 +251,8 @@ let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
 
 let output ?human_edges ?compress_edges ?compress_start ?insert_newlines
   ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
-  output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short (fname ^ ".dot") t;
+  output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short
+    (fname ^ ".dot") t;
   if pdf then begin
     let r = Sys.command (sprintf "dot -Tpdf %s.dot -o %s.pdf" fname fname) in
     if r = 0 && open_ then
@@ -382,6 +396,7 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
   let module AS = (val aset : Alleles.Set) in
   let open MSA in
   let open Nodes in
+  let ia = invalid_argf in
   let first_start_node = S first_start in
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
@@ -453,8 +468,7 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
       | S _ | E _ -> forward nv "Skipping start End"
       | B (p, c) when p = pos ->
           if c <> idx then
-            invalid_argf "Boundary at %d position diff from reference %d count %d"
-              p c idx
+            ia "Boundary at %d position diff from reference %d count %d" p c idx
           else
             pv, nv
       | B (p, _)
@@ -462,10 +476,9 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           visit pv nv;
           forward nv (sprintf "Trying to find B %d %d after %d" pos idx p)
       | B (p, c) (*when p > pos*) ->
-          invalid_argf "Next Boundary %d %d after desired boundary %d %d"
-            p c pos idx
+          ia "Next Boundary %d %d after desired boundary %d %d" p c pos idx
       | N (p, _) ->
-          invalid_argf "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
+          ia "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
             p pos idx allele
     in
     loop prev next
@@ -480,20 +493,20 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
   (* In the beginning we have not 'Start'ed ->
     Loop through the alignment elemends:
       - discarding Boundaries and Gaps
-      - on a Start find the position in reference and start correct loop
+      - on a Start find the position in reference and start construction loop
       - complaining on anything other than a Start *)
   and start_loop previous_starts_and_ends lst =
     let rec find_start_loop = function
       | Boundary _ :: t
-      | Gap _ :: t      -> find_start_loop t (* Ignore Gaps & Boundaries before Start *)
-      | Start p :: t    -> Some ( p, t)
-      | []              ->
+      | Gap _ :: t    -> find_start_loop t (* Ignore Gaps & Boundaries before Start *)
+      | Start p :: t  -> Some ( p, t)
+      | []            ->
         begin
           match previous_starts_and_ends with
-          | [] -> invalid_argf "Failed to find start for %s." allele
+          | [] -> ia "Failed to find start for %s." allele
           | ls -> None
         end
-      | s :: _          -> invalid_argf "Encountered %s in %s instead of Start"
+      | s :: _        -> ia "Encountered %s in %s instead of Start"
                             (al_el_to_string s) allele
     in
     match find_start_loop lst with
@@ -514,8 +527,8 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
       start_loop ns tl
   (* When the only thing that matters is the previous node. *)
   and solo_loop state prev = function
-    | []                        -> invalid_argf "No End at allele sequence: %s" allele
-    | Start p :: _              -> invalid_argf "Another start %d in %s allele sequence." p allele
+    | []                        -> ia "No End at allele sequence: %s" allele
+    | Start p :: _              -> ia "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl         -> add_end state end_pos prev tl
     | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
                                    add_allele_edge prev boundary_node;
@@ -524,35 +537,35 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
                                    add_allele_edge prev sequence_node;
                                    solo_loop state sequence_node t
     | Gap _ :: t                -> solo_loop state prev t
-  (* When traversing a reference gap. We have to keep check allele elements
-    position to check when to join back with the next reference node. *)
-  and ref_gap_loop state ~prev ref_node ref_pos = function
-    | []                                -> invalid_argf "No End at allele sequence: %s" allele
-    | Start p :: _                      -> invalid_argf "Another start %d in %s allele sequence." p allele
-    | (End end_pos :: tl) as lst        ->
+  (* When traversing a reference gap. We have to keep track of allele element's
+     position to check when to join back with the next reference node. *)
+  and ref_gap_loop state ~prev ref_node ref_pos lst = match lst with
+    | []                          -> ia "No End at allele sequence: %s" allele
+    | Start p :: _                -> ia "Another start %d in %s allele sequence." p allele
+    | End end_pos :: tl           ->
         if end_pos <= ref_pos then
           add_end state end_pos prev tl
         else (* end_pos > ref_pos *)
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node lst
-    | (Boundary { idx; pos} :: tl) as l ->
+    | Boundary { idx; pos} :: tl  ->
         if pos < ref_pos then
-          invalid_argf "Allele %s has a boundary %d at %d that is in ref gap ending %d."
+          ia "Allele %s has a boundary %d at %d that is in ref gap ending %d."
             allele idx pos ref_pos
         else if pos = ref_pos then
           if ref_node = B (pos, idx) then
             let () = add_allele_edge prev ref_node in
             main_loop state ~prev ~next:ref_node tl
           else
-            invalid_argf "Allele %s has a boundary %d at %d where ref gap ends %d."
+            ia "Allele %s has a boundary %d at %d where ref gap ends %d."
               allele idx pos ref_pos
         else
           let () = add_allele_edge prev ref_node in
-          main_loop state ~prev ~next:ref_node l
-    | (Sequence { start; s} :: tl) as l ->
+          main_loop state ~prev ~next:ref_node lst
+    | Sequence { start; s} :: tl  ->
         if start > ref_pos then begin
           add_allele_edge prev ref_node;
-          main_loop state ~prev ~next:ref_node l
+          main_loop state ~prev ~next:ref_node lst
         end else
           let new_node = G.V.create (N (start, s)) in
           let () = add_allele_edge prev new_node in
@@ -562,10 +575,10 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           else (* close_pos > ref_pos *)
             rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
               ~new_node tl
-    | (Gap { gstart; length} :: tl) as l ->
+    | Gap { gstart; length} :: tl ->
         if gstart > ref_pos then begin
           add_allele_edge prev ref_node;
-          main_loop state ~prev ~next:ref_node l
+          main_loop state ~prev ~next:ref_node lst
         end else
           let close_pos = gstart + length in
           if close_pos <= ref_pos then
@@ -591,8 +604,8 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
         close_position_loop state ~prev ~next ~allele_node new_pe lst
   (* When not in a reference gap *)
   and main_loop state ~prev ~next = function
-    | []              -> invalid_argf "No End at allele sequence: %s" allele
-    | Start p :: _    -> invalid_argf "Another start %d in %s allele sequence." p allele
+    | []              -> ia "No End at allele sequence: %s" allele
+    | Start p :: _    -> ia "Another start %d in %s allele sequence." p allele
     | End end_pos :: tl  ->
         let prev =
           match split_in ~prev ~next ~visit:add_allele_edge end_pos with
@@ -646,25 +659,29 @@ module NodeQueue = struct
 
   let add_successors g = G.fold_succ add g
 
-  let at_min_position q =
+  let at_min_position g q =
     let rec loop p q acc =
       if is_empty q then
         q, acc
       else
         let me = min_elt q in
-        match acc with
-        | [] -> loop (Nodes.position me) (remove me q) [me]
-        | _  -> if Nodes.position me = p then
-                  loop p (remove me q) (me :: acc)
-                else
-                  q, acc
+        if Nodes.position me = p then
+          loop p (add_successors g me (remove me q)) (me :: acc)
+        else
+          q, acc
+    and start q =
+      let me = min_elt q in
+      let nq = remove me q in
+      loop (Nodes.position me) (add_successors g me nq) [me]
     in
-    loop min_int q []
+    start q
 
 end
 
 module FoldAtSamePosition = struct
 
+  (* We know all of the start positions based upon the bounds map; so use that
+     to fold upon start nodes to seed a queue. *)
   let after_start_nodes g amap bounds =
     let module AM = (val amap : Alleles.Map) in
     let open Nodes in
@@ -674,19 +691,19 @@ module FoldAtSamePosition = struct
               ~f:(fun q sep ->
                     NodeQueue.add_successors g (S (fst sep.start, allele)) q))
 
-  let step g q =
-    let without_old, amp = NodeQueue.at_min_position q in
-    let withnew =
-      List.fold_left amp ~init:without_old
-        ~f:(fun q n ->
-              if Nodes.is_seq_or_boundary n then
-                NodeQueue.add_successors g n q
-              else
-                q)
-    in
-    withnew, amp
+  let step = NodeQueue.at_min_position
 
-  let fold_from g q ~f ~init =
+  let nl_to_string nl =
+    List.map nl ~f:Nodes.vertex_name
+    |> String.concat ~sep:";"
+
+  let nq_to_string nq =
+    NodeQueue.fold nq ~init:[] ~f:(fun n acc -> n :: acc)
+    |> nl_to_string
+    |> sprintf "nq: %s"
+
+  (* Fold from an initialized queue. *)
+  let fold_from g ~f ~init q =
     let rec loop a q =
       if NodeQueue.is_empty q then
         a
@@ -699,7 +716,7 @@ module FoldAtSamePosition = struct
 
 
   let fold_after_starts g amap bounds ~f ~init =
-    fold_from g (after_start_nodes g amap bounds) ~f ~init
+    fold_from g ~f ~init (after_start_nodes g amap bounds)
 
   let node_queue_with_start_and_successors_nodes g amap bounds =
     let module AM = (val amap : Alleles.Map) in
@@ -713,7 +730,8 @@ module FoldAtSamePosition = struct
                 NodeQueue.add_successors g s nq))
 
   let f g amap bounds ~f ~init =
-    fold_from g (node_queue_with_start_and_successors_nodes g amap bounds) ~f ~init
+    fold_from g ~f ~init
+      (node_queue_with_start_and_successors_nodes g amap bounds)
 
 end (* FoldAtSamePosition *)
 
@@ -750,9 +768,9 @@ module JoinSameSequencePaths = struct
   (* Alignment and sequence pair, set used as queue *)
   module Apsq =
     Set.Make(struct
-      type t = alignment_position * sequence
+      type t = MSA.position * sequence
       let compare (a1, s1) (a2, s2) =
-        let r = compare_alignment_position a1 a2 in
+        let r = MSA.compare_position a1 a2 in
         if r = 0 then
           compare_sequence s1 s2
         else
@@ -965,7 +983,7 @@ let find_node_at_private ?allele ?ongap ~pos g aset offset posarr =
   let open Nodes in
   let all_str, test =
     match allele with
-    | None   -> "", (fun n -> Nodes.is_seq_or_boundary n && Nodes.inside pos n)
+    | None   -> "", (fun n -> Nodes.is_seq n && Nodes.inside pos n)
     | Some a ->
         let is_along_allele node =
           try
@@ -976,7 +994,7 @@ let find_node_at_private ?allele ?ongap ~pos g aset offset posarr =
             true
         in
         (" " ^ a)
-        , (fun n -> Nodes.is_seq_or_boundary n && is_along_allele n && Nodes.inside pos n)
+        , (fun n -> Nodes.is_seq n && is_along_allele n && Nodes.inside pos n)
   in
   let h, tl = find_nodes_at_private offset posarr ~pos in
   let lst = h :: tl in
