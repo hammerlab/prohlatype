@@ -140,6 +140,6 @@ let () =
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with
-  | `Ok n -> exit n
-  | `Error _ -> failwith "cmdliner error"
+  | `Ok n    -> exit n
+  | `Error _ -> failwith "error"
   | `Version | `Help -> exit 0
