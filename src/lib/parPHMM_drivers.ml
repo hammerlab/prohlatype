@@ -134,7 +134,7 @@ let repf fmt =
 let fqi_to_read_and_probs fqi ~k =
   let open Core_kernel.Std in
   let open Biocaml_unix.Fastq in
-  time (sprintf "updating on %s" fqi.name) (fun () ->
+  time (sprintf "updating on single read %s" fqi.name) (fun () ->
     match Fastq.phred_log_probs fqi.qualities with
     | Result.Error e       -> repf "%s" (Error.to_string_hum e)
     | Result.Ok read_probs -> k fqi.name fqi.sequence read_probs)
@@ -143,7 +143,7 @@ let fqi2_to_read_and_probs fq1 fq2 ~k =
   let open Biocaml_unix.Fastq in
   let open Core_kernel.Std in
   assert (fq1.name = fq2.name);
-  time (sprintf "updating on %s" fq1.name) (fun () ->
+  time (sprintf "updating on double read %s" fq1.name) (fun () ->
     match Fastq.phred_log_probs fq1.Biocaml_unix.Fastq.qualities with
     | Result.Error e       -> repf "%s" (Error.to_string_hum e)
     | Result.Ok rp1 ->
