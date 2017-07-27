@@ -55,18 +55,7 @@ case "$TEST" in
     ./merged_sensible_test.native C
     export BISECT="true"
     ;;
-  adj)
-    echo testing adjcent finding for A_gen
-    time ./adjacents.native A_gen 2>/dev/null
-    echo testing adjcent finding for A_nuc
-    time ./adjacents.native A_nuc 2>/dev/null
-    echo testing adjcent finding for B_gen
-    time ./adjacents.native B_gen 2>/dev/null
-    echo testing adjcent finding for B_nuc
-    time ./adjacents.native B_nuc 2>/dev/null
-    export BISECT="true"
-    ;;
-  alleleDiffA)
+ alleleDiffA)
     echo testing allele differences between A_gen
     time ./test_allele_distances.native A_gen > A_sim.csv
     export BISECT="true"
@@ -88,10 +77,6 @@ case "$TEST" in
   *)
     ;;
 esac
-
-# Full adjacents calculation takes too long
-#cp src/scripts/adjacent_tests.sh .
-#./adjacent_tests.sh
 
 if [ -n "$TEST" -a -n "$BISECT" ] ; then
   ocveralls --repo_token $COVERALLSTOKEN --git --send bisect*.out

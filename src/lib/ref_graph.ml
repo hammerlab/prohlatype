@@ -138,11 +138,6 @@ module EdgeNodeSet = struct
 
 end (* EdgeNodeSet *)
 
-type adjacent_info =
-  { edge_node_set : EdgeNodeSet.t
-  ; seen_alleles  : Alleles.set
-  }
-
 type t =
   { align_date    : string                   (* When the alignment was created by IMGT. *)
   ; reference     : string                                (* Name of reference allelle. *)
@@ -152,7 +147,6 @@ type t =
   ; amap          : (module Alleles.Map)
   ; bounds        : sep list Alleles.map    (* Map of where the alleles start and stop. *)
   ; posarr        : by_position_array                          (* Per position lookups. *)
-  ; adjacents_arr : adjacent_info array
   ; offset        : int
   ; merge_map     : (string * Alter_MSA.info) list   (* Information about how an allele's
                                                         alignment_sequence was created. *)
@@ -176,16 +170,20 @@ let starts_by_position { bounds; amap; aset; _ } =
         (pos, AS.singleton allele) :: asc))
 
 let add_allele_edge g aset pv nv allele =
-  let module AS = (val aset : Alleles.Set) in
-  let new_edge =
-    try
-      let eset = G.find_edge g pv nv |> G.E.label in
-      G.remove_edge g pv nv;
-      G.E.create pv (AS.set eset allele) nv
-    with Not_found ->
-      G.E.create pv (AS.singleton allele) nv
-  in
-  G.add_edge_e g new_edge
+  (* UGH. Unfortunately a necessary guard against
+     1. Not typing this logic better.
+     2. OCamlgraph find_edge stack-overflow *)
+  if pv = nv then () else
+    let module AS = (val aset : Alleles.Set) in
+    let new_edge =
+      try
+        let eset = G.find_edge g pv nv |> G.E.label in
+        G.remove_edge g pv nv;
+        G.E.create pv (AS.set eset allele) nv
+      with Not_found ->
+        G.E.create pv (AS.singleton allele) nv
+    in
+    G.add_edge_e g new_edge
 
 (** Compress the start nodes; join all the start nodes that have the same
     alignment position into one node. *)
@@ -284,7 +282,7 @@ let relationship pos v =
   | N (p, _) when pos < p                 -> `Before p
   | B (p, _) when pos = p                 -> `Exact
   | N (p, s) when pos = p                 -> `Exact
-  | B _                                   -> `After
+  | B _ (*   when pos > p *)              -> `After
   | N (p, s) when pos < end_pos p s       -> `In (p, s)
   | N _ (*p, s) when pos >= end_pos p s*) -> `After
 
@@ -620,7 +618,7 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
             pos idx
         in
         let () = add_allele_edge prev next in
-        main_loop state ~prev ~next t
+        main_loop state ~prev:next ~next t
     | Sequence { start; s} :: t ->
         let new_node = G.V.create (N (start, s)) in
         let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
@@ -1006,155 +1004,6 @@ let find_node_at_private ?allele ?ongap ~pos g aset offset posarr =
       | Some f -> f lst
       end
 
-let adjacents_debug_ref = ref false
-
-(* Methods for finding adjacent nodes/edges combinations.:
-   Nodes with the same (or greater; due to gaps) alignment position.
-
-   Aside from checking the bounds and looking for Boundary positions,
-   there is no way of knowing when we have found all adjacents. These
-   algorithms expand a set of successively seen nodes at progressively
-   farther distance (measured by edges) from the root node. At each
-   step they recurse down and explore new adjacents. The two main methods
-   {until} and {check_by_levels} provide a fold operation over these
-   adjacents (via ~f and ~init) as they are discovered and also returns:
-   1. A EdgeNodeSet of actual adjacents. adjacent nodes can have multiple
-      edges leading into them.
-   2. The final accumulator value.
-   3. A stack of encountered nodes (probably not useful). *)
-module Adjacents = struct
-
-  (* [add_if_new cur node sibs] Add [node] to [kids] if it isn't in [cur]rent.
-     Although [kids] and [cur] may represent nodes at different alignment
-     position, to prevent traversing/recursing down the same paths as we
-     discover new kids, we keep track of two sets.
-
-     (check) + (add) -> O(log n) + O(log n) = O(2 log n
-     as opposed to O(log n) for just adding but then we redo lots (how much?)
-     work and can't add the is_empty stop condition in [down].  *)
-  let add_if_new ~cur n kids =
-    if NodeSet.mem n cur then kids else NodeSet.add n kids
-
-  let add_if_new_and_above ~cur ~pos n kids =
-    (* Start Nodes will have an equal node position to pos but will be "above"
-       and therefore potentially point at adjacents.*)
-    if NodeSet.mem n cur then kids else
-      let open Nodes in
-      match n with
-      | S (np, _) when np = pos -> NodeSet.add n kids
-      | _                       -> if Nodes.position n >= pos then kids else
-                                     NodeSet.add n kids
-
-  let siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc =
-    let add ((_pn, _el, n) as e) (kids, adjs, acc) =
-      if Nodes.position n >= pos then
-        let is_new, (nadjs, nacc) = if_new e (adjs, acc) in
-        if is_new then
-          G.fold_pred (add_if_new_and_above ~cur:kids ~pos) g n kids, nadjs, nacc
-        else
-          kids, nadjs, nacc
-      else
-        let nkids = add_if_new ~cur n kids in
-        nkids, adjs, acc
-    in
-    let init = NodeSet.empty, adjacents, acc in
-    NodeSet.fold new_nodes ~f:(G.fold_succ_e add g) ~init
-
-  let rec down if_new g pos acc ~adjacents ~new_nodes cur =
-    let newer_nodes, nadjacents, nacc =
-      siblings_and_adjacents pos ~if_new g ~new_nodes ~cur ~adjacents acc
-    in
-    let new_cur = NodeSet.union cur new_nodes in
-    if NodeSet.is_empty newer_nodes then
-      (* no new nodes: don't recurse! *)
-      nadjacents, nacc, new_cur
-    else
-      down if_new g pos nacc ~adjacents:nadjacents ~new_nodes:newer_nodes new_cur
-
-  let look_above g cur =
-    NodeSet.fold cur ~f:(G.fold_pred (add_if_new ~cur) g) ~init:NodeSet.empty
-
-  (* A general combination of [up] and [down] that is a parameterized
-     search that should tell us when to stop recursing. *)
-  let up_and ?max_height ?prev_edge_node_set ~init ~if_new ~down g ~pos node =
-    let rec up i adjacents acc ~new_nodes cur =
-      match max_height with
-      | Some h when i >= h  -> adjacents, acc, NodeSet.union new_nodes cur
-      | None | Some _       ->
-          match down acc ~adjacents ~new_nodes cur with
-          | `Stop t                            -> t
-          | `Continue (nadjacents, nacc, ncur) ->
-              let newer_nodes = look_above g new_nodes in
-              if !adjacents_debug_ref then
-                eprintf "Adding new newer_nodes: %s\n from new_nodes: %s\n"
-                  (NodeSet.to_string newer_nodes) (NodeSet.to_string new_nodes);
-              up (i + 1) nadjacents nacc ~new_nodes:newer_nodes ncur
-    in
-    let wrap_if_new e a = snd (if_new e a) in
-    let initial_edge_set =
-      Option.value prev_edge_node_set
-        ~default:EdgeNodeSet.empty
-    in
-    let adj_strt, nacc = G.fold_pred_e wrap_if_new g node (initial_edge_set, init) in
-    let new_nodes = G.fold_pred NodeSet.add g node NodeSet.empty in
-    let cur = NodeSet.singleton node in
-    up 0 adj_strt nacc ~new_nodes cur
-
-  (* A more general method that checks whether to continue after each new
-     adjacent. Since we throw an exception to terminate early, the search
-     stack isn't correct.
-
-    TODO: Need to benchmark to figure out which method is ultimately faster. *)
-  let until (type a) ?max_height ~f ~init g node =
-    let module M = struct exception F of a end in
-    let if_new (_, e, n) ((adjacents, acc) as s) =
-      let en = e, n in
-      if EdgeNodeSet.mem en adjacents then false, s else
-        match f e n acc with
-        | `Stop r     -> raise (M.F r)
-        | `Continue r -> true, (EdgeNodeSet.add en adjacents, r)
-    in
-    let pos = Nodes.position node in
-    let downc = down if_new g pos  in
-    let down acc ~adjacents ~new_nodes cur =
-      try `Continue (downc acc ~adjacents ~new_nodes cur)
-      with M.F r -> `Stop (adjacents, r, (NodeSet.union new_nodes cur))
-    in
-    up_and ?max_height ~init ~if_new ~down g ~pos node
-
-  (* A less general method that requires an extra predicate function to check
-     the stopping condition. The advantage is that we check less frequently and
-     probably when it matters: when we increase the level of how far back in
-     the graph we look for adjacents. *)
-  let check_by_levels ?max_height ?prev_edge_node_set ~f ~stop ~init g node =
-    let if_new (pn, e, n) ((adjacents, acc) as s) =
-      if !adjacents_debug_ref then
-        eprintf "if_new check of %s -> %s\n"
-          (Nodes.vertex_name pn) (Nodes.vertex_name n);
-      let en = e, n in
-      if EdgeNodeSet.mem en adjacents then false, s else
-        true, (EdgeNodeSet.add en adjacents, (f e n acc))
-    in
-    let pos = Nodes.position node in
-    (* TODO: There is a corner cases where down has redundant calls to if_new.*)
-    let downc = down if_new g pos in
-    let down acc ~adjacents ~new_nodes cur =
-      let (nadjacents, nacc, ptl) as state =
-        downc acc ~adjacents ~new_nodes cur
-      in
-      if stop nacc then
-        `Stop (nadjacents, nacc, (NodeSet.union new_nodes cur))
-      else
-        `Continue state
-    in
-    let init =
-      Option.value_map prev_edge_node_set ~default:init
-        ~f:(EdgeNodeSet.fold ~init ~f:(fun (e, n) a -> f e n a))
-    in
-    up_and ?max_height ?prev_edge_node_set ~init ~if_new ~down g ~pos node
-
-end (* Adjacents *)
-
 let within ?(include_ends=true) pos sep =
   (fst sep.start) <= pos &&
     ((include_ends && pos <= sep.end_) || pos < sep.end_)
@@ -1168,60 +1017,6 @@ let alleles_with_data_private ?include_ends aset amap bounds ~pos =
         AS.set es allele
       else
         es))
-
-(* At or past *)
-let adjacents_at_private ?max_edge_debug_length ?(max_height=10000)
-  ?prev_edge_node_set ~pos g aset amap offset posarr bounds =
-  let module AS = (val aset : Alleles.Set) in
-  let max_length = max_edge_debug_length in
-  let all_edges = alleles_with_data_private ~include_ends:false aset amap bounds ~pos in
-  let prev_edge_node_set =
-    Option.map prev_edge_node_set ~f:(EdgeNodeSet.fold ~init:EdgeNodeSet.empty
-        ~f:(fun ((edge, node) as en) nes ->
-            if (Nodes.position node > pos || Nodes.inside pos node)
-            (* Can be optimized with an non-empty intersect method *)
-            && AS.(cardinal (inter all_edges edge)) > 0 then
-              EdgeNodeSet.add en nes
-            else
-              nes))
-  in
-  let rootn, _ = find_nodes_at_private offset posarr ~pos in
-  let stop es_acc =
-    if es_acc = all_edges then true else
-      begin
-        if !adjacents_debug_ref then
-          eprintf "Still missing\n1:%s\n2:%s\n"
-            (AS.to_human_readable ?max_length
-              (AS.diff all_edges es_acc))
-            (AS.to_human_readable ?max_length
-              (AS.diff es_acc all_edges));
-          false
-      end
-  in
-  let f edge node edge_set =
-    match node with
-    | Nodes.E p when p <= pos -> edge_set
-    | _ ->
-      if !adjacents_debug_ref then
-        eprintf "Adding %s <- %s.\n"
-          (Nodes.vertex_name node)
-          (AS.to_human_readable ?max_length edge);
-      AS.union edge edge_set
-  in
-  let init = AS.init () in
-  Adjacents.check_by_levels ?prev_edge_node_set ~max_height ~init ~stop g rootn ~f
-
-let create_adjacents_arr g aset amap offset posarr bounds =
-  let st, en = range_pr amap bounds in
-  let len = en - st + 1 in
-  let pensr = ref None in
-  Array.init len ~f:(fun i ->
-    let pos = offset + i in
-    let (edge_node_set, seen_alleles, _) =
-      adjacents_at_private ?prev_edge_node_set:!pensr g aset amap offset posarr bounds ~pos
-    in
-    pensr := Some edge_node_set;
-    {edge_node_set; seen_alleles})
 
 (* This used to have more options but they got refactored to other parts of the
    code. We'll preserve the record as a placeholder for other logic that we may
@@ -1265,7 +1060,6 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
     JoinSameSequencePaths.do_it g aset amap bounds; (* mutates g *)
   let offset = fst (range_pr amap bounds) in
   let posarr = create_by_position g amap bounds in
-  let adjacents_arr = create_adjacents_arr g aset amap offset posarr bounds in
   { align_date
   ; reference
   ; g
@@ -1276,7 +1070,6 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   ; offset
   ; posarr
   ; merge_map
-  ; adjacents_arr
   }
 
 let construct ?arg input =
@@ -1461,6 +1254,3 @@ let search_through_gap g node ~pos =
       | None   -> error "Couldn't work through gap before %s for %d"
                     (Nodes.vertex_name node) pos
 
-let adjacents_at ?max_edge_debug_length ?max_height ~pos
-    { offset; adjacents_arr; _} =
-  adjacents_arr.(pos - offset)

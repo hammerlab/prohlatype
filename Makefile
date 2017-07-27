@@ -1,7 +1,7 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner biocaml.unix
 SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving.4.1 nonstd.0.0.2 sosa.0.2.0 ocamlgraph.1.8.6 cmdliner.1.0.0 biocaml.0.6.0
 TOOLS=mhc2gpdf par_type multi_par align2fasta allele_distances
-TESTS=test_parsing round_trip adjacents benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
+TESTS=test_parsing round_trip benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
 
 .PHONY: default setup clean build tools tests covered_tests
@@ -29,9 +29,6 @@ test_parsing:
 
 round_trip:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts round_trip.native
-
-adjacents:
-	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts adjacents.native
 
 benchmark_k:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts benchmark_k.native
