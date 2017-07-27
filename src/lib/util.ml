@@ -177,6 +177,10 @@ module StringMap = Map.Make (struct
   type t = string [@@deriving ord]
 end)
 
+let string_set_of_list lst =
+  List.fold_left lst ~init:StringSet.empty
+    ~f:(fun s e -> StringSet.add e s)
+
 let string_map_of_assoc asc =
   List.fold_left asc ~init:StringMap.empty
     ~f:(fun acc (key, data) -> StringMap.add ~key ~data acc)
