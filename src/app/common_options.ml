@@ -154,7 +154,7 @@ let without_arg =
   let docv = "STRING" in
   let doc  =
     sprintf "Alleles to remove from the working set. \
-             This \"allele selector\" is applied before the execlude (%s)
+             This \"allele selector\" is applied before the exclude (%s)
              selector but after specific (%s) one.
              Use this option to construct a graph without alleles (ex. \
              A*01:02). One can repeat this argument to specify multiple \
