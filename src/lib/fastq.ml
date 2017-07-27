@@ -98,19 +98,16 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
   let same = same cmp in
   let open Future_unix in
   let open Deferred in
+  let fold_if_f_not_none ff ~init l =
+    Option.value_map ff ~default:init
+      ~f:(fun f -> List.fold l ~init ~f)
+  in
   Reader.with_file file1 ~f:(fun rdr1 ->
     Reader.with_file file2 ~f:(fun rdr2 ->
       (* Avoid circular dep *)
       let fr1 = Biocaml_unix.Fastq.read rdr1 in
       let fr2 = Biocaml_unix.Fastq.read rdr2 in
-      let rec single_pipe_fold fr f2 acc =
-        Pipe.read fr >>= fun r ->
-          match r with
-          | `Eof          -> return (`FinishedSingle acc)
-          | `Ok (Error e) -> eprintf "%s\n" (Error.to_string_hum e);
-                             single_pipe_fold fr f2 acc
-          | `Ok (Ok a)    -> single_pipe_fold fr f2 (f2 acc a)
-      and two_pipe_fold c s1 s2 acc =
+      let rec two_pipe_fold c s1 s2 acc =
         if stop c then
           return (`DesiredReads acc)
         else
@@ -118,39 +115,19 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
             Pipe.read fr2 >>= fun r2 ->
               match r1, r2 with
               | `Eof, `Eof                      ->
-                  return (`BothFinished acc)
-              | `Eof, `Ok eb                    ->
-                  let nacc =
-                    Option.value_map ff ~default:acc
-                      ~f:(fun ff -> List.fold s1 ~init:acc ~f:ff)
-                  in
-                  begin match fs with
-                  | None -> return (`OneReadPairedFinished (1, nacc))
-                  | Some fs ->
-                      let nacc = List.fold s2 ~init:nacc ~f:fs in
-                      begin match eb with
-                      | Error e -> eprintf "%s\n" (Error.to_string_hum e);
-                                   single_pipe_fold fr2 fs nacc
-                      | Ok b    -> single_pipe_fold fr2 fs (fs nacc b)
-                      end
-                   end
-              | `Ok ea, `Eof                    ->
-                  let nacc =
-                    Option.value_map fs ~default:acc
-                      ~f:(fun fs -> List.fold s2 ~init:acc ~f:fs)
-                  in
-                  begin match ff with
-                  | None -> return (`OneReadPairedFinished (2, acc))
-                  | Some ff ->
-                      let nacc = List.fold s2 ~init:nacc ~f:ff in
-                      begin match ea with
-                      | Error e ->
-                        eprintf "%s\n" (Error.to_string_hum e);
-                        single_pipe_fold fr2 ff nacc
-                      | Ok a ->
-                        single_pipe_fold fr2 ff (ff nacc a)
-                      end
-                  end
+                  let nacc = fold_if_f_not_none ff ~init:acc s1 in
+                  let nacc = fold_if_f_not_none fs ~init:nacc s2 in
+                  return (`BothFinished nacc)
+              | `Eof, `Ok (Error eb)            ->
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  two_pipe_fold c s1 s2 acc
+              | `Eof, `Ok (Ok b)                ->
+                  same_check c s1 (b :: s2) acc
+              | `Ok (Error ea), `Eof            ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  two_pipe_fold c s1 s2 acc
+              | `Ok (Ok a), `Eof                ->
+                  same_check c (a :: s1) s2 acc
               | `Ok (Error ea), `Ok (Error eb)  ->
                   eprintf "%s\n" (Error.to_string_hum ea);
                   eprintf "%s\n" (Error.to_string_hum eb);
@@ -165,20 +142,20 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
                   if cmp a b then begin
                     filter_pass a b c s1 s2 acc
                   end else
-                    let ns1 = a :: s1 in
-                    let ns2 = b :: s2 in
-                    match same ns1 ns2 with
-                    | Some (r1, r2, ns1, ns2) ->
-                        filter_pass r1 r2 c ns1 ns2 acc
-                    | None ->
-                        two_pipe_fold c ns1 ns2 acc
+                    same_check c (a :: s1) (b :: s2) acc
+      and same_check c ns1 ns2 acc =
+        match same ns1 ns2 with
+        | Some (r1, r2, ns1, ns2) ->
+            filter_pass r1 r2 c ns1 ns2 acc
+        | None ->
+            two_pipe_fold c ns1 ns2 acc
       and filter_pass a b c s1 s2 acc =
         let display, stop = filt a.Biocaml_unix.Fastq.name in
         match display, stop with
         | true,        true  -> `StoppedByFilter (f acc a b)
         | false,       true  -> `StoppedByFilter acc
-        | true,        false -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
-        | false,       false -> two_pipe_fold c s1 s2 acc
+        | true,        false -> same_check (c + 1) s1 s2 (f acc a b)
+        | false,       false -> same_check c s1 s2 acc
       in
       two_pipe_fold 0 [] [] init))
 
