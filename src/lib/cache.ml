@@ -147,24 +147,22 @@ let graph_and_two_index =
 
 type par_phmm_args =
   { pinput    : Alleles.Input.t
-  ; selectors : Alleles.Selectors.t list
   ; read_size : int
   }
 
-let par_phmm_args ~input ~selectors ~read_size =
-  { pinput = input; selectors ; read_size }
+let par_phmm_args ~input ~read_size =
+  { pinput = input; read_size }
 
-let par_phmm_args_to_string {pinput; selectors; read_size} =
-  sprintf "%s_%s_%d"
+let par_phmm_args_to_string {pinput; read_size} =
+  sprintf "%s_%d"
     (Alleles.Input.to_string pinput)
-    (Alleles.Selectors.list_to_string selectors)
     read_size
 
 let par_phmm_cache_dir =
   Filename.concat dir "parhmm"
 
-let par_phmm_no_cache { pinput; selectors ; read_size } =
-  ParPHMM.construct pinput selectors
+let par_phmm_no_cache { pinput; read_size } =
+  ParPHMM.construct pinput
 
 let par_phmm =
   let dir = Filename.concat (Sys.getcwd ()) par_phmm_cache_dir in

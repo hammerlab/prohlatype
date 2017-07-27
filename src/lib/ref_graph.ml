@@ -1223,32 +1223,26 @@ let create_adjacents_arr g aset amap offset posarr bounds =
     pensr := Some edge_node_set;
     {edge_node_set; seen_alleles})
 
+(* This used to have more options but they got refactored to other parts of the
+   code. We'll preserve the record as a placeholder for other logic that we may
+   want, (ex. remove reference). *)
 type construction_arg =
-  { selectors           : Alleles.Selectors.t list
-  ; join_same_sequence  : bool
+  { join_same_sequence : bool
   }
 
-let default_construction_arg =
-  { selectors          = []
-  ; join_same_sequence = true
-  }
+let default_construction_arg = { join_same_sequence = true }
 
-let construction_arg_to_string
-  { selectors; join_same_sequence } =
-    sprintf "%s_%b"
-      (Alleles.Selectors.list_to_string selectors)
-      join_same_sequence
+let construction_arg_to_string { join_same_sequence } =
+  string_of_bool join_same_sequence
 
 let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let open MSA in
-  let { selectors ; join_same_sequence; } = arg in
+  let { join_same_sequence; } = arg in
   let { Parser.align_date; reference; ref_elems; alt_elems} = r in
-  let alt_elems = List.sort ~cmp:(fun (n1, _) (n2, _) -> Alleles.compare n1 n2) alt_elems in
-  let alt_alleles = Alleles.Selectors.apply_to_assoc selectors alt_elems in
-  let num_alleles = List.length alt_alleles in
+  let num_alleles = List.length alt_elems in
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
-  let aindex = Alleles.index (reference :: List.map ~f:fst alt_alleles) in
+  let aindex = Alleles.index (reference :: List.map ~f:fst alt_elems) in
   let module Aset = Alleles.MakeSet (struct let index = aindex end) in
   let aset = (module Aset : Alleles.Set) in
   let module Amap = Alleles.MakeMap (struct let index = aindex end) in
@@ -1256,7 +1250,7 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let start_and_stop_assoc =
-    List.fold_left alt_alleles ~init:[ reference, refs_start_ends]
+    List.fold_left alt_elems ~init:[ reference, refs_start_ends]
       ~f:(fun acc (allele, lst) ->
             let start_and_stops = add_non_ref g aset reference fs_ls_st_assoc allele lst in
             (allele, start_and_stops) :: acc)

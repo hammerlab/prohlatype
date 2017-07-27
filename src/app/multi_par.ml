@@ -9,22 +9,22 @@ let to_read_size_dependent
   (* Allele information source *)
     ~alignment_files ~merge_files ~distance
     ~skip_disk_cache =
+    let selectors = [] in           (* Selectors NOT supported, on purpose! *)
     let als =
-      List.map alignment_files ~f:(Alleles.Input.alignment ~distance)
+      List.map alignment_files ~f:(Alleles.Input.alignment ~selectors ~distance)
     in
     let mls =
-      List.map merge_files ~f:(Alleles.Input.merge ~distance)
+      List.map merge_files ~f:(Alleles.Input.merge ~selectors ~distance)
     in
     match als @ mls with
     | []     -> Error "Neither a merge nor alignment file specified!"
     | inputs ->
-      let selectors = [] in           (* Selectors NOT supported, on purpose! *)
       Ok (fun read_size ->
-        List.map inputs ~f:(fun input ->
-          let name = Alleles.Input.to_string input in
-          let par_phmm_arg = Cache.par_phmm_args ~input ~selectors ~read_size in
-          let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
-          name, pt))
+            List.map inputs ~f:(fun input ->
+              let name = Alleles.Input.to_string input in
+              let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
+              let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
+              name, pt))
 
 module Pdml = ParPHMM_drivers.Mulitple_loci
 

@@ -5,24 +5,26 @@ let app_name = "par_type"
 
 let to_read_size_dependent
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance
+    ?alignment_file ?merge_file ~distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
     ~without_list
     ?number_alleles
     ~do_not_ignore_suffixed_alleles
+  (* Cache logic. *)
     ~skip_disk_cache
     =
-    Common_options.to_allele_input ?alignment_file ?merge_file ~distance ()
+    let open Common_options in
+    let selectors =
+      aggregate_selectors ~regex_list ~specific_list
+        ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
+    in
+    to_allele_input ?alignment_file ?merge_file ~distance ~selectors
       >>= fun input ->
-        let selectors =
-          Common_options.aggregate_selectors ~regex_list ~specific_list
-            ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
-        in
-        Ok (fun read_size ->
-            let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
-            Cache.par_phmm ~skip_disk_cache par_phmm_args)
+          Ok (fun read_size ->
+                let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
+                Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
 module Pdsl = ParPHMM_drivers.Single_loci
 

@@ -229,15 +229,6 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let to_allele_input ?alignment_file ?merge_file ?distance () =
-  let open Alleles.Input in
-  match merge_file with
-  | Some prefix     -> Ok (merge ?distance prefix)
-  | None  ->
-      match alignment_file with
-      | (Some path) -> Ok (alignment ?distance path)
-      | None        -> Error "Neither a file or merge argument were specified"
-
 let option_to_list o =
   Option.value_map o ~default:[] ~f:(fun s -> [s])
 
@@ -250,9 +241,18 @@ let aggregate_selectors ?number_alleles
     @ (if do_not_ignore_suffixed_alleles then
         [Alleles.Selectors.DoNotIgnoreSuffixed] else [])
 
+let to_allele_input ?alignment_file ?merge_file ?distance ~selectors =
+  let open Alleles.Input in
+  match merge_file with
+  | Some prefix   -> Ok (merge ?distance ~selectors prefix)
+  | None  ->
+      match alignment_file with
+      | Some path -> Ok (alignment ?distance ~selectors path)
+      | None      -> Error "Neither a file nor merge argument was specified."
+
 let to_filename_and_graph_args
   (* Allele information source *)
-  ?alignment_file ?merge_file ?distance
+    ?alignment_file ?merge_file ?distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -260,17 +260,17 @@ let to_filename_and_graph_args
     ?number_alleles
     ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
-  ~join_same_sequence =
-    to_allele_input ?alignment_file ?merge_file ?distance ()
+    ~join_same_sequence =
+    let selectors =
+      aggregate_selectors ~regex_list ~specific_list ~without_list
+        ?number_alleles ~do_not_ignore_suffixed_alleles
+    in
+    to_allele_input ?alignment_file ?merge_file ?distance ~selectors
       >>= fun input ->
-        let selectors =
-          aggregate_selectors ~regex_list ~specific_list ~without_list
-            ?number_alleles ~do_not_ignore_suffixed_alleles
-        in
-        let arg = {Ref_graph.selectors; join_same_sequence } in
-        let graph_arg = Cache.graph_args ~arg ~input in
-        let option_based_fname = Cache.graph_args_to_string graph_arg in
-        Ok (option_based_fname, graph_arg)
+            let arg = { Ref_graph.join_same_sequence } in
+            let graph_arg = Cache.graph_args ~arg ~input in
+            let option_based_fname = Cache.graph_args_to_string graph_arg in
+            Ok (option_based_fname, graph_arg)
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in

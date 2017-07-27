@@ -1762,7 +1762,7 @@ type t =
   ; emissions_a     : base_emissions array
   }
 
-let construct input selectors =
+let construct input =
   if not (Alleles.Input.is_imputed input) then
     invalid_argf "Allele input MUST be imputed!"
   else begin

@@ -65,7 +65,7 @@ let test_sequences file =
   let all_args =
     Cache.graph_args
       ~input:(Alleles.Input.alignment (to_alignment_file file) ~selectors)
-      ~arg:Ref_graph.{ default_construction_arg with selectors = selectors }
+      ~arg:Ref_graph.default_construction_arg
   in
   let gall = Cache.graph all_args in
   let a_fasta = Fasta.all (to_fasta_file file) in
