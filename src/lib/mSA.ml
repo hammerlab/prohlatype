@@ -1096,14 +1096,18 @@ module Segments = struct
           advance_allele cur acc s1 s2
         else
           match e1, e2 with
-          | Start s, Start _ -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:true
-          | Start s, End _   -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:false
-          | End e,   Start _ -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:true
-          | End e,   End _   -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:false
-          | Start _, _
-          | End _,   _
-          | _,       Start _
-          | _,       End _   -> invalid_argf "%s paired with non-zero-length al-el %s"
+          | Start s,    Start _    -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:true
+          | Start s,    End _      -> split_wrap cur s acc s1 s2 ~new_start1:true ~new_start2:false
+          | Start s,    Boundary _ -> split_wrap cur s acc s1 (e2 :: s2) ~new_start1:true
+
+          | End e,      Start _ -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:true
+          | Boundary _, Start s -> split_wrap cur s acc (e1 :: s1) s2 ~new_start2:true
+          | End e,      End _   -> split_wrap cur e acc s1 s2 ~new_start1:false ~new_start2:false
+
+          | Start _,    _
+          | End _,      _
+          | _,          Start _
+          | _,          End _   -> invalid_argf "%s paired with non-zero-length al-el %s"
                                     (al_el_to_string e1) (al_el_to_string e2)
 
           | Boundary b, Boundary _ -> (* make sure we're at a boundary in the ref *)
