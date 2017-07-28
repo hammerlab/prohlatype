@@ -45,7 +45,7 @@ let initialize_base_array_and_position_map ref_elems =
     | Start pos :: t              -> ia "second start: %d" pos
     | End pos :: t                -> ia "end with more %d" pos
     | []                          -> ia "list before End"
-    | Boundary { pos; _ } :: t    -> loop (pos + 1) (p + pos - lkmp) pp ((lkmp, p) :: pacc) acc t
+    | Boundary { pos; _ } :: t    -> loop pos (p + pos - lkmp) pp ((lkmp, p) :: pacc) acc t
     | Sequence { s; start } :: t  -> let l = String.length s in
                                      loop (start + l) (p + l) (-1) ((lkmp, p) :: pacc)
                                         (sequence_to_base_states_array s :: acc) t
@@ -1975,6 +1975,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       ; init_global_state
       ; maximum_match
       }
+
 (* Return
   1. a function to process one read
   2. the workspace that it uses
