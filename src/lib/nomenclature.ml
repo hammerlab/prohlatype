@@ -84,11 +84,15 @@ let parse_resolution s =
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
-let parse s =
-  match String.split s ~on:(`Character '*') with
-  | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
-  | _ :: [] -> error "Did not find the '*' separator in %s" s
-  | _       -> error "Found too many '*' separators in %s" s
+type gene = string
+type t = resolution * suffix option
+
+let parse : string -> (gene * t, string) result =
+  fun s ->
+    match String.split s ~on:(`Character '*') with
+    | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
+    | _ :: [] -> error "Did not find the '*' separator in %s" s
+    | _       -> error "Found too many '*' separators in %s" s
 
 let parse_to_resolution_exn s =
   parse s |> unwrap_ok |> snd
@@ -103,7 +107,7 @@ let resolution_to_string ?gene =
 
 let resolution_and_suffix_opt_to_string ?gene (r,so) =
   sprintf "%s%s" (resolution_to_string ?gene r)
-    (Option.value_map so ~default:"" ~f:suffix_to_string) 
+    (Option.value_map so ~default:"" ~f:suffix_to_string)
 
 module Trie (*: sig
 

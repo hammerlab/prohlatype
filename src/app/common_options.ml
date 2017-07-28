@@ -515,11 +515,19 @@ let likelihood_first_flag =
   Arg.(value & flag & info ~doc ["likelihood-first"; "llhdfst"])
 
 let do_not_finish_singles_flag =
-  let doc   = "Paired FASTQ files that may be created by downstream analysis \
-                may not guarantee that all of the reads are paired. When in \
-                paired mode (2 FASTQ files are passed), by default we'll \
-                continue evaluating the unpaired reads as if they were \
-                single. By passing this flag we'll skip them entirely and use \
-                only the paired reads."
+  let doc = "Paired FASTQ files that may be created by downstream analysis may \
+             not guarantee that all of the reads are paired. When in paired \
+             mode (2 FASTQ files are passed), by default we'll continue \
+             evaluating the unpaired reads as if they were eingle. By passing \
+             this flag we'll skip them entirely and use only the paired reads."
   in
   Arg.(value & flag & info ~doc ["do-not-finish-singles"])
+
+let zygosity_report_size_arg =
+  let open ParPHMM_drivers.Reducer in
+  let doc =
+    sprintf "Override the default number of allelic pairs reported as part of \
+             the zygosity portion. Defaults to %d." default_zygosity_report_size
+  in
+  Arg.(value & opt positive_int default_zygosity_report_size
+             & info ~doc ["zygosity-report-size"])

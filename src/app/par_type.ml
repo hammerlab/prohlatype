@@ -117,6 +117,7 @@ let type_
     number
     width
     likelihood_first
+    zygosity_report_size
   (* how are we typing *)
     map_depth
     mode
@@ -144,7 +145,7 @@ let type_
         let finish_singles = not do_not_finish_singles in
         let mode =
           match mode with
-          | `Reducer -> `Reducer likelihood_first
+          | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
           | `Mapper  -> `Mapper map_depth
           | `Viterbi -> `Viterbi
         in
@@ -245,6 +246,7 @@ let () =
             $ number_bands_arg
             $ band_width_arg
             $ likelihood_first_flag
+            $ zygosity_report_size_arg
             (* How are we typing *)
             $ map_depth_arg
             $ mode_flag

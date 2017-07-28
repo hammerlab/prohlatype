@@ -113,6 +113,7 @@ let type_
     number
     width
     likelihood_first
+    zygosity_report_size
   (* how are we typing *)
     map_depth
     not_incremental_pairs
@@ -148,7 +149,7 @@ let type_
   in
   let mode =
     match mode with
-    | `Reducer -> `Reducer likelihood_first
+    | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
     | `Mapper  -> `Mapper map_depth
   in
   match need_read_size_r with
@@ -258,6 +259,7 @@ let () =
             $ number_bands_arg
             $ band_width_arg
             $ likelihood_first_flag
+            $ zygosity_report_size_arg
             (* How are we typing *)
             $ map_depth_arg
             $ do_not_use_incremental_pairs_flag

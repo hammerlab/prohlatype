@@ -277,18 +277,27 @@ module Reducer = struct
     ; output    : out_channel -> unit
     }
 
-  let output_allele_first allele_arr final_likelihoods oc =
-    let o = Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a) in
-    let cmp (l1, a1) (l2, a2) =
-      if l2 < l1 then
-        -1
-      else if l2 > l1 then
-        1
-      else
-        compare a1 a2 (* Sort by the nomenclature order, not strings. *)
+  let higher_likelihood_compare (l1, r1, _i1, _a1) (l2, r2, _i2, _a2) =
+    if l2 < l1 then
+      -1
+    else if l2 > l1 then
+      1
+    else
+      Nomenclature.compare r1 r2
+
+  let by_likelihood_arr allele_arr final_likelihoods =
+    let o =
+      Array.mapi allele_arr ~f:(fun i a ->
+        final_likelihoods.(i)
+        , Nomenclature.parse_to_resolution_exn a
+        , i         (* Preserver the index for merging with zygosity results. *)
+        , a)
     in
-    Array.sort o ~cmp;
-    Array.iter o ~f:(fun (l,a) -> fprintf oc "%10s\t%0.20f\n" a l)
+    Array.sort o ~cmp:higher_likelihood_compare;
+    o
+
+  let output_allele_first o oc =
+    Array.iter o ~f:(fun (l,_,_,a) -> fprintf oc "%16s\t%0.20f\n" a l)
 
   let output_likelihood_first allele_arr final_likelihoods oc =
     let o =
@@ -296,38 +305,60 @@ module Reducer = struct
       |> Array.to_list
       |> group_by_assoc
       |> List.map ~f:(fun (l, alst) ->
-        (* TODO: Convert these back to sets to allow us to say "Everything" *)
             let clst = Alleles.CompressNames.f alst in
             l, String.concat ~sep:";" clst)
       |> List.sort ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1) (* higher fst *)
     in
-    List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%s\n" l a)
+    List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%16s\n" l a)
 
-  let output_zygosity ?(size=10) likelihood_first aa zt oc =
+  let default_zygosity_report_size = 100
+
+  let output_zygosity ?(size=default_zygosity_report_size) likelihood_first aa
+    blarr zt oc =
     fprintf oc "Zygosity:\n";
     let zb = Zygosity_likelihood_array.best ~size zt in
+    let nzb = (* Merge with blarr to weight homozygous pairs. *)
+      match List.last zb with
+      | None                -> eprintf "Didn't find any zygosity weights!\n"; zb
+      | Some (lowest, _, _) ->
+          match Array.findi blarr ~f:(fun (l, _, _, _) -> l < lowest) with
+          | None            -> zb                     (* Nothing more likely. *)
+          | Some len        ->
+              let append_me =
+                Array.sub blarr ~pos:0 ~len
+                |> Array.map ~f:(fun (l, _, i, _) -> l, i, i)
+                |> Array.to_list
+              in
+              zb @ append_me
+              |> List.sort ~cmp:(fun (l1, _, _) (l2, _, _) -> compare l2 l1)
+              |> fun l -> List.take l size
+    in
     if likelihood_first then
-      List.map zb ~f:(fun (l, i, j) -> l, (i, j))
+      List.map nzb ~f:(fun (l, i, j) -> l, (i, j))
       |> group_by_assoc
       |> List.iter ~f:(fun (l, ijlist) ->
           let alleles_str =
             List.map ijlist ~f:(fun (i,j) -> sprintf "%s,%s" aa.(i) aa.(j))
             |> String.concat ~sep:"\t"
           in
-          fprintf oc "%0.20f\t%s\n" l alleles_str)
+          fprintf oc "%0.20f\t%16s\n" l alleles_str)
     else
-      List.iter zb ~f:(fun (l, i, j) -> fprintf oc "%s\t%s\t%0.20f\n" aa.(i) aa.(j) l)
+      List.iter nzb ~f:(fun (l, i, j) -> fprintf oc "%16s\t%16s\t%0.20f\n" aa.(i) aa.(j) l)
 
   let output_i likelihood_first allele_arr final_likelihoods oc =
+    let o = by_likelihood_arr allele_arr final_likelihoods in
     fprintf oc "Likelihood:\n";
     if likelihood_first then
       output_likelihood_first allele_arr final_likelihoods oc
     else
-      output_allele_first allele_arr final_likelihoods oc
+      output_allele_first o oc;
+    o
 
-  let output_zi likelihood_first allele_arr final_likelihoods zt oc =
-    output_i likelihood_first allele_arr final_likelihoods oc;
-    output_zygosity likelihood_first allele_arr zt oc
+  let output_zi likelihood_first zygosity_report_size allele_arr
+    final_likelihoods zt oc =
+    let blarr = output_i likelihood_first allele_arr final_likelihoods oc in
+    output_zygosity ~size:zygosity_report_size likelihood_first allele_arr
+      blarr zt oc
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
     read_length pt =
@@ -361,7 +392,7 @@ module Reducer = struct
           done
         done
 
-  let init conf likelihood_first read_length pt =
+  let init conf likelihood_first zygosity_report_size read_length pt =
     let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
         ; check_rc } = conf
     in
@@ -391,7 +422,10 @@ module Reducer = struct
         in
         add_log_likelihoods_andz n t.state t.zygosity r1;
         add_log_likelihoods_andz n t.state t.zygosity r2)
-    and output oc = output_zi likelihood_first allele_arr t.state t.zygosity oc in
+    and output oc =
+      output_zi likelihood_first zygosity_report_size allele_arr t.state
+        t.zygosity oc
+    in
     t
 
   let apply fqi t =
@@ -593,9 +627,12 @@ module Single_loci = struct
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer lfst -> Reducer (Reducer.init conf lfst read_length pt)
-      | `Mapper n     -> Mapper (Mapper.init conf read_length n pt)
-      | `Viterbi      -> Viterbi (Viterbi.init conf read_length pt)
+      | `Reducer (lfst, zrs) ->
+          Reducer (Reducer.init conf lfst zrs read_length pt)
+      | `Mapper n            ->
+          Mapper (Mapper.init conf read_length n pt)
+      | `Viterbi             ->
+          Viterbi (Viterbi.init conf read_length pt)
 
   (* fqi = FastQ Item *)
   let apply t fqi = match t with
@@ -712,7 +749,7 @@ module Multiple_reducer = struct
     ; output  : out_channel -> unit
     }
 
-  let init conf likelihood_first read_length pt_lst =
+  let init conf likelihood_first zygosity_report_size read_length pt_lst =
     let { insert_p; band; max_number_mismatches; _ } = conf in
     let open ParPHMM in
     let paa =
@@ -736,7 +773,8 @@ module Multiple_reducer = struct
       List.iter2 paa t.state
         ~f:(fun (_, (_, allele_arr, _)) { loci; likelihood; zygosity; _} ->
               fprintf oc "%s\n" loci;
-              Reducer.output_zi likelihood_first allele_arr likelihood zygosity oc)
+              Reducer.output_zi likelihood_first zygosity_report_size
+                allele_arr likelihood zygosity oc)
     and apply fqi =
       match pt with
       | `Don't ->
@@ -932,8 +970,8 @@ module Mulitple_loci = struct
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer lfst ->
-          Reducer (Multiple_reducer.init conf lfst read_length pt)
+      | `Reducer (lfst, zrs) ->
+          Reducer (Multiple_reducer.init conf lfst zrs read_length pt)
       | `Mapper n ->
           Mapper (Multiple_mapper.init conf read_length n pt)
 
