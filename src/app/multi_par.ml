@@ -151,6 +151,7 @@ let type_
     match mode with
     | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
     | `Mapper  -> `Mapper map_depth
+    | `Rammer  -> `Rammer (likelihood_first, zygosity_report_size, map_depth)
   in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
@@ -204,6 +205,8 @@ let () =
                      the number of elements that are reported."
               map_depth_argument)
           [ "map" ])
+      ; ( `Rammer
+        , info ~doc: "Combination of reduce and map." [ "rammer" ])
       ]
     in
     value & vflag `Reducer  modes

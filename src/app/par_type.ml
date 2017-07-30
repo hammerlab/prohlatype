@@ -148,6 +148,7 @@ let type_
           | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
           | `Mapper  -> `Mapper map_depth
           | `Viterbi -> `Viterbi
+          | `Rammer  -> `Rammer (likelihood_first, zygosity_report_size, map_depth)
         in
         let conf = Pdsl.conf ?allele ~insert_p ?band ?max_number_mismatches
                         ~past_threshold_filter ~check_rc ()
@@ -203,6 +204,8 @@ let () =
                       argument, defaults to using the reference of the loci."
               specific_allele_argument)
           [ "viterbi" ])
+      ; ( `Rammer
+        , info ~doc: "Combination of reduce and map." [ "rammer" ])
       ]
     in
     value & vflag `Reducer modes

@@ -21,27 +21,32 @@ type 'a rc_states =
   ; complement      : 'a pass_result
   }
 
-type mapped_complement_stats = mapper_stats rc_states
-
 (* The output is ordered so that the left most stat is the most likely.
    We add characters 'R', 'C', 'F' as little annotations. *)
-let mapped_complement_stats_to_string ?(sep='\t') ms =
+let rc_stats_to_string ?(sep='\t') cmp comp_to_string ms =
   match ms.regular, ms.complement with
   | Completed r, Completed c ->
-    if fst (List.hd_exn r.positions) > fst (List.hd_exn c.positions) then
+    if cmp r c then
       sprintf "R%c%s%cC%c%s"
-        sep (mapper_stats_to_string ~sep r)
-        sep sep (mapper_stats_to_string ~sep c)
+        sep (comp_to_string r)
+        sep sep (comp_to_string c)
     else
       sprintf "C%c%s%cR%c%s"
-        sep (mapper_stats_to_string ~sep c)
-        sep sep (mapper_stats_to_string ~sep r)
+        sep (comp_to_string c)
+        sep sep (comp_to_string r)
   | Completed r, Filtered m ->
-      sprintf "R%c%s%cF%c%s" sep (mapper_stats_to_string ~sep r) sep sep m
+      sprintf "R%c%s%cF%c%s" sep (comp_to_string r) sep sep m
   | Filtered m, Completed c ->
-      sprintf "C%c%s%cF%c%s" sep (mapper_stats_to_string ~sep c) sep sep m
+      sprintf "C%c%s%cF%c%s" sep (comp_to_string c) sep sep m
   | Filtered mr, Filtered mc ->
       sprintf "F%c%s%cF%c%s" sep mr sep sep mc
+
+type mapped_complement_stats = mapper_stats rc_states
+
+let mapped_complement_stats_to_string ?sep =
+  rc_stats_to_string ?sep
+    (fun r c -> fst (List.hd_exn r.positions) > fst (List.hd_exn c.positions))
+    (fun r -> mapper_stats_to_string ?sep r )
 
 type reducer_stats =
   { comp       : bool
@@ -118,13 +123,40 @@ let most_likely_between_rc = function
     else
       Completed c
 
-let reducer ?(check_rc=true) past_threshold proc read read_prob =
+let reducer ?(check_rc=true) past_threshold proc read read_errors =
   if check_rc then begin
-    let mp, pt = both past_threshold proc_to_reducer_stat proc read read_prob in
+    let mp, pt = both past_threshold proc_to_reducer_stat proc read read_errors in
     most_likely_between_rc (mp.regular, mp.complement), pt
   end else
     (* Can't care about previous threshold! *)
-    single proc proc_to_reducer_stat false read read_prob, None
+    single proc proc_to_reducer_stat false read read_errors, None
+
+type alleles_and_positions = (float * string * int) list
+
+let aap_to_string (e,a,p) = sprintf "%s,%d,%0.5f" a p e
+
+let aap_lst_to_string al =
+  String.concat ~sep:";" (List.map al ~f:aap_to_string)
+
+let fc_aap_to_string comp = function
+  | Filtered m          ->
+      sprintf "F %s" m
+  | Completed aap ->
+      sprintf "%c %s" (if comp then 'C' else 'R')
+        (aap_lst_to_string aap)
+
+type rammer_stats =
+  { aap         : alleles_and_positions
+  ; rlikelihood : float array
+  }
+
+let proc_to_rammer_stat report_size proc _comp =
+  { aap         = proc.best_allele_pos report_size
+  ; rlikelihood = proc.per_allele_llhd ()
+  }
+
+let rammer report_size past_threshold proc read read_errors =
+  both past_threshold (proc_to_rammer_stat report_size) proc read read_errors
 
 exception Read_error_parsing of string
 
@@ -136,8 +168,8 @@ let fqi_to_read_and_probs fqi ~k =
   let open Biocaml_unix.Fastq in
   time (sprintf "updating on single read %s" fqi.name) (fun () ->
     match Fastq.phred_log_probs fqi.qualities with
-    | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-    | Result.Ok read_probs -> k fqi.name fqi.sequence read_probs)
+    | Result.Error e        -> repf "%s" (Error.to_string_hum e)
+    | Result.Ok read_errors -> k fqi.name fqi.sequence read_errors)
 
 let fqi2_to_read_and_probs fq1 fq2 ~k =
   let open Biocaml_unix.Fastq in
@@ -146,11 +178,11 @@ let fqi2_to_read_and_probs fq1 fq2 ~k =
   time (sprintf "updating on double read %s" fq1.name) (fun () ->
     match Fastq.phred_log_probs fq1.Biocaml_unix.Fastq.qualities with
     | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-    | Result.Ok rp1 ->
+    | Result.Ok re1 ->
         match Fastq.phred_log_probs fq2.Biocaml_unix.Fastq.qualities with
         | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-        | Result.Ok rp2 ->
-            k fq1.name fq1.sequence rp1 fq2.sequence rp2)
+        | Result.Ok re2 ->
+            k fq1.name fq1.sequence re1 fq2.sequence re2)
 
 type single_conf =
   { allele                : string option
@@ -373,24 +405,27 @@ module Reducer = struct
       proc, [| allele |]
 
   let add_log_likelihoods n state = function
-    | Filtered _  -> ()                     (* Should we warn about ignoring a read? *)
+    | Filtered _  -> ()              (* Should we warn about ignoring a read? *)
     | Completed r ->
         for i = 0 to n - 1 do
           state.(i) <- state.(i) +. r.likelihood.(i)
         done
 
-  let add_log_likelihoods_andz n state zygosity = function
-    | Filtered _  -> ()                     (* Should we warn about ignoring a read? *)
-    | Completed r ->
-        for i = 0 to n - 1 do
-          state.(i) <- state.(i) +. r.likelihood.(i)
-        done;
-        for allele1 = 0 to n - 2 do
-          for allele2 = allele1 + 1 to n - 1 do
-            Zygosity_likelihood_array.add zygosity ~allele1 ~allele2
-              (max r.likelihood.(allele1) r.likelihood.(allele2)) ;
-          done
-        done
+  let add_log_likelihoods_from_llhd ~state zygosity likelihood =
+    let n = Array.length state in
+    for i = 0 to n - 1 do
+      state.(i) <- state.(i) +. likelihood.(i)
+    done;
+    for allele1 = 0 to n - 2 do
+      for allele2 = allele1 + 1 to n - 1 do
+        Zygosity_likelihood_array.add zygosity ~allele1 ~allele2
+          (max likelihood.(allele1) likelihood.(allele2)) ;
+      done
+    done
+
+  let add_log_likelihoods_andz ~state zygosity = function
+    | Filtered _  -> ()              (* Should we warn about ignoring a read? *)
+    | Completed r -> add_log_likelihoods_from_llhd ~state zygosity r.likelihood
 
   let init conf likelihood_first zygosity_report_size read_length pt =
     let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
@@ -402,26 +437,25 @@ module Reducer = struct
         read_length pt
     in
     let past_threshold = init_past_threshold past_threshold_filter in
-    let n = Array.length allele_arr in
     (* Discard resulting past threshold *)
     let r rd rp = fst (reducer ~check_rc past_threshold proc rd rp) in
     let rec t = { state; zygosity; apply; paired; output }
     and state = proc.init_global_state ()
-    and zygosity = Zygosity_likelihood_array.init n
+    and zygosity = Zygosity_likelihood_array.init (Array.length allele_arr)
     and apply fqi =
-      fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
-        r read read_probs
-        |> add_log_likelihoods_andz n t.state t.zygosity)
+      fqi_to_read_and_probs fqi ~k:(fun _name read read_errors ->
+        r read read_errors
+        |> add_log_likelihoods_andz ~state:t.state t.zygosity)
     and paired fq1 fq2 =
-      fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
-        let r1 = r rd1 rp1 in
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 re1 rd2 re2 ->
+        let r1 = r rd1 re1 in
         let r2 =
           match r1 with
-          | Filtered _  -> r rd2 rp2 (* Filtered so check both conf *)
-          | Completed c -> single proc proc_to_reducer_stat (not c.comp) rd2 rp2
+          | Filtered _  -> r rd2 re2 (* Filtered so check both conf *)
+          | Completed c -> single proc proc_to_reducer_stat (not c.comp) rd2 re2
         in
-        add_log_likelihoods_andz n t.state t.zygosity r1;
-        add_log_likelihoods_andz n t.state t.zygosity r2)
+        add_log_likelihoods_andz ~state:t.state t.zygosity r1;
+        add_log_likelihoods_andz ~state:t.state t.zygosity r2)
     and output oc =
       output_zi likelihood_first zygosity_report_size allele_arr t.state
         t.zygosity oc
@@ -493,13 +527,13 @@ module Mapper = struct
     in
     let rec t = { state = []; apply; paired; output }
     and apply =
-      fqi_to_read_and_probs ~k:(fun name read read_probs ->
-        let rc = m read read_probs in
+      fqi_to_read_and_probs ~k:(fun name read read_errors ->
+        let rc = m read read_errors in
         t.state <- (name, Single rc) :: t.state)
     and paired fq1 fq2 =
-      fqi2_to_read_and_probs fq1 fq2 ~k:(fun name rd1 rp1 rd2 rp2 ->
-        let rc1 = m rd1 rp1 in
-        let rc2 = m rd2 rp2 in
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+        let rc1 = m rd1 re1 in
+        let rc2 = m rd2 re2 in
         t.state <- (name, (Paired (rc1, rc2))) :: t.state)
     and output oc =
       fprintf oc "Reads: %d\n" (List.length t.state);
@@ -589,8 +623,8 @@ module Viterbi = struct
     in
     let rec t = { state = []; apply; paired; output }
     and apply =
-      fqi_to_read_and_probs ~k:(fun read_name read read_probs ->
-        t.state <- (read_name, s read read_probs) :: t.state)
+      fqi_to_read_and_probs ~k:(fun read_name read read_errors ->
+        t.state <- (read_name, s read read_errors) :: t.state)
     and paired fq1 fq2 =
       fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 re1 rd2 re2 ->
         t.state <- (read_name, p rd1 re1 rd2 re2) :: t.state)
@@ -611,6 +645,102 @@ module Viterbi = struct
 
 end (* Viterbi *)
 
+(* Reduce and map: Adding this to simplify matters. *)
+module Rammer = struct
+
+  open ParPHMM
+
+  type per_read =
+    { name  : string
+    ; runr  : alleles_and_positions rc_states
+    }
+
+  type t =
+    { per_allele_lhood  : float array
+    ; zygosity          : Zygosity_likelihood_array.t
+    ; mutable per_reads : per_read list
+    ; apply             : Biocaml_unix.Fastq.item -> unit
+    ; paired            : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
+    ; output            : out_channel -> unit
+    }
+
+  let just_aap = function
+    | Filtered m   -> Filtered m
+    | Completed rm -> Completed rm.aap
+
+  let rc_just_aap rc =
+    { regular    = just_aap rc.regular
+    ; complement = just_aap rc.complement
+    }
+
+  let update_state t name rcs =
+    let allars = Reducer.add_log_likelihoods_from_llhd in
+    t.per_reads <- {name; runr = rc_just_aap rcs} :: t.per_reads;
+    match rcs.regular, rcs.complement with
+    | Filtered rm, Filtered cm  ->
+        invalid_argf "Both were filtered!: %s %s" rm cm
+    | Filtered _m, Completed c  ->
+        allars ~state:t.per_allele_lhood t.zygosity c.rlikelihood
+    | Completed r, Filtered _   ->
+        allars ~state:t.per_allele_lhood t.zygosity r.rlikelihood
+    | Completed r, Completed c  ->
+        if compare_emissions r.rlikelihood c.rlikelihood then
+          allars ~state:t.per_allele_lhood t.zygosity r.rlikelihood
+        else
+          allars ~state:t.per_allele_lhood t.zygosity c.rlikelihood
+
+  let output_state likelihood_first zygosity_report_size allele_arr t oc =
+    Reducer.output_zi likelihood_first zygosity_report_size allele_arr
+      t.per_allele_lhood t.zygosity oc;
+    fprintf oc "Per Read Positions:\n";
+    List.iter t.per_reads ~f:(fun {name; runr} ->
+      fprintf oc "%s\n\t%s\n\t%s\n"
+        name
+        (fc_aap_to_string false runr.regular)
+        (fc_aap_to_string true runr.complement))
+
+  let init conf likelihood_first zygosity_report_size ~report_size read_length pt =
+    let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
+        ; _} = conf
+    in
+    let open ParPHMM in
+    let proc, allele_arr =
+      Reducer.to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
+        read_length pt
+    in
+    let past_threshold = init_past_threshold past_threshold_filter in
+    (* Discard resulting past threshold *)
+    let r rd rp = fst (rammer report_size past_threshold proc rd rp) in
+    let rec t = { per_allele_lhood; zygosity; per_reads; apply; paired; output }
+    and per_allele_lhood = proc.init_global_state ()
+    and zygosity = Zygosity_likelihood_array.init (Array.length allele_arr)
+    and per_reads = []
+    and apply fqi =
+      fqi_to_read_and_probs fqi ~k:(fun name read read_errors ->
+        r read read_errors
+        |> update_state t name)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+        let r1 = r rd1 re1 in
+        let r2 = r rd2 re2 in               (* A bit wasteful. *)
+        update_state t name r1;
+        update_state t name r2)
+    and output oc =
+      output_state likelihood_first zygosity_report_size allele_arr t oc
+    in
+    t
+
+  let apply fqi t =
+    t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
+
+  let output oc t =
+    t.output oc
+
+end (* Rammer *)
+
 (** Single Loci Drivers **)
 module Single_loci = struct
 
@@ -624,31 +754,37 @@ module Single_loci = struct
     | Reducer of Reducer.t
     | Mapper of Mapper.t
     | Viterbi of Viterbi.t
+    | Rammer of Rammer.t
 
   let init conf read_length pt mode =
       match mode with
-      | `Reducer (lfst, zrs) ->
+      | `Reducer (lfst, zrs)    ->
           Reducer (Reducer.init conf lfst zrs read_length pt)
-      | `Mapper n            ->
+      | `Mapper n               ->
           Mapper (Mapper.init conf read_length n pt)
-      | `Viterbi             ->
+      | `Viterbi                ->
           Viterbi (Viterbi.init conf read_length pt)
+      | `Rammer (lfst, zrs, rs) ->
+          Rammer (Rammer.init conf lfst zrs ~report_size:rs read_length pt)
 
   (* fqi = FastQ Item *)
   let apply t fqi = match t with
     | Reducer r -> Reducer.apply fqi r
     | Mapper m  -> Mapper.apply fqi m
     | Viterbi v -> Viterbi.apply fqi v
+    | Rammer v  -> Rammer.apply fqi v
 
   let paired t fq1 fq2 = match t with
     | Reducer r -> Reducer.paired fq1 fq2 r
     | Mapper m  -> Mapper.paired fq1 fq2 m
     | Viterbi v -> Viterbi.paired fq1 fq2 v
+    | Rammer v  -> Rammer.paired fq1 fq2 v
 
   let output t oc = match t with
     | Reducer r -> Reducer.output oc r
     | Mapper m  -> Mapper.output oc m
     | Viterbi v -> Viterbi.output oc v
+    | Rammer v  -> Rammer.output oc v
 
 end (* Single_loci *)
 
@@ -709,24 +845,23 @@ module Multiple_reducer = struct
 
   type per_loci =
     { loci           : string
-    ; number_alleles : int
     ; likelihood     : float array
     ; zygosity       : Zygosity_likelihood_array.t
     }
 
-  let add_log_likelihoods  { number_alleles; likelihood; zygosity; _} = function
+  let add_log_likelihoods  { likelihood; zygosity; _} = function
     | Single r        ->
-        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r
+        Reducer.add_log_likelihoods_andz ~state:likelihood zygosity r
     | Paired (r1, r2) ->
-        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r1;
-        Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity r2
+        Reducer.add_log_likelihoods_andz ~state:likelihood zygosity r1;
+        Reducer.add_log_likelihoods_andz ~state:likelihood zygosity r2
 
   let merge state current =
     let b = best current in
     List.iter state ~f:(fun pl ->
       if pl.loci = b.name then add_log_likelihoods pl b.rspr)
 
-  let reduce_to_best_loci ~init ~f ~c = function
+  let to_best_loci ~init ~f ~c = function
     | [] -> invalid_argf "Empty loci list"
     | (name, (proc, _, _)) :: tl ->
         let acc, m = f init proc in
@@ -765,7 +900,7 @@ module Multiple_reducer = struct
     let rec t = { state; apply; paired; output }
     and state =
       List.map paa ~f:(fun (loci, (p, _, number_alleles)) ->
-        { loci; number_alleles
+        { loci
         ; likelihood = p.init_global_state ()
         ; zygosity = Zygosity_likelihood_array.init number_alleles
         })
@@ -778,74 +913,74 @@ module Multiple_reducer = struct
     and apply fqi =
       match pt with
       | `Don't ->
-          fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
-            List.map_snd paa ~f:(fun (p, _, _) -> Single (fst (reducer pt p read read_probs)))
+          fqi_to_read_and_probs fqi ~k:(fun _name read read_errors ->
+            List.map_snd paa ~f:(fun (p, _, _) -> Single (fst (reducer pt p read read_errors)))
             |> merge t.state)
       | `Start ->
-          fqi_to_read_and_probs fqi ~k:(fun _name read read_probs ->
+          fqi_to_read_and_probs fqi ~k:(fun _name read read_errors ->
           List.fold_left paa ~init:(pt, [])
             ~f:(fun (pt, acc) (name, (p, _, _)) ->
-                  let m, npto = reducer pt p read read_probs in
+                  let m, npto = reducer pt p read read_errors in
                   let npt = update_pt npto in
                   (npt, (name, Single m) :: acc))
           |> function _, acc ->
                 merge t.state acc)
     and paired fq1 fq2 =
-      let add_to_state best_name m1 m2 =
-        List.iter t.state ~f:(fun {loci; number_alleles; likelihood; zygosity} ->
-          if loci = best_name then begin
-            Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity m1;
-            Reducer.add_log_likelihoods_andz number_alleles likelihood zygosity m2
+      let add_to_state best_loci m1 m2 =
+        List.iter t.state ~f:(fun {loci; likelihood; zygosity; _ } ->
+          if loci = best_loci then begin
+            Reducer.add_log_likelihoods_andz likelihood zygosity m1;
+            Reducer.add_log_likelihoods_andz likelihood zygosity m2
          end)
       in
       match pt with
       | `Don't ->
-          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 re1 rd2 re2 ->
             if conf.incremental_pairs then
-              let best_name, best_proc, m1 =
-                reduce_to_best_loci paa ~init:()
-                  ~f:(fun () p -> (), fst (reducer `Don't p rd1 rp1))
+              let best_loci, best_proc, m1 =
+                to_best_loci paa ~init:()
+                  ~f:(fun () p -> (), fst (reducer `Don't p rd1 re1))
                   ~c:pr_to_llhd
               in
               let m2 =
                 match m1 with
-                | Filtered  _ -> fst (reducer `Don't best_proc rd2 rp2)
-                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 rp2
+                | Filtered  _ -> fst (reducer `Don't best_proc rd2 re2)
+                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 re2
               in
-              add_to_state best_name m1 m2
+              add_to_state best_loci m1 m2
             else
               List.map_snd paa ~f:(fun (p, _, _) ->
-                let r1 = fst (reducer `Don't p rd1 rp1) in
+                let r1 = fst (reducer `Don't p rd1 re1) in
                 let r2 =
                   match r1 with
-                  | Filtered _  -> fst (reducer `Don't p rd2 rp2) (* Filtered so check both conf *)
-                  | Completed c -> single p proc_to_reducer_stat (not c.comp) rd2 rp2
+                  | Filtered _  -> fst (reducer `Don't p rd2 re2) (* Filtered so check both conf *)
+                  | Completed c -> single p proc_to_reducer_stat (not c.comp) rd2 re2
                 in
                 Paired (r1, r2))
               |> merge t.state)
       | `Start ->
-          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 rp1 rd2 rp2 ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun _name rd1 re1 rd2 re2 ->
             if conf.incremental_pairs then
-              let best_name, best_proc, m1 =
-                reduce_to_best_loci paa ~init:`Start
+              let best_loci, best_proc, m1 =
+                to_best_loci paa ~init:`Start
                   ~f:(fun pt proc ->
-                        let m1, npto = reducer pt proc rd1 rp1 in
+                        let m1, npto = reducer pt proc rd1 re1 in
                         update_pt npto, m1)
                   ~c:pr_to_llhd
               in
               let m2 =
                 match m1 with
-                | Filtered  _ -> fst (reducer `Don't best_proc rd2 rp2)
-                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 rp2
+                | Filtered  _ -> fst (reducer `Don't best_proc rd2 re2)
+                | Completed c -> single best_proc proc_to_reducer_stat (not c.comp) rd2 re2
               in
-              (*let m2 = fst (reducer `Don't best_proc rd2 rp2) in *)
-              add_to_state best_name m1 m2
+              (*let m2 = fst (reducer `Don't best_proc rd2 re2) in *)
+              add_to_state best_loci m1 m2
             else
               List.fold_left paa ~init:(`Start, `Start, [])
                 ~f:(fun (pt1, pt2, acc) (name, (p, _, _)) ->
-                      let m1, npto1 = reducer pt1 p rd1 rp1 in
+                      let m1, npto1 = reducer pt1 p rd1 re1 in
                       let npt1 = update_pt npto1 in
-                      let m2, npto2 = reducer pt2 p rd2 rp2 in
+                      let m2, npto2 = reducer pt2 p rd2 re2 in
                       let npt2 = update_pt npto2 in
                       let nacc = (name, Paired (m1, m2)) :: acc in
                       (npt1, npt2, nacc))
@@ -905,17 +1040,17 @@ module Multiple_mapper = struct
     and apply fqi =
       match pt with
       | `Don't  ->
-          fqi_to_read_and_probs fqi ~k:(fun read_name read read_probs ->
+          fqi_to_read_and_probs fqi ~k:(fun read_name read read_errors ->
             let r = List.map_snd procs ~f:(fun p ->
-                      Single (fst (mapper ~n `Don't p read read_probs)))
+                      Single (fst (mapper ~n `Don't p read read_errors)))
             in
             t.state <- (read_name, r) :: t.state)
       | `Start  ->
           (* Now we have to take into account previous filter results. *)
-          fqi_to_read_and_probs fqi ~k:(fun read_name read read_probs ->
+          fqi_to_read_and_probs fqi ~k:(fun read_name read read_errors ->
             List.fold_left procs ~init:(`Start, [])
               ~f:(fun (pt, acc) (name, p) ->
-                    let m, npto = mapper ~n pt p read read_probs in
+                    let m, npto = mapper ~n pt p read read_errors in
                     let npt = update_pt npto in
                     (npt, (name, Single m) :: acc))
             |> function _, acc ->
@@ -923,21 +1058,21 @@ module Multiple_mapper = struct
     and paired fq1 fq2 =
       match pt with
       | `Don't ->
-          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 re1 rd2 re2 ->
             let r = List.map_snd procs ~f:(fun p ->
-              let m1, _ = mapper `Don't ~n p rd1 rp1 in
-              let m2, _ = mapper `Don't ~n p rd2 rp2 in
+              let m1, _ = mapper `Don't ~n p rd1 re1 in
+              let m2, _ = mapper `Don't ~n p rd2 re2 in
               Paired (m1, m2))
             in
             t.state <- (read_name, r) :: t.state)
       | `Start ->
           (* Now we have to take into account previous filter results. *)
-          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 rp1 rd2 rp2 ->
+          fqi2_to_read_and_probs fq1 fq2 ~k:(fun read_name rd1 re1 rd2 re2 ->
             List.fold_left procs ~init:(`Start, `Start, [])
               ~f:(fun (pt1, pt2, acc) (name, p) ->
-                    let m1, npto1 = mapper ~n pt1 p rd1 rp1 in
+                    let m1, npto1 = mapper ~n pt1 p rd1 re1 in
                     let npt1 = update_pt npto1 in
-                    let m2, npto2 = mapper ~n pt2 p rd2 rp2 in
+                    let m2, npto2 = mapper ~n pt2 p rd2 re2 in
                     let npt2 = update_pt npto2 in
                     let nacc = (name, Paired (m1, m2)) :: acc in
                     (npt1, npt2, nacc))
@@ -957,6 +1092,360 @@ module Multiple_mapper = struct
 
 end (* Multiple_mapper *)
 
+module Multiple_rammer = struct
+
+  type read_result =
+    | SingleRead of alleles_and_positions rc_states
+    (* We'll test both regular and complement options. *)
+
+    | FirstFiltered of
+      { first   : string
+      ; second  : alleles_and_positions rc_states
+      }
+    (* Both orientations filered *)
+
+    | FirstOrientedSecond of
+      { first   : alleles_and_positions rc_states
+      ; second  : alleles_and_positions pass_result
+      }
+    (* At least one orientation of the first read isn't Filtered. *)
+
+    | PairedDependent of alleles_and_positions rc_states
+    (* Orientation and loci of 2nd is determined by 1st. *)
+
+  let rrpr_to_likelihood_opt = function
+    | Filtered  _ -> None
+    | Completed r -> Some r.rlikelihood
+
+  let rrcs_to_likelihood_opt rrcs =
+    match rrcs.regular, rrcs.complement with
+    | Filtered mr, Filtered mc -> None
+    | Filtered _r, Completed c -> Some c.rlikelihood
+    | Completed r, Filtered _c -> Some r.rlikelihood
+    | Completed r, Completed c ->
+      if compare_emissions r.rlikelihood c.rlikelihood then
+        Some r.rlikelihood
+      else
+        Some c.rlikelihood
+
+  let aap_rc_to_string ?sep aaprc =
+    rc_stats_to_string ?sep
+      (fun al1 al2 ->
+        let e1, _, _ = List.hd_exn al1 in
+        let e2, _, _ = List.hd_exn al2 in
+        e1 > e2)
+      aap_lst_to_string aaprc
+
+  let read_result_to_string = function
+    | SingleRead aaprc                      ->
+        sprintf "SR\t%s" (aap_rc_to_string aaprc)
+    | FirstFiltered { first; second}        ->
+        sprintf "FF\t%s\t%s" first (aap_rc_to_string second)
+    | FirstOrientedSecond { first; second } ->
+        sprintf "FO\t%s\t%s" (aap_rc_to_string first)
+          (pass_result_to_string aap_lst_to_string second)
+    | PairedDependent aaprc ->
+        sprintf "PD\t%s" (aap_rc_to_string aaprc)
+
+  let single_filtered_later comp s =
+    if comp then
+      { regular = Filtered "Not best loci"
+      ; complement = Completed s
+      }
+    else
+      { regular = Completed s
+      ; complement = Filtered "Not best loci"
+      }
+
+  type per_read =
+    { name  : string
+    ; rrs   : (string * read_result) list
+    }
+
+  let output_per_reads prlst oc =
+    List.iter prlst ~f:(fun {name ; rrs} ->
+      fprintf oc "%s\n" name;
+      List.iter rrs ~f:(fun (loci, rr) ->
+        fprintf oc "\t%s\t%s\n" loci (read_result_to_string rr)))
+
+  type per_loci =
+    { loci        : string
+    ; likelihood  : float array
+    ; zygosity    : Zygosity_likelihood_array.t
+    }
+
+  type t =
+    { per_loci          : per_loci list
+    ; mutable per_read  : per_read list
+    ; apply             : Biocaml_unix.Fastq.item -> unit
+    ; paired            : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> unit
+    ; output            : out_channel -> unit
+    }
+
+  (* I'm doing an aweful lot of tagging to delay adding likelihoods. *)
+  let max_opt_sp = function
+    | Single None               -> None
+    | Single (Some la)          -> Some (max_arr la, Single la)
+    | Paired (None,    None)    -> None
+    | Paired (None,    Some lb) -> Some (max_arr lb, Single lb)
+    | Paired (Some la, None)    -> Some (max_arr la, Single la)
+    | Paired (Some la, Some lb) -> Some (max (max_arr la) (max_arr lb)
+                                        , Paired (la, lb))
+
+  let merge t = function
+    | []                 -> invalid_argf "Empty loci list!"
+    | likelihood_opt_lst ->
+        List.fold_left likelihood_opt_lst ~init:None
+          ~f:(fun best_opt (loci, lldho) ->
+                match max_opt_sp lldho with
+                | None            -> best_opt
+                | Some (nla, nsp) ->
+                    match best_opt with
+                    | None -> Some (loci, nsp, nla)
+                    | Some (_current_best_loci, _current_best_sp, best_l) ->
+                            if nla > best_l then
+                              Some (loci, nsp, nla)
+                            else
+                              best_opt)
+        |> function
+            | None  -> eprintf "All loci filtered out\n"
+            | Some (best_loci, best_sp_llhd, _bl) ->
+                List.iter t.per_loci ~f:(fun {loci; likelihood; zygosity} ->
+                  if loci = best_loci then begin
+                    match best_sp_llhd with
+                    | Single best_llhd ->
+                        Reducer.add_log_likelihoods_from_llhd
+                            ~state:likelihood zygosity best_llhd
+                    | Paired (b1, b2)  ->
+                        Reducer.add_log_likelihoods_from_llhd
+                          ~state:likelihood zygosity b1;
+                        Reducer.add_log_likelihoods_from_llhd
+                          ~state:likelihood zygosity b2
+                  end)
+
+  let informative comp rc =
+    match rc.regular, rc.complement with
+    | Filtered mr, Filtered mc -> `FilteredBoth (sprintf "Both! %s, %s" mr mc)
+    | Filtered _r, Completed c -> `OneGood (true, c)
+    | Completed r, Filtered _c -> `OneGood (false, r)
+    | Completed r, Completed c ->
+        if comp r c then
+          `OneGood (false, r)
+        else
+          `OneGood (true, c)
+
+  let informative_rammer_res =
+    informative (fun r c -> compare_emissions r.rlikelihood c.rlikelihood)
+
+  let init conf likelihood_first zygosity_report_size ~report_size read_length
+    pt_lst =
+    let { insert_p; band; max_number_mismatches; _ } = conf in
+    let open ParPHMM in
+    let module Mr = Multiple_reducer in
+    let paa =
+      List.map_snd pt_lst ~f:(fun pt ->
+        let proc, allele_arr =
+          Reducer.to_proc_allele_arr ?insert_p ?max_number_mismatches ?band
+            read_length pt
+        in
+        let n = Array.length allele_arr in
+        proc, allele_arr, n)
+    in
+    let pt = init_past_threshold conf.past_threshold_filter in
+    let rammer = rammer report_size in
+    let single p = single p (proc_to_rammer_stat report_size) in
+    let split_rammer pt p read read_errors =
+      let rammer_rc_stats, npt = rammer pt p read read_errors in
+      let rlikelihood_opt = rrcs_to_likelihood_opt rammer_rc_stats in
+      let read_result = Rammer.rc_just_aap rammer_rc_stats in
+      npt, rlikelihood_opt, read_result
+    in
+    let rec t = { per_loci; per_read; apply; paired; output }
+    and per_loci =
+      List.map paa ~f:(fun (loci, (p, _, number_alleles)) ->
+        { loci
+        ; likelihood = p.init_global_state ()
+        ; zygosity = Zygosity_likelihood_array.init number_alleles
+        })
+    and per_read = []
+    and output oc =
+      List.iter2 paa t.per_loci
+        ~f:(fun (_, (_, allele_arr, _)) { loci; likelihood; zygosity; _} ->
+              fprintf oc "%s\n" loci;
+              Reducer.output_zi likelihood_first zygosity_report_size
+                allele_arr likelihood zygosity oc);
+      output_per_reads t.per_read oc
+    and apply fqi =
+      match pt with
+      | `Don't ->
+          fqi_to_read_and_probs fqi ~k:(fun name read read_errors ->
+            let rlikelihoods, rrs =
+              List.map paa ~f:(fun (loci, (p, _, _)) ->
+                let _npt, rlikelihood_opt, read_result =
+                  split_rammer pt p read read_errors
+                in
+                (loci, Single rlikelihood_opt)
+                , (loci, SingleRead read_result))
+              |> List.split
+            in
+            t.per_read <- { name; rrs } :: t.per_read;
+            merge t rlikelihoods)
+      | `Start ->
+          fqi_to_read_and_probs fqi ~k:(fun name read read_errors ->
+            let _final_pt, rlikelihoods, rrslst =
+              List.fold_left paa ~init:(pt, [], [])
+                ~f:(fun (pt, acc1, acc2) (loci, (p, _, _)) ->
+                    let npto, rlikelihood_opt, read_result =
+                      split_rammer pt p read read_errors
+                    in
+                    let npt = update_pt npto in
+                    (npt
+                    , (loci, Single rlikelihood_opt) :: acc1
+                    , (loci, SingleRead read_result) :: acc2))
+            in
+            t.per_read <- {name; rrs = List.rev rrslst} :: t.per_read;
+            merge t rlikelihoods)
+    and paired fq1 fq2 =
+      fqi2_to_read_and_probs fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+        match pt with
+        | `Don't ->                                           (* No previous threshold. *)
+            if conf.incremental_pairs then begin
+              let rlikelihoods, rrs, best_opt =
+                List.fold_left paa ~init:([], [], None)
+                  ~f:(fun (acc1, acc2, best) (loci, (p, _, _)) ->
+                        let rammer_rc_stats1, _npt = rammer `Don't p rd1 re1 in
+                        match informative_rammer_res rammer_rc_stats1 with
+                        | `FilteredBoth _  ->
+                            (loci, Single None) :: acc1
+                            , (loci, SingleRead (Rammer.rc_just_aap rammer_rc_stats1)) :: acc2
+                            , best
+                        | `OneGood (comp, rammer_rc) ->
+                            let l = max_arr rammer_rc.rlikelihood in
+                            begin match best with
+                            | None  ->
+                                let nbest = Some (loci, p, comp, rammer_rc_stats1, l) in
+                                acc1, acc2, nbest
+                            | Some (bloci, bp, bcomp, brammer_rc_stat, bl) ->
+                                if l > bl then    (* replace *)
+                                  let nbest = Some (loci, p, comp, rammer_rc_stats1, l) in
+                                  (loci, Single (rrcs_to_likelihood_opt brammer_rc_stat)) :: acc1
+                                  , (loci, SingleRead (Rammer.rc_just_aap brammer_rc_stat)) :: acc2
+                                  , nbest
+                                else
+                                  (loci, Single (Some rammer_rc.rlikelihood)) :: acc1
+                                  , (loci, SingleRead (Rammer.rc_just_aap rammer_rc_stats1)) :: acc2
+                                  , best
+                            end)
+              in
+              let rlikelihoods, rrs =
+                match best_opt with
+                | None  ->
+                    rlikelihoods, rrs (* Possible if all filtered. *)
+                | Some (bloci, bp, bcomp, brammer_rc_stat, bl) ->
+                    let second = single bp (not bcomp) rd2 re2 in
+                    let combined_likelihood =
+                      Paired (rrcs_to_likelihood_opt brammer_rc_stat
+                             , rrpr_to_likelihood_opt second)
+                    in
+                    (bloci, combined_likelihood) :: rlikelihoods
+                   , (bloci, FirstOrientedSecond
+                              { first = Rammer.rc_just_aap brammer_rc_stat
+                              ; second = Rammer.just_aap second }) :: rrs
+              in
+              t.per_read <- { name; rrs } :: t.per_read;
+              merge t rlikelihoods
+            end else begin
+              let rlikelihoods, rrs =
+                List.map paa ~f:(fun (loci, (p, _, _)) ->
+                  let rammer_rc_stats1, _npt = rammer `Don't p rd1 re1 in
+                  match informative_rammer_res rammer_rc_stats1 with
+                  | `FilteredBoth first  ->
+                      let _npt, rlikelihood_opt2, second = split_rammer `Don't p rd2 re2 in
+                      (loci, Single rlikelihood_opt2)
+                      , (loci, FirstFiltered {first; second})
+                  | `OneGood (comp, rammer_rc) ->
+                      let second = single p (not comp) rd2 re2 in
+                      let combined_likelihood =
+                        Paired (Some rammer_rc.rlikelihood
+                               , rrpr_to_likelihood_opt second)
+                      in
+                      (loci, combined_likelihood)
+                      , (loci, FirstOrientedSecond
+                                { first = Rammer.rc_just_aap rammer_rc_stats1
+                                ; second = Rammer.just_aap second }))
+                |> List.split
+              in
+              t.per_read <- { name; rrs } :: t.per_read;
+              merge t rlikelihoods
+            end
+      | `Start ->
+          if conf.incremental_pairs then begin
+            let npt, rlikelihoods, rrs, best_opt =
+              List.fold_left paa ~init:(`Start, [], [], None)
+                ~f:(fun (pt, acc1, acc2, best) (loci, (p, _, _)) ->
+                      let rammer_rc_stats1, npt = rammer pt p rd1 re1 in
+                      let npto = update_pt npt in
+                      match informative_rammer_res rammer_rc_stats1 with
+                      | `FilteredBoth _  ->
+                          npto
+                          , (loci, Single None) :: acc1
+                          , (loci, SingleRead (Rammer.rc_just_aap rammer_rc_stats1)) :: acc2
+                          , best
+                      | `OneGood (comp, rammer_rc) ->
+                          let l = max_arr rammer_rc.rlikelihood in
+                          begin match best with
+                          | None  ->
+                              let nbest = Some (loci, p, comp, rammer_rc_stats1, l) in
+                              npto, acc1, acc2, nbest
+                          | Some (bloci, bp, bcomp, brammer_rc_stat, bl) ->
+                              if l > bl then    (* replace *)
+                                let nbest = Some (loci, p, comp, rammer_rc_stats1, l) in
+                                npto
+                                , (loci, Single (rrcs_to_likelihood_opt brammer_rc_stat)) :: acc1
+                                , (loci, SingleRead (Rammer.rc_just_aap brammer_rc_stat)) :: acc2
+                                , nbest
+                              else
+                                npto
+                                , (loci, Single (Some rammer_rc.rlikelihood)) :: acc1
+                                , (loci, SingleRead (Rammer.rc_just_aap rammer_rc_stats1)) :: acc2
+                                , best
+                          end)
+            in
+            let rlikelihoods, rrs =
+              match best_opt with
+              | None  ->
+                  rlikelihoods, rrs (* Possible if all filtered. *)
+              | Some (bloci, bp, bcomp, brammer_rc_stat, bl) ->
+                  let second = single bp (not bcomp) rd2 re2 in
+                  let combined_likelihood =
+                    Paired (rrcs_to_likelihood_opt brammer_rc_stat
+                            , rrpr_to_likelihood_opt second)
+                  in
+                  (bloci, combined_likelihood) :: rlikelihoods
+                  , (bloci, FirstOrientedSecond
+                            { first = Rammer.rc_just_aap brammer_rc_stat
+                            ; second = Rammer.just_aap second }) :: rrs
+            in
+            t.per_read <- { name; rrs } :: t.per_read;
+            merge t rlikelihoods
+          end else begin
+            failwith "Not Implemented: Do you REALLY want filtered non-increment pairs?"
+          end)
+    in
+    t
+
+  let apply fqi t =
+    t.apply fqi
+
+  let paired fq1 fq2 t =
+    t.paired fq1 fq2
+
+  let output oc t =
+    t.output oc
+
+
+end (* Multiple_rammer *)
+
 module Mulitple_loci = struct
 
   let conf ?insert_p ?band ?max_number_mismatches ~past_threshold_filter
@@ -967,6 +1456,7 @@ module Mulitple_loci = struct
   type t =
     | Reducer of Multiple_reducer.t
     | Mapper of Multiple_mapper.t
+    | Rammer of Multiple_rammer.t
 
   let init conf read_length pt mode =
       match mode with
@@ -974,19 +1464,24 @@ module Mulitple_loci = struct
           Reducer (Multiple_reducer.init conf lfst zrs read_length pt)
       | `Mapper n ->
           Mapper (Multiple_mapper.init conf read_length n pt)
+      | `Rammer (lfst, zrs, rs) ->
+          Rammer (Multiple_rammer.init conf lfst zrs ~report_size:rs
+                    read_length pt)
 
   (* fqi = FastQ Item *)
   let apply t fqi = match t with
     | Reducer r -> Multiple_reducer.apply fqi r
     | Mapper m  -> Multiple_mapper.apply fqi m
+    | Rammer m  -> Multiple_rammer.apply fqi m
 
   let paired t fq1 fq2 = match t with
     | Reducer r -> Multiple_reducer.paired fq1 fq2 r
     | Mapper m  -> Multiple_mapper.paired fq1 fq2 m
+    | Rammer m  -> Multiple_rammer.paired fq1 fq2 m
 
   let output t oc = match t with
     | Reducer r -> Multiple_reducer.output oc r
     | Mapper m  -> Multiple_mapper.output oc m
+    | Rammer m  -> Multiple_rammer.output oc m
 
 end (* Mulitple_loci *)
-

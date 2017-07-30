@@ -1905,6 +1905,7 @@ type proc =
 
   ; best_alleles    : int -> (float * string) list
   ; best_positions  : int -> (float * int) list
+  ; best_allele_pos : int -> (float * string * int) list
   (* After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
@@ -1937,7 +1938,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       in
       let ref_length = Array.length allele_a in
       let ws = ForwardSLogSpace.W.generate ~ref_length ~read_length in
-      let best_positions n =
+      let best_positions n =               (* 'n' useless when single allele. *)
         let lgn = largest n in
         ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
           ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
@@ -1968,10 +1969,14 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
         pass.paired read1 read2
       in
       let best_alleles _n = [ ForwardSLogSpace.W.get_emission ws, allele] in
+      let best_allele_pos n =
+        best_positions n |> List.map ~f:(fun (l, i) -> (l, allele, i))
+      in
       let per_allele_llhd () = [| ForwardSLogSpace.W.get_emission ws |] in
       let init_global_state () = [| LogProbabilities.one |] in
       { single; paired
-      ; best_alleles; best_positions; per_allele_llhd
+      ; best_alleles; best_positions; best_allele_pos
+      ; per_allele_llhd
       ; init_global_state
       ; maximum_match
       }
@@ -1994,6 +1999,20 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
     let lgn = largest n in
     Pm.fold_indices_and_values emission_pm ~init:[]
       ~f:(fun acc i emission -> lgn emission alleles.(i) acc)
+  in
+  let best_allele_pos n =
+    let alleles = Array.map ~f:fst alleles in
+    let emission_pm = F.W.get_emission ws in
+    let lgn a p = largest n a p in
+    Pm.fold_indices_and_values emission_pm ~init:[]
+      ~f:(fun acc i emission ->
+            let _, bplst =
+              F.W.fold_over_final ws ~init:(0, [])
+                ~f:(fun (p, acc) fcam -> (p + 1, lgn (Pm.get fcam i) p acc))
+            in
+            let _best_prob, best_pos = List.hd_exn bplst in
+            lgn emission (alleles.(i), best_pos) acc)
+    |> List.map ~f:(fun (e, (a, p)) -> (e, a, p))
   in
   let best_positions n =
     let lgn = largest n in
@@ -2083,7 +2102,8 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           filtered ~filter
     in
     { single; paired
-    ; best_alleles ; best_positions ; per_allele_llhd
+    ; best_alleles ; best_positions ; best_allele_pos
+    ; per_allele_llhd
     ; maximum_match
     ; init_global_state
     }
