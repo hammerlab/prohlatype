@@ -37,7 +37,7 @@ let () =
     in
     Term.(const allele_distances
             (* Allele set construction args *)
-            $ file_arg $ merge_arg
+            $ alignment_arg $ merge_arg
             (* How to measure distances. *)
             $ defaulting_distance_flag
         , info app_name ~version ~doc ~man)

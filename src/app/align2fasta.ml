@@ -75,7 +75,7 @@ let () =
       ; `P bug
       ]
     in
-    Term.(const convert $ output_fname_arg $ file_arg $ merge_arg $ defaulting_distance_flag
+    Term.(const convert $ output_fname_arg $ alignment_arg $ merge_arg $ defaulting_distance_flag
         , info app_name ~version ~doc ~man)
   in
   match Term.eval convert with

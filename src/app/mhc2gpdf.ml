@@ -118,7 +118,7 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg $ optional_distance_flag
+            $ alignment_arg $ merge_arg $ optional_distance_flag
             (* output file *)
             $ output_fname_arg
             (* allele selection. *)

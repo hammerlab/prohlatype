@@ -1029,11 +1029,11 @@ module ForwardPass (W : Workspace_intf) = struct
       full_f ?rows ~base_p ~filter ws recurrences ~read:read2 ~reference
 
   (* Without the filter. *)
-  let pass ?rows ws recurrences ~read ~reference =
-    ignore (pass_f ~filter:empty_filter ?rows ws recurrences ~read ~reference)
+  let pass ?base_p ?rows ws recurrences ~read ~reference =
+    ignore (pass_f ?base_p ~filter:empty_filter ?rows ws recurrences ~read ~reference)
 
-  let full ?rows ws recurrences ~read ~reference =
-    ignore (full_f ~filter:empty_filter ?rows ws recurrences ~read ~reference)
+  let full ?base_p ?rows ws recurrences ~read ~reference =
+    ignore (full_f ?base_p ~filter:empty_filter ?rows ws recurrences ~read ~reference)
 
   let paired ?rows ws recurrences ~read1 ~read2 ~reference =
     ignore (paired_f ?rows ~filter:empty_filter ws recurrences ~read1 ~read2 ~reference)
@@ -1047,6 +1047,10 @@ type 'a pass_result =
 let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
   | Filtered m  -> sprintf "Filtered: %s" m
+
+let map_completed ~f = function
+  | Completed c -> Completed (f c)
+  | Filtered m  -> Filtered m
 
 let completed = function
   | Completed _ -> true
@@ -1883,6 +1887,11 @@ type proc =
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
   ; single            : ?prev_threshold:float
+                      -> ?base_p:float mt             (* ascending partition map. *)
+                      (* NOTE: Be careful about passing in a base_p. It could
+                         slow down the calculation dramnatically, so have think
+                         carefully about whether these values couldn't be
+                         factored out. *)
                       -> reverse_complement:bool
                       -> read:string
                       -> read_errors:float array
@@ -1911,10 +1920,11 @@ type proc =
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd : unit -> float array
+  ; per_allele_llhd : unit -> float mt
   (* If we're not interested in diagnostics, but just the end result, we want
      the per allele likelihood: *)
 
+  (* For paired reads when we want to know the next base. *)
   ; maximum_match   : unit -> float
   (* We might also want to get a possible threshold value for future passes. *)
   }
@@ -1958,7 +1968,9 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
         ForwardSLogSpace.passes ?insert_p ?max_number_mismatches
           ~transition_ref_length ~read_length ws allele_a
       in
-      let single ?prev_threshold ~reverse_complement ~read ~read_errors =
+      let single ?prev_threshold ?base_p ~reverse_complement ~read ~read_errors =
+        (* Ignore base_p for the moment, as I can't think of a good reason to 
+           implement this logic in the single case. *)
         let read = access reverse_complement read read_errors in
         pass.full read
       in
@@ -1972,7 +1984,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       let best_allele_pos n =
         best_positions n |> List.map ~f:(fun (l, i) -> (l, allele, i))
       in
-      let per_allele_llhd () = [| ForwardSLogSpace.W.get_emission ws |] in
+      let per_allele_llhd () = Pm.init_all_a ~size:1 (ForwardSLogSpace.W.get_emission ws) in
       let init_global_state () = [| LogProbabilities.one |] in
       { single; paired
       ; best_alleles; best_positions; best_allele_pos
@@ -2026,23 +2038,23 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
       ~init:neg_infinity ~f:(fun v fcam -> max v (F.cam_max_cell fcam))
   in
   let reference i = emissions_a.(i) in
-  let per_allele_llhd () = Pm.to_array (F.W.get_emission ws) in
+  let per_allele_llhd () = F.W.get_emission ws in
   let init_global_state () = F.per_allele_emission_arr t.number_alleles in
   let normal () =
     (* TODO: Refactor this to be a bit more elegant, though it isn't obvious
        how to preserve the type variability of the filters. *)
-    let single ?prev_threshold ~reverse_complement ~read ~read_errors =
+    let single ?prev_threshold ?base_p ~reverse_complement ~read ~read_errors =
       (* We do not have to clear the workspace, since a full pass will
          overwrite all elements of the workspace.
         F.Workspace.clear ws;*)
       let read = access reverse_complement read read_errors in
       let unfiltered () =
-        F.Regular.full ws r ~reference ~read;
+        F.Regular.full ?base_p ws r ~reference ~read;
         Completed ()
       in
       let filtered ~filter =
         try
-          let _final_filter = F.Regular.full_f ~filter ws r ~reference ~read in
+          let _final_filter = F.Regular.full_f ?base_p ~filter ws r ~reference ~read in
           Completed ()
         with PastThreshold msg ->
           Filtered msg
@@ -2133,5 +2145,3 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   | None                                    -> normal ()
   | Some c when c.warmup >= last_read_index -> normal ()
   | Some c                                  -> banded c
-
-

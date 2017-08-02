@@ -67,12 +67,12 @@ let non_negative_int =
     (non_negative_int_parser, int_fprinter)
 
 (*** Graph source arguments. ***)
-let file_arg =
+let alignment_arg =
   let docv = "FILE" in
   let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
               file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
-  Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
+  Arg.(value & opt (some file) None & info ~doc ~docv ["alignment"])
 
 let merge_arg, merges_arg =
   let parser_ path =
@@ -523,11 +523,12 @@ let do_not_finish_singles_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-finish-singles"])
 
+let zygosity_report_size_argument = "zygosity-report-size"
 let zygosity_report_size_arg =
-  let open ParPHMM_drivers.Reducer in
+  let open ParPHMM_drivers.Output in
   let doc =
     sprintf "Override the default number of allelic pairs reported as part of \
              the zygosity portion. Defaults to %d." default_zygosity_report_size
   in
   Arg.(value & opt positive_int default_zygosity_report_size
-             & info ~doc ["zygosity-report-size"])
+             & info ~doc [zygosity_report_size_argument])

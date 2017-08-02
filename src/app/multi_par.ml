@@ -26,56 +26,59 @@ let to_read_size_dependent
               let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
               name, pt))
 
-module Pdml = ParPHMM_drivers.Mulitple_loci
+module Pd = ParPHMM_drivers
+module Pdml = Pd.Multiple_loci
 
-let to_comp conf read_size rp mode =
+let init conf opt read_size rp =
   let ptlst =
     time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
       (fun () -> rp read_size)
   in
   time "Allocating forward pass workspaces"
-    (fun () -> Pdml.init conf read_size ptlst mode)
+    (fun () -> Pdml.init conf opt read_size ptlst)
 
-let to_apply conf mode =
-  fun acc fqi ->
-    match acc with
-    | `Setup rp ->
-        let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-        let c = to_comp conf read_size rp mode in
-        `Set (Pdml.apply c fqi; c)
-    | `Set c ->
-        `Set (Pdml.apply c fqi; c)
+let single conf opt acc fqi =
+  match acc with
+  | `Setup rp ->
+      let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+      let t, s = init conf opt read_size rp in
+      t.Pd.merge s (t.Pd.single fqi);
+      `Set (t, s)
+  | `Set (t, s) ->
+      t.Pd.merge s (t.Pd.single fqi);
+      `Set (t, s)
 
-let to_paired conf mode =
-  fun acc fq1 fq2 ->
-    match acc with
-    | `Setup rp ->
-        let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
-        let c = to_comp conf read_size rp mode in
-        `Set (Pdml.paired c fq1 fq2; c)
-    | `Set c ->
-        `Set (Pdml.paired c fq1 fq2; c)
+let paired conf opt acc fq1 fq2 =
+  match acc with
+  | `Setup rp ->
+      let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+      let t, s = init conf opt read_size rp in
+      t.Pd.merge s (t.Pd.paired fq1 fq2);
+      `Set (t, s)
+  | `Set (t, s) ->
+      t.Pd.merge s (t.Pd.paired fq1 fq2);
+      `Set (t, s)
 
-let across_fastq conf mode
+let across_fastq conf opt
   (* Fastq specific arguments. *)
   ?number_of_reads ~specific_reads file init =
-  let f = to_apply conf mode in
+  let f = single conf opt in
   try
     Fastq.fold ?number_of_reads ~specific_reads ~init file ~f
     |> function
-        | `Setup _  -> eprintf "Didn't find any reads."
-        | `Set c    -> Pdml.output c stdout
-  with ParPHMM_drivers.Read_error_parsing e ->
+        | `Setup _    -> eprintf "Didn't find any reads."
+        | `Set (t, s) -> t.Pd.output s stdout
+  with Pd.Fastq_items.Read_error_parsing e ->
     eprintf "%s" e
 
-let across_paired ~finish_singles conf mode
+let across_paired ~finish_singles conf opt
     (* Fastq specific arguments. *)
     ?number_of_reads ~specific_reads file1 file2 init =
-  let f = to_paired conf mode in
+  let f = paired conf opt in
   try
     begin
       if finish_singles then
-        let ff = to_apply conf mode in
+        let ff = single conf opt in
         let fs = ff in
         Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
           ~init ~f ~ff ~fs
@@ -89,9 +92,9 @@ let across_paired ~finish_singles conf mode
         | `StoppedByFilter o
         | `DesiredReads o ->
             match o with
-            | `Setup _ -> eprintf "Didn't find any reads."
-            | `Set c   -> Pdml.output c stdout
-  with ParPHMM_drivers.Read_error_parsing e ->
+            | `Setup _    -> eprintf "Didn't find any reads."
+            | `Set (t, s) -> t.Pd.output s stdout
+  with Pd.Fastq_items.Read_error_parsing e ->
     eprintf "%s" e
 
 let type_
@@ -117,7 +120,6 @@ let type_
   (* how are we typing *)
     map_depth
     not_incremental_pairs
-    mode
     forward_accuracy_opt
     =
   Option.value_map forward_accuracy_opt ~default:()
@@ -139,19 +141,19 @@ let type_
   let past_threshold_filter = not do_not_past_threshold_filter in
   let incremental_pairs = not not_incremental_pairs in
   let finish_singles = not do_not_finish_singles in
-  let conf = Pdml.conf ~insert_p ?band ?max_number_mismatches
-                    ~past_threshold_filter ~incremental_pairs ()
+  let conf = Pd.multiple_conf ~insert_p ?band ?max_number_mismatches
+                ~past_threshold_filter ~incremental_pairs ()
   in
   let need_read_size_r =
     to_read_size_dependent
       ~alignment_files ~merge_files ~distance
       ~skip_disk_cache
   in
-  let mode =
-    match mode with
-    | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
-    | `Mapper  -> `Mapper map_depth
-    | `Rammer  -> `Rammer (likelihood_first, zygosity_report_size, map_depth)
+  let opt =
+    { Pd.likelihood_first
+    ; zygosity_report_size
+    ; report_size = map_depth
+    }
   in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
@@ -159,13 +161,13 @@ let type_
     let init =
       match read_size_override with
       | None   -> `Setup need_read_size
-      | Some r -> `Set (to_comp conf r need_read_size mode)
+      | Some r -> `Set (init conf opt r need_read_size)
     in
     begin match fastq_file_lst with
     | []              -> invalid_argf "Cmdliner lied!"
-    | [fastq]         -> across_fastq conf mode
+    | [fastq]         -> across_fastq conf opt
                             ?number_of_reads ~specific_reads fastq init
-    | [read1; read2]  -> across_paired ~finish_singles conf mode
+    | [read1; read2]  -> across_paired ~finish_singles conf opt
                             ?number_of_reads ~specific_reads read1 read2 init
     | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                            (List.length lst)
@@ -174,14 +176,14 @@ let type_
 let () =
   let open Cmdliner in
   let open Common_options in
-  let files_arg =
+  let alignments_arg =
     let docv = "FILE" in
     let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
                 file will initially define the set of alleles to be used for \
                 named locus. Supply multiple file (or merge) arguments to \
                 compute the likelihood of a read against each locus and add to \
                 the most likely (highest likelihood)." in
-    Arg.(value & opt_all file [] & info ~doc ~docv ["f"; "file"])
+    Arg.(value & opt_all file [] & info ~doc ~docv ["alignments"])
   in
   let max_number_mismatches_arg =
     let docv = "POSITIVE INTEGER" in
@@ -189,27 +191,6 @@ let () =
                seen this many mismatches." in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv
           ["max-mismatches"])
-  in
-  let mode_flag =
-    let open Arg in
-    let modes =
-      [ ( `Reducer
-        , info ~doc:"Aggregate read data into per allele likelihoods, \
-                    default. Each read's likelihood is added only to the most \
-                    likely loci's."
-          [ "reducer" ])
-      ; ( `Mapper
-        , info ~doc:
-            (sprintf "Map each read into the most likely alleles and \
-                     positions, across loci. Specify the %S argument to change
-                     the number of elements that are reported."
-              map_depth_argument)
-          [ "map" ])
-      ; ( `Rammer
-        , info ~doc: "Combination of reduce and map." [ "rammer" ])
-      ]
-    in
-    value & vflag `Reducer  modes
   in
   let class1gen_arg =
     let docv  = "DIRECTORY" in
@@ -246,7 +227,7 @@ let () =
     Term.(const type_
             (* Allele information source *)
             $ class1gen_arg
-            $ files_arg $ merges_arg $ defaulting_distance_flag
+            $ alignments_arg $ merges_arg $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag
             (* What are we typing *)
@@ -266,7 +247,6 @@ let () =
             (* How are we typing *)
             $ map_depth_arg
             $ do_not_use_incremental_pairs_flag
-            $ mode_flag
             $ forward_pass_accuracy_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg

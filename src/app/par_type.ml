@@ -26,73 +26,117 @@ let to_read_size_dependent
                 let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
                 Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
-module Pdsl = ParPHMM_drivers.Single_loci
+module BoilerPlate (S : ParPHMM_drivers.S) = struct
 
-let to_comp conf rp read_size mode =
-  let pt =
-    time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-      (fun () -> rp read_size)
+  module D = ParPHMM_drivers.Make_single_loci(S)
+
+  let init conf rp read_size opt =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> D.init conf read_size pt opt)
+
+  let single conf opt =
+    fun acc fqi ->
+      match acc with
+      | `Setup rp ->
+          let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+          let t, s = init conf rp read_size opt in
+          D.merge t s (D.single t fqi);
+          `Set (t, s)
+      | `Set (t,s) ->
+          D.merge t s (D.single t fqi);
+          acc
+
+  let paired conf opt =
+    fun acc fq1 fq2 ->
+      match acc with
+      | `Setup rp ->
+          let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+          let t, s = init conf rp read_size opt in
+          D.merge t s (D.paired t fq1 fq2);
+          `Set (t, s)
+      | `Set (t, s) ->
+          D.merge t s (D.paired t fq1 fq2);
+          acc
+
+  let across_fastq conf opt
+      (* Fastq specific arguments. *)
+      ?number_of_reads ~specific_reads file init =
+    let f = single conf opt in
+    try
+      Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
+      |> function
+          | `Setup _    -> eprintf "Didn't find any reads."
+          | `Set (t, s) -> D.output t s stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired ~finish_singles conf opt
+      (* Fastq specific arguments. *)
+      ?number_of_reads ~specific_reads file1 file2 init =
+    let f = paired conf opt in
+    try
+      begin
+        if finish_singles then
+          let fs = single conf opt in
+          let ff = fs in
+          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+            ~init ~f ~ff ~fs
+        else
+          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+      end
+      |> function
+          | `BothFinished o
+          | `FinishedSingle o
+          | `OneReadPairedFinished (_, o)
+          | `StoppedByFilter o
+          | `DesiredReads o ->
+              match o with
+              | `Setup _    -> eprintf "Didn't find any reads."
+              | `Set (t, s) -> D.output t s stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* BoilerPlate *)
+
+module Bv = BoilerPlate(ParPHMM_drivers.Viterbi)
+
+let viterbi read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles =
+  let init =
+    match read_size_override with
+    | None   -> `Setup need_read_size
+    | Some r -> `Set (Bv.init conf need_read_size r ())
   in
-  time "Allocating forward pass workspace"
-    (fun () -> Pdsl.init conf read_size pt mode)
+  match fastq_file_list with
+  | []              -> invalid_argf "Cmdliner lied!"
+  | [fastq]         -> Bv.across_fastq conf ()
+                            ?number_of_reads ~specific_reads fastq init
+  | [read1; read2]  -> Bv.across_paired ~finish_singles conf ()
+                            ?number_of_reads ~specific_reads read1 read2 init
+  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                          (List.length lst)
 
-let to_apply conf mode =
-  fun acc fqi ->
-    match acc with
-    | `Setup rp ->
-        let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-        let c = to_comp conf rp read_size mode in
-        `Set (Pdsl.apply c fqi; c)
-    | `Set c ->
-        `Set (Pdsl.apply c fqi; c)
+module Bf = BoilerPlate(ParPHMM_drivers.Forward)
 
-let to_paired conf mode =
-  fun acc fq1 fq2 ->
-    match acc with
-    | `Setup rp ->
-        let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
-        let c = to_comp conf rp read_size mode in
-        `Set (Pdsl.paired c fq1 fq2; c)
-    | `Set c ->
-        `Set (Pdsl.paired c fq1 fq2; c)
-
-let across_fastq conf mode
-    (* Fastq specific arguments. *)
-    ?number_of_reads ~specific_reads file init =
-  let f = to_apply conf mode in
-  try
-    Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
-    |> function
-        | `Setup _ -> eprintf "Didn't find any reads."
-        | `Set c   -> Pdsl.output c stdout
-  with ParPHMM_drivers.Read_error_parsing e ->
-    eprintf "%s" e
-
-let across_paired ~finish_singles conf mode
-    (* Fastq specific arguments. *)
-    ?number_of_reads ~specific_reads file1 file2 init =
-  let f = to_paired conf mode in
-  try
-    begin
-      if finish_singles then
-        let fs = to_apply conf mode in
-        let ff = fs in
-        Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
-          ~init ~f ~ff ~fs
-      else
-        Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
-    end
-    |> function
-        | `BothFinished o
-        | `FinishedSingle o
-        | `OneReadPairedFinished (_, o)
-        | `StoppedByFilter o
-        | `DesiredReads o ->
-            match o with
-            | `Setup _ -> eprintf "Didn't find any reads."
-            | `Set c   -> Pdsl.output c stdout
-  with ParPHMM_drivers.Read_error_parsing e ->
-    eprintf "%s" e
+let forward opt read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles =
+  let init =
+    match read_size_override with
+    | None   -> `Setup need_read_size
+    | Some r -> `Set (Bf.init conf need_read_size r opt)
+  in
+  match fastq_file_list with
+  | []              -> invalid_argf "Cmdliner lied!"
+  | [fastq]         -> Bf.across_fastq conf opt
+                          ?number_of_reads ~specific_reads fastq init
+  | [read1; read2]  -> Bf.across_paired ~finish_singles conf opt
+                          ?number_of_reads ~specific_reads read1 read2 init
+  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                        (List.length lst)
 
 let type_
   (* Allele information source *)
@@ -104,7 +148,7 @@ let type_
   (* Process *)
     skip_disk_cache
   (* What to do? *)
-    fastq_file_lst number_of_reads specific_reads
+    fastq_file_list number_of_reads specific_reads
     do_not_finish_singles
   (* options *)
     insert_p
@@ -143,30 +187,21 @@ let type_
         let check_rc = not not_check_rc in
         let past_threshold_filter = not do_not_past_threshold_filter in
         let finish_singles = not do_not_finish_singles in
-        let mode =
-          match mode with
-          | `Reducer -> `Reducer (likelihood_first, zygosity_report_size)
-          | `Mapper  -> `Mapper map_depth
-          | `Viterbi -> `Viterbi
-          | `Rammer  -> `Rammer (likelihood_first, zygosity_report_size, map_depth)
+        let conf =
+          ParPHMM_drivers.single_conf ?allele ~insert_p ?band
+            ?max_number_mismatches ~past_threshold_filter ~check_rc ()
         in
-        let conf = Pdsl.conf ?allele ~insert_p ?band ?max_number_mismatches
-                        ~past_threshold_filter ~check_rc ()
-        in
-        let init =
-          match read_size_override with
-          | None   -> `Setup need_read_size
-          | Some r -> `Set (to_comp conf need_read_size r mode)
-        in
-        begin match fastq_file_lst with
-        | []              -> invalid_argf "Cmdliner lied!"
-        | [fastq]         -> across_fastq conf mode
-                                ?number_of_reads ~specific_reads fastq init
-        | [read1; read2]  -> across_paired ~finish_singles conf mode
-                                ?number_of_reads ~specific_reads read1 read2 init
-        | lst             -> invalid_argf "More than 2, %d fastq files specified!"
-                              (List.length lst)
-        end
+        match mode with
+        | `Viterbi ->
+            viterbi read_size_override need_read_size conf fastq_file_list
+              number_of_reads specific_reads finish_singles
+        | `Forward ->
+            let opt = { ParPHMM_drivers.likelihood_first
+                      ; zygosity_report_size
+                      ; report_size = map_depth
+                      } in
+            forward opt read_size_override need_read_size conf fastq_file_list
+              number_of_reads specific_reads finish_singles
 
 let () =
   let open Cmdliner in
@@ -187,28 +222,26 @@ let () =
   let mode_flag =
     let open Arg in
     let modes =
-      [ ( `Reducer
-        , info ~doc:"Aggregate read data into per allele likelihoods, default."
-          [ "reducer" ])
-      ; ( `Mapper
-        , info ~doc:
-            (sprintf "Map each read into the most likely alleles and \
-                     positions. Specify the %S argument to change the number \
-                     of elements that are reported."
-              map_depth_argument)
-          [ "map" ])
-      ; ( `Viterbi
-        , info ~doc:
+      [ ( `Viterbi, info ~doc:
             (sprintf "Map each read into the viterbi decoded path against a \
                       specified allele. Specify the allele with %S \
                       argument, defaults to using the reference of the loci."
               specific_allele_argument)
           [ "viterbi" ])
-      ; ( `Rammer
-        , info ~doc: "Combination of reduce and map." [ "rammer" ])
+      ; ( `Forward, info ~doc:
+          (sprintf "Default mode: aggregate read data into per allele \
+            likelihoods. This mode reports the aggregated per allele \
+            likelihoods as well as a subset of all possible zygosity
+            likelihoods (control the number with %S). Furthermore, for each \
+            read we'll report the most likely alleles, their likely emission \
+            and the position with the largest emission. Specify the %S \
+            argument to change the number of elements that are reported."
+              zygosity_report_size_argument
+              map_depth_argument)
+          [ "forward" ])
       ]
     in
-    value & vflag `Reducer modes
+    value & vflag `Forward modes
   in
   let type_ =
     let version = "0.0.0" in
@@ -228,7 +261,7 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
-            $ file_arg $ merge_arg $ defaulting_distance_flag
+            $ alignment_arg $ merge_arg $ defaulting_distance_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
             $ do_not_ignore_suffixed_alleles_flag
