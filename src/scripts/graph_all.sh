@@ -67,7 +67,7 @@ function graph() {
   S=`basename $FILE`
   O=graph_2016_10_17/${S%.txt}
 
-  ./mhc2gpdf.native --no-cache --no-open -f $FILE -o $O
+  ./mhc2gpdf.native --no-cache --no-open --alignment $FILE -o $O
 }
 
 export -f graph
