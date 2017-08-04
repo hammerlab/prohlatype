@@ -766,10 +766,6 @@ module SingleWorkspace (R : Ring) :
 
 end (* SingleWorkspace *)
 
-type 'a single_or_paired =
-  | Single of 'a
-  | Paired of ('a * 'a)
-
 (* Describe a path, a decoding through the PHMM. *)
 module Path = struct
 

@@ -28,7 +28,7 @@ let to_read_size_dependent
 
 module BoilerPlate (S : ParPHMM_drivers.S) = struct
 
-  module D = ParPHMM_drivers.Make_single_loci(S)
+  module D = ParPHMM_drivers.Make_single(S)
 
   let init conf rp read_size opt =
     let pt =
@@ -62,9 +62,7 @@ module BoilerPlate (S : ParPHMM_drivers.S) = struct
           D.merge t s (D.paired t fq1 fq2);
           acc
 
-  let across_fastq conf opt
-      (* Fastq specific arguments. *)
-      ?number_of_reads ~specific_reads file init =
+  let across_fastq conf opt ?number_of_reads ~specific_reads file init =
     let f = single conf opt in
     try
       Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
@@ -74,9 +72,8 @@ module BoilerPlate (S : ParPHMM_drivers.S) = struct
     with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
       eprintf "%s" e
 
-  let across_paired ~finish_singles conf opt
-      (* Fastq specific arguments. *)
-      ?number_of_reads ~specific_reads file1 file2 init =
+  let across_paired ~finish_singles conf opt ?number_of_reads ~specific_reads
+    file1 file2 init =
     let f = paired conf opt in
     try
       begin
@@ -138,6 +135,64 @@ let forward opt read_size_override need_read_size conf fastq_file_list
   | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                         (List.length lst)
 
+module Parallel (S : ParPHMM_drivers.S) = struct
+
+  module D = ParPHMM_drivers.Make_single(S)
+
+  let init conf rp read_size opt =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> D.init conf read_size pt opt)
+
+  let across_fastq conf opt ?number_of_reads ~specific_reads ~nprocs
+    file driver state =
+    try
+      let map fqi = D.single driver fqi in
+      let mux rr = D.merge driver state rr in
+      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
+      D.output driver state stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired conf opt ?number_of_reads ~specific_reads ~nprocs
+    file1 file2 driver state =
+    let map = function
+      | Single fqi      -> D.single driver fqi
+      | Paired (f1, f2) -> D.paired driver f1 f2
+    in
+    let mux rr = D.merge driver state rr in
+    try
+      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
+        ~nprocs ~map ~mux file1 file2;
+      D.output driver state stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Parallel *)
+
+module Pf = Parallel(ParPHMM_drivers.Forward)
+
+let p_forward opt read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles nprocs =
+  match read_size_override with
+  | None   -> invalid_argf "Must specify read size for pallel!"
+  | Some r -> let driver, state = Pf.init conf need_read_size r opt in
+              begin match fastq_file_list with
+              | []              -> invalid_argf "Cmdliner lied!"
+              | [fastq]         -> Pf.across_fastq conf opt
+                                      ?number_of_reads ~specific_reads ~nprocs
+                                      fastq driver state
+              | [read1; read2]  -> Pf.across_paired conf opt
+                                      ?number_of_reads ~specific_reads ~nprocs
+                                      read1 read2 driver state
+              | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                    (List.length lst)
+              end
+
+
 let type_
   (* Allele information source *)
     alignment_file merge_file distance
@@ -166,6 +221,7 @@ let type_
     map_depth
     mode
     forward_accuracy_opt
+    number_processes_opt
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
@@ -200,8 +256,14 @@ let type_
                       ; zygosity_report_size
                       ; report_size = map_depth
                       } in
-            forward opt read_size_override need_read_size conf fastq_file_list
-              number_of_reads specific_reads finish_singles
+            begin match number_processes_opt with
+            | None  ->
+                forward opt read_size_override need_read_size conf fastq_file_list
+                  number_of_reads specific_reads finish_singles
+            | Some n ->
+                p_forward opt read_size_override need_read_size conf fastq_file_list
+                  number_of_reads specific_reads finish_singles n
+            end
 
 let () =
   let open Cmdliner in
@@ -287,6 +349,7 @@ let () =
             $ map_depth_arg
             $ mode_flag
             $ forward_pass_accuracy_arg
+            $ number_processes_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag
