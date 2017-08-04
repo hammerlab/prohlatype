@@ -821,9 +821,9 @@ module Multiple_loci = struct
     let rec update loci stat best tl =
       let l = max_pm stat.Forward.likelihood in
       match best with
+      | None                        -> loop (Some (l, loci, Single stat)) tl
       | Some (bl, _, _) when l > bl -> loop (Some (l, loci, Single stat)) tl
-      | _                           ->
-          loop best tl
+      | Some _                      -> loop best tl
     and loop best = function
       | []                -> best
       | (loci, soi) :: tl ->
@@ -861,8 +861,9 @@ module Multiple_loci = struct
     let update loci stat pr best =
       let l = max_pm stat.Forward.likelihood in
       match best with
-      | None                    -> Some (l, loci, pr)
-      | Some (bl, _bloci, _bpr) -> if l > bl then Some (l, loci, pr) else best
+      | None                        -> Some (l, loci, pr)
+      | Some (bl, _, _) when l > bl -> Some (l, loci, pr)
+      | Some _                      -> best
     in
     let open ParPHMM in
     let rec loop best = function
