@@ -433,11 +433,15 @@ let max_number_mismatches_arg =
   Arg.(value & opt (some positive_int) None & info ~doc ~docv
         ["max-mismatches"])
 
+let read_size_override_argument = "read-size"
+
 let read_size_override_arg =
   let docv = "POSITIVE INTEGER" in
   let doc = "Override the number of bases to calculate the likelihood over, \
               instead of using the number of bases in the FASTQ." in
-  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
+  Arg.(value
+      & opt (some positive_int) None
+      & info ~doc ~docv [read_size_override_argument])
 
 let map_depth_argument = "map-depth"
 let map_depth_default = 5
@@ -532,3 +536,15 @@ let zygosity_report_size_arg =
   in
   Arg.(value & opt positive_int default_zygosity_report_size
              & info ~doc [zygosity_report_size_argument])
+
+let number_processes_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Parallelize read processing across this number of processesors. \
+             By default the application is not parallelized as the user would \
+             most likely achieve greater efficiency by natively parallelizing \
+             across samples as opposed to parallelizing across reads. \
+             Furthermore the user MUST specify %S as well in this mode." 
+      read_size_override_argument
+  in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])

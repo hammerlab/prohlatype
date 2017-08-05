@@ -4,6 +4,7 @@
 #require "ppx_deriving.runtime"
 #require "ppx_deriving.std"
 #require "biocaml.unix"
+#require "parany"
 
 #directory "_build/src/lib"
 #load_rec "prohlatype.cma"

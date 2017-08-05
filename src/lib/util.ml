@@ -232,3 +232,9 @@ let time s f =
   let r = f () in
   printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
   r
+
+type 'a single_or_paired =
+  | Single of 'a
+  | Paired of ('a * 'a)
+
+

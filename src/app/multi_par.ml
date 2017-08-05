@@ -29,73 +29,110 @@ let to_read_size_dependent
 module Pd = ParPHMM_drivers
 module Pdml = Pd.Multiple_loci
 
-let init conf opt read_size rp =
-  let ptlst =
-    time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-      (fun () -> rp read_size)
-  in
-  time "Allocating forward pass workspaces"
-    (fun () -> Pdml.init conf opt read_size ptlst)
+module Regular = struct
 
-let single conf opt acc fqi =
-  match acc with
-  | `Setup rp ->
-      let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-      let t, s = init conf opt read_size rp in
-      t.Pd.merge s (t.Pd.single fqi);
-      `Set (t, s)
-  | `Set (t, s) ->
-      t.Pd.merge s (t.Pd.single fqi);
-      `Set (t, s)
+  let init conf opt read_size rp =
+    let ptlst =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspaces"
+      (fun () -> Pdml.init conf opt read_size ptlst)
 
-let paired conf opt acc fq1 fq2 =
-  match acc with
-  | `Setup rp ->
-      let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
-      let t, s = init conf opt read_size rp in
-      t.Pd.merge s (t.Pd.paired fq1 fq2);
-      `Set (t, s)
-  | `Set (t, s) ->
-      t.Pd.merge s (t.Pd.paired fq1 fq2);
-      `Set (t, s)
+  let single conf opt acc fqi =
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+        let t, s = init conf opt read_size rp in
+        t.Pd.merge s (t.Pd.single fqi);
+        `Set (t, s)
+    | `Set (t, s) ->
+        t.Pd.merge s (t.Pd.single fqi);
+        `Set (t, s)
 
-let across_fastq conf opt
-  (* Fastq specific arguments. *)
-  ?number_of_reads ~specific_reads file init =
-  let f = single conf opt in
-  try
-    Fastq.fold ?number_of_reads ~specific_reads ~init file ~f
-    |> function
-        | `Setup _    -> eprintf "Didn't find any reads."
-        | `Set (t, s) -> t.Pd.output s stdout
-  with Pd.Fastq_items.Read_error_parsing e ->
-    eprintf "%s" e
+  let paired conf opt acc fq1 fq2 =
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+        let t, s = init conf opt read_size rp in
+        t.Pd.merge s (t.Pd.paired fq1 fq2);
+        `Set (t, s)
+    | `Set (t, s) ->
+        t.Pd.merge s (t.Pd.paired fq1 fq2);
+        `Set (t, s)
 
-let across_paired ~finish_singles conf opt
-    (* Fastq specific arguments. *)
-    ?number_of_reads ~specific_reads file1 file2 init =
-  let f = paired conf opt in
-  try
-    begin
-      if finish_singles then
-        let ff = single conf opt in
-        let fs = ff in
-        Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
-          ~init ~f ~ff ~fs
-      else
-        Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
-    end
-    |> function
-        | `BothFinished o
-        | `FinishedSingle o
-        | `OneReadPairedFinished (_, o)
-        | `StoppedByFilter o
-        | `DesiredReads o ->
-            match o with
-            | `Setup _    -> eprintf "Didn't find any reads."
-            | `Set (t, s) -> t.Pd.output s stdout
-  with Pd.Fastq_items.Read_error_parsing e ->
-    eprintf "%s" e
+  let across_fastq conf opt ?number_of_reads ~specific_reads file init =
+    let f = single conf opt in
+    try
+      Fastq.fold ?number_of_reads ~specific_reads ~init file ~f
+      |> function
+          | `Setup _    -> eprintf "Didn't find any reads."
+          | `Set (t, s) -> t.Pd.output s stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired ~finish_singles conf opt ?number_of_reads ~specific_reads
+    file1 file2 init =
+    let f = paired conf opt in
+    try
+      begin
+        if finish_singles then
+          let ff = single conf opt in
+          let fs = ff in
+          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+            ~init ~f ~ff ~fs
+        else
+          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+      end
+      |> function
+          | `BothFinished o
+          | `FinishedSingle o
+          | `OneReadPairedFinished (_, o)
+          | `StoppedByFilter o
+          | `DesiredReads o ->
+              match o with
+              | `Setup _    -> eprintf "Didn't find any reads."
+              | `Set (t, s) -> t.Pd.output s stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Regular *)
+
+module Parallel = struct
+
+  let init conf opt read_size rp =
+    let ptlst =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspaces"
+      (fun () -> Pdml.init conf opt read_size ptlst)
+
+  let across_fastq conf opt ?number_of_reads ~specific_reads ~nprocs file
+    driver state =
+    let map = driver.Pd.single in
+    let mux = driver.Pd.merge state in
+    try
+      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
+      driver.Pd.output state stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired conf opt ?number_of_reads ~specific_reads ~nprocs
+    file1 file2 driver state =
+    let map = function
+      | Single fqi      -> driver.Pd.single fqi
+      | Paired (f1, f2) -> driver.Pd.paired f1 f2
+    in
+    let mux = driver.Pd.merge state in
+    try
+      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
+        ~nprocs ~map ~mux file1 file2;
+      driver.Pd.output state stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Parallel *)
 
 let type_
   (* Allele information source *)
@@ -121,6 +158,7 @@ let type_
     map_depth
     not_incremental_pairs
     forward_accuracy_opt
+    number_processes_opt
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
@@ -158,20 +196,40 @@ let type_
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
-    let init =
-      match read_size_override with
-      | None   -> `Setup need_read_size
-      | Some r -> `Set (init conf opt r need_read_size)
-    in
-    begin match fastq_file_lst with
-    | []              -> invalid_argf "Cmdliner lied!"
-    | [fastq]         -> across_fastq conf opt
-                            ?number_of_reads ~specific_reads fastq init
-    | [read1; read2]  -> across_paired ~finish_singles conf opt
-                            ?number_of_reads ~specific_reads read1 read2 init
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!"
-                           (List.length lst)
-    end
+      begin
+        match number_processes_opt with
+        | None  ->
+            let init =
+              match read_size_override with
+              | None   -> `Setup need_read_size
+              | Some r -> `Set (Regular.init conf opt r need_read_size)
+            in
+            begin match fastq_file_lst with
+            | []              -> invalid_argf "Cmdliner lied!"
+            | [fastq]         -> Regular.across_fastq conf opt
+                                    ?number_of_reads ~specific_reads fastq init
+            | [read1; read2]  -> Regular.across_paired ~finish_singles conf opt
+                                    ?number_of_reads ~specific_reads read1 read2 init
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                  (List.length lst)
+            end
+        | Some nprocs ->
+            let r = Option.value_exn read_size_override
+                      ~msg:"Must specify read size override in parallel mode"
+            in
+            let driver, state = Parallel.init conf opt r need_read_size in
+            begin match fastq_file_lst with
+            | []              -> invalid_argf "Cmdliner lied!"
+            | [fastq]         -> Parallel.across_fastq conf opt
+                                    ?number_of_reads ~specific_reads ~nprocs
+                                    fastq driver state
+            | [read1; read2]  -> Parallel.across_paired conf opt
+                                    ?number_of_reads ~specific_reads ~nprocs
+                                    read1 read2 driver state
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                  (List.length lst)
+            end
+      end
 
 let () =
   let open Cmdliner in
@@ -248,6 +306,7 @@ let () =
             $ map_depth_arg
             $ do_not_use_incremental_pairs_flag
             $ forward_pass_accuracy_arg
+            $ number_processes_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ upto_kmer_hood_arg

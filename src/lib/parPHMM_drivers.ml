@@ -430,7 +430,7 @@ let single_conf ?allele ?insert_p ?band ?max_number_mismatches
     ; check_rc
     }
 
-type ('state, 'read_result) single_loci_driver =
+type ('state, 'read_result) t =
   { single  : Biocaml_unix.Fastq.item -> 'read_result
   ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> 'read_result
   ; merge   : 'state -> 'read_result -> unit
@@ -660,11 +660,11 @@ module type S = sig
            -> read_length:int
            -> ParPHMM.t
            -> opt
-           -> (state, read_result) single_loci_driver * state
+           -> (state, read_result) t * state
 
 end (* S *)
 
-module Make_single_loci (S : S) = struct
+module Make_single (S : S) = struct
 
   let init = S.init
 
@@ -673,7 +673,7 @@ module Make_single_loci (S : S) = struct
   let merge d s r = d.merge s r
   let output d s oc = d.output s oc
 
-end (* Make_single_loci *)
+end (* Make_single *)
 
 (* Combine results from multiple loci. *)
 
