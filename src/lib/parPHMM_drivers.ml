@@ -216,39 +216,63 @@ module Zygosity_array = struct
     let k = k_n t.n i j in
     t.l.(k) <- t.l.(k) +. likelihood
 
-  let best ?size t =
-    let max_size = max 1 (Option.value size ~default:(storage_size t.n)) in
-    let sorted_insert big_enough ((l, _, _) as p) lst =
-      let rec insert lst = match lst with
-        | []     -> [p]
-        | h :: t ->
-            let hl, _, _ = h in
-            if hl < l then
-              h :: insert t
-            else
-              p :: lst
-      in
-      if big_enough then begin
+  (* log likelihood, probability, index 1st, index 2nd *)
+  let best ?size t likelihood_arr =
+    let desired_size = max 1 (Option.value size ~default:(storage_size t.n)) in
+    let sorted_insert l i j current_size lst =
+      let rec insert lst =
         match lst with
-        | []            -> assert false        (* Be big enough and be empty? *)
-        | (hl,_,_) :: t ->
-          if l > hl then
-            insert t
+        | []     -> [l, 1, [i,j]]
+        | h :: t ->
+            let hl, hn, hv = h in
+            if hl < l then
+              (hl, hn, hv) :: insert t
+            else if hl = l then
+              (hl, hn + 1, (i,j) :: hv) :: t
+            else (* hl > l *)
+              (l, 1, [i,j]) :: lst
+      in
+      match lst with
+      | []
+      | _ :: [] -> current_size + 1, insert lst
+      | h :: t  ->
+        let hl, hn, hv = h in
+        if l < hl then begin
+          if current_size >= desired_size then
+            current_size, lst
           else
-            lst
-      end else
-        insert lst
+            current_size + 1, insert lst
+        end else if l = hl then
+          current_size + 1, ((hl, hn + 1, (i,j) :: hv) :: t)
+        else (* if l > hl *) begin
+          if current_size - hn < desired_size then
+            current_size + 1, h :: insert t
+          else
+            current_size + 1 - hn, insert t
+        end
     in
-    let _fk, res =
-      Array.fold_left t.l ~init:(0, [])
-        ~f:(fun (k, acc) l ->
+    let _fk, fcs, fres =                                     (* Heterozygous. *)
+      Array.fold_left t.l ~init:(0, 0, [])
+        ~f:(fun (k, cs, acc) l ->
               let i, j = kinv_n t.n k in
-              let p = l, i, j in
-              let big_enough = k >= max_size in
-              let nacc = sorted_insert big_enough p acc in
-              (k + 1, nacc))
+              let ncs, nacc = sorted_insert l i j cs acc in
+              (k + 1, ncs, nacc))
     in
-    List.rev res
+    let _fk, _cs, res =                                        (* Homozygous. *)
+      Array.fold_left likelihood_arr ~init:(0, fcs, fres)
+        ~f:(fun (i, cs, acc) l ->
+              let ncs, nacc = sorted_insert l i i cs acc in
+              (i + 1, ncs, nacc))
+    in
+    let most_likely = List.rev_map ~f:(fun (l, _n, ijlst) -> (l, ijlst)) res in
+    let maxl, _ = List.hd_exn most_likely in
+    let prob l = 10. ** (l -. maxl) in
+    let ns =
+      let f s l = s +. prob l in
+      Array.fold_left ~init:0. ~f t.l
+      |> fun init -> Array.fold_left ~init ~f likelihood_arr
+    in
+    List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
 
 end (* Zygosity_array *)
 
@@ -280,10 +304,7 @@ module Output = struct
   let compare2 (l1, _) (l2, _) =
     descending_float_cmp l1 l2
 
-  let compare3 (l1, _, _) (l2, _, _) =
-    descending_float_cmp l1 l2
-
-  let compare4 (l1, r1, _i1, _a1) (l2, r2, _i2, _a2) =
+  let compare3 (l1, r1, _a1) (l2, r2, _a2) =
     let lc = descending_float_cmp l1 l2 in
     if lc <> 0 then
       lc
@@ -295,18 +316,17 @@ module Output = struct
       Array.mapi allele_arr ~f:(fun i a ->
         final_likelihoods.(i)
         , Nomenclature.parse_to_resolution_exn a
-        , i         (* Preserver the index for merging with zygosity results. *)
         , a)
     in
-    Array.sort o ~cmp:compare4;
+    Array.sort o ~cmp:compare3;
     o
 
   let allele_first o oc =
-    Array.iter o ~f:(fun (l,_,_,a) -> fprintf oc "%16s\t%0.20f\n" a l)
+    Array.iter o ~f:(fun (l,_,a) -> fprintf oc "%16s\t%0.20f\n" a l)
 
-  let likelihood_first allele_arr final_likelihoods oc =
+  let likelihood_first allele_arr allele_llhd_arr oc =
     let o =
-      Array.mapi allele_arr ~f:(fun i a -> final_likelihoods.(i), a)
+      Array.mapi allele_arr ~f:(fun i a -> allele_llhd_arr.(i), a)
       |> Array.to_list
       |> group_by_assoc
       |> List.map ~f:(fun (l, alst) ->
@@ -318,52 +338,37 @@ module Output = struct
 
   let default_zygosity_report_size = 100
 
-  let zygosity ?(size=default_zygosity_report_size) likelihood_first aa
-    blarr zt oc =
+  let zygosity ?(size=default_zygosity_report_size) likelihood_first
+    allele_arr allele_llhd_arr zt oc =
     fprintf oc "Zygosity:\n";
-    let zb = Zygosity_array.best ~size zt in
-    let nzb = (* Merge with blarr to weight homozygous pairs. *)
-      match List.last zb with
-      | None                -> eprintf "Didn't find any zygosity weights!\n"; zb
-      | Some (lowest, _, _) ->
-          match Array.findi blarr ~f:(fun (l, _, _, _) -> l < lowest) with
-          | None            -> zb                     (* Nothing more likely. *)
-          | Some len        ->
-              let append_me =
-                Array.sub blarr ~pos:0 ~len
-                |> Array.map ~f:(fun (l, _, i, _) -> l, i, i)
-                |> Array.to_list
-              in
-              zb @ append_me
-              |> List.sort ~cmp:compare3
-              |> fun l -> List.take l size
-    in
+    let open Zygosity_array in
+    let zb = best ~size zt allele_llhd_arr in
     if likelihood_first then
-      List.map nzb ~f:(fun (l, i, j) -> l, (i, j))
-      |> group_by_assoc
-      |> List.iter ~f:(fun (l, ijlist) ->
-          let alleles_str =
-            List.map ijlist ~f:(fun (i,j) -> sprintf "%s,%s" aa.(i) aa.(j))
-            |> String.concat ~sep:"\t"
-          in
-          fprintf oc "%0.20f\t%16s\n" l alleles_str)
+      List.iter zb ~f:(fun (l, p, ijlist) ->
+        let alleles_str =
+          List.map ijlist ~f:(fun (i,j) ->
+            sprintf "%s,%s" allele_arr.(i) allele_arr.(j))
+          |> String.concat ~sep:"\t"
+        in
+        fprintf oc "%0.20f\t%0.4f\t%16s\n" l p alleles_str)
     else
-      List.iter nzb ~f:(fun (l, i, j) -> fprintf oc "%16s\t%16s\t%0.20f\n" aa.(i) aa.(j) l)
+      List.iter zb ~f:(fun (l, p, ijlist) ->
+        List.iter ijlist ~f:(fun (i, j) ->
+          fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n" allele_arr.(i) allele_arr.(j) l p))
 
-  let output_likelihood lfirst allele_arr final_likelihoods oc =
-    let o = by_likelihood_arr allele_arr final_likelihoods in
+  let output_likelihood lfirst allele_arr allele_llhd_arr oc =
+    let o = by_likelihood_arr allele_arr allele_llhd_arr in
     fprintf oc "Likelihood:\n";
     if lfirst then
-      likelihood_first allele_arr final_likelihoods oc
+      likelihood_first allele_arr allele_llhd_arr oc
     else
-      allele_first o oc;
-    o
+      allele_first o oc
 
   let f lfirst zygosity_report_size allele_arr
-    final_likelihoods zt oc =
-    let blarr = output_likelihood lfirst allele_arr final_likelihoods oc in
+    allele_llhd_arr zt oc =
+    output_likelihood lfirst allele_arr allele_llhd_arr oc;
     zygosity ~size:zygosity_report_size lfirst allele_arr
-      blarr zt oc
+      allele_llhd_arr zt oc
 
 end (* Output *)
 
