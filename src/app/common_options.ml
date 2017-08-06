@@ -304,9 +304,13 @@ let optional_distance_flag, defaulting_distance_flag =
       , false
       , "trie"
     ; WeightedPerSegment
-    , "smallest shared weighted per segment distance."
-    , true
-    , "weighted-segment"
+      , "smallest shared weighted per segment distance."
+      , true
+      , "weighted-segment"
+    ; Reference
+      , "consider the reference the closest for all alleles."
+      , false
+      , "reference-distance"
     ]
   in
   let r default =

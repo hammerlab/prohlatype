@@ -10,8 +10,11 @@ open Util
 
 type alignment_sequence = string MSA.alignment_sequence
 
-(** The two types of distance logic that we currently support. *)
+(** The types of distance logic that we currently support. *)
 type logic =
+  | Reference
+  (** Consider the reference the closest sequence for all alleles. *)
+
   | Trie
   (** For a specific HLA loci construct a trie of the alleles based upon their
       (upto) 8 digit specification. The distance is always fixed at 1 and only

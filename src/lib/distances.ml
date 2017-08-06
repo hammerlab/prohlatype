@@ -88,7 +88,25 @@ module Weighted_per_segment = struct
 
 end (* Weighted_per_segment *)
 
+module Reference = struct
+
+  let one ~reference ~reference_sequence ~candidates ~allele =
+    let is_ref, isn't =
+      StringMap.bindings candidates
+      |> List.partition ~f:(fun (al, _seq) -> al = reference)
+    in
+    List.map is_ref ~f:(fun _ -> reference, 0.0)
+    @ List.map isn't ~f:(fun (a, _) -> a, infinity)
+
+  let f ~reference ~reference_sequence ~targets ~candidates =
+    StringMap.map targets ~f:(fun _s ->
+      one ~reference ~reference_sequence ~candidates
+        ~allele:("Allele sequence doesn't matter", []))
+
+end (* Reference *)
+
 type logic =
+  | Reference
   | Trie
   | WeightedPerSegment
   [@@deriving show]
@@ -96,6 +114,10 @@ type logic =
 type alignment_sequence = string MSA.alignment_sequence
 
 let one ~reference ~reference_sequence ~allele ~candidates = function
+  | Reference          ->
+      let _aname, aseq = allele in
+      Ok (Reference.one ~reference ~reference_sequence ~candidates
+            ~allele:aseq)
   | Trie               ->
       let aname, aseq = allele in
       let targets = StringMap.singleton aname aseq in
@@ -107,6 +129,8 @@ let one ~reference ~reference_sequence ~allele ~candidates = function
             ~allele:aseq)
 
 let compute ~reference ~reference_sequence ~targets ~candidates = function
+  | Reference ->
+      Ok (Reference.f ~reference ~reference_sequence ~targets ~candidates)
   | Trie               ->
       Trie_distances.f ~targets ~candidates
   | WeightedPerSegment ->
