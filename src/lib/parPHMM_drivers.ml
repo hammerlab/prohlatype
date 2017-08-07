@@ -225,11 +225,11 @@ module Zygosity_array = struct
         | []     -> [l, 1, [i,j]]
         | h :: t ->
             let hl, hn, hv = h in
-            if hl < l then
-              (hl, hn, hv) :: insert t
-            else if hl = l then
+            if l > hl then
+              h :: insert t
+            else if l = hl then
               (hl, hn + 1, (i,j) :: hv) :: t
-            else (* hl > l *)
+            else (* l < hl *)
               (l, 1, [i,j]) :: lst
       in
       match lst with
@@ -237,18 +237,18 @@ module Zygosity_array = struct
       | _ :: [] -> current_size + 1, insert lst
       | h :: t  ->
         let hl, hn, hv = h in
-        if l < hl then begin
+        if l > hl then begin
+           if current_size - hn < desired_size then
+            current_size + 1, h :: insert t
+          else
+            current_size + 1 - hn, insert t
+        end else if l = hl then
+          current_size + 1, ((hl, hn + 1, (i,j) :: hv) :: t)
+        else (* l < hl *) begin
           if current_size >= desired_size then
             current_size, lst
           else
             current_size + 1, insert lst
-        end else if l = hl then
-          current_size + 1, ((hl, hn + 1, (i,j) :: hv) :: t)
-        else (* if l > hl *) begin
-          if current_size - hn < desired_size then
-            current_size + 1, h :: insert t
-          else
-            current_size + 1 - hn, insert t
         end
     in
     let _fk, fcs, fres =                                     (* Heterozygous. *)
@@ -281,12 +281,16 @@ module Likelihoods_and_zygosity = struct
   (* TODO: We're opening Util which has likehood defined. *)
 
   let add_ll state_llhd llhd =
-    Pm.iter_set llhd ~f:(fun i v -> state_llhd.(i) <- state_llhd.(i) +. v)
+    Pm.iter_set llhd ~f:(fun i v ->
+      state_llhd.(i) <- state_llhd.(i) +. v)
 
   let add_lz zygosity llhd =
     Pm.iter_set llhd ~f:(fun allele1 v1 ->
       Pm.iter_set llhd ~f:(fun allele2 v2 ->
-        if allele1 = allele2 then
+        (* The Zygosity array only stores the upper triangle of the full
+           pairwise likelihood matrix. Therefore, ignore the diagonal and
+           lower triangular elements to avoid double counting (per read). *)
+        if allele1 >= allele2 then
           ()
         else
           Zygosity_array.add zygosity ~allele1 ~allele2 (max v1 v2)))
@@ -364,8 +368,7 @@ module Output = struct
     else
       allele_first o oc
 
-  let f lfirst zygosity_report_size allele_arr
-    allele_llhd_arr zt oc =
+  let f lfirst zygosity_report_size allele_arr allele_llhd_arr zt oc =
     output_likelihood lfirst allele_arr allele_llhd_arr oc;
     zygosity ~size:zygosity_report_size lfirst allele_arr
       allele_llhd_arr zt oc
@@ -498,7 +501,7 @@ module Forward = struct
     | Filtered m        -> printf "For %s: %s\n" name m
     | Completed (_c, s) ->
         Likelihoods_and_zygosity.add_ll_and_lz
-              t.per_allele_lhood t.zygosity s.likelihood
+          t.per_allele_lhood t.zygosity s.likelihood
 
   let output_state likelihood_first zygosity_report_size allele_arr t oc =
     let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
