@@ -302,13 +302,15 @@ module Likelihoods_and_zygosity = struct
 
 end (* Likelihoods_and_zygosity *)
 
-(* Outputing results *)
+(* Outputing results.
+
+   TODO: Expose a separator argument. *)
 module Output = struct
 
   let compare2 (l1, _) (l2, _) =
     descending_float_cmp l1 l2
 
-  let compare3 (l1, r1, _a1) (l2, r2, _a2) =
+  let compare4 (l1, r1, _a1, _m1) (l2, r2, _a2, _m1) =
     let lc = descending_float_cmp l1 l2 in
     if lc <> 0 then
       lc
@@ -317,20 +319,24 @@ module Output = struct
 
   let by_likelihood_arr allele_arr final_likelihoods =
     let o =
-      Array.mapi allele_arr ~f:(fun i a ->
+      Array.mapi allele_arr ~f:(fun i (a, m) ->
         final_likelihoods.(i)
         , Nomenclature.parse_to_resolution_exn a
-        , a)
+        , a
+        , m)
     in
-    Array.sort o ~cmp:compare3;
+    Array.sort o ~cmp:compare4;
     o
 
   let allele_first o oc =
-    Array.iter o ~f:(fun (l,_,a) -> fprintf oc "%16s\t%0.20f\n" a l)
+    Array.iter o ~f:(fun (l,_,a, m) ->
+      fprintf oc "%16s\t%0.20f\t%s\n" a l
+        (Alter_MSA.info_to_string m))
 
+  (* Ignore Alter.info *)
   let likelihood_first allele_arr allele_llhd_arr oc =
     let o =
-      Array.mapi allele_arr ~f:(fun i a -> allele_llhd_arr.(i), a)
+      Array.mapi allele_arr ~f:(fun i (a, _m) -> allele_llhd_arr.(i), a)
       |> Array.to_list
       |> group_by_assoc
       |> List.map ~f:(fun (l, alst) ->
@@ -342,6 +348,7 @@ module Output = struct
 
   let default_zygosity_report_size = 100
 
+  (* Ignore Alter.info *)
   let zygosity ?(size=default_zygosity_report_size) likelihood_first
     allele_arr allele_llhd_arr zt oc =
     fprintf oc "Zygosity:\n";
@@ -351,14 +358,15 @@ module Output = struct
       List.iter zb ~f:(fun (l, p, ijlist) ->
         let alleles_str =
           List.map ijlist ~f:(fun (i,j) ->
-            sprintf "%s,%s" allele_arr.(i) allele_arr.(j))
+            sprintf "%s,%s" (fst allele_arr.(i)) (fst allele_arr.(j)))
           |> String.concat ~sep:"\t"
         in
         fprintf oc "%0.20f\t%0.4f\t%16s\n" l p alleles_str)
     else
       List.iter zb ~f:(fun (l, p, ijlist) ->
         List.iter ijlist ~f:(fun (i, j) ->
-          fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n" allele_arr.(i) allele_arr.(j) l p))
+          fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n"
+            (fst allele_arr.(i)) (fst allele_arr.(j)) l p))
 
   let output_likelihood lfirst allele_arr allele_llhd_arr oc =
     let o = by_likelihood_arr allele_arr allele_llhd_arr in
@@ -514,20 +522,30 @@ module Forward = struct
             Alleles_and_positions.lst_to_string aapt))
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
-    read_length pt =
+    read_length parPHMM_t =
     match allele with
     | None ->
-      let proc = setup_single_pass ?insert_p ?max_number_mismatches ?band
-                  read_length pt in
-      proc, (Array.map ~f:fst pt.alleles)  (* Drop merge info for now *)
+      let proc =
+        setup_single_pass ?insert_p ?max_number_mismatches ?band read_length
+        parPHMM_t
+      in
+      proc, parPHMM_t.alleles
     | Some allele ->
-      let proc = setup_single_allele_forward_pass ?insert_p
-                  ?max_number_mismatches read_length allele pt in
-      proc, [| allele |]
+      let proc =
+        setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
+          read_length allele parPHMM_t
+      in
+      let arr =
+        let index_opt = Array.findi parPHMM_t.alleles ~f:(fun (a,_) -> a = allele) in
+        match index_opt with
+        | None  -> invalid_argf "Allele %s isn't part of gene!" allele
+        | Some i -> [| parPHMM_t.alleles.(i) |]
+      in
+      proc, arr
 
   type opt = forward_opt
 
-  let init conf ~read_length pt opt =
+  let init conf ~read_length parPHMM_t opt =
     let { likelihood_first; zygosity_report_size; report_size } = opt in
     let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
         ; _} = conf
@@ -535,7 +553,7 @@ module Forward = struct
     let open ParPHMM in
     let proc, allele_arr =
       to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
-        read_length pt
+        read_length parPHMM_t
     in
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
@@ -628,15 +646,15 @@ module Viterbi = struct
 
   type opt = unit
 
-  let init conf ~read_length pt () =
+  let init conf ~read_length parPHMM_t () =
     let { allele; insert_p; _ } = conf in
     let open ParPHMM in
-    (* Relying on reference being first. *)
-    let allele = Option.value ~default:(fst pt.alleles.(0)) allele in
+    (* Relying on reference being first in the specified ParPHMM.t allele list. *)
+    let allele = Option.value ~default:(fst parPHMM_t.alleles.(0)) allele in
     let labels = allele ^ " ", "read " in
     let s, p =
       setup_single_allele_viterbi_pass ?insert_p ~allele
-        read_length pt
+        read_length parPHMM_t
     in
     let state = { results = [] } in
     let rec t = { single; paired; merge; output }

@@ -16,6 +16,10 @@ type info =
   | FullSequence                         (* Nothing added same as original. *)
   | Added of string * float
 
+let info_to_string = function
+  | FullSequence -> ""
+  | Added (s,d)  -> sprintf "%s (%f)" s d
+
 module Impute = struct
 
   let split_al_els pos including e =
