@@ -1,4 +1,4 @@
-(** Encode HLA allele's *)
+(** Decode HLA allele names. *)
 
 open Util
 
