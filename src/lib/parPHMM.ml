@@ -1965,7 +1965,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
           ~transition_ref_length ~read_length ws allele_a
       in
       let single ?prev_threshold ?base_p ~reverse_complement ~read ~read_errors =
-        (* Ignore base_p for the moment, as I can't think of a good reason to 
+        (* Ignore base_p for the moment, as I can't think of a good reason to
            implement this logic in the single case. *)
         let read = access reverse_complement read read_errors in
         pass.full read
