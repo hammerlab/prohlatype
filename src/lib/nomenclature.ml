@@ -109,6 +109,19 @@ let resolution_and_suffix_opt_to_string ?gene (r,so) =
   sprintf "%s%s" (resolution_to_string ?gene r)
     (Option.value_map so ~default:"" ~f:suffix_to_string)
 
+let two_matches_full nr1 nr2 =
+  match (fst nr1) with                     (* Match on just the name, ignore suffix *)
+  | Two (r1, r2) ->
+      begin
+        match (fst nr2) with                               (* Also, ignore suffix. *)
+        | One _               -> false
+        | Two (s1, s2)
+        | Three (s1, s2, _)
+        | Four (s1, s2, _, _) -> r1 = s1 && r2 = s2
+      end
+  | fnr ->
+      invalid_argf "Not Two resolution: %s " (resolution_to_string fnr)
+
 module Trie (*: sig
 
   type t
