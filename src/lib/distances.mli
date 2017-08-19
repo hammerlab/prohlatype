@@ -37,10 +37,14 @@ val one : reference : string
         -> logic
         -> ((string * float) list, string) result
 
+type arg =
+  { reference : string
+  ; reference_sequence : alignment_sequence
+  ; targets : alignment_sequence StringMap.t
+  ; candidates : alignment_sequence StringMap.t
+  }
+
 (** Compute the distances for all the alleles [targets]. *)
-val compute : reference : string
-            -> reference_sequence : alignment_sequence
-            -> targets : alignment_sequence StringMap.t
-            -> candidates : alignment_sequence StringMap.t
+val compute : arg
             -> logic
             -> ((string * float) list StringMap.t, string) result

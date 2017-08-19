@@ -63,7 +63,7 @@ type resolution =
   | Four of int * int * int * int
 
 (* Ignore suffix for sorting *)
-let compare (r1,_) (r2,_) =
+let compare_by_resolution (r1,_) (r2,_) =
   let to_quad = function
     | One a           -> [ a; -1; -1; -1 ]
     | Two (a,b)       -> [ a;  b; -1; -1 ]

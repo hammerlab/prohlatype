@@ -16,19 +16,21 @@ type sequence = string [@@deriving eq, ord, show]
 (* start end pairs *)
 type sep = { start : start ; end_ : MSA.position } [@@deriving eq, ord]
 
+let blts = MSA.boundary_label_to_string
+
 module Nodes = struct
 
   type t =
     | S of start
     | E of MSA.position
-    | B of MSA.position * int               (* Boundary of position and count *)
+    | B of MSA.position * MSA.boundary_label(* Boundary of position and label *)
     | N of MSA.position * sequence                               (* Sequences *)
     [@@deriving eq, ord]
 
   let vertex_name ?(short=true) = function
     | S (n, s)  -> sprintf "S%d-%s" n s
     | E n       -> sprintf "E%d" n
-    | B (p, n)  -> sprintf "B%d-%d" n p
+    | B (p, l)  -> sprintf "B-%s-%d" (blts l) p
     | N (p, s)  -> sprintf "%d%s" p (if short then short_seq s else s)
 
   let position = function
@@ -312,8 +314,8 @@ let add_reference_elems g aset allele ref_elems =
     G.add_edge_e g (G.E.create prev (bse ()) (G.V.create (E end_pos)));
     `Ended (st, end_pos) :: lst
   in
-  let add_boundary ~st ~prev ~idx ~pos lst =
-    let boundary_node = G.V.create (B (pos, idx)) in
+  let add_boundary ~st ~prev ~label ~pos lst =
+    let boundary_node = G.V.create (B (pos, label)) in
     G.add_edge_e g (G.E.create prev (bse ()) boundary_node);
     `Started (st, boundary_node) :: lst
   in
@@ -333,11 +335,11 @@ let add_reference_elems g aset allele ref_elems =
     | `Ended _ :: _ , al_el                         ->
         invalid_argf "Unexpected %s after end for %s"
           (al_el_to_string al_el) allele
-    | `Started (st, prev) :: tl, End end_pos          -> add_end end_pos ~st ~prev tl
-    | `Started (st, prev) :: tl, Boundary {idx; pos } -> add_boundary ~st ~prev ~idx ~pos tl
-    | `Started (st, prev) :: tl, Sequence {start; s } -> add_seq ~st ~prev start s tl
-    | `Started (_, _) :: _,      Gap _                -> state       (* ignore gaps *)
-    | `Started (_, _) :: tl,     Start sp             ->
+    | `Started (st, prev) :: tl, End end_pos            -> add_end end_pos ~st ~prev tl
+    | `Started (st, prev) :: tl, Boundary {label; pos } -> add_boundary ~st ~prev ~label ~pos tl
+    | `Started (st, prev) :: tl, Sequence {start; s }   -> add_seq ~st ~prev start s tl
+    | `Started (_, _) :: _,      Gap _                  -> state       (* ignore gaps *)
+    | `Started (_, _) :: tl,     Start sp               ->
         invalid_argf "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
       | `Started _ -> invalid_argf "Still have a Started in %s ref" allele
@@ -458,26 +460,29 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
   in
-  let rec advance_until_boundary ~visit ~prev ~next pos idx =
+  let rec advance_until_boundary ~visit ~prev ~next pos label =
     let rec forward node msg =
       loop node (next_reference ~msg node)
     and loop pv nv =
       match nv with
       | S _ | E _ -> forward nv "Skipping start End"
       | B (p, c) when p = pos ->
-          if c <> idx then
-            ia "Boundary at %d position diff from reference %d count %d" p c idx
+          if c <> label then
+            ia "Boundary at %d position diff from reference %s label %s"
+              p (blts c) (blts label)
           else
             pv, nv
       | B (p, _)
       | N (p, _) when p < pos ->
           visit pv nv;
-          forward nv (sprintf "Trying to find B %d %d after %d" pos idx p)
+          forward nv (sprintf "Trying to find B %d %s after %d"
+            pos (blts label) p)
       | B (p, c) (*when p > pos*) ->
-          ia "Next Boundary %d %d after desired boundary %d %d" p c pos idx
+          ia "Next Boundary %d %s after desired boundary %d %s"
+            p (blts c) pos (blts label)
       | N (p, _) ->
-          ia "Next Sequence position: %d at or after desired boundary pos %d (idx %d) %s"
-            p pos idx allele
+          ia "Next Sequence position: %d at or after desired boundary pos %d (label %s) %s"
+            p pos (blts label) allele
     in
     loop prev next
   in
@@ -525,16 +530,16 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
       start_loop ns tl
   (* When the only thing that matters is the previous node. *)
   and solo_loop state prev = function
-    | []                        -> ia "No End at allele sequence: %s" allele
-    | Start p :: _              -> ia "Another start %d in %s allele sequence." p allele
-    | End end_pos :: tl         -> add_end state end_pos prev tl
-    | Boundary { idx; pos} :: t -> let boundary_node = G.V.create (B (pos, idx)) in
-                                   add_allele_edge prev boundary_node;
-                                   solo_loop state boundary_node t
-    | Sequence { start; s} :: t -> let sequence_node = G.V.create (N (start, s)) in
-                                   add_allele_edge prev sequence_node;
-                                   solo_loop state sequence_node t
-    | Gap _ :: t                -> solo_loop state prev t
+    | []                          -> ia "No End at allele sequence: %s" allele
+    | Start p :: _                -> ia "Another start %d in %s allele sequence." p allele
+    | End end_pos :: tl           -> add_end state end_pos prev tl
+    | Boundary { label; pos} :: t -> let boundary_node = G.V.create (B (pos, label)) in
+                                     add_allele_edge prev boundary_node;
+                                     solo_loop state boundary_node t
+    | Sequence { start; s} :: t   -> let sequence_node = G.V.create (N (start, s)) in
+                                     add_allele_edge prev sequence_node;
+                                     solo_loop state sequence_node t
+    | Gap _ :: t                  -> solo_loop state prev t
   (* When traversing a reference gap. We have to keep track of allele element's
      position to check when to join back with the next reference node. *)
   and ref_gap_loop state ~prev ref_node ref_pos lst = match lst with
@@ -546,17 +551,17 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
         else (* end_pos > ref_pos *)
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node lst
-    | Boundary { idx; pos} :: tl  ->
+    | Boundary { label; pos} :: tl  ->
         if pos < ref_pos then
-          ia "Allele %s has a boundary %d at %d that is in ref gap ending %d."
-            allele idx pos ref_pos
+          ia "Allele %s has a boundary %s at %d that is in ref gap ending %d."
+            allele (blts label) pos ref_pos
         else if pos = ref_pos then
-          if ref_node = B (pos, idx) then
+          if ref_node = B (pos, label) then
             let () = add_allele_edge prev ref_node in
             main_loop state ~prev ~next:ref_node tl
           else
-            ia "Allele %s has a boundary %d at %d where ref gap ends %d."
-              allele idx pos ref_pos
+            ia "Allele %s has a boundary %s at %d where ref gap ends %d."
+              allele (blts label) pos ref_pos
         else
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node lst
@@ -612,10 +617,10 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           | `InGap (p, _, _) -> p
         in
         add_end state end_pos prev tl
-    | Boundary { idx; pos} :: t ->
+    | Boundary { label; pos} :: t ->
         let prev, next =
           advance_until_boundary ~prev ~next ~visit:add_allele_edge
-            pos idx
+            pos label
         in
         let () = add_allele_edge prev next in
         main_loop state ~prev:next ~next t
@@ -707,6 +712,7 @@ module FoldAtSamePosition = struct
         a
       else
         let nq, amp = step g q in
+        printf "at: %s\n%!" (nl_to_string amp);
         let na = f a amp in
         loop na nq
     in
@@ -796,7 +802,7 @@ module JoinSameSequencePaths = struct
     in
     loop min_int q []
 
-  let same_debug = ref false
+  let debug = ref false
 
   let rec add_node_successors_only g v q =
     let open Nodes in
@@ -878,8 +884,8 @@ module JoinSameSequencePaths = struct
           | [| 0; 0; 0; n; 0|] when n >= 1 -> diff_loop (index + 1)
           | [| 0; 0; 0; 0; n|] when n >= 1 -> diff_loop (index + 1)
           | _                            ->
-              if !same_debug then
-                eprintf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
+              if !debug then
+                printf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
                   index arr.(0) arr.(1) arr.(2) arr.(3) arr.(4);
               if index > 0 then index else same_loop index
         end
@@ -891,8 +897,8 @@ module JoinSameSequencePaths = struct
           clear_arr ();
           fill_arr nindex;
           let mx = Array.fold_left ~init:0 ~f:max arr in
-          if !same_debug then
-            eprintf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
+          if !debug then
+            printf "found diff %d: [| %d; %d; %d; %d; %d |]\n"
               index arr.(0) arr.(1) arr.(2) arr.(3) arr.(4);
           if mx = 1 then
             same_loop nindex
@@ -906,8 +912,8 @@ module JoinSameSequencePaths = struct
       | []                -> q
       | (p, s) :: []      ->
           begin
-            if !same_debug then
-              eprintf "one %d %s next_pos %d\n%!"
+            if !debug then
+              printf "one %d %s next_pos %d\n%!"
                 p s (Option.value next_pos ~default:(-1));
             match next_pos with
             | Some np when inside_seq p s ~pos:np ->
@@ -918,9 +924,9 @@ module JoinSameSequencePaths = struct
       | (p, _) :: _ as ls ->
           let must_split = Option.map ~f:(fun np -> np - p) next_pos in
           let index = find_highest_diff ~must_split ls in
-          if !same_debug then begin
-            eprintf "index:\t%d must_split:\t%d\n" index (Option.value must_split ~default:(-1));
-            List.iter ls ~f:(fun (p, s) -> eprintf "%d: %s\n" p s)
+          if !debug then begin
+            printf "index:\t%d must_split:\t%d\n" index (Option.value must_split ~default:(-1));
+            List.iter ls ~f:(fun (p, s) -> printf "%d: %s\n" p s)
           end;
           if index = 0 then
             List.fold_left ls ~init:q ~f:(fun q (p, s) ->
@@ -931,13 +937,13 @@ module JoinSameSequencePaths = struct
           else
             List.fold_left ls ~init:q ~f:(fun q (p, s) ->
             if String.length s = index then begin
-              if !same_debug then
-                eprintf "Not splitting %d %s because length is less than %d\n" p s index;
+              if !debug then
+                printf "Not splitting %d %s because length is less than %d\n" p s index;
               (* Don't split to avoid an empty Node!*)
               add_successors (N (p, s)) q
             end else begin
-              if !same_debug then
-                eprintf "splitting %d %s at %d\n" p (index_string s index) index;
+              if !debug then
+                printf "splitting %d %s at %d\n" p (index_string s index) index;
               split_and_rejoin ~index q p s
             end)
     in
@@ -947,8 +953,8 @@ module JoinSameSequencePaths = struct
       else
         let nq, amp = at_min_position q in
         let next_pos = peak_min_position nq in
-        if !same_debug then
-          eprintf "popping [%s] peaking at %d\n"
+        if !debug then
+          printf "popping [%s] peaking at %d\n"
             (List.map ~f:(fun (p, s) -> sprintf "(%d,%s)" p s) amp
              |> String.concat ~sep:";")
             (Option.value next_pos ~default:(-1));
@@ -1030,6 +1036,8 @@ let default_construction_arg = { join_same_sequence = true }
 let construction_arg_to_string { join_same_sequence } =
   string_of_bool join_same_sequence
 
+let debug = ref false
+
 let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let open MSA in
   let { join_same_sequence; } = arg in
@@ -1042,24 +1050,34 @@ let construct_from_parsed ?(merge_map=[]) ?(arg=default_construction_arg) r =
   let aset = (module Aset : Alleles.Set) in
   let module Amap = Alleles.MakeMap (struct let index = aindex end) in
   let amap = (module Amap : Alleles.Map) in
+  if !debug then
+    printf "adding reference %s to graph.\n%s\n%!"
+      reference (al_seq_to_string ~sep:"," ref_elems);
   let refs_start_ends = add_reference_elems g aset reference ref_elems in
   let fs_ls_st_assoc = reference_starts_and_ends refs_start_ends in
   let start_and_stop_assoc =
     List.fold_left alt_elems ~init:[ reference, refs_start_ends]
       ~f:(fun acc (allele, lst) ->
+            if !debug then
+              printf "adding %s to graph.\n%s\n%!"
+                allele (al_seq_to_string ~sep:"," lst);
             let start_and_stops = add_non_ref g aset reference fs_ls_st_assoc allele lst in
             (allele, start_and_stops) :: acc)
   in
+  if !debug then printf "calculating bounds.\n%!";
   let bounds =
     Amap.init (fun allele ->
       match List.Assoc.get allele start_and_stop_assoc with
       | Some alst -> List.rev alst
       | None      -> assert false)
   in
+  if !debug then printf "joining same\n%!";
   if join_same_sequence then
     JoinSameSequencePaths.do_it g aset amap bounds; (* mutates g *)
   let offset = fst (range_pr amap bounds) in
+  if !debug then printf "creating by positions.\n%!";
   let posarr = create_by_position g amap bounds in
+  if !debug then printf "done.\n%!";
   { align_date
   ; reference
   ; g

@@ -78,6 +78,18 @@ let unwrap_error = function
   | Ok _    -> invalid_argf "Not Error in unwrap_error."
   | Error e -> e
 
+let print_line ?width oc s =
+  match width with
+  | None   -> fprintf oc "%s\n" s
+  | Some w -> let n = String.length s in
+              let rec loop i =
+                if i > n then () else
+                  let length = min w (n - i) in
+                  fprintf oc "%s\n" (String.sub_exn s ~index:i ~length);
+                  loop (i + w)
+              in
+              loop 0
+
 let short_seq s =
   let n = String.length s in
   if n > 10 then
@@ -193,6 +205,9 @@ let remove_and_assoc el list =
   in
   loop [] list
 
+let assoc v l =
+  Option.value_exn ~msg:"Not found" (List.Assoc.get v l)
+
 let group_by_assoc l =
   let insert assoc (k, v) =
     match List.Assoc.remove_and_get k assoc with
@@ -236,5 +251,3 @@ let time s f =
 type 'a single_or_paired =
   | Single of 'a
   | Paired of ('a * 'a)
-
-

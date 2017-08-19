@@ -315,7 +315,7 @@ module Output = struct
     if lc <> 0 then
       lc
     else
-      Nomenclature.compare r1 r2
+      Nomenclature.compare_by_resolution r1 r2
 
   let by_likelihood_arr allele_arr final_likelihoods =
     let o =

@@ -25,6 +25,8 @@ end (* Trie_distances *)
 
 module Weighted_per_segment = struct
 
+  let debug = ref false
+
   let against_mask ~init ~f =
     List.fold_left ~init ~f:(fun a -> function
       | None -> a
@@ -50,7 +52,7 @@ module Weighted_per_segment = struct
       else
         a +. mismatches)
 
-  let one ~reference ~reference_sequence ~candidates ~allele =
+  let one ~reference ~reference_sequence ~candidates ~allele ~allele_name =
     let open MSA.Segments in
     let dist_to_ref = distances ~reference:reference_sequence ~allele in
     let ref_mask =
@@ -66,6 +68,8 @@ module Weighted_per_segment = struct
     let ref_diff = against_mask ~init:dist_init ~f:dist_f ref_mask in
     let all_distances =
       StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
+        if !debug then
+          printf "Calculating weighted differences for %s vs %s\n" allele_name al2;
         let dlst =
           distances_between ~reference:reference_sequence ~allele1:allele ~allele2
           |> List.map ~f:(fun s ->
@@ -84,7 +88,8 @@ module Weighted_per_segment = struct
 
   let f ~reference ~reference_sequence ~targets ~candidates =
     let c = one ~reference ~reference_sequence ~candidates in
-    StringMap.mapi targets ~f:(fun _al1 allele -> c allele)
+    StringMap.mapi targets ~f:(fun allele_name allele ->
+      c ~allele_name ~allele)
 
 end (* Weighted_per_segment *)
 
@@ -124,11 +129,18 @@ let one ~reference ~reference_sequence ~allele ~candidates = function
       Trie_distances.f ~targets ~candidates >>= fun m ->
         Ok (StringMap.find aname m)
   | WeightedPerSegment ->
-      let _aname, aseq = allele in
+      let allele_name, aseq = allele in
       Ok (Weighted_per_segment.one ~reference ~reference_sequence ~candidates
-            ~allele:aseq)
+            ~allele_name ~allele:aseq)
 
-let compute ~reference ~reference_sequence ~targets ~candidates = function
+type arg =
+  { reference : string
+  ; reference_sequence : alignment_sequence
+  ; targets : alignment_sequence StringMap.t
+  ; candidates : alignment_sequence StringMap.t
+  }
+
+let compute { reference; reference_sequence; targets; candidates } = function
   | Reference ->
       Ok (Reference.f ~reference ~reference_sequence ~targets ~candidates)
   | Trie               ->

@@ -116,22 +116,27 @@ let () =
   if !Sys.interactive then () else begin
     let n = Array.length Sys.argv in
     let prefix = if n < 2 then "A" else Sys.argv.(1) in
+    Alter_MSA.Impute.debug := true;
+    Alter_MSA.Merge.debug := true;
+    Ref_graph.debug := true;
+    Ref_graph.JoinSameSequencePaths.debug := true;
     let merged_ave_exon_graph = load prefix `MergeAveExon in
     let merged_trie_graph = load prefix `MergeTrie in
     let genetic_graph = load prefix `Genetic in
     let nuclear_graph = load prefix `Nuclear in
     let comp merged_graph =
       List.iter merged_graph.Ref_graph.merge_map ~f:(fun (nuc, gen_merge_info) ->
+        printf "checking: %s\n%!" nuc;
         Ref_graph.sequence ~boundaries:true merged_graph nuc >>= begin fun merged_seq ->
           match gen_merge_info with
           | Alter_MSA.FullSequence ->
               printf "%s FullSequence %!" nuc;
               Ref_graph.sequence ~boundaries:true genetic_graph nuc >>= fun genetic_seq ->
                 test_same ~merged_seq ~genetic_seq nuc
-          | Alter_MSA.Added (gen, _dist) ->
+          | Alter_MSA.Added { alternate_allele; _} ->
               Ref_graph.sequence ~boundaries:true genetic_graph nuc >>= fun genetic_seq ->
                   Ref_graph.sequence ~boundaries:true nuclear_graph nuc >>= fun nuclear_seq ->
-                    test_diff ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen)
+                    test_diff ~merged_seq ~genetic_seq ~nuclear_seq (nuc, alternate_allele)
         end
         |> function
           | Ok () -> printf "equal\n"

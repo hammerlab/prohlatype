@@ -1,11 +1,28 @@
 
 open Util
 #mod_use "src/scripts/common.ml";;
+(*
 #use "src/scripts/merged_sensible_test.ml";;
+*)
+
+let gen_mp = MSA.Parser.from_file (Common.to_alignment_file "A_gen")
+let nuc_mp = MSA.Parser.from_file (Common.to_alignment_file "A_nuc")
+let intr =
+  match Alter_MSA.Merge.align_mp_into_instructions ~gen_mp ~nuc_mp with
+  | Error e -> invalid_arg e
+  | Ok i -> i
+
+let imputed_gen_mp, imputed_info_assoc =
+  match Alter_MSA.Impute.do_it Distances.Reference gen_mp with
+  | Error e -> invalid_arg e
+  | Ok g -> g
+
+(*
 
 let prefix = "B"
+
 let gen_mp, nuc_mp, instr =
-  Merge_mas.align_from_prefix ("../foreign/IMGTHLA/alignments/" ^ prefix)
+  Merge_mas.align_from_prefix (Common.to_alignment_file prefix)
   |> unwrap_ok ;;
 
 let ref_instr =
@@ -58,6 +75,7 @@ let d ~s1 ~s2 n =
     (manual_comp_display
       (List.nth_exn (split_into_xons s1) n)
       (List.nth_exn (split_into_xons s2) n)) ;;
+*)
 
 (*
 let merged_graph = load prefix `Merge  ;;

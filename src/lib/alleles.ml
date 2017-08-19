@@ -478,7 +478,8 @@ module Selectors = struct
 
   let sort_by_nomenclature lst =
     List.map lst ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
-    |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) -> Nomenclature.compare n1 n2)
+    |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) ->
+          Nomenclature.compare_by_resolution n1 n2)
     |> List.map ~f:(fun (_n, a, s) -> (a, s))
 
   let apply_to_assoc ?(sort_to_nomenclature_order=true) lst =
@@ -543,6 +544,12 @@ module Input = struct
         end
     | MergeFromPrefix _ -> true
 
+  let to_short_fname_prefix = function
+    | AlignmentFile { path; _ } ->
+        (Filename.chop_extension (Filename.basename path))
+    | MergeFromPrefix { prefix_path; } ->
+        (Filename.basename prefix_path)
+
   let to_string = function
     | AlignmentFile { path; selectors; distance } ->
         sprintf "AF_%s_%s_%s"
@@ -582,7 +589,7 @@ module Input = struct
                      fun l -> l
       | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
 
-    let do_it ?verbose ?(drop_known_splice_variants=true) prefix selectors dl =
+    let do_it ?(drop_known_splice_variants=true) prefix selectors dl =
       let open MSA.Parser in
       let gen_mp = from_file (prefix ^ "_gen.txt") in
       let nuc_mp = from_file (prefix ^ "_nuc.txt") in
@@ -601,7 +608,7 @@ module Input = struct
         in
         let gen_mp = Selectors.apply_to_mp selectors gen_mp in
         let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
-        Alter_MSA.Merge.do_it_spec ?verbose ~gen_mp ~nuc_mp dl
+        Alter_MSA.Merge.do_it ~gen_mp ~nuc_mp dl
 
   end (* MergeConstruction *)
 
