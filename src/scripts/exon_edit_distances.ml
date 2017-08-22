@@ -80,7 +80,7 @@ let output fname dmap =
   fprintf oc "allele vs, distances \n";
   DMap.iter (fun (a1, a2) lst ->
     fprintf oc "%s:%s,%s\n" a1 a2
-      (String.concat ~sep:"," (List.map ~f:(sprintf "%d") lst))) dmap;
+      (string_of_list ~sep:"," ~f:(sprintf "%d") lst)) dmap;
   close_out oc
 
 let () =

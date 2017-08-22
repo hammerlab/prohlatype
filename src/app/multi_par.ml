@@ -137,6 +137,8 @@ end (* Parallel *)
 let type_
   (* Allele information source *)
     class1_gen_dir
+    class1_nuc_dir
+    class1_mgd_dir
     alignment_files merge_files distance
   (* Process *)
     skip_disk_cache
@@ -169,12 +171,14 @@ let type_
       Some { ParPHMM.warmup; number; width }
   in
   let alignment_files, merge_files =
-    match class1_gen_dir with
-    | None   -> alignment_files, merge_files
-    | Some d -> [ d // "A_gen.txt"
-                ; d // "B_gen.txt"
-                ; d // "C_gen.txt"
-                ], []
+    match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
+    | Some d, _,      _       ->
+        [ d // "A_gen.txt" ; d // "B_gen.txt" ; d // "C_gen.txt" ], []
+    | None,   Some d, _       ->
+        [ d // "A_nuc.txt" ; d // "B_nuc.txt" ; d // "C_nuc.txt" ], []
+    | None,   None,   Some d  ->
+        [], [ d // "A" ; d // "B" ; d // "C" ]
+    | None,   None,   None    -> alignment_files, merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let incremental_pairs = not not_incremental_pairs in
@@ -257,6 +261,20 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
   in
+  let class1nuc_arg =
+    let docv  = "DIRECTORY" in
+    let doc   = "Short-cut argument that expands the given dir to look for \
+                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                 alignment files or merge arguments." in
+    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
+  in
+   let class1mgd_arg =
+    let docv  = "DIRECTORY" in
+    let doc   = "Short-cut argument that expands the given dir to look for \
+                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                 alignment files or merge arguments." in
+    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
+  in
   let do_not_use_incremental_pairs_flag =
     let doc   = "By default when performing paired typing, we use the first \
                  (as specified by the read found in the first file on the \
@@ -285,6 +303,8 @@ let () =
     Term.(const type_
             (* Allele information source *)
             $ class1gen_arg
+            $ class1nuc_arg
+            $ class1mgd_arg
             $ alignments_arg $ merges_arg $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag

@@ -216,6 +216,9 @@ let group_by_assoc l =
   in
   List.fold_left ~init:[] ~f:insert l
 
+let string_of_list ~sep ~f l =
+  String.concat ~sep (List.map ~f l)
+
 let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
   let lcp = log (1. -. er) in

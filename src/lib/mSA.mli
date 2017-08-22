@@ -49,6 +49,7 @@ type boundary_label =
 val equal_boundary_label : boundary_label -> boundary_label -> bool
 val compare_boundary_label : boundary_label -> boundary_label -> int
 val boundary_label_to_string : boundary_label -> string
+val boundary_label_to_short : boundary_label -> string
 
 (** Elements that describe alignment sequence.
 
@@ -96,16 +97,40 @@ val split_gap : gap -> pos:position -> gap * gap
 type 'a alignment_sequence = 'a alignment_element list
 
 val al_seq_to_string
-    : ?enclose: bool
-    -> sep:string
+    : ?enclose:bool
+    -> ?sep:string
     -> string alignment_sequence
     -> string
+
+module Alteration : sig
+
+  type per_segment = { full : bool; type_ : boundary_label; start : position; end_ : position; }
+  val equal_per_segment : per_segment -> per_segment -> Ppx_deriving_runtime.bool
+  val compare_per_segment : per_segment -> per_segment -> Ppx_deriving_runtime.int
+  val per_segment_to_string : per_segment -> string
+  val per_segment_list_to_string : per_segment list -> bytes
+  type t = { allele : string; why : string; distance : float; positions : per_segment list; }
+  val to_string : t -> string
+
+end (* Alteration *)
 
 module Parser : sig
 
   (** [find_align_date] parses an in channel of an alignment file up to the
       alignment date, or returns None if it is not found. *)
   val find_align_date : in_channel -> string option
+
+  (* Alternate allele information *)
+  type alt =
+    { allele : string
+    (** The name: ex. "B*15:148" *)
+    
+    ; seq : string alignment_sequence 
+    (** The sequence elements. *)
+
+    ; alters : Alteration.t list
+    (* Alterations; a result with have these empty. See Alter_MSA. *)
+    }
 
   type result =
     { align_date  : string
@@ -117,12 +142,14 @@ module Parser : sig
     ; ref_elems   : string alignment_sequence
     (** The sequence elements of the reference. *)
 
-    ; alt_elems   : (string * string alignment_sequence) list
-    (** Sequence elements of alternative alleles in an associated list.*)
+    ; alt_elems   : alt list
+    (** Sequence elements of alternative alleles.*)
     }
 
   (* Report invariant parsing violations to stdout. *)
   val report : bool ref
+
+  val lookup_allele : result -> string -> alt
 
   (** Does the source contain alignment for a gDNA (UTR's, Exons & Introns)
       or from cDNA (just Exons)? *)

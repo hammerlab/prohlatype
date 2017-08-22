@@ -473,34 +473,35 @@ module Selectors = struct
     | Number n            -> sprintf "N%d" n
     | DoNotIgnoreSuffixed -> "DNIS"
 
-  let list_to_string l =
-    String.concat ~sep:"_" (List.map l ~f:(to_string))
+  let string_of_list =
+    string_of_list ~sep:"_" ~f:to_string
 
   let sort_by_nomenclature lst =
-    List.map lst ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
-    |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) ->
-          Nomenclature.compare_by_resolution n1 n2)
-    |> List.map ~f:(fun (_n, a, s) -> (a, s))
+    let open MSA.Parser in
+    List.map lst ~f:(fun a -> Nomenclature.parse_to_resolution_exn a.allele, a)
+    |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Nomenclature.compare_by_resolution n1 n2)
+    |> List.map ~f:snd
 
-  let apply_to_assoc ?(sort_to_nomenclature_order=true) lst =
+  let apply_to_alt_elems ?(sort_to_nomenclature_order=true) lst =
+    let open MSA.Parser in
     let sorted = List.sort ~cmp:compare lst in
-    fun assoc ->
-      let assoc =
+    fun alts ->
+      let nalts =
         if List.mem DoNotIgnoreSuffixed ~set:sorted then
-          assoc
+          alts
         else
-          List.fold_left assoc ~init:[] ~f:(fun acc (allele, v) ->
-            match Nomenclature.trim_suffix allele with
-            | Ok (_a, None)         -> (allele, v) :: acc
+          List.fold_left alts ~init:[] ~f:(fun acc a ->
+            match Nomenclature.trim_suffix a.allele with
+            | Ok (_a, None)         -> a :: acc
             | Ok (_a, Some _suffix) -> acc                  (* Ignore suffixed! *)
             | Error m               -> failwith m)
           (*|> List.rev *)
       in
-      List.fold_left sorted ~init:assoc ~f:(fun acc -> function
+      List.fold_left sorted ~init:nalts ~f:(fun acc -> function
         | Regex r             -> let p = Re_posix.compile_pat r in
-                                 List.filter acc ~f:(fun (allele, _) -> Re.execp p allele)
-        | Specific s          -> List.filter acc ~f:(fun (allele, _) -> allele = s)
-        | Without e           -> List.filter acc ~f:(fun (allele, _) -> allele <> e)
+                                 List.filter acc ~f:(fun a -> Re.execp p a.allele)
+        | Specific s          -> (List.filter nalts ~f:(fun a -> a.allele = s)) @ acc
+        | Without e           -> List.filter acc ~f:(fun a -> a.allele <> e)
         | Number n            -> List.take acc n
         | DoNotIgnoreSuffixed -> acc        (* No-op at this point *))
       |> fun l ->
@@ -508,7 +509,7 @@ module Selectors = struct
 
   let apply_to_mp lst mp =
     let open MSA.Parser in
-    { mp with alt_elems = apply_to_assoc lst mp.alt_elems }
+    { mp with alt_elems = apply_to_alt_elems lst mp.alt_elems }
 
 end (* Selectors. *)
 
@@ -517,16 +518,16 @@ module Input = struct
 
   type t =
     | AlignmentFile of
-        { path      : string    (* path to file (ex. ../alignments/A_nuc.txt) *)
+        { path      : string              (* path to file (ex. ../alignments/A_nuc.txt) *)
         ; selectors : Selectors.t list
         ; distance  : Distances.logic option
         (* How to measure distances, if specified than we impute. *)
         }
     | MergeFromPrefix of
-        { prefix_path : string         (* path to prefix (ex ../alignments/A) *)
+        { prefix_path : string                   (* path to prefix (ex ../alignments/A) *)
         ; selectors   : Selectors.t list
-        ; drop_sv     : bool                          (* drop splice variants *)
-        ; distance    : Distances.logic (* How to measure distances, always impute! *)
+        ; drop_sv     : bool                                    (* drop splice variants *)
+        ; distance    : Distances.logic     (* How to measure distances, always impute! *)
         }
 
   let alignment ?(selectors=[]) ?distance path =
@@ -554,14 +555,14 @@ module Input = struct
     | AlignmentFile { path; selectors; distance } ->
         sprintf "AF_%s_%s_%s"
           (Filename.chop_extension (Filename.basename path))
-          (Selectors.list_to_string selectors)
+          (Selectors.string_of_list selectors)
           (match distance with
            | None -> "false"
            | Some dl -> Distances.show_logic dl)
     | MergeFromPrefix { prefix_path; selectors; drop_sv; distance } ->
         sprintf "MGD_%s_%s_%b_%s"
           (Filename.basename prefix_path)
-          (Selectors.list_to_string selectors)
+          (Selectors.string_of_list selectors)
           drop_sv
           (Distances.show_logic distance)
 
@@ -587,7 +588,7 @@ module Input = struct
       match List.Assoc.get p splice_variants with
       | None      -> eprintf "Splice variant filter not implemented for %s\n" p;
                      fun l -> l
-      | Some set  -> List.filter ~f:(fun (a, _) -> not (List.mem a ~set))
+      | Some set  -> List.filter ~f:(fun a -> not (List.mem a.MSA.Parser.allele ~set))
 
     let do_it ?(drop_known_splice_variants=true) prefix selectors dl =
       let open MSA.Parser in
@@ -617,7 +618,7 @@ module Input = struct
         let mp = MSA.Parser.from_file path in
         let smp = Selectors.apply_to_mp selectors mp in
         begin match distance with
-        | None    -> Ok (smp, []) (* empty merge_map *)
+        | None    -> Ok smp
         | Some dl -> Alter_MSA.Impute.do_it dl smp
         end
     | MergeFromPrefix

@@ -1501,7 +1501,7 @@ module ForwardMultipleGen (R : Ring) = struct
 
     let to_string t =
       sprintf "cols: %s\tbv: %s \tlv: %s\n\t\ts: %s"
-        (String.concat ~sep:";" (List.map t.cols ~f:(sprintf "%d")))
+        (string_of_list ~sep:";" ~f:(sprintf "%d") t.cols)
         (cell_to_string R.to_string t.best_value)
         (cell_to_string R.to_string t.last_value)
         (Aset.to_human_readable t.alleles)
@@ -1607,8 +1607,8 @@ module ForwardMultipleGen (R : Ring) = struct
         let base, base_prob = obsp in
         printf "current bands for %c %f cols:%s at %d \n\t%s\n"
           base base_prob
-          (String.concat ~sep:";" (List.map b.cols ~f:(sprintf "%d"))) i
-            (to_string b)
+          (string_of_list ~sep:";" ~f:(sprintf "%d") b.cols)
+            i (to_string b)
       end;
       let cur_row = Cm.get b.alleles col_values in
       let update ?cur_row emp k alleles =
@@ -1757,7 +1757,7 @@ module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
 
 type t =
   { align_date      : string
-  ; alleles         : (string * Alter_MSA.info) array     (* Canonical order. *)
+  ; alleles         : (string * MSA.Alteration.t list) array        (* Canonical order. *)
   ; number_alleles  : int
   ; emissions_a     : base_emissions array
   }
@@ -1767,19 +1767,15 @@ let construct input =
     invalid_argf "Allele input MUST be imputed!"
   else begin
     let open MSA.Parser in
-    Alleles.Input.construct input >>= fun (mp, merge_map) ->
+    Alleles.Input.construct input >>= fun mp ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
-      List.iter alt_elems ~f:(fun (allele, allele_seq) ->
-        add_alternate_allele pmap allele allele_seq
-          base_arr state_a);
+      List.iter alt_elems ~f:(fun a ->
+        add_alternate_allele pmap a.allele a.seq base_arr state_a);
       let emissions_a = Array.map Pm.ascending state_a in
       let alleles =
-        (reference, Alter_MSA.FullSequence) ::
-         (List.map alt_elems ~f:(fun (a,_) -> a,
-           List.Assoc.get a merge_map
-           |> Option.value_exn ~msg:(sprintf "couldn't find %s in merge_map" a)))
+        (reference, []) :: List.map alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in
@@ -1801,8 +1797,7 @@ let load_pphmm fname =
 
 let float_arr_to_str a =
   Array.to_list a
-  |> List.map ~f:(sprintf "%f")
-  |> String.concat ~sep:"; "
+  |> string_of_list ~sep:";" ~f:(sprintf "%f")
   |> sprintf "[|%s|]"
 
 (* Abstracts, behind a function the regular or reverse complement access

@@ -46,6 +46,12 @@ let boundary_label_to_string = function
   | Exon n   -> sprintf "Exon %d" n
   | Intron n -> sprintf "Intron %d" n
 
+let boundary_label_to_short = function
+  | UTR5     -> "U5"
+  | UTR3     -> "U3"
+  | Exon n   -> sprintf "X%d" n
+  | Intron n -> sprintf "I%d" n
+
 type 'sr sequence = { start : position; s : 'sr }
 and gap = { gstart : position; length : int }
 and boundary = { label : boundary_label; pos : position }
@@ -78,11 +84,11 @@ let al_el_to_string = function
   | Sequence { start; s }   -> sprintf "Sequence %s at %d" s start
   | Gap { gstart; length }  -> sprintf "Gap of %d from %d" length gstart
 
-let al_seq_to_string ?(enclose=true) ~sep lst =
+let al_seq_to_string ?(enclose=true) ?(sep=";") lst =
   if lst = [] then begin
     if enclose then "[]" else ""
   end else
-    let s = String.concat ~sep (List.map ~f:al_el_to_string lst) in
+    let s = string_of_list ~sep ~f:al_el_to_string lst in
     if enclose then
       sprintf "[%s]" s
     else
@@ -107,6 +113,43 @@ let split_gap gap ~pos =
   { gstart = gap.gstart + length; length = gap.length - length }
 
 type 'a alignment_sequence = 'a alignment_element list
+
+
+(** Information about how we alter an allele's sequence.
+
+    We define Alterations here because they're fundamental to some of the later
+    algorithms so it is helpful to include the type now. But we dont' add any
+    alterations to the Parsed allele information in this module. *)
+module Alteration = struct
+
+  type per_segment =
+    { full  : bool
+    ; type_ : boundary_label
+    ; start : position
+    ; end_  : position
+    } [@@deriving eq, ord]
+
+  let per_segment_to_string p =
+    sprintf "[%s:%s:%d,%d)"
+      (boundary_label_to_short p.type_)
+      (if p.full then "full" else "partial")
+      p.start p.end_
+
+  let per_segment_list_to_string =
+    string_of_list ~sep:";" ~f:per_segment_to_string
+
+  type t =
+    { allele    : string
+    ; why       : string
+    ; distance  : float
+    ; positions : per_segment list
+    }
+
+  let to_string { allele; why; distance; positions } =
+    sprintf "%s %s (d: %f) positions: [%s]"
+      allele why distance (per_segment_list_to_string positions)
+
+end (* Alteration. *)
 
 (* How this works:
 
@@ -138,7 +181,7 @@ module Parser = struct
                 (boundary_label_to_string prev)
 
   type 'e parse_struct =
-    { allele          : string
+    { allele_n        : string
     (* For now, it makes it easier to have some kind of sane delimiter to align
        and spot check these alignments. The "|" are the 'boundaries'. This keeps
        track of the most recently encountered boundary marker, starting with 0.
@@ -152,9 +195,9 @@ module Parser = struct
     ; in_data         : bool
     }
 
-  let init_ps boundary_schema allele position =
+  let init_ps boundary_schema allele_n position =
     let boundary_label = first_boundary_label boundary_schema in
-    { allele
+    { allele_n
     ; position
     ; boundary_schema
     ; boundary_label
@@ -163,8 +206,8 @@ module Parser = struct
     }
 
   let where ps =
-    sprintf "allele: %s, position: %d, sequence length: %d"
-      ps.allele ps.position (List.length ps.sequence)
+    sprintf "allele_n: %s, position: %d, sequence length: %d"
+      ps.allele_n ps.position (List.length ps.sequence)
 
   (* What type of character have we seen? *)
   type type_of_character =
@@ -229,9 +272,9 @@ module Parser = struct
       | Sequence {start; s} :: t when start + (List.length s) = position
                         -> Sequence { start; s = c :: s} :: t
       | []              -> invalid_argf "Adding char %c %d %s at Empty state!"
-                              c position ps.allele
+                              c position ps.allele_n
       | End _ :: _      -> invalid_argf "Adding char %c %d %s after End!"
-                              c position ps.allele
+                              c position ps.allele_n
       | Start _ :: _
       | Boundary _ :: _
       | Gap _ :: _
@@ -322,12 +365,23 @@ module Parser = struct
     | Empty
     | Data of line
 
+  type alt =
+    { allele : string
+    ; seq    : string alignment_element list
+    ; alters : Alteration.t list
+    }
+
   type result =
     { align_date  : string
     ; reference   : string
     ; ref_elems   : string alignment_element list
-    ; alt_elems   : (string * string alignment_element list) list
+    ; alt_elems   : alt list
     }
+
+  let lookup_allele r find_me =
+    match List.find r.alt_elems ~f:(fun a -> a.allele = find_me) with
+    | Some a -> a
+    | None   -> invalid_argf "Didn't find %s" find_me
 
   let report = ref false
 
@@ -379,7 +433,7 @@ module Parser = struct
               reference. *)
             if !report && new_ps.position <> !latest_reference_position then
               eprintf "position mismatch %d vs %d for %s.\n"
-                !latest_reference_position new_ps.position new_ps.allele;
+                !latest_reference_position new_ps.position new_ps.allele_n;
             Hashtbl.replace x.alt_htbl allele new_ps;
             x
           end
@@ -453,10 +507,13 @@ module Parser = struct
         let alt_elems =
           Hashtbl.fold ~init:[] ~f:(fun ~key:all ~data:ps acc ->
               if ps.sequence = [] then begin
-                printf "Dropping empty sequence: %s\n" ps.allele;
+                printf "Dropping empty sequence: %s\n" ps.allele_n;
                 acc
               end else
-                (all, normalized_seq ~boundary_swap ps) :: acc)
+                { allele = ps.allele_n
+                ; seq    = normalized_seq ~boundary_swap ps
+                ; alters = []
+                } :: acc)
             reversed.alt_htbl
         in
         { align_date
@@ -1296,8 +1353,8 @@ module Segments = struct
     | (final_bm, (fs1, fs2, acc, a1, a2)) :: tl ->
         if !debug then
           printf "After reference pass still have:\nAllele1: %s\nAllele2: %s\n"
-            (al_seq_to_string ~sep:";" a1)
-            (al_seq_to_string ~sep:";" a2);
+            (al_seq_to_string a1)
+            (al_seq_to_string a2);
         let final1, final2, nacc =
           same_position_fold a1 a2 ~init:(fs1, fs2, acc)
             ~f:(fun (started1, started2, acc) ns ->

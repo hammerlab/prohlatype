@@ -14,21 +14,21 @@ open MSA
 open MSA.Parser
 
 let apply_allele a r =
-  let allele =
-    match List.Assoc.get a r.alt_elems with
+  let alt =
+    match List.find ~f:(fun alt -> alt.allele = a) r.alt_elems with
     | None -> invalid_argf "missing allele %s" a
     | Some a -> a
   in
-  allele_sequence ~reference:r.ref_elems ~allele ()
+  allele_sequence ~reference:r.ref_elems ~allele:alt.seq ()
 
 let test f =
   let r = from_file f in
   let reference = r.ref_elems in
   (r.reference, reference_sequence r)
   :: List.map r.alt_elems
-      ~f:(fun (a, allele) ->
-          printf "testing %s\n" a;
-          a, allele_sequence ~reference ~allele ())
+      ~f:(fun alt ->
+          printf "testing %s\n" alt.allele;
+          alt.allele, allele_sequence ~reference ~allele:alt.seq ())
 
 let load_fasta f =
   List.map (Fasta.all f) ~f:(fun (hdr, s) ->

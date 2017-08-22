@@ -9,33 +9,27 @@ let fail_on_parse a =
   | Ok (g, r) -> g, r
   | Error e   -> failwith e
 
-let against_mp ?width mp merge_assoc out =
+let alters_to_string = function
+  | []  -> " "
+  | lst -> sprintf " %s "
+              (string_of_list lst ~sep:"," ~f:MSA.Alteration.to_string)
+
+let against_mp ?width mp out =
   let open MSA in
   let open MSA.Parser in
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
   let gene, ref_res = fail_on_parse mp.reference in
-  let check_for_merge =
-    match merge_assoc with
-    | []  -> fun _ -> " "
-    | ma  -> let smap = string_map_of_assoc ma in
-             begin fun a ->
-               try
-                 let info = StringMap.find a smap in
-                 sprintf " %s " (Alter_MSA.info_to_string info)
-               with Not_found -> " "
-             end
-  in
   let oc = open_out out in
   try
-    List.map mp.alt_elems ~f:(fun (a, allele) ->
-        let g, r = fail_on_parse a in
+    List.map mp.alt_elems ~f:(fun a ->
+        let g, r = fail_on_parse a.allele in
           if g <> gene then failwithf "Different genes: %s vs %s" gene g;
-          r, a, allele_sequence ~reference ~allele ())
-    |> fun l -> ((ref_res, mp.reference, r) :: l)
-    |> List.sort ~cmp:(fun (r1,_,_) (r2,_,_) -> Nomenclature.compare_by_resolution r1 r2)
-    |> List.iter ~f:(fun (_, a, s) ->
-      fprintf oc ">%s%slength: %d\n" a (check_for_merge a) (String.length s);
+          r, a.allele, (allele_sequence ~reference ~allele:a.seq ()), a.alters)
+    |> fun l -> ((ref_res, mp.reference, r, []) :: l)
+    |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
+    |> List.iter ~f:(fun (_, a, s, alters) ->
+      fprintf oc ">%s%slength: %d\n" a (alters_to_string alters) (String.length s);
       print_line ?width oc s);
     close_out oc
   with e ->
@@ -60,10 +54,10 @@ let convert
       ?number_alleles ~do_not_ignore_suffixed_alleles
   in
   to_allele_input ?alignment_file ?merge_file ?distance ~selectors >>= fun i ->
-    Alleles.Input.construct i >>= fun (mp, merge_assoc) ->
+    Alleles.Input.construct i >>= fun mp ->
       let ofiledefault = Alleles.Input.to_short_fname_prefix i in
       let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
-      Ok (against_mp ?width mp merge_assoc out)
+      Ok (against_mp ?width mp out)
 
 let () =
   let open Cmdliner in

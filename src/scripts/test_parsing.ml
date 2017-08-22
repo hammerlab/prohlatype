@@ -128,7 +128,7 @@ let check (desc, pred) allele lst =
 let all_sequences_in_result f r =
   let open MSA.Parser in
   check f r.reference r.ref_elems;
-  List.iter ~f:(fun (al, el) -> check f al el) r.alt_elems
+  List.iter ~f:(fun alt -> check f alt.allele alt.seq) r.alt_elems
 
 let test_result r =
   [ starts_with_start

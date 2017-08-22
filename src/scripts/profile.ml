@@ -55,7 +55,7 @@ let to_correct_map data =
             | a1 :: a2 :: [] -> Some (gene, Diploid.init a1 a2)
             | _ -> eprintf "Odd! gene: %s has <2 or >2 alleles: %s\n"
                     gene
-                    (String.concat ~sep:" " (List.map ~f:Nomenclature.resolution_and_suffix_opt_to_string allele_lst));
+                    (string_of_list ~sep:" " ~f:Nomenclature.resolution_and_suffix_opt_to_string allele_lst);
                    None))
 
 let tab_character = '\t'

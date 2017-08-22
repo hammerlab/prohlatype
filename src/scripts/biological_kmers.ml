@@ -90,8 +90,7 @@ let diff ~fasta_table ~graph_table fasta_seqs known_alleles idx =
                   (show_too_short ts)
             | Ok pos_lst  ->
                 sprintf "(at: %s)"
-                  (String.concat ~sep:","
-                    (List.map pos_lst ~f:Index.show_position))
+                  (string_of_list pos_lst ~sep:"," ~f:Index.show_position)
           in
           Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d, %s) \
                          didn't find it in Fasta sequences!" i s v1 v2 pos_msg)

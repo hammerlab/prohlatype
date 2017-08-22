@@ -24,9 +24,8 @@ module Set = struct
     in
     loop
 
-  let to_string s =
-    List.map s ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
-    |> String.concat ~sep:";"
+  let to_string  =
+    string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
 
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
 
@@ -321,14 +320,12 @@ let init_all_a ~size v =
 
 (* Properties *)
 let asc_to_string la to_s =
-  List.map la ~f:(fun (s, v) ->
-    sprintf "[%s]:%s" (Set.to_string s) (to_s v))
-  |> String.concat ~sep:"; "
+  string_of_list la ~sep:"; " ~f:(fun (s, v) ->
+      sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
 let desc_to_string ld to_s =
-  List.map ld ~f:(fun (i, v) ->
+  string_of_list ld ~sep:";" ~f:(fun (i, v) ->
     sprintf "%s:%s" (Interval.to_string i) (to_s v))
-  |> String.concat ~sep:";"
 
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with

@@ -9,11 +9,15 @@ let to_distance_targets_and_candidates ?alignment ?merge () =
   | (Some prefix), _  ->
       let gen = from_file (prefix ^ "_gen.txt") in
       let nuc = from_file (prefix ^ "_nuc.txt") in
-      let gen_alleles = List.map ~f:fst gen.alt_elems in
+      let gen_alleles = List.map ~f:(fun a -> a.allele) gen.alt_elems in
       Ok (Alter_MSA.Merge.to_distance_arguments nuc gen_alleles)
   | None, (Some af)   ->
       let mp = from_file af in
-      let targets = string_map_of_assoc mp.alt_elems in
+      let targets =
+        mp.alt_elems 
+        |> List.map ~f:(fun alt -> (alt.allele, alt.seq))
+        |> string_map_of_assoc 
+      in
       Ok { Distances.reference = mp.reference
          ; Distances.reference_sequence = mp.ref_elems
          ; targets

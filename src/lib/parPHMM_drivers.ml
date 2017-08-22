@@ -148,8 +148,8 @@ module Alleles_and_positions = struct
 
   let to_string (e,a,p) = sprintf "%s,%d,%0.5f" a p e
 
-  let lst_to_string al =
-    String.concat ~sep:";" (List.map al ~f:to_string)
+  let string_of_list =
+    string_of_list ~sep:";" ~f:to_string
 
   (* Descending *)
   let descending_cmp l1 l2 =
@@ -329,9 +329,9 @@ module Output = struct
     o
 
   let allele_first o oc =
-    Array.iter o ~f:(fun (l,_,a, m) ->
-      fprintf oc "%16s\t%0.20f\t%s\n" a l
-        (Alter_MSA.info_to_string m))
+    Array.iter o ~f:(fun (l, _, a, alts) ->
+      fprintf oc "%16s\t%0.20f\t%s\n"
+        a l (string_of_list ~sep:";" ~f:MSA.Alteration.to_string alts))
 
   (* Ignore Alter.info *)
   let likelihood_first allele_arr allele_llhd_arr oc =
@@ -357,9 +357,8 @@ module Output = struct
     if likelihood_first then
       List.iter zb ~f:(fun (l, p, ijlist) ->
         let alleles_str =
-          List.map ijlist ~f:(fun (i,j) ->
+          string_of_list ijlist ~sep:"\t" ~f:(fun (i,j) ->
             sprintf "%s,%s" (fst allele_arr.(i)) (fst allele_arr.(j)))
-          |> String.concat ~sep:"\t"
         in
         fprintf oc "%0.20f\t%0.4f\t%16s\n" l p alleles_str)
     else
@@ -519,7 +518,7 @@ module Forward = struct
     List.iter t.per_reads ~f:(fun {name; aapt} ->
       fprintf oc "%s\n\t%s\n" name
         (Orientation.to_string ~take_regular
-            Alleles_and_positions.lst_to_string aapt))
+            Alleles_and_positions.string_of_list aapt))
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
     read_length parPHMM_t =
@@ -807,13 +806,11 @@ module Multiple_loci = struct
 
   let pp_to_string ?(sep='\t') sr_to_string = function
     | Single_or_incremental soi_lst ->
-        List.map soi_lst ~f:(fun (l, s) ->
+        string_of_list soi_lst ~sep:"\n" ~f:(fun (l, s) ->
           sprintf "%s%c%s" l sep (aap_soi_to_string ~sep sr_to_string s))
-        |> String.concat ~sep:"\n"
     | MPaired pr_lst ->
-        List.map pr_lst ~f:(fun (l, p) ->
+        string_of_list pr_lst ~sep:"\n" ~f:(fun (l, p) ->
           sprintf "%s%c%s" l sep (pr_to_string ~sep sr_to_string p))
-        |> String.concat ~sep:"\n"
 
   type 'sr per_read =
     { name  : string
@@ -955,7 +952,7 @@ module Multiple_loci = struct
     fprintf oc "Per Read:\n";
     List.iter prlst ~f:(fun {name; rrs} ->
       fprintf oc "%s\n%s\n" name
-        (pp_to_string Alleles_and_positions.lst_to_string rrs))
+        (pp_to_string Alleles_and_positions.string_of_list rrs))
 
   let init conf opt read_length parPHMM_t_lst =
     let { likelihood_first; zygosity_report_size; report_size } = opt in

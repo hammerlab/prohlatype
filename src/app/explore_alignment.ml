@@ -56,7 +56,7 @@ let report_msm_lst (gall, _idx) (seq, reslst) =
           (sum_mismatches nlst)
           ma
           (manual_comp_display seq as_seq)
-          (String.concat ~sep:";" (List.map nlst ~f:(fun (p,d) -> sprintf "(%d,%d)" p d)))
+          (string_of_list ~sep:";" ~f:(fun (p,d) -> sprintf "(%d,%d)" p d))
           (Alleles.Set.to_human_readable gall.Ref_graph.aindex als)))
 
 let best_match_allele_map = Alleles.Map.fold_wa ~init:max_int ~f:min

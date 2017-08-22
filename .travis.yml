@@ -17,6 +17,12 @@ matrix:
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=biologicalKmers
     - os: linux
       env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=impute
+    - os: linux
+      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeA
+    - os: linux
+      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeB
+    - os: linux
+      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeC
 
     # At the moment bootstrapping OCaml on OSX takes too long, for the sake of
     # simplicity just test compilation
