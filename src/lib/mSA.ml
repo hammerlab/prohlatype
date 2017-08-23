@@ -165,9 +165,8 @@ module Parser = struct
     | GDNA
     | CDNA
 
-  let first_boundary_label = function
-    | GDNA -> UTR5
-    | CDNA -> Exon 1
+  let first_boundary_label p =
+    if p < 1 then UTR5 else Exon 1
 
   let next_boundary_label scheme prev =
     let opt =
@@ -196,7 +195,7 @@ module Parser = struct
     }
 
   let init_ps boundary_schema allele_n position =
-    let boundary_label = first_boundary_label boundary_schema in
+    let boundary_label = first_boundary_label position in
     { allele_n
     ; position
     ; boundary_schema
@@ -332,7 +331,7 @@ module Parser = struct
      End in this normalization step. *)
   let normalized_seq ~boundary_swap ps =
     let empty_seq =
-      [ Boundary { label = first_boundary_label ps.boundary_schema; pos = ps.position } ]
+      [ Boundary { label = first_boundary_label ps.position; pos = ps.position } ]
     in
     if ps.sequence = empty_seq then
       []
