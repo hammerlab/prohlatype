@@ -331,16 +331,22 @@ module Parser = struct
      hasn't terminated with an UnknownChar then we need to explicitly add an
      End in this normalization step. *)
   let normalized_seq ~boundary_swap ps =
-    let rec has_end = function
-      | End _ :: _      -> true
-      | Boundary _ :: t -> has_end t
-      | Gap _ :: t      -> has_end t
-      | _               -> false
+    let empty_seq =
+      [ Boundary { label = first_boundary_label ps.boundary_schema; pos = ps.position } ]
     in
-    if has_end ps.sequence then
-      reverse_seq ~boundary_swap ps.sequence
+    if ps.sequence = empty_seq then
+      []
     else
-      reverse_seq ~boundary_swap (End ps.position :: ps.sequence)
+      let rec has_end = function
+        | End _ :: _      -> true
+        | Boundary _ :: t -> has_end t
+        | Gap _ :: t      -> has_end t
+        | _               -> false
+      in
+      if has_end ps.sequence then
+        reverse_seq ~boundary_swap ps.sequence
+      else
+        reverse_seq ~boundary_swap (End ps.position :: ps.sequence)
 
   type line =
     | Position of bool * int             (* nucleotide or amino acid sequence *)

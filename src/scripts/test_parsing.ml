@@ -87,7 +87,7 @@ let theres_an_end_for_every_start =
       in
       not c
     with Double s ->
-      eprintf "Found double %s" s;
+      printf "Found double %s" s;
       false
 
 let sequence_have_diff_elemns =
@@ -100,7 +100,7 @@ let sequence_have_diff_elemns =
     | h :: t ->
         List.fold_left ~f:(fun (s, p) n ->
           let false_ () =
-            Printf.printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
+            printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
             (false && s, n)
           in
           match p, n with
@@ -119,11 +119,13 @@ let we_can_parse_the_allele_name =
 
 exception TestFailed of string
 
-let check (desc, pred) allele lst =
-  if pred allele lst then
-    ()
-  else
-    raise (TestFailed (sprintf "%s failed for %s" desc allele))
+let check (desc, pred) allele = function
+  | []  -> printf "ignoring %s because of empty sequence!\n" allele
+  | lst ->
+    if pred allele lst then
+      ()
+    else
+      raise (TestFailed (sprintf "%s failed for %s" desc allele))
 
 let all_sequences_in_result f r =
   let open MSA.Parser in
@@ -154,6 +156,6 @@ let () =
           printf "parsed and checked %s\n%!" f;
           s
         with e ->
-          eprintf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
+          printf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
           -1)
     |> exit
