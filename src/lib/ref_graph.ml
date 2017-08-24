@@ -403,6 +403,7 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
   let module AS = (val aset : Alleles.Set) in
   let open MSA in
   let open Nodes in
+  let first_start_pos = fst first_start in
   let first_start_node = S first_start in
   let last_end_node = E last_end in
   let end_to_start_nodes = List.map ~f:(fun (e, s) -> E e, S s) end_to_next_start_assoc in
@@ -530,9 +531,12 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
         let start = start_pos, allele in
         let state = start, previous_starts_and_ends in
         let new_node = G.V.create (S start) in
-        (* we can think of a start as as a Gap *)
-        close_position_loop state ~prev:first_start_node ~next:first_start_node
-          ~allele_node:new_node (`Gap start_pos) tl
+        if start_pos < first_start_pos then
+          ref_gap_loop state ~prev:new_node first_start_node first_start_pos tl
+        else
+          (* we can think of a start as as a Gap *)
+          close_position_loop state ~prev:first_start_node ~next:first_start_node
+            ~allele_node:new_node (`Gap start_pos) tl
   and add_end (start, os) end_ prev tl =
     add_allele_edge prev (G.V.create (E end_));
     let ns = { start; end_ } :: os in
@@ -564,17 +568,22 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node lst
     | Boundary { label; pos} :: tl  ->
-        if pos < ref_pos then
-          gc "Allele %s has a boundary %s at %d that is in ref gap ending %d."
-            allele (blts label) pos ref_pos
-        else if pos = ref_pos then
+        if pos < ref_pos then begin
+          if ref_pos = first_start_pos then begin
+            let bn = G.V.create (B (pos, label)) in
+            let () = add_allele_edge prev bn in
+            ref_gap_loop state ~prev:bn ref_node ref_pos tl
+          end else
+            gc "Allele %s has a boundary %s at %d that is in ref gap ending %d."
+              allele (blts label) pos ref_pos
+        end else if pos = ref_pos then
           if ref_node = B (pos, label) then
             let () = add_allele_edge prev ref_node in
             main_loop state ~prev ~next:ref_node tl
           else
             gc "Allele %s has a boundary %s at %d where ref gap ends %d."
               allele (blts label) pos ref_pos
-        else
+        else (* pos > ref_pos *)
           let () = add_allele_edge prev ref_node in
           main_loop state ~prev ~next:ref_node lst
     | Sequence { start; s} :: tl  ->
@@ -585,9 +594,9 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           let new_node = G.V.create (N (start, s)) in
           let () = add_allele_edge prev new_node in
           let close_pos = start + String.length s in
-          if close_pos <= ref_pos then
+          if close_pos < ref_pos then begin
             ref_gap_loop state ~prev:new_node ref_node ref_pos tl
-          else (* close_pos > ref_pos *)
+          end else (* close_pos => ref_pos *)
             rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
               ~new_node tl
     | Gap { gstart; length} :: tl ->
@@ -596,21 +605,15 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
           main_loop state ~prev ~next:ref_node lst
         end else
           let close_pos = gstart + length in
-          if close_pos <= ref_pos then
+          if close_pos < ref_pos then
             ref_gap_loop state ~prev ref_node ref_pos tl
-          else (* close_pos > ref_pos *)
+          else (* close_pos >= ref_pos *)
             rejoin_after_split ~prev:ref_node ~next:ref_node close_pos state
               ~new_node:prev tl
   (* The "run-length"-encoding nature of alignment implies that our edges have
      to link to the next sequence element iff they are consecutive
      (ex. "A..C", "...A..C" ) as opposed to linking back to the reference! *)
   and close_position_loop state ~prev ~next ~allele_node pe lst =
-    (*let () =
-      printf "cpl prev %s, next %s, an, %s\n"
-        (Nodes.vertex_name prev)
-        (Nodes.vertex_name next)
-        (Nodes.vertex_name allele_node)
-    in*)
     match test_consecutive_elements allele pe lst with
     | `End (end_pos, tl)                    ->
         add_end state end_pos allele_node  tl
@@ -643,17 +646,14 @@ let add_non_ref g aset reference (first_start, last_end, end_to_next_start_assoc
         let () = add_allele_edge prev next in
         main_loop state ~prev:next ~next t
     | Sequence { start; s} :: t ->
-        (*let () = printf "adding %s at %d ...." s start in *)
         let new_node = G.V.create (N (start, s)) in
         let open_res = split_in ~prev ~next ~visit:add_allele_edge start in begin
         match open_res with
         | `AfterLast prev         ->
-            (*let () = printf "AfterLast %s \n" (Nodes.vertex_name prev) in *)
             let () = add_allele_edge prev new_node in
             solo_loop state new_node t
         | `InGap (prev, next, _)
         | `AtNext (prev, next)    ->
-            (*let () = printf "InGap|AtNext %s -> %s \n" (Nodes.vertex_name prev) (Nodes.vertex_name next) in *)
             let () = add_allele_edge prev new_node in
             let close_pos = start + String.length s in
             close_position_loop ~prev ~next ~allele_node:new_node state (`Sequence close_pos) t
@@ -1094,7 +1094,7 @@ let construct_from_parsed ?(arg=default_construction_arg) r =
               in
               (allele, start_and_stops) :: acc
             with (GraphConstruction s) ->
-              eprintf "Graph construction error: %s skipping allele.\n" s;
+              eprintf "Graph construction error: %s skipping allele.\n%!" s;
               acc)
   in
   if !debug then printf "calculating bounds.\n%!";
