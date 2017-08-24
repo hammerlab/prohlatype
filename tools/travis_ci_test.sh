@@ -42,18 +42,18 @@ case "$TEST" in
     ;;
   mergeA)
     echo testing merging of A
-    time ./merged_sensible_test.native A
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native A > merged_A.log
     ;;
   mergeB)
     echo testing merging of B
-    time ./merged_sensible_test.native B
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native B > merged_B.log
     ;;
   mergeC)
     echo testing merging of C
-    time ./merged_sensible_test.native C
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native C > merged_C.log
     ;;
  alleleDiffA)
     echo testing allele differences between A_gen
