@@ -437,6 +437,9 @@ let insert_if_not_empty s v l =
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
+(* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
+   any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
+   values are equal add to the end of l. *)
 let merge_or_add_to_end eq s v l =
   let rec loop = function
     | []     -> [s, v]
@@ -530,11 +533,10 @@ let merge3 ~eq t1 t2 t3 f =
   match t1, t2, t3 with
   | (Asc l1), (Asc l2), (Asc l3) -> Asc (start l1 l2 l3)
 
-
-(* This method is tail recursive, and we pay the cost of inserting an element,
-   at the end each time but hopefully, merging, due to {eq}, instead into the
-   accumulator will effectively constrain the size of the resulting accumulator
-   such that the cost is amortized. *)
+(* This method is tail recursive, and by default we pay the cost of inserting
+   an element at the end, each time, Hopefully, merging, due to {eq}, instead into
+   the accumulator-list will effectively constrain the size of the resulting
+   list such that the cost is amortized. *)
 let merge4 ~eq t1 t2 t3 t4 f =
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
