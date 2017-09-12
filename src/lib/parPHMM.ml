@@ -568,10 +568,13 @@ module ForwardFilters (R : Ring) = struct
      the threshold, stop executing! *)
 
   (* Assume that {errors} are in ascending order; therefore the lowest base
-     error are at the front of the list. In this model/calculation there are
-     only transitions between match states, so we don't need to scale by
-     transition probabilities such as t_m_m. *)
-  let ungapped_path_prob number_mismatches errors =
+     error are at the front of the list; this way when we say that there are
+     'n' mismatches, those n have the lowest error (highest probability of
+     being right). In this model/calculation there are only transitions between
+     match states, we need to scale by the transition probabilities
+     (t_s_m, t_m_m) in order to make it comparable with the match value in the
+     PHMM cell. *)
+  let ungapped_path_prob number_mismatches ~t_s_m ~t_m_m errors =
     let to_emission_p n e =
       if n < number_mismatches then Fc.mismatch_p e else Fc.match_p e
     in
@@ -579,12 +582,12 @@ module ForwardFilters (R : Ring) = struct
       match l with
       | []     -> p
       | e :: t -> let emission_p = to_emission_p n e in
-                  loop (n + 1) R.(p * emission_p) t
+                  loop (n + 1) R.(p * emission_p * t_m_m) t
     in
     match errors with
     | []     -> R.one
     | e :: t -> let emission_p = to_emission_p 0 e in
-                loop 1 R.((* one *) emission_p) t
+                loop 1 R.(t_s_m * emission_p) t
 
   (* Insert by maintaining the ascending order. *)
   let rec insert error l = match l with
@@ -594,8 +597,11 @@ module ForwardFilters (R : Ring) = struct
                 else
                   e :: (insert error t)
 
-  let match_filter ~number_mismatches of_entry =
-    let path_prob = ungapped_path_prob number_mismatches in
+  let match_filter tm ~number_mismatches of_entry =
+    let open Phmm.TransitionMatrix in
+    let t_s_m = R.constant (tm StartOrEnd Match) in
+    let t_m_m = R.constant (tm Match Match) in
+    let path_prob = ungapped_path_prob number_mismatches ~t_s_m ~t_m_m in
     (* Called at the start of each base *)
     let base (errors, max_value) (_base, base_error) =
       let threshold = path_prob errors in
@@ -958,7 +964,7 @@ type ('workspace, 'entry, 'final_entry, 'final_emission, 'base) recurrences =
 
    Produce functions that actually traverse and fill in the forward pass,
    and emission values. These functions also take an optional [filter] that
-   may raise an exception (such as {PastThreshold}) to signal a stop of the
+   may raise an exception ({PastThreshold}) to signal a premature stop to the
    computation. *)
 module ForwardPass (W : Workspace_intf) = struct
 
@@ -1116,7 +1122,7 @@ module ForwardSingleGen (R: Ring) = struct
     | Some number_mismatches ->
         let full ~read =
           let of_entry c = c.match_ in
-          let filter = Ff.match_filter ~number_mismatches of_entry in
+          let filter = Ff.match_filter tm ~number_mismatches of_entry in
           try
             let _filter_s = Fp.full_f ~filter ws recurrences ~reference ~read in
             Completed ()
@@ -1125,7 +1131,7 @@ module ForwardSingleGen (R: Ring) = struct
         in
         let paired ~read1 ~read2 =
           let of_entry c = c.match_ in
-          let filter = Ff.match_filter ~number_mismatches of_entry in
+          let filter = Ff.match_filter tm ~number_mismatches of_entry in
           try
             let _filter_s = Fp.paired_f ~filter ws recurrences ~reference ~read1 ~read2 in
             Completed ()
@@ -2059,12 +2065,12 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           filtered ~filter
       | Some number_mismatches, None            ->
           let of_entry = F.cam_max_cell in
-          let filter = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter = F.Ff.match_filter tm ~number_mismatches of_entry in
           filtered ~filter
       | Some number_mismatches, Some threshold  ->
           let of_entry = F.cam_max_cell in
           let filter1 = F.Ff.past_threshold_filter threshold of_entry in
-          let filter2 = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter2 = F.Ff.match_filter tm ~number_mismatches of_entry in
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
@@ -2095,12 +2101,12 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           filtered ~filter
       | Some number_mismatches, None            ->
           let of_entry = F.cam_max_cell in
-          let filter = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter = F.Ff.match_filter tm ~number_mismatches of_entry in
           filtered ~filter
       | Some number_mismatches, Some threshold  ->
           let of_entry = F.cam_max_cell in
           let filter1 = F.Ff.past_threshold_filter threshold of_entry in
-          let filter2 = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter2 = F.Ff.match_filter tm ~number_mismatches of_entry in
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
