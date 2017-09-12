@@ -538,7 +538,7 @@ module ForwardCalcs (R : Ring) = struct
 
 end (* ForwardCalcs *)
 
-module ForwardFilters  (R : Ring) = struct
+module ForwardFilters (R : Ring) = struct
 
   module Fc = ForwardCalcs(R)
 
