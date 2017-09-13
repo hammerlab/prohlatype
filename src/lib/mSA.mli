@@ -132,6 +132,8 @@ module Parser : sig
     (* Alterations; a result with have these empty. See Alter_MSA. *)
     }
 
+  val sort_alts_by_nomenclature : alt list -> alt list
+
   type result =
     { align_date  : string
     (** When the sequences were aligned by IMGT. *)

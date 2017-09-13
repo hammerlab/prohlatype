@@ -476,12 +476,6 @@ module Selectors = struct
   let string_of_list =
     string_of_list ~sep:"_" ~f:to_string
 
-  let sort_by_nomenclature lst =
-    let open MSA.Parser in
-    List.map lst ~f:(fun a -> Nomenclature.parse_to_resolution_exn a.allele, a)
-    |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Nomenclature.compare_by_resolution n1 n2)
-    |> List.map ~f:snd
-
   let apply_to_alt_elems ?(sort_to_nomenclature_order=true) lst =
     let open MSA.Parser in
     let sorted = List.sort ~cmp:compare lst in
@@ -505,7 +499,7 @@ module Selectors = struct
         | Number n            -> List.take acc n
         | DoNotIgnoreSuffixed -> acc        (* No-op at this point *))
       |> fun l ->
-          if sort_to_nomenclature_order then sort_by_nomenclature l else l
+          if sort_to_nomenclature_order then sort_alts_by_nomenclature l else l
 
   let apply_to_mp lst mp =
     let open MSA.Parser in

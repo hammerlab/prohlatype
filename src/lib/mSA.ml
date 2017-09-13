@@ -376,6 +376,11 @@ module Parser = struct
     ; alters : Alteration.t list
     }
 
+  let sort_alts_by_nomenclature lst =
+    List.map lst ~f:(fun a -> Nomenclature.parse_to_resolution_exn a.allele, a)
+    |> List.sort ~cmp:(fun (n1, _) (n2, _) -> Nomenclature.compare_by_resolution n1 n2)
+    |> List.map ~f:snd
+
   type result =
     { align_date  : string
     ; reference   : string

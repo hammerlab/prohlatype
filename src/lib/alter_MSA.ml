@@ -1045,10 +1045,11 @@ end (* Merge *) = struct
           let ref_n = nuc_mp.ref_elems in
           if !debug then printf "finished same_alts\n";
           diff_alts dl instr nuc_mp same ref_g ref_n >>= fun diff_alt_elems ->
+            let nalt_elems = same_alt_elems @ diff_alt_elems in
             Ok ({ align_date = gen_mp.align_date
                 ; reference  = gen_mp.reference
                 ; ref_elems  = new_ref_elems
-                ; alt_elems  = same_alt_elems @ diff_alt_elems
+                ; alt_elems  = sort_alts_by_nomenclature nalt_elems
                 })
 
 end (* Merge *)
