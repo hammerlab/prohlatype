@@ -1,5 +1,5 @@
 PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner biocaml.unix parany
-SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving.4.1 nonstd.0.0.2 sosa.0.2.0 ocamlgraph.1.8.6 cmdliner.1.0.0 biocaml.0.6.0 parany.1.0.3
+SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner biocaml parany
 TOOLS=mhc2gpdf par_type multi_par align2fasta allele_distances
 TESTS=test_parsing round_trip benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
@@ -11,10 +11,10 @@ default: build
 all: build tools tests
 
 build:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma prohlatype.cmxa
 
 setup:
-	opam install ocamlfind ocamlbuild $(SETUP_PACKAGE_NAMES)
+	opam install $(SETUP_PACKAGE_NAMES)
 
 #cli:
 #	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib -I src/app cli.native
