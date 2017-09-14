@@ -45,13 +45,13 @@ module TransitionMatrix = struct
     let tm = Array.make_matrix ~dimx:4 ~dimy:4 0. in
     let ll = float ref_length in
     let open Float in
-    tm.(match_idx).(match_idx)            <- (1. - 2. * alpha) * (1. - gamma);
-    tm.(match_idx).(insertion_idx)        <- alpha * (1. - gamma);
-    tm.(match_idx).(deletion_idx)         <- alpha * (1. - gamma);
+    tm.(match_idx).(match_idx)            <- (1. - 2. * alpha) (* (1. - gamma)*);
+    tm.(match_idx).(insertion_idx)        <- alpha (* (1. - gamma)*);
+    tm.(match_idx).(deletion_idx)         <- alpha (* (1. - gamma)*);
     tm.(match_idx).(start_end_idx)        <- gamma;
 
-    tm.(insertion_idx).(match_idx)        <- (1. - beta) * (1. - gamma);
-    tm.(insertion_idx).(insertion_idx)    <- beta * (1. - gamma);
+    tm.(insertion_idx).(match_idx)        <- (1. - beta) (* (1. - gamma)*);
+    tm.(insertion_idx).(insertion_idx)    <- beta (* (1. - gamma)*);
     (*tm.(insertion_idx).(deletion_idx)   <- 0.; *)
     tm.(insertion_idx).(start_end_idx)    <- gamma;
 
