@@ -38,12 +38,12 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
     else begin
       let file = Filename.concat dir (arg_to_string arg) in
       let save r =
-        (*
+        (**)
         if not (Sys.file_exists dir) then make_full_path dir;
         let o = open_out file in
         Marshal.to_channel o r [Marshal.Closures];
         close_out o;
-        *)
+        (**)
         r
       in
       let load () =
