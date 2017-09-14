@@ -52,9 +52,9 @@ module Past_threshold = struct
 end  (* Past_threshold *)
 
 (* Consider a single orientation: either regular or reverse complement. *)
-let single ?base_p ?prev_threshold proc pass_result_map reverse_complement read read_errors =
+let specific_orientation ?prev_threshold proc pass_result_map reverse_complement read read_errors =
   let open ParPHMM in
-  match proc.single ?base_p ?prev_threshold ~reverse_complement ~read ~read_errors with
+  match proc.single ?prev_threshold ~read ~read_errors reverse_complement with
   | Filtered m    -> Filtered m
   | Completed ()  -> Completed (pass_result_map proc reverse_complement)
 
@@ -113,10 +113,23 @@ module Orientation = struct
         | Completed (`Snd, c) -> Completed (true, c)
         | Completed (`Fst, r) -> Completed (false, r)
 
+  (* Compute a specific orientation and label the other as Filtered. *)
+  let specific ?prev_threshold proc pass_result_map rc read read_errors =
+    if rc then
+      { regular     = Filtered "Selected reverse complement"
+      ; complement  = specific_orientation ?prev_threshold proc pass_result_map
+                        true read read_errors
+      }
+    else
+      { regular     = specific_orientation ?prev_threshold proc pass_result_map
+                        false read read_errors
+      ; complement  = Filtered "Selected regular"
+      }
+
   (* Consider both orientations. *)
-  let paired pt pass_result_map proc read read_errors =
+  let check pt pass_result_map proc read read_errors =
     let do_work ?prev_threshold rc =
-      single ?prev_threshold proc pass_result_map rc read read_errors
+      specific_orientation ?prev_threshold proc pass_result_map rc read read_errors
     in
     match pt with
     | `Don't ->
@@ -473,7 +486,11 @@ module Forward = struct
     }
 
   let forward report_size past_threshold proc read read_errors =
-    Orientation.paired past_threshold (proc_to_stat report_size) proc read read_errors
+    time (sprintf "forward of report_size: %d; past_threshold: %s; read: %s"
+            report_size (Past_threshold.to_string past_threshold)
+              (String.sub_exn read ~index:0 ~length:10))
+    (fun () ->
+      Orientation.check past_threshold (proc_to_stat report_size) proc read read_errors)
 
   type per_read =
     { name  : string
@@ -526,6 +543,7 @@ module Forward = struct
     | None ->
       let proc =
         setup_single_pass ?insert_p ?max_number_mismatches ?band read_length
+        (*setup_single_pass_split ?insert_p ?max_number_mismatches ?band read_length*)
         parPHMM_t
       in
       proc, parPHMM_t.alleles
@@ -554,6 +572,11 @@ module Forward = struct
       to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
         read_length parPHMM_t
     in
+    (*printf "allele list: \n\t%s\n%!"
+      (parPHMM_t.alleles
+        |> Array.to_list
+        |> List.map ~f:(fun (a, _) -> a)
+        |> String.concat ~sep:"\t\n"); *)
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
     let forward pt r re = fst (forward report_size pt proc r re) in
@@ -566,13 +589,17 @@ module Forward = struct
       Fastq_items.single fqi ~k:(fun name read read_errors ->
         { name; stat = Single (forward initial_pt read read_errors) })
     and paired fq1 fq2 =
+      let take_regular = take_regular_by_likelihood in
       Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
         let r1 = forward initial_pt rd1 re1 in
-        (* A little bit wasteful as we can check the best orientation for the
-           2nd read; not implementing this here because it is much better, more
-           corner cases are considered, in the Multiple_loci implementation. *)
-        let r2 = forward initial_pt rd2 re2 in
-        { name; stat = Paired (r1, r2)})
+        match Orientation.most_likely_between r1 ~take_regular with
+        | Filtered m  ->
+            let r2 = forward initial_pt rd2 re2 in
+            { name; stat = Paired (r1, r2)}
+        | Completed (c, _)  ->
+            let r2 = Orientation.specific proc (proc_to_stat report_size)
+                      (not c) rd2 re2 in
+            { name; stat = Paired (r1, r2)})
     and merge state rr =
       match rr.stat with
       | Single stat_or  -> update_state_single state rr.name  stat_or
@@ -744,7 +771,7 @@ module Multiple_loci = struct
       ; first   : 'single_result
       ; second  : 'single_result
       }
-    (* Orientation and loci of 2nd is determined by 1st There is no
+    (* Orientation and gene of 2nd read is determined by 1st. There is no
        {pass_result} since we're not going to apply a filter to the 2nd read.
        Note that one could "naturally" combine the result of the first by
        passing the first's emission (via per_allele_hood) into the second
@@ -969,7 +996,7 @@ module Multiple_loci = struct
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
     let forward = Forward.forward report_size in
     let filterless_single p rc r re =
-      match single p (Forward.proc_to_stat report_size) rc r re with
+      match specific_orientation p (Forward.proc_to_stat report_size) rc r re with
       | ParPHMM.Filtered m  -> invalid_argf "Filtered result %s without filter!" m
       | ParPHMM.Completed s -> s
     in
