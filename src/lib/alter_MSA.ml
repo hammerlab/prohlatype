@@ -283,7 +283,8 @@ end (* Impute *) = struct
                 }
               in
               Ok ({ alt with alters = [a]; seq = merged } :: alt_list))
-      >>= fun nalt_elems -> Ok ({ mp with alt_elems = nalt_elems})
+      >>= fun nalt_elems ->
+        Ok ({ mp with alt_elems = sort_alts_by_nomenclature nalt_elems})
 
 end (* Impute *)
 

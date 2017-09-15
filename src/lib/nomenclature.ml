@@ -61,11 +61,20 @@ type resolution =
   | Two of int * int
   | Three of int * int * int
   | Four of int * int * int * int
-  [@@deriving ord]
 
-(* Ignore suffix for sorting  *)
+(* This logic compares alleles such that the sorted order is the same as in the
+   alignment files. Without doing too much work the resulting order has a
+   tremendous impact on performance: For example, ParPHMM forward passes are at
+   least twice as fast because of the resulting partition_maps are more
+   compressed! *)
 let compare_by_resolution (r1,_) (r2,_) =
-  compare_resolution r1 r2
+  let to_quad = function
+    | One a           -> [ a; -1; -1; -1 ]
+    | Two (a,b)       -> [ a;  b; -1; -1 ]
+    | Three (a,b,c)   -> [ a;  b;  c; -1 ]
+    | Four (a,b,c,d)  -> [ a;  b;  c;  d ]
+  in
+  Pervasives.compare (to_quad r1) (to_quad r2)
 
 let parse_resolution s =
   trim_suffix s >>=
