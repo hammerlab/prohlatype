@@ -1907,18 +1907,7 @@ type proc =
   (* Perform a forward pass. We purposefully only signal whether we fully
      completed the pass or were filtered, because we may have different uses
      for the result of a pass. The accessors below allow the user to extract
-     more purposeful information. The method is called "single" to contrast
-     with [paired] which performs the forward pass for paired reads. *)
-
-  ; paired            : ?prev_threshold:float
-                      -> reverse_complement:bool
-                      -> read1:string
-                      -> read_errors1:float array
-                      -> read2:string
-                      -> read_errors2:float array
-                      -> unit pass_result
-  (* Perform a forward pass for paired reads. Takes care of flipping either
-     the first or second read information depending on reverse complement. *)
+     more purposeful information. *)
 
   ; best_alleles    : int -> (float * string) list
   ; best_positions  : int -> (float * int) list
@@ -1980,19 +1969,13 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
         let read = access reverse_complement read read_errors in
         pass.full read
       in
-      let paired ?prev_threshold ~reverse_complement
-          ~read1 ~read_errors1 ~read2 ~read_errors2 =
-        let read1 = access reverse_complement read1 read_errors1 in
-        let read2 = access (not reverse_complement) read2 read_errors2 in
-        pass.paired read1 read2
-      in
       let best_alleles _n = [ ForwardSLogSpace.W.get_emission ws, allele] in
       let best_allele_pos n =
         best_positions n |> List.map ~f:(fun (l, i) -> (l, allele, i))
       in
       let per_allele_llhd () = Pm.init_all_a ~size:1 (ForwardSLogSpace.W.get_emission ws) in
       let init_global_state () = [| LogProbabilities.one |] in
-      { single; paired
+      { single
       ; best_alleles; best_positions; best_allele_pos
       ; per_allele_llhd
       ; init_global_state
@@ -2082,44 +2065,10 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
-    let paired ?prev_threshold ~reverse_complement ~read1 ~read_errors1
-      ~read2 ~read_errors2 =
-      (* We do not have to clear the workspace, since a full pass will
-         overwrite all elements of the workspace.
-        F.Workspace.clear ws;*)
-      let read1 = access reverse_complement read1 read_errors1 in
-      let read2 = access (not reverse_complement) read2 read_errors2 in
-      let unfiltered () =
-        F.Regular.paired ws r ~reference ~read1 ~read2;
-        Completed ()
-      in
-      let filtered ~filter =
-        try
-          let _final_filter = F.Regular.paired_f ~filter ws r ~reference ~read1 ~read2 in
-          Completed ()
-        with PastThreshold msg ->
-          Filtered msg
-      in
-      match max_number_mismatches, prev_threshold with
-      | None,                   None            ->
-          unfiltered ()
-      | None,                   Some threshold  ->
-          let of_entry = F.cam_max_cell in
-          let filter = F.Ff.past_threshold_filter threshold of_entry in
-          filtered ~filter
-      | Some number_mismatches, None            ->
-          let of_entry = F.cam_max_cell in
-          let filter = F.Ff.match_filter tm ~number_mismatches of_entry in
-          filtered ~filter
-      | Some number_mismatches, Some threshold  ->
-          let of_entry = F.cam_max_cell in
-          let filter1 = F.Ff.past_threshold_filter threshold of_entry in
-          let filter2 = F.Ff.match_filter tm ~number_mismatches of_entry in
-          let filter = join_filter filter1 filter2 in
-          filtered ~filter
-    in
-    { single; paired
-    ; best_alleles ; best_positions ; best_allele_pos
+    { single
+    ; best_alleles
+    ; best_positions
+    ; best_allele_pos
     ; per_allele_llhd
     ; maximum_match
     ; init_global_state
@@ -2244,11 +2193,7 @@ let setup_single_pass_split ?band ?insert_p ?max_number_mismatches read_length t
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
-    let paired ?prev_threshold ~reverse_complement ~read1 ~read_errors1
-      ~read2 ~read_errors2 =
-        failwith "NI"
-    in
-    { single; paired
+    { single
     ; best_alleles ; best_positions ; best_allele_pos
     ; per_allele_llhd
     ; maximum_match
