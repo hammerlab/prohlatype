@@ -58,18 +58,6 @@ let specific_orientation ?prev_threshold proc pass_result_map reverse_complement
   | Filtered m    -> Filtered m
   | Completed ()  -> Completed (pass_result_map proc reverse_complement)
 
-let most_likely_between_two_pr ~take_regular pr1 pr2 =
-  let open ParPHMM in
-  match pr1, pr2 with
-  | Filtered mr, Filtered mc -> Filtered (sprintf "Both! %s, %s" mr mc)
-  | Filtered _r, Completed c -> Completed (`Snd, c)
-  | Completed r, Filtered _c -> Completed (`Fst, r)
-  | Completed r, Completed c ->
-    if take_regular r c then
-      Completed (`Fst, r)
-    else
-      Completed (`Snd, c)
-
 (* Sometimes (such as in the beginning) we do not know whether to prefer a
    regular or a reverse-complement orientation for read. *)
 module Orientation = struct
@@ -107,11 +95,16 @@ module Orientation = struct
         sprintf "F%c%s%cF%c%s" sep mr sep sep mc
 
   let most_likely_between ~take_regular t =
-    most_likely_between_two_pr ~take_regular t.regular t.complement
-    |> function
-        | Filtered m          -> Filtered m
-        | Completed (`Snd, c) -> Completed (true, c)
-        | Completed (`Fst, r) -> Completed (false, r)
+    let open ParPHMM in
+    match t.regular, t.complement with
+    | Filtered mr, Filtered mc -> Filtered (sprintf "Both! %s, %s" mr mc)
+    | Filtered _r, Completed c -> Completed (true, c)
+    | Completed r, Filtered _c -> Completed (false, r)
+    | Completed r, Completed c ->
+      if take_regular r c then
+        Completed (false, r)
+      else
+        Completed (true, c)
 
   (* Compute a specific orientation and label the other as Filtered. *)
   let specific ?prev_threshold proc pass_result_map rc read read_errors =
