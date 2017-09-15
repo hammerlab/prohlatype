@@ -2182,7 +2182,6 @@ let setup_single_pass_split ?band ?insert_p ?max_number_mismatches read_length t
   let module F = ForwardMLogSpace in
   let r(*, br*) = F.recurrences ?insert_p tm r2 number_alleles in
   let ws = F.W.generate ref_length r2 in
-  let last_read_index = r2 - 1 in
   let alleles = Array.map ~f:fst alleles in
   let emission_pm1 = ref Pm.empty_a in
   let per_allele_llhd () =
