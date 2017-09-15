@@ -6,10 +6,34 @@
 open Util
 module Pm = Partition_map
 
+module Base = struct
+
+  type t =
+    | A
+    | C
+    | G
+    | T
+    [@@deriving show]
+
+  let of_char = function
+    | 'A' -> A
+    | 'C' -> C
+    | 'G' -> G
+    | 'T' -> T
+    |  c  -> invalid_argf "Unsupported base: %c" c
+
+  let to_char = function
+    | A       -> 'A'
+    | C       -> 'C'
+    | G       -> 'G'
+    | T       -> 'T'
+
+end (* Base *)
+
 (* Construction
-  1. From MSA.Parser.result -> Array of Bases.t option 's.
+  1. From MSA.Parser.result -> Array of Base.t option 's.
       None if allele is in a gap.
-    a. Figure out the Bases.t of reference sequence and a position map
+    a. Figure out the Base.t of reference sequence and a position map
        (position in MSA.Parser.result to index into final array)
        [initialize_base_array_and_position_map].
     b. Start Partition_map descending lists so that we can extend them with
@@ -21,7 +45,7 @@ over this position map as we move along MSA.Parser.alignment_element's for
 the alleles.
 *)
 
-type gapped_bases = Bases.t option          (* None -> the allele is in a gap. *)
+type gapped_bases = Base.t option          (* None -> the allele is in a gap. *)
 type base_emissions = (Pm.ascending, gapped_bases) Pm.t
 
 type position_map = (MSA.position * int) list
@@ -29,7 +53,7 @@ type position_map = (MSA.position * int) list
 let some x = Some x
 
 let initialize_base_array_and_position_map ref_elems =
-  let wrap_char c = Bases.of_char c |> some in
+  let wrap_char c = Base.of_char c |> some in
   let sequence_to_base_states_array s =
     String.to_character_list s
     |> List.map ~f:wrap_char
@@ -71,7 +95,7 @@ let reduce_position_map : position_map -> position_map = function
 
 (* Helper method to create an actual function for computing the index into
    the base state array. This is useful for debugging between the MSA.Parser
-   positions and the index into Bases array. Assumes a 'reduced' (via
+   positions and the index into Base array. Assumes a 'reduced' (via
    [reduce_position_map]) position map. *)
 let to_position_map : position_map -> (int -> int option) = function
   | [] -> invalid_arg "to_position_map: empty"
@@ -119,7 +143,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   let add_sequence start s =
     String.iteri s ~f:(fun i c ->
       let j = i + start in
-      arr.(j) <- Pm.add (some (Bases.of_char c)) arr.(j))
+      arr.(j) <- Pm.add (some (Base.of_char c)) arr.(j))
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
@@ -156,7 +180,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
 let pos_to_string pm =
   Pm.to_string pm
     (function | None   -> "none"
-              | Some c -> sprintf "some %c" (Bases.to_char c))
+              | Some c -> sprintf "some %c" (Base.to_char c))
 
 (***** Forward Pass ***)
 
@@ -375,7 +399,7 @@ module ForwardCalcs (R : Ring) = struct
       else
         mismatch_p base_error
     in
-    let open Bases in
+    let open Base in
     function
     | A -> compare_against 'A'
     | C -> compare_against 'C'
@@ -779,16 +803,16 @@ module Path = struct
     (* Start and emission values *)
     | S of int                                   (* Index into reference index. *)
     | E of int
-    | M of char * Bases. t (* Store the read pair, that _may_ have 'N', and Bases *)
+    | M of char * Base. t (* Store the read pair, that _may_ have 'N', and Base *)
     | I of int * char                     (* index into read and read base pair *)
-    | D of int * Bases.t
+    | D of int * Base.t
 
   let to_string = function
     | S i      -> sprintf "S%d" i
     | E i      -> sprintf "E%d" i
-    | M (b, r) -> sprintf "M%c%c" b (Bases.to_char r)
+    | M (b, r) -> sprintf "M%c%c" b (Base.to_char r)
     | I (p, b) -> sprintf "I%d%c" p b
-    | D (p, r) -> sprintf "D%d%c" p (Bases.to_char r)
+    | D (p, r) -> sprintf "D%d%c" p (Base.to_char r)
 
   type summary =
     { reference : string
@@ -800,9 +824,9 @@ module Path = struct
   let to_strings =
     let g = '_' in
     let to_pair = function
-      | M (b, r) -> (b, Bases.to_char r)
+      | M (b, r) -> (b, Base.to_char r)
       | I (_, b) -> (b, g)
-      | D (_, r) -> (g, Bases.to_char r)
+      | D (_, r) -> (g, Base.to_char r)
       | _        -> assert false
     in
     let rec first start reada refa = function
@@ -1073,7 +1097,7 @@ module ForwardSingleGen (R: Ring) = struct
 
   let debug_ref = ref false
 
-  type base = Bases.t
+  type base = Base.t
 
   let recurrences ?insert_p tm read_length =
     let r, _ = Fc.g ?insert_p tm read_length in
