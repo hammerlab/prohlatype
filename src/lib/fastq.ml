@@ -73,7 +73,7 @@ let fold_parany ?number_of_reads ?(specific_reads=[]) ~nprocs ~map ~mux file =
             end
     in
     let demux () = read () in
-    Parany.run ~nprocs ~demux ~work:map ~mux)
+    Parany.run ~verbose:false ~csize:1 ~nprocs ~demux ~work:map ~mux)
 
 let all ?number_of_reads file =
   fold ?number_of_reads
@@ -303,7 +303,7 @@ let fold_paired_parany ?number_of_reads ?(specific_reads=[])
               incr count_r;
               Util.Single h
       in
-      Parany.run ~nprocs ~demux:read ~work:map ~mux))
+      Parany.run ~verbose:false ~csize:1 ~nprocs ~demux:read ~work:map ~mux))
 
 let unwrap_cr_ok = function
     | Result.Error _ -> invalid_arg "unwrap_cr_ok: " (*Error.to_string_hum e*)
