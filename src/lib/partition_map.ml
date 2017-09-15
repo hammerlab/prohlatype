@@ -29,26 +29,26 @@ module Interval = struct
 
   type inter_diff_res =
     (* There is no intersection, the first interval comes Before the second
-        or it comes After the second. *)
+       or it comes After the second. *)
     | Before
     | After
 
     (* Different possible intersections. The way to read these is that the
-        first word describes the relationship of result to the intersection
-        for the first interval argument to {inter_diff} and the second word
-        for the second argument.
+       first word describes the relationship of result to the intersection
+       for the first interval argument to {inter_diff} and the second word
+       for the second argument.
 
-        For example, if inter_diff i1 i2 = EmptySplit {inter; before, after}
-        means that there is no resulting difference for the intersection of i1
-        and i2 as it pertains to i1, it is empty, but that the intersection
-        splits i2 into {before} and {after}.
+       For example, if inter_diff i1 i2 = EmptySplit {inter; before, after}
+       means that there is no resulting difference for the intersection of i1
+       and i2 as it pertains to i1, it is empty, but that the intersection
+       splits i2 into {before} and {after}.
 
-        If i1 = (3,3) and i2 = (2,6) then
-        inter_diff i1 i2 =
-          EmptySplit {inter = (3,3); before = (2,2); after = (4,6)}.
+       If i1 = (3,3) and i2 = (2,6) then
+       inter_diff i1 i2 =
+         EmptySplit {inter = (3,3); before = (2,2); after = (4,6)}.
 
-        As a consequence the record labels are changing and may pertain to
-        different elements of {i1} or {i2}. *)
+       As a consequence the record labels are changing and may pertain to
+       different elements of {i1} or {i2}. *)
 
     | BeforeAfter of { inter: t; before: t; after : t }
     | BeforeEmpty of { inter: t; before: t }
@@ -69,7 +69,7 @@ module Interval = struct
     let s2, e2 = t2 in
     if s1 = e1 then begin
     (* Handle the cases where the first interval is 1 wide to eliminate some
-        corner cases. *)
+       corner cases. *)
 
       if s1 > s2 then begin                                           (* S2_1 *)
         if e2 < s1 then                                               (* E2_1 *)
@@ -687,11 +687,9 @@ let asc_to_string la to_s =
   string_of_list la ~sep:"; " ~f:(fun (s, v) ->
       sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
-
 let desc_to_string ld to_s =
   string_of_list ld ~sep:";" ~f:(fun (i, v) ->
     sprintf "%s:%s" (Interval.to_string i) (to_s v))
-
 
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with
