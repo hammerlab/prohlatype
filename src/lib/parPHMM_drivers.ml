@@ -768,11 +768,11 @@ module Multiple_loci = struct
        {pass_result} since we're not going to apply a filter to the 2nd read.
        Note that one could "naturally" combine the result of the first by
        passing the first's emission (via per_allele_hood) into the second
-       read's forward pass via [base_p] (this is similar to thinking of the 2
-       reads as just one long read), but that will dramatically slow down the
-       pass (it will start out already branched). It is better to keep the two
-       likelihoods separate and then just multiply (log -> add) the results
-       together. This is the desired outcome for paired reads as it is the most
+       read's forward pass (this is similar to thinking of the 2 reads as just
+       one long read), but that will dramatically slow down the pass (it will
+       start out already branched). It is better to keep the two likelihoods
+       separate and then just multiply (log -> add) the results together. This
+       is the desired outcome for paired reads as it is the most
        descriminative. *)
 
   let orientation_char_of_bool reverse_complement =
