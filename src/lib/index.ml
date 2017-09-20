@@ -171,7 +171,7 @@ let kmer_counts ~biological ~k g =
     fold_over_kmers_in_graph ~k g ~absorb ~close ~extend ~init
 
 type position =
-  { alignment : alignment_position
+  { alignment : MSA.position
   ; sequence  : sequence
   ; offset    : int       (* into sequence *)
   } [@@deriving eq,ord,show]

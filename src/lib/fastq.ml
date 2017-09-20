@@ -44,6 +44,37 @@ let fold (type a) ?number_of_reads ?(specific_reads=[]) file ~f ~(init : a) =
     |> snd
   with M.Fin m -> m
 
+let fold_parany ?number_of_reads ?(specific_reads=[]) ~nprocs ~map ~mux file =
+  let open Biocaml_unix in
+  let stop = to_stop number_of_reads in
+  let filter = to_filter specific_reads in
+  let stop_r = ref false in
+  let count_r = ref 0 in
+  Future_unix.Reader.with_file file ~f:(fun rdr ->
+    let fr = Biocaml_unix.Fastq.read rdr in
+    let rec read () =
+      if !stop_r || stop !count_r then
+        raise Parany.End_of_input
+      else
+        match Future_unix.Pipe.read fr with
+        | `Eof   -> raise Parany.End_of_input
+        | `Ok oe ->
+            begin match oe with
+            | Error e -> eprintf "%s\n" (Error.to_string_hum e);
+                         read ()
+            | Ok fqi  ->
+                let display, s = filter fqi.Biocaml_unix.Fastq.name in
+                stop_r := s;
+                if display then begin
+                  incr count_r;
+                  fqi
+                end else
+                  read ()
+            end
+    in
+    let demux () = read () in
+    Parany.run ~verbose:false ~csize:1 ~nprocs ~demux ~work:map ~mux)
+
 let all ?number_of_reads file =
   fold ?number_of_reads
     ~f:(fun acc el -> el :: acc)  ~init:[] file
@@ -98,19 +129,16 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
   let same = same cmp in
   let open Future_unix in
   let open Deferred in
+  let fold_if_f_not_none ff ~init l =
+    Option.value_map ff ~default:init
+      ~f:(fun f -> List.fold l ~init ~f)
+  in
   Reader.with_file file1 ~f:(fun rdr1 ->
     Reader.with_file file2 ~f:(fun rdr2 ->
       (* Avoid circular dep *)
       let fr1 = Biocaml_unix.Fastq.read rdr1 in
       let fr2 = Biocaml_unix.Fastq.read rdr2 in
-      let rec single_pipe_fold fr f2 acc =
-        Pipe.read fr >>= fun r ->
-          match r with
-          | `Eof          -> return (`FinishedSingle acc)
-          | `Ok (Error e) -> eprintf "%s\n" (Error.to_string_hum e);
-                             single_pipe_fold fr f2 acc
-          | `Ok (Ok a)    -> single_pipe_fold fr f2 (f2 acc a)
-      and two_pipe_fold c s1 s2 acc =
+      let rec two_pipe_fold c s1 s2 acc =
         if stop c then
           return (`DesiredReads acc)
         else
@@ -118,39 +146,19 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
             Pipe.read fr2 >>= fun r2 ->
               match r1, r2 with
               | `Eof, `Eof                      ->
-                  return (`BothFinished acc)
-              | `Eof, `Ok eb                    ->
-                  let nacc =
-                    Option.value_map ff ~default:acc
-                      ~f:(fun ff -> List.fold s1 ~init:acc ~f:ff)
-                  in
-                  begin match fs with
-                  | None -> return (`OneReadPairedFinished (1, nacc))
-                  | Some fs ->
-                      let nacc = List.fold s2 ~init:nacc ~f:fs in
-                      begin match eb with
-                      | Error e -> eprintf "%s\n" (Error.to_string_hum e);
-                                   single_pipe_fold fr2 fs nacc
-                      | Ok b    -> single_pipe_fold fr2 fs (fs nacc b)
-                      end
-                   end
-              | `Ok ea, `Eof                    ->
-                  let nacc =
-                    Option.value_map fs ~default:acc
-                      ~f:(fun fs -> List.fold s2 ~init:acc ~f:fs)
-                  in
-                  begin match ff with
-                  | None -> return (`OneReadPairedFinished (2, acc))
-                  | Some ff ->
-                      let nacc = List.fold s2 ~init:nacc ~f:ff in
-                      begin match ea with
-                      | Error e ->
-                        eprintf "%s\n" (Error.to_string_hum e);
-                        single_pipe_fold fr2 ff nacc
-                      | Ok a ->
-                        single_pipe_fold fr2 ff (ff nacc a)
-                      end
-                  end
+                  let nacc = fold_if_f_not_none ff ~init:acc s1 in
+                  let nacc = fold_if_f_not_none fs ~init:nacc s2 in
+                  return (`BothFinished nacc)
+              | `Eof, `Ok (Error eb)            ->
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  two_pipe_fold c s1 s2 acc
+              | `Eof, `Ok (Ok b)                ->
+                  same_check c s1 (b :: s2) acc
+              | `Ok (Error ea), `Eof            ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  two_pipe_fold c s1 s2 acc
+              | `Ok (Ok a), `Eof                ->
+                  same_check c (a :: s1) s2 acc
               | `Ok (Error ea), `Ok (Error eb)  ->
                   eprintf "%s\n" (Error.to_string_hum ea);
                   eprintf "%s\n" (Error.to_string_hum eb);
@@ -165,25 +173,137 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
                   if cmp a b then begin
                     filter_pass a b c s1 s2 acc
                   end else
-                    let ns1 = a :: s1 in
-                    let ns2 = b :: s2 in
-                    match same ns1 ns2 with
-                    | Some (r1, r2, ns1, ns2) ->
-                        filter_pass r1 r2 c ns1 ns2 acc
-                    | None ->
-                        two_pipe_fold c ns1 ns2 acc
+                    same_check c (a :: s1) (b :: s2) acc
+      and same_check c ns1 ns2 acc =
+        match same ns1 ns2 with
+        | Some (r1, r2, ns1, ns2) ->
+            filter_pass r1 r2 c ns1 ns2 acc
+        | None ->
+            two_pipe_fold c ns1 ns2 acc
       and filter_pass a b c s1 s2 acc =
         let display, stop = filt a.Biocaml_unix.Fastq.name in
         match display, stop with
         | true,        true  -> `StoppedByFilter (f acc a b)
         | false,       true  -> `StoppedByFilter acc
-        | true,        false -> two_pipe_fold (c + 1) s1 s2 (f acc a b)
-        | false,       false -> two_pipe_fold c s1 s2 acc
+        | true,        false -> same_check (c + 1) s1 s2 (f acc a b)
+        | false,       false -> same_check c s1 s2 acc
       in
       two_pipe_fold 0 [] [] init))
 
 let fold_paired ?to_key ?number_of_reads ?specific_reads file1 file2 ~f ~init =
     fold_paired_both ?to_key ?number_of_reads ?specific_reads file1 file2 ~f ~init
+
+let fold_paired_parany ?number_of_reads ?(specific_reads=[])
+   ~nprocs ~map ~mux file1 file2 =
+  let open Biocaml_unix in
+  let to_key = name_as_key in
+  let stop = to_stop number_of_reads in
+  let filt = to_filter specific_reads in
+  let cmp r1 r2 = (to_key r1) = (to_key r2) in
+  let same = same cmp in
+  let stop_r = ref false in
+  let count_r = ref 0 in
+  Future_unix.Reader.with_file file1 ~f:(fun rdr1 ->
+    Future_unix.Reader.with_file file2 ~f:(fun rdr2 ->
+      let fr1 = Biocaml_unix.Fastq.read rdr1 in
+      let fr2 = Biocaml_unix.Fastq.read rdr2 in
+      let state_ref = ref (`ReadBoth (fr1, fr2, [], [])) in
+      let rec same_check_both s1 s2 =
+        match same s1 s2 with
+        | Some (r1, r2, ns1, ns2) ->
+            state_ref := `ReadBoth (fr1, fr2, ns1, ns2);
+            filter_pass r1 r2
+        | None ->
+            state_ref := `ReadBoth (fr1, fr2, s1, s2);
+            read ()
+      and same_check_one fr f ns1 ns2 =
+        match same ns1 ns2 with
+        | Some (r1, r2, ns1, ns2) ->
+            state_ref := `ReadOne (fr, f, ns1, ns2);
+            filter_pass r1 r2
+        | None ->
+            state_ref := `ReadOne (fr, f, ns1, ns2);
+            read ()
+      and filter_pass r1 r2 =
+        let display, s = filt r1.Biocaml_unix.Fastq.name in
+        stop_r := s;
+        if display then begin
+          incr count_r;
+          Util.Paired (r1, r2)
+        end else
+          read ()
+      and read () =
+        if !stop_r || stop !count_r then
+          raise Parany.End_of_input
+        else
+          match !state_ref with
+          | `ReadBoth (fr1, fr2, s1, s2) ->
+              let r1 = Future_unix.Pipe.read fr1 in
+              let r2 = Future_unix.Pipe.read fr2 in
+              begin match r1, r2 with
+              | `Eof,           `Eof  ->
+                  state_ref := `Remaining (s1, s2);
+                  read ()
+              | `Eof,           `Ok (Error eb)  ->
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  state_ref := `ReadOne (fr2, false, s1, s2);
+                  read ()
+              | `Eof,           `Ok (Ok b)      ->
+                  same_check_one fr2 false s1 (b :: s2) 
+              | `Ok (Error ea), `Eof            ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  state_ref := `ReadOne (fr1, true,  s1, s2);
+                  read ()
+              | `Ok (Ok a),     `Eof            ->
+                  same_check_one fr1 true (a :: s1) s2 
+              | `Ok (Error ea), `Ok (Error eb)  ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  read ()
+              | `Ok (Ok a),     `Ok (Error eb)  ->
+                  eprintf "%s\n" (Error.to_string_hum eb);
+                  same_check_both (a :: s1) s2 
+              | `Ok (Error ea), `Ok (Ok b)      ->
+                  eprintf "%s\n" (Error.to_string_hum ea);
+                  same_check_both s1 (b :: s2) 
+              | `Ok (Ok a),     `Ok (Ok b)      ->
+                  same_check_both (a :: s1) (b :: s2) 
+              end
+          | `ReadOne (fr, f, s1, s2) ->
+              begin match Future_unix.Pipe.read fr with
+              | `Eof  ->
+                  state_ref := `Remaining (s1, s2);
+                  read ()
+              | `Ok (Error e) ->
+                  eprintf "%s\n" (Error.to_string_hum e);
+                  read ()
+              | `Ok (Ok a) ->
+                  if f then
+                    same_check_one fr f (a :: s1) s2
+                  else
+                    same_check_one fr f s1 (a :: s2)
+              end
+          | `Remaining (s1, s2) ->
+              begin match same s1 s2 with
+              | Some (r1, r2, ns1, ns2) ->
+                  state_ref := `Remaining (ns1, ns2);
+                  filter_pass r1 r2
+              | None ->
+                  state_ref := `OneAtATime (s1, s2);
+                  read ()
+              end
+          | `OneAtATime ([], [])  ->
+              raise Parany.End_of_input
+          | `OneAtATime (h :: t, l) ->
+              state_ref := `OneAtATime (t, l);
+              incr count_r;
+              Util.Single h
+          | `OneAtATime ([], h :: t) ->
+              state_ref := `OneAtATime ([], t);
+              incr count_r;
+              Util.Single h
+      in
+      Parany.run ~verbose:false ~csize:1 ~nprocs ~demux:read ~work:map ~mux))
 
 let unwrap_cr_ok = function
     | Result.Error _ -> invalid_arg "unwrap_cr_ok: " (*Error.to_string_hum e*)

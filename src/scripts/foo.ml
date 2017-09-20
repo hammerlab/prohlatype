@@ -40,7 +40,7 @@ let init_from_masp_ref =
     else
       last_known_mas_pos, p, pacc, acc
   in
-  let open Mas_parser in
+  let open MSA_parser in
   let rec loop lkmp p pacc acc = function
     | []                          -> List.rev acc, List.rev ((lkmp, p) :: pacc)
     (* We're not explicitly tracking what is {un}known through this sequence and
@@ -166,7 +166,7 @@ let extend_run_length_encoded rmap allele_mas_instr ref_pos_arr rl_arr =
     done
   in
   let rec loop rmap lp =
-    let open Mas_parser in function
+    let open MSA_parser in function
     | []                          -> ()
     | Start p :: t                ->
         let ap, rmap = to_array_pos p rmap in
@@ -202,14 +202,14 @@ let extend_run_length_encoded rmap allele_mas_instr ref_pos_arr rl_arr =
 
 
 let build_allele_and_rls ?spec ?n mp =
-  let rg_lst, pmap = init_from_masp_ref mp.Mas_parser.ref_elems in
+  let rg_lst, pmap = init_from_masp_ref mp.MSA_parser.ref_elems in
   let rpmap = reduce_position_map pmap in
   let rg = Array.concat rg_lst in
   (* reference goes first *)
   let rl_arr = Array.map rg ~f:(init_rl) in
-  let init = mp.Mas_parser.reference :: [] in
+  let init = mp.MSA_parser.reference :: [] in
 
-  let alleles = List.sort ~cmp:(fun (a1,_) (a2,_) -> compare a1 a2) mp.Mas_parser.alt_elems in
+  let alleles = List.sort ~cmp:(fun (a1,_) (a2,_) -> compare a1 a2) mp.MSA_parser.alt_elems in
   let add_these =
     match spec with
     | Some set -> List.filter alleles ~f:(fun (a, _) -> List.mem a ~set)
@@ -522,7 +522,7 @@ let fill_possibilities conf =
     Array.map r ~f:(fun r2 ->
       Array.map r2 ~f:(fun l -> String.of_character_list (List.rev l))))
 
-let mp = Mas_parser.from_file (to_alignment_file "A_gen") ;;
+let mp = MSA_parser.from_file (to_alignment_file "A_gen") ;;
 
 let spec =
   [ "A*01:01:01:01"

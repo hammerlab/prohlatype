@@ -64,7 +64,7 @@ module Interval = struct
     | SplitEmpty of  { inter: t; before: t; after : t}
     [@@deriving eq, ord, show]
 
-  let inter_diff t1  t2 =
+  let inter_diff t1 t2 =
     let s1, e1 = t1 in
     let s2, e2 = t2 in
     if s1 = e1 then begin
@@ -208,7 +208,7 @@ module Interval = struct
               `ThereShouldBeAnIntersect (p1, p2)
         | BeforeAfter { inter; before; after }          ->
             error tr p1 p2 i (merge before inter <> Some p1  &&
-                               merge inter after <> Some p2)
+                                merge inter after <> Some p2)
         | BeforeEmpty { inter; before }                 ->
             error tr p1 p2 i (merge before inter <> Some p1)
         | EmptyAfter { inter; after}                    ->
@@ -230,10 +230,10 @@ module Interval = struct
     loop 0
 
   (* This is a more composable version of inter_diff. We either find an
-     intersection or we find something that is 'before' any possible
-     intersection and should be discarded.
+      intersection or we find something that is 'before' any possible
+      intersection and should be discarded.
 
-     The return results are
+      The return results are
       1. Possible before of first interval.
       2. Possible before of second interval.
       3. Possible interseciton.
@@ -387,9 +387,9 @@ module Set = struct
     in
     loop
 
-  let to_string s =
-    List.map s ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
-    |> String.concat ~sep:";"
+  let to_string  =
+    string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
+
 
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
 
@@ -684,14 +684,12 @@ let init_all_a ~size v =
 
 (* Properties *)
 let asc_to_string la to_s =
-  List.map la ~f:(fun (s, v) ->
-    sprintf "[%s]:%s" (Set.to_string s) (to_s v))
-  |> String.concat ~sep:"; "
+  string_of_list la ~sep:"; " ~f:(fun (s, v) ->
+      sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
 let desc_to_string ld to_s =
-  List.map ld ~f:(fun (i, v) ->
+  string_of_list ld ~sep:";" ~f:(fun (i, v) ->
     sprintf "%s:%s" (Interval.to_string i) (to_s v))
-  |> String.concat ~sep:";"
 
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with
@@ -803,6 +801,9 @@ let insert_if_not_empty s v l =
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
+(* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
+   any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
+   values are equal add to the end of l. *)
 let merge_or_add_to_end eq s v l =
   let rec loop = function
     | []     -> [s, v]
@@ -842,12 +843,11 @@ let merge t1 t2 f =
            2. NOT performing this simple equality check
               (ie. comparing 3 floats is too much) and
            3. Making this function tail-rec and using merge_or_add_to_end to
-              merge {eq}ual values or add them at the end and avoiding the
-              List.rev at the end:
-           Do NOT make the total running time faster. None of the above either
+              merge {eq}ual values or add them at the end:
+           Do NOT make the total running time faster; none of the above either
            reduce the branching sufficiently to merit the extra work. This kind
            of make sense since you wouldn't expect this at the edge of the
-           PHMM forward-matrix, where [merge] is mostly called. But still a bit
+           PHMM forward-matrix, where [merge] is called. But still a bit
            disappointing that we can't have uniformity in these methods; or
            phrased another way that this logic isn't exposed in more
            informative types. *)
@@ -859,6 +859,7 @@ let merge t1 t2 f =
   in
   match t1, t2 with
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
+
 
 let merge3 ~eq t1 t2 t3 f =
   let rec start l1 l2 l3 =
@@ -896,11 +897,10 @@ let merge3 ~eq t1 t2 t3 f =
   match t1, t2, t3 with
   | (Asc l1), (Asc l2), (Asc l3) -> Asc (start l1 l2 l3)
 
-
-(* This method is tail recursive, and we pay the cost of inserting an element,
-   at the end each time but hopefully, merging, due to {eq}, instead into the
-   accumulator will effectively constrain the size of the resulting accumulator
-   such that the cost is amortized. *)
+(* This method is tail recursive, and by default we pay the cost of inserting
+   an element at the end, each time, Hopefully, merging, due to {eq}, instead into
+   the accumulator-list will effectively constrain the size of the resulting
+   list such that the cost is amortized. *)
 let merge4 ~eq t1 t2 t3 t4 f =
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with

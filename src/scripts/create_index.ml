@@ -4,7 +4,7 @@ open Common
 let k = 10 ;;
 
 let default_input =
-  Alleles.Input.AlignmentFile (to_alignment_file "A_gen", true) ;;
+  Alleles.Input.alignment (to_alignment_file "A_gen") ;;
 
 let gall, idxall =
   Cache.(graph_and_two_index { k = k
@@ -12,7 +12,7 @@ let gall, idxall =
                           ~arg:Ref_graph.default_construction_arg  }) ;;
 
 let g_and_idx ?(k=10) ?input ~arg () =
-  let default = Alleles.Input.AlignmentFile (to_alignment_file "A_nuc", false) in
+  let default = Alleles.Input.alignment (to_alignment_file "A_nuc") in
   let input = Option.value input ~default in
   Cache.(graph_and_two_index { k = k; graph_args = graph_args ~input ~arg })
 

@@ -4,6 +4,7 @@
 #require "ppx_deriving.runtime"
 #require "ppx_deriving.std"
 #require "biocaml.unix"
+#require "parany"
 
 #directory "_build/src/lib"
 #load_rec "prohlatype.cma"
@@ -14,4 +15,5 @@ open Util
 
 let nn elst ilst = List.map ~f:(List.nth elst) ilst ;;
 
-#mod_use "src/scripts/common.ml"
+#mod_use "src/scripts/common.ml";;
+UTop.set_margin_function (fun _ -> Some 200) ;;

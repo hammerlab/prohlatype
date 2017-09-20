@@ -78,6 +78,18 @@ let unwrap_error = function
   | Ok _    -> invalid_argf "Not Error in unwrap_error."
   | Error e -> e
 
+let print_line ?width oc s =
+  match width with
+  | None   -> fprintf oc "%s\n" s
+  | Some w -> let n = String.length s in
+              let rec loop i =
+                if i > n then () else
+                  let length = min w (n - i) in
+                  fprintf oc "%s\n" (String.sub_exn s ~index:i ~length);
+                  loop (i + w)
+              in
+              loop 0
+
 let short_seq s =
   let n = String.length s in
   if n > 10 then
@@ -169,9 +181,21 @@ let list_map_consecutives f lst =
   in
   loop [] lst
 
+module StringSet = Set.Make (struct
+  type t = string [@@deriving ord]
+end)
+
 module StringMap = Map.Make (struct
   type t = string [@@deriving ord]
 end)
+
+let string_set_of_list lst =
+  List.fold_left lst ~init:StringSet.empty
+    ~f:(fun s e -> StringSet.add e s)
+
+let string_map_of_assoc asc =
+  List.fold_left asc ~init:StringMap.empty
+    ~f:(fun acc (key, data) -> StringMap.add ~key ~data acc)
 
 let remove_and_assoc el list =
   let rec loop acc = function
@@ -180,6 +204,20 @@ let remove_and_assoc el list =
     | h :: t                  -> loop (h :: acc) t
   in
   loop [] list
+
+let assoc v l =
+  Option.value_exn ~msg:"Not found" (List.Assoc.get v l)
+
+let group_by_assoc l =
+  let insert assoc (k, v) =
+    match List.Assoc.remove_and_get k assoc with
+    | None              -> (k,[v]) :: assoc
+    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
+  in
+  List.fold_left ~init:[] ~f:insert l
+
+let string_of_list ~sep ~f l =
+  String.concat ~sep (List.map ~f l)
 
 let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
@@ -213,10 +251,48 @@ let time s f =
   printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
   r
 
-let group_by_assoc l =
-  let insert assoc (k, v) =
-    match List.Assoc.remove_and_get k assoc with
-    | None              -> (k,[v]) :: assoc
-    | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
-  in
-  List.fold_left ~init:[] ~f:insert l
+let gc_between s f =
+  let open Gc in
+  let before = stat () in
+  let r = f () in
+  let after = stat () in
+  printf "%s Gc change: \n\
+    \t { minor_words : %f;\n\
+    \t   promoted_words : %f;\n\
+    \t   major_words : %f;\n\
+    \t   minor_collections : %d;\n\
+    \t   major_collections : %d;\n\
+    \t   heap_words : %d;\n\
+    \t   heap_chunks : %d;\n\
+    \t   live_words : %d;\n\
+    \t   live_blocks : %d;\n\
+    \t   free_words : %d;\n\
+    \t   free_blocks : %d;\n\
+    \t   largest_free : %d;\n\
+    \t   fragments : %d;\n\
+    \t   compactions : %d;\n\
+    \t   top_heap_words : %d;\n\
+    \t   stack_size : %d;\n\
+    \t }\n"
+      s
+      (after.minor_words -. before.minor_words)
+      (after.promoted_words -. before.promoted_words)
+      (after.major_words -. before.major_words)
+      (after.minor_collections - before.minor_collections)
+      (after.major_collections - before.major_collections)
+      (after.heap_words - before.heap_words)
+      (after.heap_chunks - before.heap_chunks)
+      (after.live_words - before.live_words)
+      (after.live_blocks - before.live_blocks)
+      (after.free_words - before.free_words)
+      (after.free_blocks - before.free_blocks)
+      (after.largest_free - before.largest_free)
+      (after.fragments - before.fragments)
+      (after.compactions - before.compactions)
+      (after.top_heap_words - before.top_heap_words)
+      (after.stack_size - before.stack_size);
+  r
+
+type 'a single_or_paired =
+  | Single of 'a
+  | Paired of ('a * 'a)

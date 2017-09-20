@@ -4,58 +4,75 @@ open Common_options
 
 let app_name = "align2fasta"
 
-let against_mp ?merge_assoc mp out =
-  let open Mas_parser in
+let fail_on_parse a =
+  match Nomenclature.parse a with
+  | Ok (g, r) -> g, r
+  | Error e   -> failwith e
+
+let alters_to_string = function
+  | []  -> " "
+  | lst -> sprintf " %s "
+              (string_of_list lst ~sep:"," ~f:MSA.Alteration.to_string)
+
+let against_mp ?width mp out =
+  let open MSA in
+  let open MSA.Parser in
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
-  let a =
-    List.map mp.alt_elems ~f:(fun (a, allele) ->
-      a, allele_sequence ~reference ~allele ())
-  in
-  let all = (mp.reference, r) :: a in
+  let gene, ref_res = fail_on_parse mp.reference in
   let oc = open_out out in
-  begin match merge_assoc with
-  | None ->
-    List.iter all ~f:(fun (r,s) ->
-      fprintf oc ">%s %d bp\n%s\n" r (String.length s) s)
-  | Some ma ->
-    List.iter all ~f:(fun (r,s) ->
-      let mg =
-        match List.Assoc.get r ma with
-        | None -> ""
-        | Some i -> if i = r then "" else sprintf " %s introns" i
-      in
-      fprintf oc ">%s%s %d bp\n%s\n" r mg (String.length s) s);
-  end;
-  close_out oc
+  try
+    List.map mp.alt_elems ~f:(fun a ->
+        let g, r = fail_on_parse a.allele in
+          if g <> gene then failwithf "Different genes: %s vs %s" gene g;
+          r, a.allele, (allele_sequence ~reference ~allele:a.seq ()), a.alters)
+    |> fun l -> ((ref_res, mp.reference, r, []) :: l)
+    |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
+    |> List.iter ~f:(fun (_, a, s, alters) ->
+      fprintf oc ">%s%slength: %d\n" a (alters_to_string alters) (String.length s);
+      print_line ?width oc s);
+    close_out oc
+  with e ->
+    close_out oc;
+    raise e
 
-let convert ofile ifile merge_file distance =
-  let open Mas_parser in
-  begin match merge_file, ifile with
-    | None, None   -> None
-    | None, Some f ->
-        let mp = from_file f in
-        let ofiledefault = Filename.(chop_extension (basename f)) in
-        let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
-        Some (against_mp mp out)
-    | Some p, _    ->
-        match Merge_mas.do_it p distance with
-        | Error e             -> failwith (sprintf "%s\n" e)
-        | Ok (mp, merge_assoc) ->
-          let ofiledefault =
-            sprintf "%s_%s" Filename.(basename p) (Distances.show_logic distance)
-          in
-          let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
-          Some (against_mp ~merge_assoc mp out)
-  end
+let convert
+  (* output destination. *)
+  ofile
+  (* output option *)
+  width
+  (* input *)
+  alignment_file merge_file
+  (* optional distance to trigger imputation, merging *)
+  distance
+  (* selectors *)
+  regex_list specific_list without_list number_alleles
+  do_not_ignore_suffixed_alleles
+  =
+  let selectors =
+    aggregate_selectors ~regex_list ~specific_list ~without_list
+      ?number_alleles ~do_not_ignore_suffixed_alleles
+  in
+  to_allele_input ?alignment_file ?merge_file ?distance ~selectors >>= fun i ->
+    Alleles.Input.construct i >>= fun mp ->
+      let ofiledefault = Alleles.Input.to_short_fname_prefix i in
+      let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
+      Ok (against_mp ?width mp out)
 
 let () =
   let open Cmdliner in
   let output_fname_arg =
     let docv = "FILE" in
-    let doc  = "Output file name, defaults to a (input file)_.[fasta]."
+    let doc  = "Output file name, defaults to \"(input file)_.fasta\"."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
+  in
+  let width_arg =
+    let docv = "POSITIVE INTEGER" in
+    let doc  = "Sequence, per-line, output width." in
+    Arg.(value
+          & opt (some positive_int) None
+          & info ~doc ~docv ["output-width"])
   in
   let convert =
     let version = "0.0.0" in
@@ -72,12 +89,19 @@ let () =
       ; `P bug
       ]
     in
-    Term.(const convert $ output_fname_arg $ file_arg $ merge_arg $ distance_flag
+    Term.(const convert
+          $ output_fname_arg
+          $ width_arg
+          (* Allele information source *)
+          $ alignment_arg $ merge_arg $ optional_distance_flag
+          (* Allele selectors *)
+          $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+          $ do_not_ignore_suffixed_alleles_flag
+
         , info app_name ~version ~doc ~man)
   in
   match Term.eval convert with
-  | `Ok (Some ())    -> exit 0
-  | `Ok (None)       -> eprintf "Neither input alignment nor merge prefix specified!";
-                        exit 1
+  | `Ok (Ok ())      -> exit 0
+  | `Ok (Error e)    -> failwith e
   | `Error _         -> failwith "error"
   | `Version | `Help -> exit 0
