@@ -3,11 +3,12 @@ open Util
 
 let construct
   (* input *)
-  alignment_file merge_file distance impute
+  alignment_file merge_file distance
   (* output *)
   ofile
   (* allele selection. *)
   regex_list specific_list without_list number_alleles
+  do_not_ignore_suffixed_alleles
   (* Construction args *)
   not_join_same_seq
   (* output configuration. *)
@@ -19,8 +20,9 @@ let construct
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
     Common_options.to_filename_and_graph_args
-      ?alignment_file ?merge_file ~distance ~impute
+      ?alignment_file ?merge_file ?distance
       ~specific_list ~regex_list ~without_list ?number_alleles
+      ~do_not_ignore_suffixed_alleles
       ~join_same_sequence
   in
   match fname_cargs_result with
@@ -96,7 +98,7 @@ let () =
     Arg.(value & flag & info ~doc ["do-not-compress-start"])
   in
   let do_not_insert_newlines_flag =
-    let doc = "Do not insert newliens into a list of alleles." in
+    let doc = "Do not insert newlines into a list of alleles." in
     Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
   let construct =
@@ -116,7 +118,7 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ file_arg $ merge_arg $ distance_flag $ impute_flag
+            $ alignment_arg $ merge_arg $ optional_distance_flag
             (* output file *)
             $ output_fname_arg
             (* allele selection. *)
@@ -124,6 +126,7 @@ let () =
             $ allele_arg
             $ without_arg
             $ num_alt_arg
+            $ do_not_ignore_suffixed_alleles_flag
             (* construction args. *)
             $ do_not_join_same_sequence_paths_flag
             (* output configuration *)
@@ -137,6 +140,6 @@ let () =
         , info app_name ~version ~doc ~man)
   in
   match Term.eval construct with
-  | `Ok n -> exit n
-  | `Error _ -> failwith "cmdliner error"
+  | `Ok n    -> exit n
+  | `Error _ -> failwith "error"
   | `Version | `Help -> exit 0

@@ -39,7 +39,7 @@ echo E_gen    && ./biological_kmers.native E_gen
 echo E_nuc    && ./biological_kmers.native E_nuc
 echo F_gen    && ./biological_kmers.native F_gen
 echo F_nuc    && ./biological_kmers.native F_nuc
-echo G_gen    && ./biological_kmers.native G_gen
+echo G_gen    && ./biological_kmers.native G_gen      "G*01:01:01:08"
 echo G_nuc    && ./biological_kmers.native G_nuc
 echo HFE_gen  && ./biological_kmers.native HFE_gen
 echo HFE_nuc  && ./biological_kmers.native HFE_nuc

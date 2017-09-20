@@ -217,6 +217,28 @@ module Make (S : Size) = struct
     done;
     inter_into, diff_into, !same, !no_i
 
+  let split3 b1 b2 =
+    let inter_into = copy b1 in
+    let diff1_into = copy b1 in
+    let diff2_into = copy b1 in
+    let same = ref true in
+    let no_i = ref true in   (* no intersection? *)
+    let left = ref false in
+    for i = 0 to last_array_index do
+      let b1i = Array.unsafe_get inter_into.a i in
+      let b2i = Array.unsafe_get b2.a i in
+      let ii  = b1i land b2i in
+      let di  = b1i land (lnot b2i) in
+      let dj  = b2i land (lnot b1i) in
+      Array.unsafe_set inter_into.a i ii;
+      Array.unsafe_set diff1_into.a i di;
+      Array.unsafe_set diff2_into.a i dj;
+      same := !same && ii = b1i;
+      no_i := !no_i && ii = 0;
+      left := !left || dj <> 0;
+    done;
+    inter_into, diff1_into, diff2_into, !same, !no_i, !left
+
   let select bv arr =
     let l = ref [] in
     begin try

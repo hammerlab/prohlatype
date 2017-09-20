@@ -5,292 +5,254 @@ let app_name = "multi_par"
 
 let (//) = Filename.concat
 
-let time s f =
-  let n = Sys.time () in
-  let r = f () in
-  Printf.printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
-  r
-
 let to_read_size_dependent
   (* Allele information source *)
-    ~alignment_files ~merge_files ~distance ~impute
+    ~alignment_files ~merge_files ~distance
     ~skip_disk_cache =
+    let selectors = [] in           (* Selectors NOT supported, on purpose! *)
     let als =
-      List.map alignment_files ~f:(Common_options.input_alignments ~impute)
+      List.map alignment_files ~f:(Alleles.Input.alignment ~selectors ~distance)
     in
     let mls =
-      List.map merge_files ~f:(Common_options.input_merges ~distance ~impute)
+      List.map merge_files ~f:(Alleles.Input.merge ~selectors ~distance)
     in
     match als @ mls with
     | []     -> Error "Neither a merge nor alignment file specified!"
     | inputs ->
-      let selectors = [] in           (* Selectors NOT supported, on purpose! *)
       Ok (fun read_size ->
-        List.map inputs ~f:(fun input ->
-          let name = Alleles.Input.to_string input in
-          let par_phmm_arg = Cache.par_phmm_args ~input ~selectors ~read_size in
-          let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
-          name, pt))
+            List.map inputs ~f:(fun input ->
+              let name = Alleles.Input.to_string input in
+              let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
+              let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
+              name, pt))
 
-exception PPE of string
+module Pd = ParPHMM_drivers
+module Pdml = Pd.Multiple_loci
 
-let ppe s = raise (PPE s)
-let ppef fmt =
-  ksprintf ppe fmt
+module Regular = struct
 
-(* TODO: write out type annotation for f, otherwise it is too abstract *)
-let to_update_f read_size ~f acc fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    let ls = String.length fqi.Biocaml_unix.Fastq.sequence in
-    let lq = String.length fqi.Biocaml_unix.Fastq.qualities in
-    if ls <> read_size then
-      ppef "Sequence length %d not configured length:%d, skipping." ls read_size
-    else if lq <> read_size then
-      ppef "Sequence length %d not configured length:%d, skipping." ls read_size
-    else
-      match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-      | Result.Error e       -> ppe (Error.to_string_hum e)
-      | Result.Ok read_probs -> f acc fqi.Biocaml_unix.Fastq.name fqi.Biocaml_unix.Fastq.sequence read_probs)
+  let init conf opt read_size rp =
+    let ptlst =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspaces"
+      (fun () -> Pdml.init conf opt read_size ptlst)
 
-type 'a g =
-  { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
-  ; fin       : 'a -> unit
-  ; mutable s : 'a
-  }
+  let single conf opt acc fqi =
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+        let t, s = init conf opt read_size rp in
+        t.Pd.merge s (t.Pd.single fqi);
+        `Set (t, s)
+    | `Set (t, s) ->
+        t.Pd.merge s (t.Pd.single fqi);
+        `Set (t, s)
 
-let proc_g = function
-  | `Mapper g -> begin fun fqi ->
-                  try
-                    g.s <- g.f g.s fqi;
-                    `Mapper g
-                  with PPE e ->
-                    eprintf "for %s: %s" fqi.Biocaml_unix.Fastq.name e;
-                    `Mapper g
-                 end
-  | `Reporter g -> begin fun fqi ->
-                    try
-                      g.s <- g.f g.s fqi;
-                      `Reporter g
-                  with PPE e ->
-                    eprintf "for %s: %s" fqi.Biocaml_unix.Fastq.name e;
-                    `Reporter g
-                 end
+  let paired conf opt acc fq1 fq2 =
+    match acc with
+    | `Setup rp ->
+        let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+        let t, s = init conf opt read_size rp in
+        t.Pd.merge s (t.Pd.paired fq1 fq2);
+        `Set (t, s)
+    | `Set (t, s) ->
+        t.Pd.merge s (t.Pd.paired fq1 fq2);
+        `Set (t, s)
 
-let sort_mapped_output lst =
-  let open ParPHMM in
-  let highest_llhd l =
-    List.map l ~f:(fun (_name, s) -> best_stat s)
-    |> List.reduce ~f:max
-  in
-  List.sort lst ~cmp:(fun (_rn1, nlst1) (_rn2, nlst2) ->
-    let sl1 = highest_llhd nlst1 in
-    let sl2 = highest_llhd nlst2 in
-    compare sl2 sl1 (* higher is better *))
+  let across_fastq conf opt ?number_of_reads ~specific_reads file init =
+    let f = single conf opt in
+    try
+      Fastq.fold ?number_of_reads ~specific_reads ~init file ~f
+      |> function
+          | `Setup _    -> eprintf "Didn't find any reads."
+          | `Set (t, s) -> t.Pd.output s stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
 
-let output_mapped lst =
-  List.iter lst ~f:(fun (read, lst) ->
-    printf "%s\n\t%s\n"
-      read
-      (String.concat ~sep:"\n\t"
-        (List.map lst ~f:(fun (name, ms) ->
-          sprintf "%s\t%s" name
-            (ParPHMM.mapped_stats_to_string ~sep:'\t' ms)))))
+  let across_paired ~finish_singles conf opt ?number_of_reads ~specific_reads
+    file1 file2 init =
+    let f = paired conf opt in
+    try
+      begin
+        if finish_singles then
+          let ff = single conf opt in
+          let fs = ff in
+          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+            ~init ~f ~ff ~fs
+        else
+          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+      end
+      |> function
+          | `BothFinished o
+          | `FinishedSingle o
+          | `OneReadPairedFinished (_, o)
+          | `StoppedByFilter o
+          | `DesiredReads o ->
+              match o with
+              | `Setup _    -> eprintf "Didn't find any reads."
+              | `Set (t, s) -> t.Pd.output s stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
 
-let to_set ?band mode rp read_size =
-  let ptlst =
-    time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-      (fun () -> rp read_size)
-  in
-  let g =
-    time (sprintf "Allocating forward pass workspaces")
-      (fun () ->
-        match ParPHMM.forward_pass_m ?band mode ptlst read_size with
-        | `Mapper m ->
-            `Mapper
-              { f   = to_update_f read_size ~f:(fun l n s r -> (n, m s r) :: l)
-              ; s   = []
-              ; fin = begin fun lst ->
-                        printf "Reads: %d\n" (List.length lst);
-                        output_mapped (sort_mapped_output lst)
-                      end
-              }
-        | `Reporter (lst, ff) ->
-            `Reporter
-              { f   = to_update_f read_size ~f:(fun l _n s r -> ff s r l)
-              ; s   = lst
-              ; fin = begin fun lst ->
-                        List.iter2 ptlst lst ~f:(fun (name, pt) (_name, llhd) ->
-                          printf "%s\n" name;
-                          List.mapi pt.ParPHMM.alleles ~f:(fun i a -> llhd.(i), a)
-                          |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-                          |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l))
-                      end
-              })
-  in
-  `Set g
+end (* Regular *)
 
-let fin = function
-  | `Setup _ -> eprintf "Didn't fine any reads."
-  | `Set (`Mapper g)  -> g.fin g.s
-  | `Set (`Reporter g) -> g.fin g.s
+module Parallel = struct
 
-let across_fastq ?number_of_reads ~specific_reads ?band mode file init =
-  try
-    Fastq.fold ?number_of_reads ~specific_reads ~init file
-      ~f:(fun acc fqi ->
-            match acc with
-            | `Setup rp ->
-                let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set ?band mode rp read_size in
-                `Set (proc_g g fqi)
-            | `Set g ->
-                `Set (proc_g g fqi))
-    |> fin
-  with PPE e ->
-    eprintf "%s" e
+  let init conf opt read_size rp =
+    let ptlst =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspaces"
+      (fun () -> Pdml.init conf opt read_size ptlst)
+
+  let across_fastq conf opt ?number_of_reads ~specific_reads ~nprocs file
+    driver state =
+    let map = driver.Pd.single in
+    let mux = driver.Pd.merge state in
+    try
+      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
+      driver.Pd.output state stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired conf opt ?number_of_reads ~specific_reads ~nprocs
+    file1 file2 driver state =
+    let map = function
+      | Single fqi      -> driver.Pd.single fqi
+      | Paired (f1, f2) -> driver.Pd.paired f1 f2
+    in
+    let mux = driver.Pd.merge state in
+    try
+      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
+        ~nprocs ~map ~mux file1 file2;
+      driver.Pd.output state stdout
+    with Pd.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Parallel *)
 
 let type_
   (* Allele information source *)
     class1_gen_dir
+    class1_nuc_dir
+    class1_mgd_dir
     alignment_files merge_files distance
   (* Process *)
     skip_disk_cache
   (* What to do? *)
     fastq_file_lst number_of_reads specific_reads
+    do_not_finish_singles
   (* options *)
+    insert_p
+    do_not_past_threshold_filter
+    max_number_mismatches
     read_size_override
-    not_band
-    column
-    number
-    width
+    band_warmup_arg
+    band_number_arg
+    band_radius_arg
+    likelihood_first
+    zygosity_report_size
   (* how are we typing *)
-    map
+    map_depth
+    not_incremental_pairs
+    forward_accuracy_opt
+    number_processes_opt
     =
-  let impute   = true in
-  let band     =
-    if not_band then
-      None
-    else
-      Some { ParPHMM.column; number; width }
+  Option.value_map forward_accuracy_opt ~default:()
+    ~f:(fun fa -> ParPHMM.dx := fa);
+  let band =
+    let open Option in
+      band_warmup_arg >>= fun warmup ->
+        band_number_arg >>= fun number ->
+          band_radius_arg >>= fun radius ->
+            Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
-    match class1_gen_dir with
-    | None   -> alignment_files, merge_files
-    | Some d -> [ d // "A_gen.txt"
-                ; d // "B_gen.txt"
-                ; d // "C_gen.txt"
-                ], []
+    match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
+    | Some d, _,      _       ->
+        [ d // "A_gen.txt" ; d // "B_gen.txt" ; d // "C_gen.txt" ], []
+    | None,   Some d, _       ->
+        [ d // "A_nuc.txt" ; d // "B_nuc.txt" ; d // "C_nuc.txt" ], []
+    | None,   None,   Some d  ->
+        [], [ d // "A" ; d // "B" ; d // "C" ]
+    | None,   None,   None    -> alignment_files, merge_files
+  in
+  let past_threshold_filter = not do_not_past_threshold_filter in
+  let incremental_pairs = not not_incremental_pairs in
+  let finish_singles = not do_not_finish_singles in
+  let conf = Pd.multiple_conf ~insert_p ?band ?max_number_mismatches
+                ~past_threshold_filter ~incremental_pairs ()
   in
   let need_read_size_r =
     to_read_size_dependent
-      ~alignment_files ~merge_files ~distance ~impute
+      ~alignment_files ~merge_files ~distance
       ~skip_disk_cache
   in
-  let mode = if map then `Mapper else `Reporter in
+  let opt =
+    { Pd.likelihood_first
+    ; zygosity_report_size
+    ; report_size = map_depth
+    }
+  in
   match need_read_size_r with
   | Error e           -> eprintf "%s" e
   | Ok need_read_size ->
-    let init =
-      match read_size_override with
-      | None   -> `Setup need_read_size
-      | Some r -> to_set ?band mode need_read_size r
-    in
-    begin match fastq_file_lst with
-    | []              -> invalid_argf "Cmdliner lied!"
-    | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads
-                            ?band mode fastq init
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-    end
+      begin
+        match number_processes_opt with
+        | None  ->
+            let init =
+              match read_size_override with
+              | None   -> `Setup need_read_size
+              | Some r -> `Set (Regular.init conf opt r need_read_size)
+            in
+            begin match fastq_file_lst with
+            | []              -> invalid_argf "Cmdliner lied!"
+            | [fastq]         -> Regular.across_fastq conf opt
+                                    ?number_of_reads ~specific_reads fastq init
+            | [read1; read2]  -> Regular.across_paired ~finish_singles conf opt
+                                    ?number_of_reads ~specific_reads read1 read2 init
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                  (List.length lst)
+            end
+        | Some nprocs ->
+            let r = Option.value_exn read_size_override
+                      ~msg:"Must specify read size override in parallel mode"
+            in
+            let driver, state = Parallel.init conf opt r need_read_size in
+            begin match fastq_file_lst with
+            | []              -> invalid_argf "Cmdliner lied!"
+            | [fastq]         -> Parallel.across_fastq conf opt
+                                    ?number_of_reads ~specific_reads ~nprocs
+                                    fastq driver state
+            | [read1; read2]  -> Parallel.across_paired conf opt
+                                    ?number_of_reads ~specific_reads ~nprocs
+                                    read1 read2 driver state
+            | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                  (List.length lst)
+            end
+      end
 
 let () =
   let open Cmdliner in
   let open Common_options in
-  let read_size_override_arg =
-    let docv = "POSITIVE INTEGER" in
-    let doc = "Override the number of bases to calculate the likelihood over, \
-               instead of using the number of bases in the FASTQ." in
-    Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
-  in
-  (* Band arguments *)
-  let not_band_flag =
-    let doc = "Calculate the full forward pass matrix." in
-    Arg.(value & flag & info ~doc ["do-not-band"])
-  in
-  let band_column_arg =
-    let default = ParPHMM.(band_default.column) in
-    let docv = "POSITIVE INTEGER" in
-    let doc =
-      sprintf "At which column in the forward pass to compute bands instead \
-               of the full pass. Defaults to: %d." default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["band-column"])
-  in
-  let number_bands_arg =
-    let default = ParPHMM.(band_default.number) in
-    let docv = "POSITIVE INTEGER" in
-    let doc  =
-      sprintf "Number of bands to calculate. Defaults to %d" default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["number-bands"])
-  in
-  let band_width_arg =
-    let default = ParPHMM.(band_default.width) in
-    let docv = "greater than 1" in
-    let doc  =
-      sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
-    in
-    Arg.(value
-          & opt greater_than_one default
-          & info ~doc ~docv ["band-width"])
-  in
-  let map_flag =
-    let doc = "Map (do not reduce) the typing of the individual reads." in
-    let docv = "This switch turns the typing logic into more of a diagnostic \
-                mode. The end user can see how individual reads are typed."
-    in
-    Arg.(value & flag & info ~doc ~docv ["map"])
-  in
-  let files_arg =
+  let alignments_arg =
     let docv = "FILE" in
     let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
                 file will initially define the set of alleles to be used for \
                 named locus. Supply multiple file (or merge) arguments to \
                 compute the likelihood of a read against each locus and add to \
                 the most likely (highest likelihood)." in
-    Arg.(value & opt_all file [] & info ~doc ~docv ["f"; "file"])
+    Arg.(value & opt_all file [] & info ~doc ~docv ["alignments"])
   in
-  let merges_arg =
-    let parser_ path =
-      let s = Filename.basename path in
-      let n = path ^ "_nuc.txt" in
-      let g = path ^ "_gen.txt" in
-      if not (List.mem ~set:Merge_mas.supported_genes s) then
-        `Error ("gene not supported: " ^ s)
-      else if not (Sys.file_exists n) then
-        `Error ("Nuclear alignment file doesn't exist: " ^ n)
-      else if not (Sys.file_exists g) then
-        `Error ("Genetic alignment file doesn't exist: " ^ n)
-      else
-        `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
-    in
-    let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-    let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
-    let doc  =
-      sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
-              prefix path. Currently only supports %s genes. The argument must \
-              be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
-              Combines with the file arguments to determine the set of loci to \
-              type at the same time.. The set of alleles is defined by the \
-              ones in the nuc file."
-        (String.concat ~sep:", " Merge_mas.supported_genes)
-    in
-    Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
+  let max_number_mismatches_arg =
+    let docv = "POSITIVE INTEGER" in
+    let doc = "Setup a filter on the reads to cancel evaluation once we've \
+               seen this many mismatches." in
+    Arg.(value & opt (some positive_int) None & info ~doc ~docv
+          ["max-mismatches"])
   in
   let class1gen_arg =
     let docv  = "DIRECTORY" in
@@ -299,38 +261,70 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
   in
+  let class1nuc_arg =
+    let docv  = "DIRECTORY" in
+    let doc   = "Short-cut argument that expands the given dir to look for \
+                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                 alignment files or merge arguments." in
+    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
+  in
+   let class1mgd_arg =
+    let docv  = "DIRECTORY" in
+    let doc   = "Short-cut argument that expands the given dir to look for \
+                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                 alignment files or merge arguments." in
+    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
+  in
+  let do_not_use_incremental_pairs_flag =
+    let doc   = "By default when performing paired typing, we use the first \
+                 (as specified by the read found in the first file on the \
+                 command line) pair, to determine which loci is the most \
+                 likely. This is faster but potentially less accurate. \
+                 To use both pairs pass this flag. "
+    in
+    Arg.(value & flag & info ~doc ["do-not-incremental-pair"])
+  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+      sprintf "Browse and report new issues at https://github.com/hammerlab/%s"
         repo
     in
     let man =
-      [ `S "AUTHORS"
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
+      [ `S "BUGS"
       ; `P bug
+      ; `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
       ]
     in
     Term.(const type_
             (* Allele information source *)
             $ class1gen_arg
-            $ files_arg $ merges_arg $ distance_flag
+            $ class1nuc_arg
+            $ class1mgd_arg
+            $ alignments_arg $ merges_arg $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
+            $ do_not_finish_singles_flag
             (* options. *)
+            $ insert_probability_arg
+            $ do_not_past_threshold_filter_flag
+            $ max_number_mismatches_arg
             $ read_size_override_arg
-            $ not_band_flag
-            $ band_column_arg
+            $ band_warmup_arg
             $ number_bands_arg
-            $ band_width_arg
+            $ band_radius_arg
+            $ likelihood_first_flag
+            $ zygosity_report_size_arg
             (* How are we typing *)
-            $ map_flag
+            $ map_depth_arg
+            $ do_not_use_incremental_pairs_flag
+            $ forward_pass_accuracy_arg
+            $ number_processes_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ upto_kmer_hood_arg

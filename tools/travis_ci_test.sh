@@ -42,31 +42,20 @@ case "$TEST" in
     ;;
   mergeA)
     echo testing merging of A
-    ./merged_sensible_test.native A
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native A > merged_A.log
     ;;
   mergeB)
     echo testing merging of B
-    ./merged_sensible_test.native B
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native B > merged_B.log
     ;;
   mergeC)
     echo testing merging of C
-    ./merged_sensible_test.native C
-    export BISECT="true"
+    make merged_sensible_test
+    time ./merged_sensible_test.native C > merged_C.log
     ;;
-  adj)
-    echo testing adjcent finding for A_gen
-    time ./adjacents.native A_gen 2>/dev/null
-    echo testing adjcent finding for A_nuc
-    time ./adjacents.native A_nuc 2>/dev/null
-    echo testing adjcent finding for B_gen
-    time ./adjacents.native B_gen 2>/dev/null
-    echo testing adjcent finding for B_nuc
-    time ./adjacents.native B_nuc 2>/dev/null
-    export BISECT="true"
-    ;;
-  alleleDiffA)
+ alleleDiffA)
     echo testing allele differences between A_gen
     time ./test_allele_distances.native A_gen > A_sim.csv
     export BISECT="true"
@@ -79,19 +68,15 @@ case "$TEST" in
     ;;
   impute)
     echo imputing A
-    time ./mhc2gpdf.native -f $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf
+    time ./mhc2gpdf.native --alignment $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf
     echo imputing B
-    time ./mhc2gpdf.native -f $IMGTHLA_DIR/alignments/B_gen.txt --no-pdf
+    time ./mhc2gpdf.native --alignment $IMGTHLA_DIR/alignments/B_gen.txt --no-pdf
     echo imputing C
-    time ./mhc2gpdf.native -f $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
+    time ./mhc2gpdf.native --alignment $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
     ;;
   *)
     ;;
 esac
-
-# Full adjacents calculation takes too long
-#cp src/scripts/adjacent_tests.sh .
-#./adjacent_tests.sh
 
 if [ -n "$TEST" -a -n "$BISECT" ] ; then
   ocveralls --repo_token $COVERALLSTOKEN --git --send bisect*.out

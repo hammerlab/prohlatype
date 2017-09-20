@@ -38,12 +38,12 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
     else begin
       let file = Filename.concat dir (arg_to_string arg) in
       let save r =
-        (*
+        (**)
         if not (Sys.file_exists dir) then make_full_path dir;
         let o = open_out file in
         Marshal.to_channel o r [Marshal.Closures];
         close_out o;
-        *)
+        (**)
         r
       in
       let load () =
@@ -88,12 +88,12 @@ let graph_no_cache { input; arg } =
 let recent_check to_input to_date arg dateable =
   let file =
     match to_input arg with
-    | Alleles.Input.AlignmentFile (f,_)     -> f
-    | Alleles.Input.MergeFromPrefix (p,_,_) -> p ^ "_nuc.txt"
+    | Alleles.Input.AlignmentFile { path; _}              -> path
+    | Alleles.Input.MergeFromPrefix { prefix_path = p; _} -> p ^ "_nuc.txt"
   in
   if Sys.file_exists file then begin
     let ic = open_in file in
-    match Mas_parser.parse_align_date ic with
+    match MSA.Parser.find_align_date ic with
     | None    ->
         eprintf "Did not find a Sequence alignment date for %s, will use current.\n" file;
         close_in ic;
@@ -147,24 +147,22 @@ let graph_and_two_index =
 
 type par_phmm_args =
   { pinput    : Alleles.Input.t
-  ; selectors : Alleles.Selection.t list
   ; read_size : int
   }
 
-let par_phmm_args ~input ~selectors ~read_size =
-  { pinput = input; selectors ; read_size }
+let par_phmm_args ~input ~read_size =
+  { pinput = input; read_size }
 
-let par_phmm_args_to_string {pinput; selectors; read_size} =
-  sprintf "%s_%s_%d"
+let par_phmm_args_to_string {pinput; read_size} =
+  sprintf "%s_%d"
     (Alleles.Input.to_string pinput)
-    (Alleles.Selection.list_to_string selectors)
     read_size
 
 let par_phmm_cache_dir =
   Filename.concat dir "parhmm"
 
-let par_phmm_no_cache { pinput; selectors ; read_size } =
-  ParPHMM.construct pinput selectors
+let par_phmm_no_cache { pinput; read_size } =
+  ParPHMM.construct pinput
 
 let par_phmm =
   let dir = Filename.concat (Sys.getcwd ()) par_phmm_cache_dir in

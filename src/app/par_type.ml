@@ -3,315 +3,352 @@ open Util
 
 let app_name = "par_type"
 
-let time s f =
-  let n = Sys.time () in
-  let r = f () in
-  Printf.printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
-  r
-
 let to_read_size_dependent
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance ~impute
+    ?alignment_file ?merge_file ~distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
     ~without_list
     ?number_alleles
+    ~do_not_ignore_suffixed_alleles
+  (* Cache logic. *)
     ~skip_disk_cache
     =
-    Common_options.to_input ?alignment_file ?merge_file ~distance ~impute ()
+    let open Common_options in
+    let selectors =
+      aggregate_selectors ~regex_list ~specific_list
+        ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
+    in
+    to_allele_input ?alignment_file ?merge_file ~distance ~selectors
       >>= fun input ->
-        let selectors =
-          regex_list @ specific_list @ without_list @
-            (match number_alleles with | None -> [] | Some s -> [s])
-        in
-        Ok (fun read_size ->
-            let par_phmm_args = Cache.par_phmm_args ~input ~selectors ~read_size in
-            Cache.par_phmm ~skip_disk_cache par_phmm_args)
+          Ok (fun read_size ->
+                let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
+                Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
-exception PPE of string
+module BoilerPlate (S : ParPHMM_drivers.S) = struct
 
-let add_log_likelihoods n =
-  fun ~into nl ->
-    for i = 0 to n - 1 do
-      into.(i) <- into.(i) +. nl.(i)
-    done
+  module D = ParPHMM_drivers.Make_single(S)
 
-let to_reduce_update_f ~check_rc perform_forward_pass add_ll update_me fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        let nl = perform_forward_pass fqi.Biocaml_unix.Fastq.sequence read_probs in
-        add_ll ~into:update_me nl;
-        update_me)
+  let init conf rp read_size opt =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> D.init conf read_size pt opt)
 
-let to_map_update_f f acc fqi =
-  time (sprintf "updating on %s" fqi.Biocaml_unix.Fastq.name) (fun () ->
-    let open Core_kernel.Std in
-    match Fastq.phred_log_probs fqi.Biocaml_unix.Fastq.qualities with
-    | Result.Error e       -> raise (PPE (Error.to_string_hum e))
-    | Result.Ok read_probs ->
-        let t = f fqi.Biocaml_unix.Fastq.sequence read_probs in
-        (fqi.Biocaml_unix.Fastq.name, t) :: acc)
+  let single conf opt =
+    fun acc fqi ->
+      match acc with
+      | `Setup rp ->
+          let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
+          let t, s = init conf rp read_size opt in
+          D.merge t s (D.single t fqi);
+          `Set (t, s)
+      | `Set (t,s) ->
+          D.merge t s (D.single t fqi);
+          acc
 
-type 'a g =
-  { f         : 'a -> Biocaml_unix.Fastq.item -> 'a
-  ; mutable s : 'a
-  ; fin       : 'a -> unit
-  }
+  let paired conf opt =
+    fun acc fq1 fq2 ->
+      match acc with
+      | `Setup rp ->
+          let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
+          let t, s = init conf rp read_size opt in
+          D.merge t s (D.paired t fq1 fq2);
+          `Set (t, s)
+      | `Set (t, s) ->
+          D.merge t s (D.paired t fq1 fq2);
+          acc
 
-let proc_g = function
-  | `Mapper g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Mapper g
-                 end
-  | `Reducer g -> begin fun fqi ->
-                  g.s <- g.f g.s fqi;
-                  `Reducer g
-                 end
+  let across_fastq conf opt ?number_of_reads ~specific_reads file init =
+    let f = single conf opt in
+    try
+      Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
+      |> function
+          | `Setup _    -> eprintf "Didn't find any reads."
+          | `Set (t, s) -> D.output t s stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
 
-let output_reducer alleles final_likelihoods =
-  List.mapi alleles ~f:(fun i a -> (final_likelihoods.(i), a))
-  |> List.sort ~cmp:(fun (l1,_) (l2,_) -> compare l2 l1)
-  |> List.iter ~f:(fun (l,a) -> printf "%10s\t%0.20f\n" a l)
+  let across_paired ~finish_singles conf opt ?number_of_reads ~specific_reads
+    file1 file2 init =
+    let f = paired conf opt in
+    try
+      begin
+        if finish_singles then
+          let fs = single conf opt in
+          let ff = fs in
+          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+            ~init ~f ~ff ~fs
+        else
+          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+      end
+      |> function
+          | `BothFinished o
+          | `FinishedSingle o
+          | `OneReadPairedFinished (_, o)
+          | `StoppedByFilter o
+          | `DesiredReads o ->
+              match o with
+              | `Setup _    -> eprintf "Didn't find any reads."
+              | `Set (t, s) -> D.output t s stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
 
-let output_mapper lst =
-  printf "Reads: %d\n" (List.length lst);
-  List.sort lst ~cmp:(fun (_n1, ms1) (_n2, ms2) ->
-    ParPHMM.(compare (best_stat ms1) (best_stat ms2)))
-  |> List.rev
-  |> List.iter ~f:(fun (n, s) ->
-    printf "%s\t%s\n" n (ParPHMM.mapped_stats_to_string ~sep:'\t' s))
+end (* BoilerPlate *)
 
-let to_set ?insert_p mode specific_allele ~check_rc ?band rp read_size =
-  let pt =
-    time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-      (fun () -> rp read_size)
+module Bv = BoilerPlate(ParPHMM_drivers.Viterbi)
+
+let viterbi read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles =
+  let init =
+    match read_size_override with
+    | None   -> `Setup need_read_size
+    | Some r -> `Set (Bv.init conf need_read_size r ())
   in
-  let g =
-    match specific_allele with
-    | None ->
-      let add_ll = add_log_likelihoods pt.ParPHMM.number_alleles in
-      time (sprintf "Allocating forward pass workspaces")
-        (fun () ->
-          match ParPHMM.forward_pass mode ?insert_p ?band pt read_size with
-          | `Reducer (u, f) ->
-              `Reducer
-                { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
-                ; s   = u
-                ; fin = output_reducer pt.ParPHMM.alleles
-                }
-          | `Mapper m ->
-              `Mapper
-                { f   = to_map_update_f m
-                ; s   = []
-                ; fin = output_mapper
-                })
-    | Some allele ->
-        let add_ll = add_log_likelihoods 1 in
-        time (sprintf "Allocating forward pass workspaces")
-          (fun () ->
-            match ParPHMM.single_allele_forward_pass ?insert_p mode pt read_size allele with
-            | `Reducer (u, f) ->
-                `Reducer
-                  { f   = to_reduce_update_f ~check_rc (f ~check_rc) add_ll
-                  ; s   = u
-                  ; fin = output_reducer [allele]
-                  }
-            | `Mapper m ->
-                `Mapper
-                  { f   = to_map_update_f m
-                  ; s   = []
-                  ; fin = output_mapper
-                  })
+  match fastq_file_list with
+  | []              -> invalid_argf "Cmdliner lied!"
+  | [fastq]         -> Bv.across_fastq conf ()
+                            ?number_of_reads ~specific_reads fastq init
+  | [read1; read2]  -> Bv.across_paired ~finish_singles conf ()
+                            ?number_of_reads ~specific_reads read1 read2 init
+  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                          (List.length lst)
+
+module Bf = BoilerPlate(ParPHMM_drivers.Forward)
+
+let forward opt read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles =
+  let init =
+    match read_size_override with
+    | None   -> `Setup need_read_size
+    | Some r -> `Set (Bf.init conf need_read_size r opt)
   in
-  `Set g
+  match fastq_file_list with
+  | []              -> invalid_argf "Cmdliner lied!"
+  | [fastq]         -> Bf.across_fastq conf opt
+                          ?number_of_reads ~specific_reads fastq init
+  | [read1; read2]  -> Bf.across_paired ~finish_singles conf opt
+                          ?number_of_reads ~specific_reads read1 read2 init
+  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                        (List.length lst)
 
-let fin = function
-  | `Setup _ -> eprintf "Didn't fine any reads."
-  | `Set (`Mapper g)  -> g.fin g.s
-  | `Set (`Reducer g) -> g.fin g.s
+module Parallel (S : ParPHMM_drivers.S) = struct
 
-let across_fastq ?number_of_reads ~specific_reads ~check_rc specific_allele ?band mode file init =
-  try
-    Fastq.fold ?number_of_reads ~specific_reads file ~init
-      ~f:(fun acc fqi ->
-            match acc with
-            | `Setup rp ->
-                let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-                let `Set g = to_set mode specific_allele ~check_rc ?band rp read_size in
-                `Set (proc_g g fqi)
-            | `Set g ->
-                `Set (proc_g g fqi))
-    |> fin
-  with PPE e ->
-    eprintf "%s" e
+  module D = ParPHMM_drivers.Make_single(S)
+
+  let init conf rp read_size opt =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
+        (fun () -> rp read_size)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> D.init conf read_size pt opt)
+
+  let across_fastq conf opt ?number_of_reads ~specific_reads ~nprocs
+    file driver state =
+    try
+      let map fqi = D.single driver fqi in
+      let mux rr = D.merge driver state rr in
+      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
+      D.output driver state stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired conf opt ?number_of_reads ~specific_reads ~nprocs
+    file1 file2 driver state =
+    let map = function
+      | Single fqi      -> D.single driver fqi
+      | Paired (f1, f2) -> D.paired driver f1 f2
+    in
+    let mux rr = D.merge driver state rr in
+    try
+      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
+        ~nprocs ~map ~mux file1 file2;
+      D.output driver state stdout
+    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Parallel *)
+
+module Pf = Parallel(ParPHMM_drivers.Forward)
+
+let p_forward opt read_size_override need_read_size conf fastq_file_list
+  number_of_reads specific_reads finish_singles nprocs =
+  match read_size_override with
+  | None   -> invalid_argf "Must specify read size for pallel!"
+  | Some r -> let driver, state = Pf.init conf need_read_size r opt in
+              begin match fastq_file_list with
+              | []              -> invalid_argf "Cmdliner lied!"
+              | [fastq]         -> Pf.across_fastq conf opt
+                                      ?number_of_reads ~specific_reads ~nprocs
+                                      fastq driver state
+              | [read1; read2]  -> Pf.across_paired conf opt
+                                      ?number_of_reads ~specific_reads ~nprocs
+                                      read1 read2 driver state
+              | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+                                    (List.length lst)
+              end
+
 
 let type_
   (* Allele information source *)
-    alignment_file merge_file distance not_impute
+    alignment_file merge_file distance
   (* Allele selectors *)
     regex_list specific_list without_list number_alleles
-    specific_allele
+    do_not_ignore_suffixed_alleles
+    allele
   (* Process *)
     skip_disk_cache
   (* What to do? *)
-    fastq_file_lst number_of_reads specific_reads
+    fastq_file_list number_of_reads specific_reads
+    do_not_finish_singles
   (* options *)
     insert_p
+    do_not_past_threshold_filter
+    max_number_mismatches
     read_size_override
     not_check_rc
-    not_band
-    column
-    number
-    width
+  (* band logic *)
+    band_warmup_arg
+    band_number_arg
+    band_radius_arg
+    likelihood_first
+    zygosity_report_size
   (* how are we typing *)
-    map
+    map_depth
+    mode
+    forward_accuracy_opt
+    number_processes_opt
     =
-  let impute   = not not_impute in
-  let check_rc = not not_check_rc in
-  let band     =
-    if not_band then
-      None
-    else
-      Some { ParPHMM.column; number; width }
-  in
-  let need_read_size_r =
-    to_read_size_dependent
-      ?alignment_file ?merge_file ~distance ~impute
-      ~regex_list ~specific_list ~without_list ?number_alleles
-      ~skip_disk_cache
-  in
-  match need_read_size_r with
-  | Error e           -> eprintf "%s" e
-  | Ok need_read_size ->
-    let mode = if map then `Mapper else `Reducer in
-    let init =
-      match read_size_override with
-      | None   -> `Setup need_read_size
-      | Some r -> to_set mode specific_allele ~check_rc ?band need_read_size r
-    in
-    begin match fastq_file_lst with
-    | []              -> invalid_argf "Cmdliner lied!"
-    | [read1; read2]  -> invalid_argf "implement pairs!"
-    | [fastq]         -> across_fastq ?number_of_reads ~specific_reads ~check_rc ?band
-                          specific_allele mode fastq init
-    | lst             -> invalid_argf "More than 2, %d fastq files specified!" (List.length lst)
-    end
+  Option.value_map forward_accuracy_opt ~default:()
+    ~f:(fun fa -> ParPHMM.dx := fa);
+  to_read_size_dependent
+    ?alignment_file ?merge_file ~distance
+    ~regex_list ~specific_list ~without_list ?number_alleles
+    ~do_not_ignore_suffixed_alleles
+    ~skip_disk_cache
+  |> function
+      | Error e           -> eprintf "%s" e       (* Construction args don't make sense.*)
+      | Ok need_read_size ->
+        (* Rename some arguments to clarify logic. *)
+        let band =
+          let open Option in
+          band_warmup_arg >>= fun warmup ->
+            band_number_arg >>= fun number ->
+              band_radius_arg >>= fun radius ->
+                Some { ParPHMM.warmup; number; radius }
+        in
+        let check_rc = not not_check_rc in
+        let past_threshold_filter = not do_not_past_threshold_filter in
+        let finish_singles = not do_not_finish_singles in
+        let conf =
+          ParPHMM_drivers.single_conf ?allele ~insert_p ?band
+            ?max_number_mismatches ~past_threshold_filter ~check_rc ()
+        in
+        match mode with
+        | `Viterbi ->
+            viterbi read_size_override need_read_size conf fastq_file_list
+              number_of_reads specific_reads finish_singles
+        | `Forward ->
+            let opt = { ParPHMM_drivers.likelihood_first
+                      ; zygosity_report_size
+                      ; report_size = map_depth
+                      } in
+            begin match number_processes_opt with
+            | None  ->
+                forward opt read_size_override need_read_size conf fastq_file_list
+                  number_of_reads specific_reads finish_singles
+            | Some n ->
+                p_forward opt read_size_override need_read_size conf fastq_file_list
+                  number_of_reads specific_reads finish_singles n
+            end
 
 let () =
   let open Cmdliner in
   let open Common_options in
-  let read_size_override_arg =
-    let docv = "POSITIVE INTEGER" in
-    let doc = "Override the number of bases to calculate the likelihood over, \
-               instead of using the number of bases in the FASTQ." in
-    Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
-  in
   let not_check_rc_flag =
     let doc = "Do not check the reverse complement." in
     Arg.(value & flag & info ~doc ["not-check-rc"])
   in
-  let do_not_impute_flag =
-    let doc  = "Do NOT fill in the missing segments of alleles with an \
-                iterative algorithm that picks the closest allele with full \
-                length. The default behavior is to impute the sequences, \
-                so that (1) the per-allele likelihoods are comparable \
-                (the default behavior of unknown sequences biases reads \
-                to map correctly in that region) and (2) this limits the \
-                actual branching of transitions inside the PPHMM."
-    in
-    Arg.(value & flag & info ~doc ["do-not-impute"])
-  in
-  (* Band arguments *)
-  let not_band_flag =
-    let doc = "Calculate the full forward pass matrix." in
-    Arg.(value & flag & info ~doc ["do-not-band"])
-  in
-  let band_column_arg =
-    let default = ParPHMM.(band_default.column) in
-    let docv = "POSITIVE INTEGER" in
-    let doc =
-      sprintf "At which column in the forward pass to compute bands instead \
-               of the full pass. Defaults to: %d." default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["band-column"])
-  in
-  let number_bands_arg =
-    let default = ParPHMM.(band_default.number) in
-    let docv = "POSITIVE INTEGER" in
-    let doc  =
-      sprintf "Number of bands to calculate. Defaults to %d" default
-    in
-    Arg.(value
-          & opt positive_int default
-          & info ~doc ~docv ["number-bands"])
-  in
-  let band_width_arg =
-    let default = ParPHMM.(band_default.width) in
-    let docv = "greater than 1" in
-    let doc  =
-      sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
-    in
-    Arg.(value
-          & opt greater_than_one default
-          & info ~doc ~docv ["band-width"])
-  in
-  let map_flag =
-    let doc = "Map (do not reduce) the typing of the individual reads." in
-    let docv = "This switch turns the typing logic into more of a diagnostic \
-                mode. The end user can see how individual reads are typed."
-    in
-    Arg.(value & flag & info ~doc ~docv ["map"])
-  in
+  let specific_allele_argument = "allele" in
   let spec_allele_arg =
-    let doc = "ALLELE" in
-    let docv = "Use a faster mode where we measure the likelihood for just \
+    let docv = "ALLELE" in
+    let doc  = "Use a faster mode where we measure the likelihood for just \
                 the passed allele. The allele must be found in the alignment \
                 or merge file." in
     Arg.(value & opt (some string) None
-               & info ~doc ~docv ["allele"])
+               & info ~doc ~docv [specific_allele_argument])
+  in
+  let mode_flag =
+    let open Arg in
+    let modes =
+      [ ( `Viterbi, info ~doc:
+            (sprintf "Map each read into the viterbi decoded path against a \
+                      specified allele. Specify the allele with %S \
+                      argument, defaults to using the reference of the loci."
+              specific_allele_argument)
+          [ "viterbi" ])
+      ; ( `Forward, info ~doc:
+          (sprintf "Default mode: aggregate read data into per allele \
+            likelihoods. This mode reports the aggregated per allele \
+            likelihoods as well as a subset of all possible zygosity
+            likelihoods (control the number with %S). Furthermore, for each \
+            read we'll report the most likely alleles, their likely emission \
+            and the position with the largest emission. Specify the %S \
+            argument to change the number of elements that are reported."
+              zygosity_report_size_argument
+              map_depth_argument)
+          [ "forward" ])
+      ]
+    in
+    value & vflag `Forward modes
   in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+      sprintf "Browse and report new issues at https://github.com/hammerlab/%s"
         repo
     in
     let man =
-      [ `S "AUTHORS"
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
+      [ `S "BUGS"
       ; `P bug
+      ; `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
       ]
     in
     Term.(const type_
             (* Allele information source *)
-            $ file_arg $ merge_arg $ distance_flag $ do_not_impute_flag
+            $ alignment_arg $ merge_arg $ defaulting_distance_flag
             (* Allele selectors *)
             $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+            $ do_not_ignore_suffixed_alleles_flag
             $ spec_allele_arg
             (* What to do ? *)
             $ no_cache_flag
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
+            $ do_not_finish_singles_flag
             (* options. *)
             $ insert_probability_arg
+            $ do_not_past_threshold_filter_flag
+            $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_check_rc_flag
-            $ not_band_flag
-            $ band_column_arg
+            $ band_warmup_arg
             $ number_bands_arg
-            $ band_width_arg
+            $ band_radius_arg
+            $ likelihood_first_flag
+            $ zygosity_report_size_arg
             (* How are we typing *)
-            $ map_flag
+            $ map_depth_arg
+            $ mode_flag
+            $ forward_pass_accuracy_arg
+            $ number_processes_arg
             (* $ map_allele_arg
             $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
               $ do_not_check_rc_flag

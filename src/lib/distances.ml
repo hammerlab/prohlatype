@@ -1,9 +1,9 @@
 (** Measure distances between different alleles from (at the moment) parsed
-    multiple alignment files. *)
+    Multiple Sequence Alignment files. *)
 
 open Util
 
-module TrieDistances = struct
+module Trie_distances = struct
 
   let init_trie elems =
     let open Nomenclature in
@@ -21,9 +21,11 @@ module TrieDistances = struct
           let closest_allele_str = resolution_and_suffix_opt_to_string ~gene closest_allele_res in
           Ok (StringMap.add ~key:ta ~data:[(closest_allele_str, 1.)] m))
 
-end
+end (* Trie_distances *)
 
-module AverageExon = struct
+module Weighted_per_segment = struct
+
+  let debug = ref false
 
   let against_mask ~init ~f =
     List.fold_left ~init ~f:(fun a -> function
@@ -50,13 +52,13 @@ module AverageExon = struct
       else
         a +. mismatches)
 
-  let one ref_allele reference ~candidates ~allele =
-    let open Mas_parser in
-    let dist_to_ref = allele_distances ~reference ~allele in
+  let one ~reference ~reference_sequence ~candidates ~allele ~allele_name =
+    let open MSA.Segments in
+    let dist_to_ref = distances ~reference:reference_sequence ~allele in
     let ref_mask =
       List.map dist_to_ref ~f:(fun s ->
-        match s.allele_relationships with
-        | Full _ -> Some (float s.mismatches, float s.reference_seq_length)
+        match s.relationship with
+        | Full _ -> Some (float s.mismatches, float s.seq_length)
         | _      -> None)
     in
     let tlen = against_mask ref_mask ~init:0.
@@ -66,13 +68,14 @@ module AverageExon = struct
     let ref_diff = against_mask ~init:dist_init ~f:dist_f ref_mask in
     let all_distances =
       StringMap.fold candidates ~init:[] ~f:(fun ~key:al2 ~data:allele2 acc ->
+        if !debug then
+          printf "Calculating weighted differences for %s vs %s\n" allele_name al2;
         let dlst =
-          Mas_parser.allele_distances_between
-            ~reference ~allele1:allele ~allele2
+          distances_between ~reference:reference_sequence ~allele1:allele ~allele2
           |> List.map ~f:(fun s ->
-              match s.allele_relationships with
+              match s.relationship with
               | (Full _), (Full _) ->
-                  Some (float s.mismatches, float s.reference_seq_length)
+                  Some (float s.mismatches, float s.seq_length)
               | _                  ->
                   None)
         in
@@ -80,24 +83,67 @@ module AverageExon = struct
         | None      -> acc
         | Some dist -> (al2, dist) :: acc)
     in
-    let with_reference = (ref_allele, ref_diff) :: all_distances in
+    let with_reference = (reference, ref_diff) :: all_distances in
     List.sort with_reference ~cmp:(fun (_,d1) (_,(d2:float)) -> compare d1 d2)
 
-  let f ref_allele reference ~targets ~candidates =
-    let c = one ref_allele reference ~candidates in
-    StringMap.mapi targets ~f:(fun _al1 allele -> c allele)
+  let f ~reference ~reference_sequence ~targets ~candidates =
+    let c = one ~reference ~reference_sequence ~candidates in
+    StringMap.mapi targets ~f:(fun allele_name allele ->
+      c ~allele_name ~allele)
 
-end
+end (* Weighted_per_segment *)
+
+module Reference = struct
+
+  let one ~reference ~reference_sequence ~candidates ~allele =
+    let is_ref, isn't =
+      StringMap.bindings candidates
+      |> List.partition ~f:(fun (al, _seq) -> al = reference)
+    in
+    List.map is_ref ~f:(fun _ -> reference, 0.0)
+    @ List.map isn't ~f:(fun (a, _) -> a, infinity)
+
+  let f ~reference ~reference_sequence ~targets ~candidates =
+    StringMap.map targets ~f:(fun _s ->
+      one ~reference ~reference_sequence ~candidates
+        ~allele:("Allele sequence doesn't matter", []))
+
+end (* Reference *)
 
 type logic =
+  | Reference
   | Trie
-  | AverageExon
+  | WeightedPerSegment
   [@@deriving show]
 
-let one ref_allele reference ~allele ~candidates = function
-  | Trie        -> Error "Distance for one allele using Trie not implemented."
-  | AverageExon -> Ok (AverageExon.one ref_allele reference ~candidates ~allele)
+type alignment_sequence = string MSA.alignment_sequence
 
-let compute ref_allele reference ~targets ~candidates = function
-  | Trie        -> TrieDistances.f ~targets ~candidates
-  | AverageExon -> Ok (AverageExon.f ref_allele reference ~targets ~candidates)
+let one ~reference ~reference_sequence ~allele ~candidates = function
+  | Reference          ->
+      let _aname, aseq = allele in
+      Ok (Reference.one ~reference ~reference_sequence ~candidates
+            ~allele:aseq)
+  | Trie               ->
+      let aname, aseq = allele in
+      let targets = StringMap.singleton aname aseq in
+      Trie_distances.f ~targets ~candidates >>= fun m ->
+        Ok (StringMap.find aname m)
+  | WeightedPerSegment ->
+      let allele_name, aseq = allele in
+      Ok (Weighted_per_segment.one ~reference ~reference_sequence ~candidates
+            ~allele_name ~allele:aseq)
+
+type arg =
+  { reference : string
+  ; reference_sequence : alignment_sequence
+  ; targets : alignment_sequence StringMap.t
+  ; candidates : alignment_sequence StringMap.t
+  }
+
+let compute { reference; reference_sequence; targets; candidates } = function
+  | Reference ->
+      Ok (Reference.f ~reference ~reference_sequence ~targets ~candidates)
+  | Trie               ->
+      Trie_distances.f ~targets ~candidates
+  | WeightedPerSegment ->
+      Ok (Weighted_per_segment.f ~reference ~reference_sequence ~targets ~candidates)

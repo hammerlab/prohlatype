@@ -15,17 +15,17 @@ val fold_over_kmers_in_string :
 val fold_over_kmers_in_graph :
   k:int ->
   init:'a ->
-  absorb:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
-  extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
-  close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
+  absorb:('a -> MSA.position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
+  extend:(MSA.position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
+  close:('a -> MSA.position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
   Ref_graph.t -> 'a
 
 val fold_over_biological_kmers_in_graph :
   k:int ->
   init:'a ->
-  absorb:('a -> alignment_position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
-  extend:(alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
-  close:('a -> alignment_position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
+  absorb:('a -> MSA.position * sequence -> [> `Whole ] kmer_substring -> 'a) ->
+  extend:(MSA.position * sequence -> [> `Part of int ] kmer_substring -> 'b option -> 'b) ->
+  close:('a -> MSA.position * sequence -> [> `Part of int ] kmer_substring -> 'b -> 'a) ->
   Ref_graph.t -> 'a
 
 val kmer_counts : biological:bool -> k:int -> Ref_graph.t -> int Kmer_table.t
@@ -34,7 +34,7 @@ val kmer_counts : biological:bool -> k:int -> Ref_graph.t -> int Kmer_table.t
 
 (** How we describe positions in the string graph. *)
 type position =
-  { alignment : alignment_position    (* Where, in the alignment the sequence starts. *)
+  { alignment : MSA.position    (* Where, in the alignment the sequence starts. *)
   ; sequence  : sequence              (* The sequence. *)
   ; offset    : int                   (* An offset into the the sequence. *)
   }
@@ -42,7 +42,7 @@ type position =
 val show_position : position -> string
 val compare_position : position -> position -> int
 
-val specific_position : Ref_graph.t -> Alleles.allele -> alignment_position ->
+val specific_position : Ref_graph.t -> Alleles.allele -> MSA.position ->
   (position, string) result
 
 (** A graph index *)

@@ -5,7 +5,7 @@ Scripts
       Takes the directory with [alignments](https://github.com/jrob119/IMGTHLA/tree/Latest/alignments)
       as the first parameter and optionally, a specific file (ex. `A_gen.txt`) as the second input.
       By default it tries to parse _all_ of the files.
-      This might be useful by modifying the `report` reference in [Mas_parser](../lib/mas_parser.ml).
+      This might be useful by modifying the `report` reference in [MSA_parser](../lib/mSA_parser.ml).
 
         ```
         $ ./test_parsing.native ../foreign/IMGTHLA/alignments
