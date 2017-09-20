@@ -150,10 +150,9 @@ let type_
     do_not_past_threshold_filter
     max_number_mismatches
     read_size_override
-    not_band
-    warmup
-    number
-    width
+    band_warmup_arg
+    band_number_arg
+    band_radius_arg
     likelihood_first
     zygosity_report_size
   (* how are we typing *)
@@ -164,11 +163,12 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
-  let band     =
-    if not_band then
-      None
-    else
-      Some { ParPHMM.warmup; number; width }
+  let band =
+    let open Option in
+      band_warmup_arg >>= fun warmup ->
+        band_number_arg >>= fun number ->
+          band_radius_arg >>= fun radius ->
+            Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
     match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
@@ -289,15 +289,14 @@ let () =
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+      sprintf "Browse and report new issues at https://github.com/hammerlab/%s"
         repo
     in
     let man =
-      [ `S "AUTHORS"
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
+      [ `S "BUGS"
       ; `P bug
+      ; `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
       ]
     in
     Term.(const type_
@@ -316,10 +315,9 @@ let () =
             $ do_not_past_threshold_filter_flag
             $ max_number_mismatches_arg
             $ read_size_override_arg
-            $ not_band_flag
             $ band_warmup_arg
             $ number_bands_arg
-            $ band_width_arg
+            $ band_radius_arg
             $ likelihood_first_flag
             $ zygosity_report_size_arg
             (* How are we typing *)

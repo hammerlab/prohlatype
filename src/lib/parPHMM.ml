@@ -1290,13 +1290,13 @@ type band_config =
                          number of bands, why not reduce it further when some
                          bands, inevitably, will have far less probability
                          mass. *)
-  ; width   : int     (* How many columns of the band to calculate. *)
+  ; radius   : int    (* How many columns of the band to calculate. *)
   }
 
 let band_default =
   { warmup  = 10
   ; number  = 5
-  ; width   = 3
+  ; radius  = 3
   }
 
 module ForwardMultipleGen (R : Ring) = struct
@@ -1500,14 +1500,14 @@ module ForwardMultipleGen (R : Ring) = struct
 
     let to_bands emissions_a increment_a c ~to_index inds =
       let lnds = Cm.map inds ~bijective:true ~f:(fun st -> st, [to_index st]) in
-      let ai = find_indices_above_n c.width emissions_a lnds in
-      let bi = find_indices_below_n c.width increment_a lnds in
+      let ai = find_indices_above_n c.radius emissions_a lnds in
+      let bi = find_indices_below_n c.radius increment_a lnds in
       (* tl_exn -> drop the center band, so we don't duplicate it. *)
       Cm.map2 ai bi ~f:(fun (st, a) (_st2, b) -> st, a @ (List.tl_exn (List.rev b)))
 
     (* This step (see get_exn) partitions the current bands based on the
       last cell's. Since these value are already away from the optimal point
-      in the band (that would be width above), I'm not certain that this
+      in the band (that would be radius above), I'm not certain that this
       is necessary. We're using this value as just an approximation in lieu
       of filling in the forward matrix. Specifically, we can have a less strict
       cell equality test, so that the allele sets are joined together.
@@ -1556,7 +1556,7 @@ module ForwardMultipleGen (R : Ring) = struct
       1. Find the highest likelihood value in the pass: best_c.match_. This helps to
           orient the next two functions.
       2. We need to know when to stop filling the band. We could use a fixed
-          width and do something like just move down 1 position per column but:
+          radius and do something like just move down 1 position per column but:
             - This doesn't account for gaps in the alleles.
             - This doesn't account for inserts/deletes that will shift the center
               of the band. In area's of ambiguity we could have 2 (or more)
@@ -1564,10 +1564,10 @@ module ForwardMultipleGen (R : Ring) = struct
               determining the center.
           Therefore we need an adaptive strategy. We count the number of match
           values that are worse; where the likelihood is less than the best.
-          Once this counter reaches the band config's width we stop considering
+          Once this counter reaches the band config's radius we stop considering
           those alleles.
         3. Keep track of the calculated cols for an allele. This allows us to
-          adaptively figure out the cols of the next pass by moving width away
+          adaptively figure out the cols of the next pass by moving radius away
           from the best_col. See [find_next_row_from_fill_state].
       *)
     type fill_state =
@@ -1576,7 +1576,7 @@ module ForwardMultipleGen (R : Ring) = struct
       ; worse    : int          (* Number of likelihoods < than best_c.match_ *)
       ; last_c   : R.t cell
       ; ncols    : int list     (* Where we're calculating. Since there might be
-                                  gaps, the width needs to look inside this list
+                                  gaps, the radius needs to look inside this list
                                   for the next start/end_col *)
       }
 
@@ -1603,14 +1603,14 @@ module ForwardMultipleGen (R : Ring) = struct
         }
 
     (* cols are in reverse, descending, order! *)
-    let to_next_cols width best_col cols =
+    let to_next_cols radius best_col cols =
       let rec find_best acc = function
         | []     -> invalid_argf "Didn't find best row."
         | h :: t ->
             if h = best_col then
-              (* TODO: These can silently take less than width. *)
-              let s = List.take t width in
-              let e = List.take acc width in
+              (* TODO: These can silently take less than radius. *)
+              let s = List.take t radius in
+              let e = List.take acc radius in
               (List.rev s) @ (h :: e)
             else
               find_best (h :: acc) t
@@ -1618,13 +1618,13 @@ module ForwardMultipleGen (R : Ring) = struct
       find_best [] cols
 
     let find_next_row_from_fill_state c fs =
-      to_next_cols c.width fs.best_col fs.ncols
+      to_next_cols c.radius fs.best_col fs.ncols
 
     let next_band emissions_a increment_a c fs_map =
       Cm.concat_map fs_map ~f:(fun alleles fs ->
         (* Shift the band, by adjusting around best_col, for next column *)
         Cm.get_exn alleles increment_a.(fs.best_col)
-        (* Now fill in the width. *)
+        (* Now fill in the radius. *)
         |> to_bands emissions_a increment_a c ~to_index:(fun nr -> nr)
         |> Cm.map ~bijective:true ~f:(fun (_br,cols) -> (cols, fs.best_c, fs.last_c)))
       |> Cm.to_list
@@ -1690,7 +1690,7 @@ module ForwardMultipleGen (R : Ring) = struct
                 else begin                          (* Filled all that we're supposed to. *)
                   let full, not_full_state =
                     Cm.partition_map new_fill_state ~f:(fun _s fs ->
-                      if fs.worse >= c.width then `Fst fs else `Snd fs)
+                      if fs.worse >= c.radius then `Fst fs else `Snd fs)
                   in
                   let full_bands = next_band emissions_a increment_a c full in
                   if !debug_ref then begin

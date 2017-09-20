@@ -211,10 +211,10 @@ let type_
     max_number_mismatches
     read_size_override
     not_check_rc
-    not_band
-    warmup
-    number
-    width
+  (* band logic *)
+    band_warmup_arg
+    band_number_arg
+    band_radius_arg
     likelihood_first
     zygosity_report_size
   (* how are we typing *)
@@ -234,12 +234,13 @@ let type_
       | Error e           -> eprintf "%s" e       (* Construction args don't make sense.*)
       | Ok need_read_size ->
         (* Rename some arguments to clarify logic. *)
-        let band     =
-          if not_band then
-              None
-            else
-              Some { ParPHMM.warmup; number; width }
-          in
+        let band =
+          let open Option in
+          band_warmup_arg >>= fun warmup ->
+            band_number_arg >>= fun number ->
+              band_radius_arg >>= fun radius ->
+                Some { ParPHMM.warmup; number; radius }
+        in
         let check_rc = not not_check_rc in
         let past_threshold_filter = not do_not_past_threshold_filter in
         let finish_singles = not do_not_finish_singles in
@@ -310,15 +311,14 @@ let () =
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
+      sprintf "Browse and report new issues at https://github.com/hammerlab/%s"
         repo
     in
     let man =
-      [ `S "AUTHORS"
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
+      [ `S "BUGS"
       ; `P bug
+      ; `S "AUTHORS"
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
       ]
     in
     Term.(const type_
@@ -339,10 +339,9 @@ let () =
             $ max_number_mismatches_arg
             $ read_size_override_arg
             $ not_check_rc_flag
-            $ not_band_flag
             $ band_warmup_arg
             $ number_bands_arg
-            $ band_width_arg
+            $ band_radius_arg
             $ likelihood_first_flag
             $ zygosity_report_size_arg
             (* How are we typing *)

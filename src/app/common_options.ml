@@ -286,8 +286,8 @@ let kmer_size_arg =
   Arg.(value & opt positive_int default & info ~doc ~docv ["k"; "kmer-size"])
 
 let fastq_file_arg =
-  let docv = "FASTQ FILE" in
-  let doc = "Fastq formatted DNA reads file, only one file per sample. \
+  let docv = "FASTQ-FILE" in
+  let doc = "Fastq formatted DNA reads file. Only one file per sample. \
              List paired end reads as 2 sequential files." in
   Arg.(non_empty & pos_all file [] & info ~doc ~docv [])
 
@@ -442,41 +442,63 @@ let map_depth_arg =
   Arg.(value & opt positive_int map_depth_default
              & info ~doc ~docv [map_depth_argument])
 
-(* Band arguments *)
+(* Band arguments
 let not_band_flag =
   let doc = "Calculate the full forward pass matrix." in
   Arg.(value & flag & info ~doc ["do-not-band"])
+*)
+
+let band_warmup_argument = "band-warmup"
+let band_number_argument = "band-number"
+let band_radius_argument = "band-radius"
 
 let band_warmup_arg =
   let default = ParPHMM.(band_default.warmup) in
   let docv = "POSITIVE INTEGER" in
   let doc =
-    sprintf "At which row in the forward pass to compute bands instead \
-              of the full pass. Defaults to: %d." default
+    sprintf "At which row (bases of the read) in the forward pass to start \
+      computing bands instead of the full pass. Defaults to: %d.\n Passing \
+      this (or any of the other two band settings %s, %s) argument will \
+      trigger the banding logic."
+      default (Arg.doc_quote band_number_argument) band_radius_argument
   in
   Arg.(value
-        & opt positive_int default
-        & info ~doc ~docv ["band-warmup"])
+        & opt (some positive_int) None
+        & info ~doc ~docv [band_warmup_argument])
 
 let number_bands_arg =
   let default = ParPHMM.(band_default.number) in
   let docv = "POSITIVE INTEGER" in
   let doc  =
-    sprintf "Number of bands to calculate. Defaults to %d" default
+    sprintf "Number of bands to calculate. Defaults to %d.\n When we perform \
+      banded passes there is a chance that after the \"warmup\" period we \
+      haven't correctly located where the read aligns to the reference; this \
+      may easily occur if there is an error in first part of the read. To \
+      compensate we can calculate more than one band and average over the \
+      results as one of them will (probably) capture most of the probability \
+      mass. Passing this (or any of the other two band settings %s, %s) \
+      argument will trigger the banding logic."
+      default band_warmup_argument band_radius_argument
   in
   Arg.(value
-        & opt positive_int default
-        & info ~doc ~docv ["number-bands"])
+        & opt (some positive_int) None
+        & info ~doc ~docv [band_number_argument])
 
-let band_width_arg =
-  let default = ParPHMM.(band_default.width) in
-  let docv = "greater than 1" in
+let band_radius_arg =
+  let default = ParPHMM.(band_default.radius) in
+  let docv = "INTEGER greater than 1" in
   let doc  =
-    sprintf "Width of bands to calculate. Defaults to %d. Must be greater than 1." default
+    sprintf "Radius of bands to calculate. Defaults to %d. Must be greater \
+      than 1.\n For a given read position, bands have this specified radius \
+      around the most likely match likelihood; the calculation logic tries to \
+      calculate this many cells before and after in the reference position. \
+      Passing this (or any of the other two band settings %s, %s) argument \
+      will trigger the banding logic."
+      default band_warmup_argument band_number_argument
   in
   Arg.(value
-        & opt greater_than_one default
-        & info ~doc ~docv ["band-width"])
+        & opt (some greater_than_one) None
+        & info ~doc ~docv [band_radius_argument ])
 
 let forward_pass_accuracy_arg =
   let docv = "POSITIVE DOUBLE" in
@@ -530,7 +552,7 @@ let number_processes_arg =
              By default the application is not parallelized as the user would \
              most likely achieve greater efficiency by natively parallelizing \
              across samples as opposed to parallelizing across reads. \
-             Furthermore the user MUST specify %S as well in this mode." 
+             Furthermore the user MUST specify %S as well in this mode."
       read_size_override_argument
   in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])
