@@ -64,7 +64,7 @@ module Interval = struct
     | SplitEmpty of  { inter: t; before: t; after : t}
     [@@deriving eq, ord, show]
 
-  let inter_diff t1  t2 =
+  let inter_diff t1 t2 =
     let s1, e1 = t1 in
     let s2, e2 = t2 in
     if s1 = e1 then begin
@@ -208,7 +208,7 @@ module Interval = struct
               `ThereShouldBeAnIntersect (p1, p2)
         | BeforeAfter { inter; before; after }          ->
             error tr p1 p2 i (merge before inter <> Some p1  &&
-                               merge inter after <> Some p2)
+                                merge inter after <> Some p2)
         | BeforeEmpty { inter; before }                 ->
             error tr p1 p2 i (merge before inter <> Some p1)
         | EmptyAfter { inter; after}                    ->
@@ -230,10 +230,10 @@ module Interval = struct
     loop 0
 
   (* This is a more composable version of inter_diff. We either find an
-     intersection or we find something that is 'before' any possible
-     intersection and should be discarded.
+      intersection or we find something that is 'before' any possible
+      intersection and should be discarded.
 
-     The return results are
+      The return results are
       1. Possible before of first interval.
       2. Possible before of second interval.
       3. Possible interseciton.
@@ -292,6 +292,34 @@ module Interval = struct
       prepo a123 a3,
       a4
 
+  let aligned_inter_diff3 i1 i2 i3 =
+    let prep p =
+      let s, _e = p in
+      function
+        | None         -> Some p
+        | Some (_s, e) -> Some (s, e)                               (* assert (_e + 1 = _s); *)
+    in
+    let i, m1, m2 =
+      match inter_diff i1 i2 with
+      | Before
+      | After
+      | AfterBefore _ | BeforeAfter _
+      | BeforeEmpty _ | EmptyBefore _
+      | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
+      | EmptyAfter { inter; after = a } -> inter, None,   Some a
+      | EmptyEmpty { inter }            -> inter, None,   None
+      | AfterEmpty { after = a; inter } -> inter, Some a, None
+    in
+    match inter_diff i i3 with
+    | Before
+    | After
+    | AfterBefore _ | BeforeAfter _
+    | BeforeEmpty _ | EmptyBefore _
+    | EmptySplit _ | SplitEmpty _     -> invalid_argf "Different lengths!"
+    | EmptyAfter { inter; after = a } -> inter, m1,        m2,        Some a
+    | EmptyEmpty { inter }            -> inter, m1,        m2,        None
+    | AfterEmpty { after = a; inter } -> inter, prep a m1, prep a m2, None
+
   let aligned_inter_diff4 i1 i2 i3 i4 =
     let prep p =
       let s, _e = p in
@@ -334,6 +362,11 @@ module Interval = struct
   let iter (s, e) ~f =
     for i = s to e do f i done
 
+  let fold (s, e) ~init ~f =
+    let acc = ref init in
+    for i = s to e do acc := f !acc i done;
+    !acc
+
 end (* Interval *)
 
 module Set = struct
@@ -354,9 +387,9 @@ module Set = struct
     in
     loop
 
-  let to_string s =
-    List.map s ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
-    |> String.concat ~sep:";"
+  let to_string  =
+    string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
+
 
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
 
@@ -520,6 +553,41 @@ module Set = struct
     | None -> l
     | Some i -> i :: l
 
+  let all_intersections3 =
+    let rec loop l1 l2 l3 = match l1, l2, l3 with
+      | [],  _,  _
+      |  _, [],  _
+      |  _,  _, []  -> [], l1, l2, l3
+      | h1 :: t1
+      , h2 :: t2
+      , h3 :: t3    ->
+        let b1, b2, b3, i, a1, a2, a3 = Interval.split_inter_diff3 h1 h2 h3 in
+        let nt1 = prepend_if_not_none a1 t1 in
+        let nt2 = prepend_if_not_none a2 t2 in
+        let nt3 = prepend_if_not_none a3 t3 in
+        let il, r1, r2, r3 = loop nt1 nt2 nt3 in
+        prepend_if_not_none i il
+        , prepend_if_not_none b1 r1
+        , prepend_if_not_none b2 r2
+        , prepend_if_not_none b3 r3
+    in
+    loop
+
+  let must_match_at_beginning3 s1 s2 s3 =
+    match s1, s2, s3 with
+    | [],  _,  _  -> invalid_argf "Empty 1"
+    |  _, [],  _  -> invalid_argf "Empty 2"
+    |  _,  _, []  -> invalid_argf "Empty 3"
+    | h1 :: t1
+    , h2 :: t2
+    , h3 :: t3    ->
+        let inter, ho1, ho2, ho3 = Interval.aligned_inter_diff3 h1 h2 h3 in
+        let nt1 = prepend_if_not_none ho1 t1 in
+        let nt2 = prepend_if_not_none ho2 t2 in
+        let nt3 = prepend_if_not_none ho3 t3 in
+        let il, r1, r2, r3 = all_intersections3 nt1 nt2 nt3 in
+        inter :: il, r1, r2, r3
+
   let all_intersections4 =
     let rec loop l1 l2 l3 l4 = match l1, l2, l3, l4 with
       | [],  _,  _,  _
@@ -535,7 +603,7 @@ module Set = struct
         let nt2 = prepend_if_not_none a2 t2 in
         let nt3 = prepend_if_not_none a3 t3 in
         let nt4 = prepend_if_not_none a4 t4 in
-        let il, r1, r2, r3,r4 = loop nt1 nt2 nt3 nt4 in
+        let il, r1, r2, r3, r4 = loop nt1 nt2 nt3 nt4 in
         prepend_if_not_none i il
         , prepend_if_not_none b1 r1
         , prepend_if_not_none b2 r2
@@ -561,6 +629,13 @@ module Set = struct
         let nt4 = prepend_if_not_none ho4 t4 in
         let il, r1, r2, r3, r4 = all_intersections4 nt1 nt2 nt3 nt4 in
         inter :: il, r1, r2, r3, r4
+
+  let fold t ~init ~f =
+    List.fold_left t ~init ~f:(fun init interval ->
+      Interval.fold interval ~init ~f)
+
+  let iter t ~f =
+    fold t ~init:() ~f:(fun () i -> f i)
 
 end (* Set *)
 
@@ -604,19 +679,17 @@ let init_first_d v =
   Desc [i, v]
 
 let init_all_a ~size v =
-  let i = Interval.make 0 size in
+  let i = Interval.make 0 (size - 1) in
   Asc [Set.of_interval i, v]
 
 (* Properties *)
 let asc_to_string la to_s =
-  List.map la ~f:(fun (s, v) ->
-    sprintf "[%s]:%s" (Set.to_string s) (to_s v))
-  |> String.concat ~sep:"; "
+  string_of_list la ~sep:"; " ~f:(fun (s, v) ->
+      sprintf "[%s]:%s" (Set.to_string s) (to_s v))
 
 let desc_to_string ld to_s =
-  List.map ld ~f:(fun (i, v) ->
+  string_of_list ld ~sep:";" ~f:(fun (i, v) ->
     sprintf "%s:%s" (Interval.to_string i) (to_s v))
-  |> String.concat ~sep:";"
 
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with
@@ -728,6 +801,9 @@ let insert_if_not_empty s v l =
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
+(* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
+   any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
+   values are equal add to the end of l. *)
 let merge_or_add_to_end eq s v l =
   let rec loop = function
     | []     -> [s, v]
@@ -767,12 +843,11 @@ let merge t1 t2 f =
            2. NOT performing this simple equality check
               (ie. comparing 3 floats is too much) and
            3. Making this function tail-rec and using merge_or_add_to_end to
-              merge {eq}ual values or add them at the end and avoiding the
-              List.rev at the end:
-           Do NOT make the total running time faster. None of the above either
+              merge {eq}ual values or add them at the end:
+           Do NOT make the total running time faster; none of the above either
            reduce the branching sufficiently to merit the extra work. This kind
            of make sense since you wouldn't expect this at the edge of the
-           PHMM forward-matrix, where [merge] is mostly called. But still a bit
+           PHMM forward-matrix, where [merge] is called. But still a bit
            disappointing that we can't have uniformity in these methods; or
            phrased another way that this logic isn't exposed in more
            informative types. *)
@@ -785,10 +860,47 @@ let merge t1 t2 f =
   match t1, t2 with
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
 
-(* This method is tail recursive, and we pay the cost of inserting an element,
-   at the end each time but hopefully, merging, due to {eq}, instead into the
-   accumulator will effectively constrain the size of the resulting accumulator
-   such that the cost is amortized. *)
+
+let merge3 ~eq t1 t2 t3 f =
+  let rec start l1 l2 l3 =
+    match l1, l2, l3 with
+    | [],     [],     []  -> []
+    | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+    | (s1, v1) :: t1
+    , (s2, v2) :: t2
+    , (s3, v3) :: t3      ->
+        let intersect, r1, r2, r3 = Set.must_match_at_beginning3 s1 s2 s3 in
+        let nt1 = insert_if_not_empty r1 v1 t1 in
+        let nt2 = insert_if_not_empty r2 v2 t2 in
+        let nt3 = insert_if_not_empty r3 v3 t3 in
+        let acc = [intersect, (f v1 v2 v3)] in
+        loop acc nt1 nt2 nt3
+  and loop acc l1 l2 l3 =
+    match l1, l2, l3 with
+    | [],     [],     []  -> acc     (* We insert at the end, thereby preserving order *)
+    | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
+    |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
+    |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+    | (s1, v1) :: t1
+    , (s2, v2) :: t2
+    , (s3, v3) :: t3      ->
+        let intersect, r1, r2, r3 = Set.must_match_at_beginning3 s1 s2 s3 in
+        let nt1 = insert_if_not_empty r1 v1 t1 in
+        let nt2 = insert_if_not_empty r2 v2 t2 in
+        let nt3 = insert_if_not_empty r3 v3 t3 in
+        let nv = f v1 v2 v3 in
+        let nacc = merge_or_add_to_end eq intersect nv acc in
+        loop nacc nt1 nt2 nt3
+  in
+  match t1, t2, t3 with
+  | (Asc l1), (Asc l2), (Asc l3) -> Asc (start l1 l2 l3)
+
+(* This method is tail recursive, and by default we pay the cost of inserting
+   an element at the end, each time, Hopefully, merging, due to {eq}, instead into
+   the accumulator-list will effectively constrain the size of the resulting
+   list such that the cost is amortized. *)
 let merge4 ~eq t1 t2 t3 t4 f =
   let rec start l1 l2 l3 l4 =
     match l1, l2, l3, l4 with
@@ -836,6 +948,15 @@ let fold_values : type o a. (o, a) t -> init:'b -> f:('b -> a -> 'b) -> 'b =
     | Desc ld -> List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
     | Asc la  -> List.fold_left la ~init ~f:(fun acc (_l, v) -> f acc v)
 
+let fold_indices_and_values :
+  type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =
+  fun l ~init ~f -> match l with
+    | Desc ld -> List.fold_left ld ~init ~f:(fun init (l, v) ->
+                    Interval.fold l ~init ~f:(fun acc i -> f acc i v))
+    | Asc la  -> List.fold_left la ~init ~f:(fun init (s, v) ->
+                    Set.fold s ~init ~f:(fun acc i -> f acc i v))
+
+
 let map : type o a. (o, a) t -> f:(a -> 'b) -> (o, 'b) t =
   fun t ~f -> match t with
     | Desc ld -> Desc (List.map_snd ld ~f)
@@ -849,3 +970,15 @@ let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
     | Asc la  ->
         List.iter la ~f:(fun (l, v) ->
           List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
+
+let to_array = function | Asc la ->
+  match la with
+  | []  -> [||]
+  | h :: t ->
+      let s, v = h in
+      let n = List.fold_left la ~init:0 ~f:(fun a (s, _) -> a + Set.size s) in
+      let r = Array.make n v in
+      let fill s v = Set.iter s ~f:(fun i -> r.(i) <- v) in
+      fill s v;
+      List.iter t ~f:(fun (s, v) -> fill s v);
+      r

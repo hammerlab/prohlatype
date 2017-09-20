@@ -6,25 +6,49 @@
 open Util
 module Pm = Partition_map
 
+module Base = struct
+
+  type t =
+    | A
+    | C
+    | G
+    | T
+    [@@deriving show]
+
+  let of_char = function
+    | 'A' -> A
+    | 'C' -> C
+    | 'G' -> G
+    | 'T' -> T
+    |  c  -> invalid_argf "Unsupported base: %c" c
+
+  let to_char = function
+    | A       -> 'A'
+    | C       -> 'C'
+    | G       -> 'G'
+    | T       -> 'T'
+
+end (* Base *)
+
 (* Construction
-  1. From Mas_parser.result -> Array of Base.t option 's.
+  1. From MSA.Parser.result -> Array of Base.t option 's.
       None if allele is in a gap.
     a. Figure out the Base.t of reference sequence and a position map
-       (position in Mas_parser.result to index into final array)
+       (position in MSA.Parser.result to index into final array)
        [initialize_base_array_and_position_map].
     b. Start Partition_map descending lists so that we can extend them with
        each alternate allele.
   2. Extend the array with each new allele.
 
 The mapping (position into base_state array) is then recovered by iterating
-over this position map as we move along Mas_parser.alignment_element's for
+over this position map as we move along MSA.Parser.alignment_element's for
 the alleles.
 *)
 
 type gapped_bases = Base.t option          (* None -> the allele is in a gap. *)
 type base_emissions = (Pm.ascending, gapped_bases) Pm.t
 
-type position_map = (Mas_parser.position * int) list
+type position_map = (MSA.position * int) list
 
 let some x = Some x
 
@@ -36,7 +60,7 @@ let initialize_base_array_and_position_map ref_elems =
     |> Array.of_list
   in
   let gap_to_base_states_array len = Array.make len None in
-  let open Mas_parser in
+  let open MSA in
   let prefix = "initialize_base_array_and_position_map: " in
   let ia fmt = invalid_argf ~prefix fmt in
   let rec loop lkmp p pp pacc acc = function
@@ -45,7 +69,7 @@ let initialize_base_array_and_position_map ref_elems =
     | Start pos :: t              -> ia "second start: %d" pos
     | End pos :: t                -> ia "end with more %d" pos
     | []                          -> ia "list before End"
-    | Boundary { pos; _ } :: t    -> loop (pos + 1) (p + pos - lkmp) pp ((lkmp, p) :: pacc) acc t
+    | Boundary { pos; _ } :: t    -> loop pos (p + pos - lkmp) pp ((lkmp, p) :: pacc) acc t
     | Sequence { s; start } :: t  -> let l = String.length s in
                                      loop (start + l) (p + l) (-1) ((lkmp, p) :: pacc)
                                         (sequence_to_base_states_array s :: acc) t
@@ -70,7 +94,7 @@ let reduce_position_map : position_map -> position_map = function
       |> List.rev
 
 (* Helper method to create an actual function for computing the index into
-   the base state array. This is useful for debugging between the Mas_parser
+   the base state array. This is useful for debugging between the MSA.Parser
    positions and the index into Base array. Assumes a 'reduced' (via
    [reduce_position_map]) position map. *)
 let to_position_map : position_map -> (int -> int option) = function
@@ -104,7 +128,7 @@ let rec position_and_advance sp (pos_map : position_map) =
 let init_state =
   Array.map ~f:Pm.init_first_d
 
-(* Add an allele's Mas_parser.sequence to the state. *)
+(* Add an allele's MSA.Parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   let add_reference_value start end_ =
     for i = start to end_ - 1 do
@@ -123,7 +147,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
-  let open Mas_parser in
+  let open MSA in
   let rec loop pmap lp = function
     | End p :: []                 ->
         let ap, _position_map = position_and_advance p pmap in
@@ -329,13 +353,13 @@ let float_cell_to_string = cell_to_string (sprintf "%0.3f")
 (* Note that we'll embed the missing/None/gap logic inside of 'a.
    They will all come from some Ring and we'll check via {is_gap}. *)
 type 'a cell_recurrences =
-  { start   : 'a -> 'a cell -> 'a cell
-  ; fst_col : 'a -> 'a cell -> 'a cell
-  ; middle  : 'a -> match_c:('a cell)
+  { start     : 'a -> 'a cell -> 'a cell
+  ; fst_col   : 'a -> 'a cell -> 'a cell
+  ; middle    : 'a -> match_c:('a cell)
                  -> insert_c:('a cell)
                  -> delete_c:('a cell)
                  -> 'a cell
-  ; end_    : 'a cell -> 'a
+  ; end_      : 'a cell -> 'a
   }
 
 exception PastThreshold of string
@@ -538,13 +562,12 @@ module ForwardCalcs (R : Ring) = struct
 
 end (* ForwardCalcs *)
 
-module ForwardFilters  (R : Ring) = struct
+module ForwardFilters (R : Ring) = struct
 
   module Fc = ForwardCalcs(R)
 
   let debug_ref = ref false
 
-  (* Filters. TODO: These deserve their own module, functor, that takes R. *)
   let past_threshold_filter threshold of_entry =
     let base (threshold, best_seen_entry) _base_doesnt_matter =
       if best_seen_entry <> R.zero && best_seen_entry < threshold then
@@ -569,10 +592,13 @@ module ForwardFilters  (R : Ring) = struct
      the threshold, stop executing! *)
 
   (* Assume that {errors} are in ascending order; therefore the lowest base
-     error are at the front of the list. In this model/calculation there are
-     only transitions between match states, so we don't need to scale by
-     transition probabilities such as t_m_m. *)
-  let ungapped_path_prob number_mismatches errors =
+     error are at the front of the list; this way when we say that there are
+     'n' mismatches, those n have the lowest error (highest probability of
+     being right). In this model/calculation there are only transitions between
+     match states, we need to scale by the transition probabilities
+     (t_s_m, t_m_m) in order to make it comparable with the match value in the
+     PHMM cell. *)
+  let ungapped_path_prob number_mismatches ~t_s_m ~t_m_m errors =
     let to_emission_p n e =
       if n < number_mismatches then Fc.mismatch_p e else Fc.match_p e
     in
@@ -580,12 +606,12 @@ module ForwardFilters  (R : Ring) = struct
       match l with
       | []     -> p
       | e :: t -> let emission_p = to_emission_p n e in
-                  loop (n + 1) R.(p * emission_p) t
+                  loop (n + 1) R.(p * emission_p * t_m_m) t
     in
     match errors with
     | []     -> R.one
     | e :: t -> let emission_p = to_emission_p 0 e in
-                loop 1 R.((* one *) emission_p) t
+                loop 1 R.(t_s_m * emission_p) t
 
   (* Insert by maintaining the ascending order. *)
   let rec insert error l = match l with
@@ -595,8 +621,11 @@ module ForwardFilters  (R : Ring) = struct
                 else
                   e :: (insert error t)
 
-  let match_filter ~number_mismatches of_entry =
-    let path_prob = ungapped_path_prob number_mismatches in
+  let match_filter tm ~number_mismatches of_entry =
+    let open Phmm.TransitionMatrix in
+    let t_s_m = R.constant (tm StartOrEnd Match) in
+    let t_m_m = R.constant (tm Match Match) in
+    let path_prob = ungapped_path_prob number_mismatches ~t_s_m ~t_m_m in
     (* Called at the start of each base *)
     let base (errors, max_value) (_base, base_error) =
       let threshold = path_prob errors in
@@ -626,15 +655,16 @@ end (* ForwardFilters *)
 
    'i' is used to index into the read, hence row.
    'k' is used to index into the reference, hence column
+
+  The workspaces are reused for the 2nd read and the current logic is configured
+  so that the 2 reads have the same length [rows].
 *)
 
 module type Workspace_intf = sig
 
   type t
 
-  type workspace_opt
-
-  val generate : workspace_opt -> ref_length:int -> read_length:int -> t
+  val generate : ref_length:int -> read_length:int -> t
 
   (* TODO: Consider renaming these to be more in line with 'i', 'k' *)
   val columns : t -> int
@@ -659,6 +689,8 @@ module type Workspace_intf = sig
   val fold_over_row : t -> int -> init:'a -> f:('a -> entry -> 'a) -> 'a
 
   val fold_over_final : t -> init:'a -> f:('a -> final_entry -> 'a) -> 'a
+
+  val foldi_over_final : t -> init:'a -> f:('a -> int -> final_entry -> 'a) -> 'a
 
   (* Reset for calculation. *)
   val clear : t -> unit
@@ -719,6 +751,14 @@ module CommonWorkspace = struct
     in
     loop 0 init
 
+  let foldi_over_final ws ~init ~f =
+    let fk = columns ws in
+    let rec loop k acc =
+      if k >= fk then acc else loop (k + 1) (f acc k (get_final ws k))
+    in
+    loop 0 init
+
+
 end (* CommonWorkspace *)
 
 (* Create the workspace for the forward calculation for a single,
@@ -726,8 +766,7 @@ end (* CommonWorkspace *)
 module SingleWorkspace (R : Ring) :
   (Workspace_intf with type entry = R.t cell
                    and type final_entry = R.t
-                   and type final_emission = R.t
-                   and type workspace_opt = unit) = struct
+                   and type final_emission = R.t) = struct
 
   module Fc = ForwardCalcs(R)
 
@@ -738,9 +777,7 @@ module SingleWorkspace (R : Ring) :
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
-  type workspace_opt = unit
-
-  let generate () ~ref_length ~read_length =
+  let generate ~ref_length ~read_length =
     { forward  = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Fc.zero_cell)
     ; final    = Array.make ref_length R.zero
     ; emission = R.zero
@@ -769,59 +806,97 @@ module SingleWorkspace (R : Ring) :
 
 end (* SingleWorkspace *)
 
-type path =
-  | M of char * Base. t   (* Store the read pair, that _may_ have 'N', and Base *)
-  | I of int * char                       (* index into read and read base pair *)
-  | D of int * Base.t
+(* Describe a path, a decoding through the PHMM. *)
+module Path = struct
 
-let path_to_string = function
-  | M (b, r) ->  sprintf "M%c%c" b (Base.to_char r)
-  | I (p, b) ->  sprintf "I%d%c" p b
-  | D (p, r) ->  sprintf "D%d%c" p (Base.to_char r)
+  type t =
+    (* Start and emission values *)
+    | S of int                                   (* Index into reference index. *)
+    | E of int
+    | M of char * Base. t (* Store the read pair, that _may_ have 'N', and Base *)
+    | I of int * char                     (* index into read and read base pair *)
+    | D of int * Base.t
 
-type path_strings =
-  { reference : string
-  ; read : string
-  }
+  let to_string = function
+    | S i      -> sprintf "S%d" i
+    | E i      -> sprintf "E%d" i
+    | M (b, r) -> sprintf "M%c%c" b (Base.to_char r)
+    | I (p, b) -> sprintf "I%d%c" p b
+    | D (p, r) -> sprintf "D%d%c" p (Base.to_char r)
 
-let path_list_to_strings =
-  let g = '_' in
-  let to_pair = function
-    | M (b, r) -> (b, Base.to_char r)
-    | I (_, b) -> (b, g)
-    | D (_, r) -> (g, Base.to_char r)
-  in
-  let rec loop reada refa = function
-    | []      -> { reference = List.rev refa |> String.of_character_list
+  type summary =
+    { reference : string
+    ; read      : string
+    ; start     : int
+    ; end_      : int
+    }
+
+  let to_strings =
+    let g = '_' in
+    let to_pair = function
+      | M (b, r) -> (b, Base.to_char r)
+      | I (_, b) -> (b, g)
+      | D (_, r) -> (g, Base.to_char r)
+      | _        -> assert false
+    in
+    let rec first start reada refa = function
+      | E end_ :: [] ->
+          Single { reference = List.rev refa |> String.of_character_list
                  ; read = List.rev reada |> String.of_character_list
-                 }
-    | p :: tl -> let a, b = to_pair p in
-                 loop (a :: reada) (b :: refa) tl
-  in
-  loop [] []
+                 ; start ; end_ }
+      | E end_ :: S nstart :: tl ->
+          let r1 =
+            { reference = List.rev refa |> String.of_character_list
+            ; read = List.rev reada |> String.of_character_list
+            ; start ; end_ }
+          in
+          let r2 = second nstart [] [] tl in
+          Paired (r1, r2)
+      |  _ :: []
+      | [] -> invalid_argf "Didn't end with an end"
+
+      | p :: tl -> let a, b = to_pair p in
+                   first start (a :: reada) (b :: refa) tl
+    and second start reada refa = function
+      | E end_ :: [] ->
+          { reference = List.rev refa |> String.of_character_list
+          ; read = List.rev reada |> String.of_character_list
+          ; start ; end_ }
+      | E _ :: _t    -> invalid_arg "Things after end!"
+      | S _ :: _     -> invalid_arg "More than 2 starts in path!"
+      |  _ :: []
+      | []           -> invalid_argf "Didn't end with an end"
+      | p :: tl      -> let a, b = to_pair p in
+                        second start (a :: reada) (b :: refa) tl
+    in
+    function
+      | S start :: tl -> first start [] [] tl
+      | h  :: _       -> invalid_argf "Path.to_strings didn't start with S but: %s"
+                           (to_string h)
+
+      | []            -> invalid_argf "Empty path list"
+
+end (* Path *)
 
 module SingleViterbiWorkspace (R : Ring) :
-  (Workspace_intf with type entry = R.t cell * path list
-                   and type final_entry = R.t * path list
-                   and type final_emission = R.t * path list
-                   and type workspace_opt = unit) = struct
+  (Workspace_intf with type entry = R.t cell * Path.t list
+                   and type final_entry = R.t * Path.t list
+                   and type final_emission = R.t * Path.t list) = struct
 
   module Fc = ForwardCalcs(R)
 
-  type entry = R.t cell * path list
-  type final_entry = R.t * path list
-  type final_emission = R.t * path list
+  type entry = R.t cell * Path.t list
+  type final_entry = R.t * Path.t list
+  type final_emission = R.t * Path.t list
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
-
-  type workspace_opt = unit
 
   let empty_entry = Fc.zero_cell, []
   let empty_final_entry = R.zero, []
   let empty_final_emission = R.zero, []
 
-  let generate () ~ref_length ~read_length =
+  let generate ~ref_length ~read_length =
     { forward  = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length empty_entry)
     ; final    = Array.make ref_length empty_final_entry
     ; emission = empty_final_emission
@@ -856,32 +931,30 @@ type 'a mt = (Pm.ascending, 'a) Pm.t
 module MakeMultipleWorkspace (R : Ring) :
   (Workspace_intf with type entry = R.t cell mt
                    and type final_entry = R.t mt
-                   and type final_emission = R.t array
-                   and type workspace_opt = int) = struct
+                   and type final_emission = R.t mt) = struct
 
   type entry = R.t cell mt
   type final_entry = R.t mt
-  type final_emission = R.t array
+  type final_emission = R.t mt
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
-  type workspace_opt = int
+  let pa = Pm.empty_a  (* This is just a place holder that is mutated. *)
 
-  let generate number_alleles ~ref_length ~read_length =
-    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Pm.empty_a)
-    ; final     = Array.make ref_length Pm.empty_a
-    ; emission  = Array.make number_alleles R.zero
+  let generate ~ref_length ~read_length =
+    { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length pa)
+    ; final     = Array.make ref_length pa
+    ; emission  = pa
     ; read_length
     }
 
   let clear ws =
     let ref_length     = Array.length ws.final in
     let number_rows    = Array.length ws.forward in
-    let number_alleles = Array.length ws.emission in
-    ws.forward <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Pm.empty_a);
-    ws.final   <- Array.make ref_length Pm.empty_a;
-    Array.fill ws.emission ~pos:0 ~len:number_alleles R.zero
+    ws.forward  <- Array.init number_rows ~f:(fun _ -> Array.make ref_length pa);
+    ws.final    <- Array.make ref_length pa;
+    ws.emission <- pa
 
   let save ws =
     let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
@@ -909,6 +982,7 @@ type read_accessor = int -> obs
 
 (* I'm somewhat purposefully shadowing the cell_recurrences field names. *)
 type ('workspace, 'entry, 'final_entry, 'final_emission, 'base) recurrences =
+  (* final_emission should have the same type as likelihood *)
   { start   : 'workspace -> obs -> 'base -> k:int -> 'entry
   ; fst_col : 'workspace -> obs -> 'base -> i:int -> 'entry
   ; middle  : 'workspace -> obs -> 'base -> i:int -> k:int -> 'entry
@@ -918,13 +992,13 @@ type ('workspace, 'entry, 'final_entry, 'final_emission, 'base) recurrences =
 
 (* Given:
     - a workspace
-    - it's dimensions
+    - its dimensions
     - recurrence functions
     - read and references acccessors
 
    Produce functions that actually traverse and fill in the forward pass,
    and emission values. These functions also take an optional [filter] that
-   may raise an exception (such as {PastThreshold}) to signal a stop of the
+   may raise an exception ({PastThreshold}) to signal a premature stop to the
    computation. *)
 module ForwardPass (W : Workspace_intf) = struct
 
@@ -934,6 +1008,10 @@ module ForwardPass (W : Workspace_intf) = struct
     ; entry = begin fun () _ -> () end
     }
 
+  (* compute the full forward pass
+     @param rows how many elements of the read to fill, defaults to the
+        configured size of the workspace; which should be at most
+        the length of the read.  *)
   let pass_f ?rows ~filter ws recurrences ~read ~reference =
     let columns = W.columns ws in
     let rows = Option.value rows ~default:(W.rows ws) in
@@ -955,7 +1033,8 @@ module ForwardPass (W : Workspace_intf) = struct
         ft := filter.entry !ft ne;
         W.set ws ~i ~k ne
       done
-    done
+    done;
+    !ft
 
   let final ws recurrences =
     let columns = W.columns ws in
@@ -965,19 +1044,32 @@ module ForwardPass (W : Workspace_intf) = struct
 
   (* Fill in both parts of the workspace. *)
   let both_f ?rows ~filter ws recurrences ~read ~reference =
-    pass_f ?rows ~filter ws recurrences ~read ~reference;
-    final ws recurrences
+    let ft = pass_f ?rows ~filter ws recurrences ~read ~reference in
+    final ws recurrences;
+    ft
 
   (* After filling in both parts of the workspace,
      compute the final emission value. *)
   let full_f ?rows ~filter ws recurrences ~read ~reference =
-    both_f ?rows ~filter ws recurrences ~read ~reference;
-    W.set_emission ws (recurrences.final_e ws)
+    let ft = both_f ?rows ~filter ws recurrences ~read ~reference in
+    W.set_emission ws (recurrences.final_e ws);
+    ft
+
+  (* paired pass.  *)
+  let paired_f ?rows ~filter ws recurrences ~read1 ~read2 ~reference =
+      let nft = full_f ?rows ~filter ws recurrences ~read:read1 ~reference in
+      let filter = { filter with init = nft } in
+      full_f ?rows ~filter ws recurrences ~read:read2 ~reference
 
   (* Without the filter. *)
-  let pass = pass_f ~filter:empty_filter
+  let pass ?rows ws recurrences ~read ~reference =
+    ignore (pass_f ~filter:empty_filter ?rows ws recurrences ~read ~reference)
 
-  let full = full_f ~filter:empty_filter
+  let full ?rows ws recurrences ~read ~reference =
+    ignore (full_f ~filter:empty_filter ?rows ws recurrences ~read ~reference)
+
+  let paired ?rows ws recurrences ~read1 ~read2 ~reference =
+    ignore (paired_f ?rows ~filter:empty_filter ws recurrences ~read1 ~read2 ~reference)
 
 end (* ForwardPass *)
 
@@ -989,9 +1081,19 @@ let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
   | Filtered m  -> sprintf "Filtered: %s" m
 
+let map_completed ~f = function
+  | Completed c -> Completed (f c)
+  | Filtered m  -> Filtered m
+
 let completed = function
   | Completed _ -> true
   | Filtered  _ -> false
+
+(* A helper record to expose the functions generated by these modules. *)
+type 'a passes =
+  { full    : read:(int -> obs) -> 'a
+  ; paired  : read1:(int -> obs) -> read2:(int -> obs) -> 'a
+  }
 
 module ForwardSingleGen (R: Ring) = struct
 
@@ -1030,7 +1132,7 @@ module ForwardSingleGen (R: Ring) = struct
 
   module Fp = ForwardPass(W)
 
-  let full ?insert_p ?transition_ref_length ?max_number_mismatches ~read_length
+  let passes ?insert_p ?transition_ref_length ?max_number_mismatches ~read_length
     ws allele_a =
     let tm =
       let ref_length = Option.value transition_ref_length
@@ -1041,23 +1143,37 @@ module ForwardSingleGen (R: Ring) = struct
     let reference k = allele_a.(k) in
     match max_number_mismatches with
     | None ->
-        begin fun ~read ->
-          Fp.full ws recurrences ~reference ~read;
-          Completed ()
-        end
+        let full ~read =
+          Fp.full ws recurrences ~reference ~read; Completed ()
+        in
+        let paired ~read1 ~read2 =
+          Fp.paired ws recurrences ~reference ~read1 ~read2; Completed ()
+        in
+        { full; paired }
     | Some number_mismatches ->
-        begin fun ~read ->
+        let full ~read =
           let of_entry c = c.match_ in
-          let filter = Ff.match_filter ~number_mismatches of_entry in
+          let filter = Ff.match_filter tm ~number_mismatches of_entry in
           try
-            Fp.full_f ~filter ws recurrences ~reference ~read;
+            let _filter_s = Fp.full_f ~filter ws recurrences ~reference ~read in
             Completed ()
           with PastThreshold msg ->
             Filtered msg
-        end
+        in
+        let paired ~read1 ~read2 =
+          let of_entry c = c.match_ in
+          let filter = Ff.match_filter tm ~number_mismatches of_entry in
+          try
+            let _filter_s = Fp.paired_f ~filter ws recurrences ~reference ~read1 ~read2 in
+            Completed ()
+          with PastThreshold msg ->
+            Filtered msg
+        in
+        { full; paired }
 
   (* Viterbi *)
   let viterbi_recurrences ?insert_p tm read_length =
+    let open Path in
     let _, r = Fc.g ?insert_p tm read_length in
     let cell_to_path i b r c =
       if c.match_ >= c.insert then begin
@@ -1099,7 +1215,7 @@ module ForwardSingleGen (R: Ring) = struct
       if !debug_ref then
         printf "at i: %d k: %d nc: %s pt: %s (%d,%d,%d)\n"
           i k (cell_to_string R.to_string nc)
-            (path_to_string pt)
+            (Path.to_string pt)
             (List.length mlst)
             (List.length ilst)
             (List.length dlst);
@@ -1108,12 +1224,14 @@ module ForwardSingleGen (R: Ring) = struct
         | M _ -> pt :: mlst
         | I _ -> pt :: ilst
         | D _ -> pt :: dlst
+        | S _
+        | E _ -> assert false
       in
       nc, pl
     in
     let end_ ws k =
       let en, lst = V.get ws ~i:(read_length-1) ~k in
-      r.end_ en, lst    (* The list contains best because we chose at middle. *)
+      r.end_ en, (E k :: lst) (* The list contains best because we chose at middle. *)
     in
     let final_e ws =
       let open R in
@@ -1125,7 +1243,7 @@ module ForwardSingleGen (R: Ring) = struct
 
   module Fpv = ForwardPass(V)
 
-  let fullv ?insert_p ?transition_ref_length ~read_length ws allele_a =
+  let passes_v ?insert_p ?transition_ref_length ~read_length ws allele_a =
     let tm =
       let ref_length = Option.value transition_ref_length
         ~default:(Array.length allele_a)
@@ -1133,8 +1251,13 @@ module ForwardSingleGen (R: Ring) = struct
       Phmm.TransitionMatrix.init ~ref_length read_length in
     let recurrences = viterbi_recurrences ?insert_p tm read_length in
     let reference k = allele_a.(k) in
-    fun ~read ->
+    let full ~read =
       Fpv.full ws recurrences ~reference ~read
+    in
+    let paired ~read1 ~read2 =
+      Fpv.paired ws recurrences ~reference ~read1 ~read2
+    in
+    { full; paired }
 
 end (* ForwardSingleGen *)
 
@@ -1225,7 +1348,8 @@ module ForwardMultipleGen (R : Ring) = struct
     let to_em_set obsp emissions =
       Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
-    let zero_cell_pm = Pm.init_all_a ~size:(number_alleles - 1) Fc.zero_cell in
+    let zero_cell_pm = Pm.init_all_a ~size:number_alleles Fc.zero_cell in
+    let eq = Fc.cells_close_enough in
     let start ws obsp base ~k =
       let ems = to_em_set obsp base in
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
@@ -1238,15 +1362,16 @@ module ForwardMultipleGen (R : Ring) = struct
       Pm.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k:0)
         r.fst_col
     in
-    let eq = Fc.cells_close_enough in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
       let inserts = W.get ws ~i:(i-1) ~k       in
       let deletes = W.get ws ~i       ~k:(k-1) in
       let ems = to_em_set obsp emissions in
-      (*printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d \n%!"
-        i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
-            (Pm.length deletes); *)
+      (*printf "at i: %d k: %d: e: %s, m: %s, i: %s, d: %s \n%!"
+        i k (Pm.to_string ems R.to_string)
+            (Pm.to_string matches (cell_to_string R.to_string))
+            (Pm.to_string inserts (cell_to_string R.to_string))
+            (Pm.to_string deletes (cell_to_string R.to_string));  *)
       Pm.merge4 ~eq ems matches inserts deletes
         (fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
@@ -1254,15 +1379,10 @@ module ForwardMultipleGen (R : Ring) = struct
     let end_ ws k =
       Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_
     in
-    let update_emission_from_cam em l =
-      let open R in
-      Pm.iter_set l ~f:(fun i v -> em.(i) <- em.(i) + v)
-    in
     let final_e ws =
-      let em = Array.make number_alleles R.zero in
-      W.fold_over_final ws ~init:()
-        ~f:(fun () fe -> update_emission_from_cam em fe);
-      em
+      (* CAN'T use empty_a since we're merging! *)
+      let init = Pm.init_all_a ~size:number_alleles R.zero in
+      W.fold_over_final ws ~init ~f:(fun e1 e2 -> Pm.merge e1 e2 R.(+))
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -1410,7 +1530,7 @@ module ForwardMultipleGen (R : Ring) = struct
 
     let to_string t =
       sprintf "cols: %s\tbv: %s \tlv: %s\n\t\ts: %s"
-        (String.concat ~sep:";" (List.map t.cols ~f:(sprintf "%d")))
+        (string_of_list ~sep:";" ~f:(sprintf "%d") t.cols)
         (cell_to_string R.to_string t.best_value)
         (cell_to_string R.to_string t.last_value)
         (Aset.to_human_readable t.alleles)
@@ -1516,8 +1636,8 @@ module ForwardMultipleGen (R : Ring) = struct
         let base, base_prob = obsp in
         printf "current bands for %c %f cols:%s at %d \n\t%s\n"
           base base_prob
-          (String.concat ~sep:";" (List.map b.cols ~f:(sprintf "%d"))) i
-            (to_string b)
+          (string_of_list ~sep:";" ~f:(sprintf "%d") b.cols)
+            i (to_string b)
       end;
       let cur_row = Cm.get b.alleles col_values in
       let update ?cur_row emp k alleles =
@@ -1664,43 +1784,27 @@ module ForwardSLogSpace = ForwardSingleGen(LogProbabilities)
 module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
 module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
 
-type merge_info = string
-
 type t =
   { align_date      : string
-  ; alleles         : (string * merge_info) array           (* Canonical order.*)
+  ; alleles         : (string * MSA.Alteration.t list) array        (* Canonical order. *)
   ; number_alleles  : int
   ; emissions_a     : base_emissions array
   }
 
-let construct input selectors =
-  if not (Alleles.Input.imputed input) then
+let construct input =
+  if not (Alleles.Input.is_imputed input) then
     invalid_argf "Allele input MUST be imputed!"
   else begin
-    let open Mas_parser in
-    Alleles.Input.construct input >>= fun (mp, merge_map) ->
+    let open MSA.Parser in
+    Alleles.Input.construct input >>= fun mp ->
       let { reference; ref_elems; alt_elems; align_date} = mp in
-      let nalt_elems =
-        Alleles.Selection.apply_to_assoc selectors alt_elems
-        (* TODO: move this logic into selection *)
-        |> List.map ~f:(fun (a, s) -> Nomenclature.parse_to_resolution_exn a, a, s)
-        |> List.sort ~cmp:(fun (n1, _,_) (n2,_,_) -> Nomenclature.compare n1 n2)
-        |> List.map ~f:(fun (_n, a, s) -> (a, s))
-      in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
-      List.iter nalt_elems ~f:(fun (allele, allele_seq) ->
-        add_alternate_allele pmap allele allele_seq
-          base_arr state_a);
+      List.iter alt_elems ~f:(fun a ->
+        add_alternate_allele pmap a.allele a.seq base_arr state_a);
       let emissions_a = Array.map Pm.ascending state_a in
-      (*Array.iteri emissions_a ~f:(fun i p ->
-        printf "emissions: %d: %d %s\n%!" i (Pm.length p) (Pm.to_string p (function | None -> "none" | Some c -> sprintf "%c" (Base.to_char c))));
-      failwith "no"; *)
       let alleles =
-        List.map nalt_elems ~f:(fun (s, _) ->
-          s,
-          Option.value_exn ~msg:"missing merge info?" (List.Assoc.get s merge_map))
-        |> fun l -> (reference, reference) :: l
+        (reference, []) :: List.map alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in
@@ -1722,47 +1826,110 @@ let load_pphmm fname =
 
 let float_arr_to_str a =
   Array.to_list a
-  |> List.map ~f:(sprintf "%f")
-  |> String.concat ~sep:"; "
+  |> string_of_list ~sep:";" ~f:(sprintf "%f")
   |> sprintf "[|%s|]"
 
 (* Abstracts, behind a function the regular or reverse complement access
    pattern of a read. This is to avoid manually reversing and converting
    the read. *)
-let access rc read read_prob =
+let access ?(o=0) rc read read_prob =
   let m = Array.length read_prob - 1 in
   if rc then
     fun i ->
+      let i = i + o in
       complement (String.get_exn read (m - i))
       , Array.get read_prob (m - i)
   else
-    fun i -> String.get_exn read i , Array.get read_prob i
+    fun i ->
+      let i = i + o in
+      String.get_exn read i , Array.get read_prob i
 
 (*** Full Forward Pass *)
+
+type viterbi_result =
+  { reverse_complement : bool       (* Was the reverse complement best? *)
+  ; emission           : float      (* Final emission likelihood *)
+  ; path_list          : Path.t list
+  }
+
+let setup_single_allele_viterbi_pass ?insert_p read_length ~allele t =
+  let { emissions_a; alleles; _ } = t in
+  (* Recover allele's base sequence, aka, emission. *)
+  match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
+  | None              ->
+      invalid_argf "%s not found among the list of alleles!" allele
+  | Some allele_index ->
+      let allele_a =
+        Array.fold_left emissions_a ~init:[] ~f:(fun acc pm ->
+          match Pm.get pm allele_index with
+          | None   -> acc            (* Gap *)
+          | Some b -> b :: acc)
+        |> List.rev
+        |> Array.of_list
+      in
+      let ref_length = Array.length allele_a in
+      let transition_ref_length = Array.length emissions_a in
+      let ws = ForwardSLogSpace.V.generate ~ref_length ~read_length in
+      let passes =
+        ForwardSLogSpace.passes_v ?insert_p ~transition_ref_length ~read_length
+          ws allele_a
+      in
+      let result reverse_complement ws =
+        let emission, pl = ForwardSLogSpace.V.get_emission ws in
+        { emission; reverse_complement; path_list = List.rev pl }
+      in
+      let most_likely_viterbi vr1 vr2 =
+        if vr1.emission > vr2.emission then
+          vr1
+        else
+          vr2
+      in
+      let single ~read ~read_errors =
+        passes.full (access false read read_errors);
+        let r = result false ws in
+        passes.full (access true read read_errors);
+        let c = result true ws in
+        most_likely_viterbi r c
+      in
+      let paired ~read1 ~read_errors1 ~read2 ~read_errors2 =
+        passes.paired (access false read1 read_errors1) (access true read2 read_errors2);
+        let r = result false ws in
+        passes.paired (access true read1 read_errors1) (access false read2 read_errors2);
+        let c = result true ws in
+        most_likely_viterbi r c
+      in
+      single, paired
+
+(* The forward pass return type requires a bit more subtlety as we want
+   diagnostic ability; to debug and to pass along values for downstream filters.
+   Therefore these passes return a structure that can (1) execute the pass
+   (ex [single]) and (2) interrogate the result (ex [best_alleles]). *)
 
 type proc =
   { init_global_state : unit -> float array
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
-  ; doit            : ?prev_threshold:float
-                      -> bool -> string -> float array
+  ; single            : ?prev_threshold:float
+                      -> read:string
+                      -> read_errors:float array
+                      -> bool                          (* reverse_complement *)
                       -> unit pass_result
   (* Perform a forward pass. We purposefully only signal whether we fully
      completed the pass or were filtered, because we may have different uses
      for the result of a pass. The accessors below allow the user to extract
      more purposeful information. *)
 
-  ; best_alleles    : int -> (float * string) list
-  ; best_positions  : int -> (float * int) list
+  ; best_allele_pos : int -> (float * string * int) list
   (* After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd : unit -> float array
+  ; per_allele_llhd : unit -> float mt
   (* If we're not interested in diagnostics, but just the end result, we want
      the per allele likelihood: *)
 
+  (* For paired reads when we want to know the next base. *)
   ; maximum_match   : unit -> float
   (* We might also want to get a possible threshold value for future passes. *)
   }
@@ -1785,13 +1952,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
         |> Array.of_list
       in
       let ref_length = Array.length allele_a in
-      let ws = ForwardSLogSpace.W.generate () ~ref_length ~read_length in
-      let best_positions n =
-        let lgn = largest n in
-        ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
-          ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
-        |> snd
-      in
+      let ws = ForwardSLogSpace.W.generate ~ref_length ~read_length in
       let maximum_match () =
         ForwardSLogSpace.W.fold_over_row ws (read_length - 1) ~init:neg_infinity
           ~f:(fun v c -> max v c.match_)
@@ -1803,53 +1964,28 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
         'local' reference size; size of allele_a. *)
       let transition_ref_length = Array.length emissions_a in
       let pass =
-        ForwardSLogSpace.full ?insert_p ?max_number_mismatches
+        ForwardSLogSpace.passes ?insert_p ?max_number_mismatches
           ~transition_ref_length ~read_length ws allele_a
       in
-      let doit ?prev_threshold rc rd rd_errors =
-        let read = access rc rd rd_errors in
-        pass read
+      let single ?prev_threshold ~read ~read_errors reverse_complement =
+        let read = access reverse_complement read read_errors in
+        pass.full read
       in
-      let best_alleles _n = [ ForwardSLogSpace.W.get_emission ws, allele] in
-      let per_allele_llhd () = [| ForwardSLogSpace.W.get_emission ws |] in
+      let best_allele_pos _n =
+        let lgn = largest 1 in
+        ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
+          ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
+        |> snd
+        |> List.map ~f:(fun (l, i) -> (l, allele, i))
+      in
+      let per_allele_llhd () = Pm.init_all_a ~size:1 (ForwardSLogSpace.W.get_emission ws) in
       let init_global_state () = [| LogProbabilities.one |] in
-      { doit ; best_alleles ; best_positions ; per_allele_llhd
+      { single
+      ; best_allele_pos
+      ; per_allele_llhd
       ; init_global_state
       ; maximum_match
       }
-
-let setup_single_allele_viterbi_pass ?insert_p read_length ~allele t =
-  let { emissions_a; alleles; _ } = t in
-  (* Recover allele's base sequence, aka, emission. *)
-  match Array.findi alleles ~f:(fun (s, _) -> s = allele) with
-  | None              ->
-      invalid_argf "%s not found among the list of alleles!" allele
-  | Some allele_index ->
-      let allele_a =
-        Array.fold_left emissions_a ~init:[] ~f:(fun acc pm ->
-          match Pm.get pm allele_index with
-          | None   -> acc            (* Gap *)
-          | Some b -> b :: acc)
-        |> List.rev
-        |> Array.of_list
-      in
-      let ref_length = Array.length allele_a in
-      let ws = ForwardSLogSpace.V.generate () ~ref_length ~read_length in
-      let transition_ref_length = Array.length emissions_a in
-      let pass =
-        ForwardSLogSpace.fullv ?insert_p ~transition_ref_length ~read_length
-          ws allele_a
-      in
-      fun rd rd_errors ->
-        pass (access true rd rd_errors);
-        let reg_emission, reg_path = ForwardSLogSpace.V.get_emission ws in
-        pass (access false rd rd_errors);
-        let comp_emission, comp_path = ForwardSLogSpace.V.get_emission ws in
-        if reg_emission >= comp_emission then
-          true, reg_emission, List.rev reg_path
-        else
-          false, comp_emission, List.rev comp_path
-
 
 (* Return
   1. a function to process one read
@@ -1861,43 +1997,51 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let tm = Phmm.TransitionMatrix.init ~ref_length read_length in
   let module F = ForwardMLogSpace in
   let r(*, br*) = F.recurrences ?insert_p tm read_length number_alleles in
-  let ws = F.W.generate number_alleles ref_length read_length in
+  let ws = F.W.generate ref_length read_length in
   let last_read_index = read_length - 1 in
-  let best_alleles n =
-    let alleles = Array.map ~f:fst alleles in
-    let emissions = F.W.get_emission ws in
-    let lgn = largest n in
-    Array.fold_left emissions ~init:(0,[])
-      ~f:(fun (i, acc) emission -> (i+1, lgn emission alleles.(i) acc))
-    |> snd
-  in
-  let best_positions n =
-    let lgn = largest n in
-    F.W.fold_over_final ws ~init:(0, [])
-      ~f:(fun (p, acc) fcam ->
-        (p + 1, lgn (F.cam_max fcam) p acc))
-    |> snd
+  let alleles = Array.map ~f:fst alleles in
+  let per_allele_llhd () = time "per_allele_llhd" (fun () -> F.W.get_emission ws) in
+  let best_allele_pos n =
+    time (sprintf "best_allele_pos %d" n)
+    (fun () ->
+        let highest_emission_position_pm =
+          let init = Pm.init_all_a ~size:number_alleles (LogProbabilities.zero, -1) in
+          F.W.foldi_over_final ws ~init
+            ~f:(fun hep_pm k em_pm ->
+                  Pm.merge hep_pm em_pm (fun b e ->
+                    let be, bk = b in
+                    if e > be then (e, k) else b))
+        in
+        let lgn a p = largest n a p in
+        let emission_pm = F.W.get_emission ws in
+        Pm.fold_indices_and_values emission_pm ~init:[]
+          ~f:(fun acc i emission -> lgn emission i acc)
+        |> List.map ~f:(fun (e, i) ->
+            let allele = alleles.(i) in
+            let _, best_pos = Pm.get highest_emission_position_pm i in
+            (e, allele, best_pos)))
   in
   let maximum_match () =
     F.W.fold_over_row ws (read_length - 1)
       ~init:neg_infinity ~f:(fun v fcam -> max v (F.cam_max_cell fcam))
   in
   let reference i = emissions_a.(i) in
-  let per_allele_llhd () = F.W.get_emission ws in
   let init_global_state () = F.per_allele_emission_arr t.number_alleles in
   let normal () =
-    let doit ?prev_threshold rc rd rd_errors =
+    (* TODO: Refactor this to be a bit more elegant, though it isn't obvious
+       how to preserve the type variability of the filters. *)
+    let single ?prev_threshold ~read ~read_errors reverse_complement =
       (* We do not have to clear the workspace, since a full pass will
          overwrite all elements of the workspace.
         F.Workspace.clear ws;*)
-      let read = access rc rd rd_errors in
+      let read = access reverse_complement read read_errors in
       let unfiltered () =
-        F.Regular.full ws r ~reference ~read;
+        time "unfiltered" (fun () -> F.Regular.full ws r ~reference ~read);
         Completed ()
       in
       let filtered ~filter =
         try
-          F.Regular.full_f ~filter ws r ~reference ~read;
+          let _final_filter = time "filtered" (fun () -> F.Regular.full_f ~filter ws r ~reference ~read) in
           Completed ()
         with PastThreshold msg ->
           Filtered msg
@@ -1911,16 +2055,18 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
           filtered ~filter
       | Some number_mismatches, None            ->
           let of_entry = F.cam_max_cell in
-          let filter = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter = F.Ff.match_filter tm ~number_mismatches of_entry in
           filtered ~filter
       | Some number_mismatches, Some threshold  ->
           let of_entry = F.cam_max_cell in
           let filter1 = F.Ff.past_threshold_filter threshold of_entry in
-          let filter2 = F.Ff.match_filter ~number_mismatches of_entry in
+          let filter2 = F.Ff.match_filter tm ~number_mismatches of_entry in
           let filter = join_filter filter1 filter2 in
           filtered ~filter
     in
-    { doit ; best_alleles ; best_positions ; per_allele_llhd
+    { single
+    ; best_allele_pos
+    ; per_allele_llhd
     ; maximum_match
     ; init_global_state
     }
@@ -1928,7 +2074,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   let banded c =
     failwith "NI"
     (*
-    let doit ?prev_threshold rc rd rd_errors =
+    let single ?prev_threshold rc rd rd_errors =
       (* Clear the forward/final array since the banded pass algorithm relies
          on unfilled cells to indicate boundaries (places where we use
          heuristics). *)
@@ -1938,9 +2084,8 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
       F.Bands.pass c emissions_a increment_a ws (r, br) last_read_index read;
       Completed ()
     in
-    { doit
+    { single
     ; best_alleles
-    ; best_positions
     ; per_allele_llhd
     ; init_global_state
     ; maximum_match (* TODO: Not quite right for bands. *)
@@ -1951,4 +2096,91 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches read_length t =
   | Some c when c.warmup >= last_read_index -> normal ()
   | Some c                                  -> banded c
 
-
+let setup_single_pass_split ?band ?insert_p ?max_number_mismatches read_length t =
+  let { number_alleles; emissions_a; alleles; _ } = t in
+  let ref_length = Array.length emissions_a in
+  let r2 = read_length / 2 in
+  let tm = Phmm.TransitionMatrix.init ~ref_length r2 in
+  let module F = ForwardMLogSpace in
+  let r(*, br*) = F.recurrences ?insert_p tm r2 number_alleles in
+  let ws = F.W.generate ref_length r2 in
+  let alleles = Array.map ~f:fst alleles in
+  let emission_pm1 = ref Pm.empty_a in
+  let per_allele_llhd () =
+    Pm.merge !emission_pm1 (F.W.get_emission ws) (LogProbabilities.( * ))
+  in
+  let best_allele_pos n =
+    let emission_pm = per_allele_llhd () in
+    let lgn a p = largest n a p in
+    Pm.fold_indices_and_values emission_pm ~init:[]
+      ~f:(fun acc i emission ->
+            let _, bplst =
+              F.W.fold_over_final ws ~init:(0, [])
+                ~f:(fun (p, acc) fcam -> (p + 1, lgn (Pm.get fcam i) p acc))
+            in
+            let _best_prob, best_pos = List.hd_exn bplst in
+            lgn emission (alleles.(i), best_pos) acc)
+    |> List.map ~f:(fun (e, (a, p)) -> (e, a, p))
+  in
+  let maximum_match () =
+    F.W.fold_over_row ws (read_length - 1)
+      ~init:neg_infinity ~f:(fun v fcam -> max v (F.cam_max_cell fcam))
+  in
+  let reference i = emissions_a.(i) in
+  let init_global_state () = F.per_allele_emission_arr t.number_alleles in
+  let normal () =
+    (* TODO: Refactor this to be a bit more elegant, though it isn't obvious
+       how to preserve the type variability of the filters. *)
+    let single ?prev_threshold ~read ~read_errors reverse_complement =
+      (* We do not have to clear the workspace, since a full pass will
+         overwrite all elements of the workspace.
+        F.Workspace.clear ws;*)
+      let r1 = access reverse_complement read read_errors in
+      let unfiltered () =
+        F.Regular.full ws r ~reference ~read:r1;
+        emission_pm1 := F.W.get_emission ws;
+        let r2 = access ~o:r2 reverse_complement read read_errors in
+        F.Regular.full ws r ~reference ~read:r2;
+        Completed ()
+      in
+      let filtered ~filter =
+        try
+          let _final_filter = F.Regular.full_f ~filter ws r ~reference ~read:r1 in
+          emission_pm1 := F.W.get_emission ws;
+          let r2 = access ~o:r2 reverse_complement read read_errors in
+          let _ff = F.Regular.full_f ~filter ws r ~reference ~read:r2 in
+          Completed ()
+        with PastThreshold msg ->
+          Filtered msg
+      in
+      match max_number_mismatches, prev_threshold with
+      | None,                   None            ->
+          printf "unfiltered:\n%!";
+          unfiltered ()
+      | None,                   Some threshold  ->
+          printf "filtered: just threshold: %f\n%!" threshold;
+          let of_entry = F.cam_max_cell in
+          let filter = F.Ff.past_threshold_filter threshold of_entry in
+          filtered ~filter
+      | Some number_mismatches, None            ->
+          printf "filtered: just number_mismatches: %d\n%!" number_mismatches;
+          let of_entry = F.cam_max_cell in
+          let filter = F.Ff.match_filter tm ~number_mismatches of_entry in
+          filtered ~filter
+      | Some number_mismatches, Some threshold  ->
+          printf "filtered: number_mismatches: %d and threshold: %f\n%!"
+            number_mismatches threshold;
+          let of_entry = F.cam_max_cell in
+          let filter1 = F.Ff.past_threshold_filter threshold of_entry in
+          let filter2 = F.Ff.match_filter tm ~number_mismatches of_entry in
+          let filter = join_filter filter1 filter2 in
+          filtered ~filter
+    in
+    { single
+    ; best_allele_pos
+    ; per_allele_llhd
+    ; maximum_match
+    ; init_global_state
+    }
+  in
+  normal ()

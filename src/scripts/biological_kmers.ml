@@ -1,5 +1,16 @@
 (* Compare the Kmer table generate via Index vs a manually created one over
-   the allele fasta file. *)
+   the allele fasta file.
+
+
+TODO: The FASTA files have no way of signaling that some part of the sequence
+is missing and will just concatenate across such a region (ex. G*01:01:01:08's
+Exon 6, the skinny one ATTGA). Therefore when looking at the sequences in a
+fasta file we'll generate wrong k-mers (with respect to our limited knowledge).
+Solutions:
+  1. Change Index.kmer_counts to create kmers across these boundaries:
+     unpleasant.
+  2. Separte method to generate these specific kmers?
+*)
 
 
 open Util
@@ -24,10 +35,9 @@ let kmer_table_from_fasta ~k file =
 
 let create_kmer_counts ~k file =
   let fasta_kt, fasta_seqs = kmer_table_from_fasta ~k (to_fasta_file file) in
-  let arg = Ref_graph.{ default_construction_arg
-                with selectors = [ Alleles.Selection.DoNotIgnoreSuffixed]}
-  in
-  let input = Alleles.Input.AlignmentFile (to_alignment_file file, false) in
+  let selectors = [ Alleles.Selectors.DoNotIgnoreSuffixed] in
+  let arg = Ref_graph.default_construction_arg in
+  let input = Alleles.Input.alignment (to_alignment_file file) ~selectors in
   let gm = Cache.(graph (graph_args ~input ~arg)) in
   let graph_kt = Index.kmer_counts ~biological:true ~k gm in
   let idx = Index.create ~k gm in
@@ -80,8 +90,7 @@ let diff ~fasta_table ~graph_table fasta_seqs known_alleles idx =
                   (show_too_short ts)
             | Ok pos_lst  ->
                 sprintf "(at: %s)"
-                  (String.concat ~sep:","
-                    (List.map pos_lst ~f:Index.show_position))
+                  (string_of_list pos_lst ~sep:"," ~f:Index.show_position)
           in
           Some (sprintf "for %d Kmer: %s (fasta occ: %d, graph occ: %d, %s) \
                          didn't find it in Fasta sequences!" i s v1 v2 pos_msg)

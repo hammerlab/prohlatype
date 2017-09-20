@@ -1,4 +1,4 @@
-(** Encode HLA allele's *)
+(** Decode HLA allele names. *)
 
 open Util
 
@@ -62,8 +62,12 @@ type resolution =
   | Three of int * int * int
   | Four of int * int * int * int
 
-(* Ignore suffix for sorting *)
-let compare (r1,_) (r2,_) =
+(* This logic compares alleles such that the sorted order is the same as in the
+   alignment files. Without doing too much work the resulting order has a
+   tremendous impact on performance: For example, ParPHMM forward passes are at
+   least twice as fast because of the resulting partition_maps are more
+   compressed! *)
+let compare_by_resolution (r1,_) (r2,_) =
   let to_quad = function
     | One a           -> [ a; -1; -1; -1 ]
     | Two (a,b)       -> [ a;  b; -1; -1 ]
@@ -84,11 +88,15 @@ let parse_resolution s =
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
-let parse s =
-  match String.split s ~on:(`Character '*') with
-  | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
-  | _ :: [] -> error "Did not find the '*' separator in %s" s
-  | _       -> error "Found too many '*' separators in %s" s
+type gene = string
+type t = resolution * suffix option
+
+let parse : string -> (gene * t, string) result =
+  fun s ->
+    match String.split s ~on:(`Character '*') with
+    | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
+    | _ :: [] -> error "Did not find the '*' separator in %s" s
+    | _       -> error "Found too many '*' separators in %s" s
 
 let parse_to_resolution_exn s =
   parse s |> unwrap_ok |> snd
@@ -103,7 +111,20 @@ let resolution_to_string ?gene =
 
 let resolution_and_suffix_opt_to_string ?gene (r,so) =
   sprintf "%s%s" (resolution_to_string ?gene r)
-    (Option.value_map so ~default:"" ~f:suffix_to_string) 
+    (Option.value_map so ~default:"" ~f:suffix_to_string)
+
+let two_matches_full nr1 nr2 =
+  match (fst nr1) with                     (* Match on just the name, ignore suffix *)
+  | Two (r1, r2) ->
+      begin
+        match (fst nr2) with                               (* Also, ignore suffix. *)
+        | One _               -> false
+        | Two (s1, s2)
+        | Three (s1, s2, _)
+        | Four (s1, s2, _, _) -> r1 = s1 && r2 = s2
+      end
+  | fnr ->
+      invalid_argf "Not Two resolution: %s " (resolution_to_string fnr)
 
 module Trie (*: sig
 

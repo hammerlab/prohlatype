@@ -2,7 +2,7 @@
    sequences:
     - All sequences have a Start, with only Gaps and Boundaries before the start
     - All sequences have an End that may be followed only by Boundaries and Gaps
-    - There is an end for every start
+    - There is an End for every Start
     - Sequence elements are different from previous
 
 ex:
@@ -44,7 +44,7 @@ let to_fnames ?fname ?suffix dir =
   |> List.map ~f:(Filename.concat dir)
 
 let starts_with_start =
-  let open Mas_parser in
+  let open MSA in
   "All sequences have a Start, with only Gaps and Boundaries before the start.",
   fun _allele lst ->
     let rec test_loop = function
@@ -58,7 +58,7 @@ let starts_with_start =
     test_loop lst
 
 let ends_with_end =
-  let open Mas_parser in
+  let open MSA in
   "All sequences have an End that may be followed only by Boundaries and Gaps.",
   fun _allele lst ->
     let rec test_loop = function
@@ -73,7 +73,7 @@ let ends_with_end =
 exception Double of string
 
 let theres_an_end_for_every_start =
-  let open Mas_parser in
+  let open MSA in
   "There is an end for every start",
   fun _allele lst ->
     try
@@ -87,11 +87,11 @@ let theres_an_end_for_every_start =
       in
       not c
     with Double s ->
-      eprintf "Found double %s" s;
+      printf "Found double %s" s;
       false
 
 let sequence_have_diff_elemns =
-  let open Mas_parser in
+  let open MSA in
   "Sequence elements are different from previous",
   fun _allele lst ->
     match lst with
@@ -100,7 +100,7 @@ let sequence_have_diff_elemns =
     | h :: t ->
         List.fold_left ~f:(fun (s, p) n ->
           let false_ () =
-            Printf.printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
+            printf "p %s n %s\n" (al_el_to_string p) (al_el_to_string n);
             (false && s, n)
           in
           match p, n with
@@ -111,7 +111,6 @@ let sequence_have_diff_elemns =
         |> fst
 
 let we_can_parse_the_allele_name =
-  let open Mas_parser in
   "We can parse the allele name",
   fun allele _lst ->
     match Nomenclature.parse allele with
@@ -120,16 +119,18 @@ let we_can_parse_the_allele_name =
 
 exception TestFailed of string
 
-let check (desc, pred) allele lst =
-  if pred allele lst then
-    ()
-  else
-    raise (TestFailed (sprintf "%s failed for %s" desc allele))
+let check (desc, pred) allele = function
+  | []  -> printf "ignoring %s because of empty sequence!\n" allele
+  | lst ->
+    if pred allele lst then
+      ()
+    else
+      raise (TestFailed (sprintf "%s failed for %s" desc allele))
 
 let all_sequences_in_result f r =
-  let open Mas_parser in
+  let open MSA.Parser in
   check f r.reference r.ref_elems;
-  List.iter ~f:(fun (al, el) -> check f al el) r.alt_elems
+  List.iter ~f:(fun alt -> check f alt.allele alt.seq) r.alt_elems
 
 let test_result r =
   [ starts_with_start
@@ -146,15 +147,15 @@ let () =
   if !Sys.interactive then
     ()
   else
-    let fname = if n <= 1 then None else Some (Sys.argv.(2)) in
+    let fname = if n <= 1 then None else Some (Sys.argv.(1)) in
     to_fnames ?fname (imgthla_dir // "alignments")
     |> List.fold_left ~init:0 ~f:(fun s f ->
         try
-          let p = Mas_parser.from_file f in
+          let p = MSA.Parser.from_file f in
           test_result p;
-          printf "parsed and checked %s\n" f;
+          printf "parsed and checked %s\n%!" f;
           s
         with e ->
-          eprintf "failed to parse %s\n" f;
+          printf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
           -1)
     |> exit

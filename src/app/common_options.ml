@@ -67,19 +67,19 @@ let non_negative_int =
     (non_negative_int_parser, int_fprinter)
 
 (*** Graph source arguments. ***)
-let file_arg =
+let alignment_arg =
   let docv = "FILE" in
   let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
               file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
-  Arg.(value & opt (some file) None & info ~doc ~docv ["f"; "file"])
+  Arg.(value & opt (some file) None & info ~doc ~docv ["alignment"])
 
-let merge_arg =
+let merge_arg, merges_arg =
   let parser_ path =
     let s = Filename.basename path in
     let n = path ^ "_nuc.txt" in
     let g = path ^ "_gen.txt" in
-    if not (List.mem ~set:Merge_mas.supported_genes s) then
+    if not (List.mem ~set:Alter_MSA.supported_genes s) then
       `Error ("gene not supported: " ^ s)
     else if not (Sys.file_exists n) then
       `Error ("Nuclear alignment file doesn't exist: " ^ n)
@@ -89,16 +89,18 @@ let merge_arg =
       `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-  let docv = sprintf "[%s]" (String.concat ~sep:"|" Merge_mas.supported_genes) in
+  let docv = sprintf "[%s]" (String.concat ~sep:"|" Alter_MSA.supported_genes) in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
-             prefix path. Currently only supports %s genes. The argument must \
-             be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
-             Overrides the file arguments. The set of alleles is defined by the
-             ones in the nuc file."
-      (String.concat ~sep:", " Merge_mas.supported_genes)
+            prefix path. Currently only supports %s genes. The argument must \
+            be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
+            Combines with the file arguments to determine the set of loci to \
+            type at the same time. The set of alleles is defined by the \
+            ones in the nuc file."
+      (String.concat ~sep:", " Alter_MSA.supported_genes)
   in
   Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
+  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
 
 (*** Allele selector arguments. ***)
 let regex_command_line_args = ["allele-regex"]
@@ -123,9 +125,9 @@ let regex_arg =
   in
   let open Arg in
   let parser_ = parser_of_kind_of_string ~kind:docv
-    (fun s -> Some (Alleles.Selection.Regex s))
+    (fun s -> Some (Alleles.Selectors.Regex s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv regex_command_line_args
 
 let allele_arg =
@@ -143,16 +145,16 @@ let allele_arg =
   let open Arg in
   let parser_ =
     parser_of_kind_of_string ~kind:docv
-      (fun s -> Some (Alleles.Selection.Specific s))
+      (fun s -> Some (Alleles.Selectors.Specific s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv allele_command_line_args
 
 let without_arg =
   let docv = "STRING" in
   let doc  =
     sprintf "Alleles to remove from the working set. \
-             This \"allele selector\" is applied before the execlude (%s)
+             This \"allele selector\" is applied before the exclude (%s)
              selector but after specific (%s) one.
              Use this option to construct a graph without alleles (ex. \
              A*01:02). One can repeat this argument to specify multiple \
@@ -163,9 +165,9 @@ let without_arg =
   let open Arg in
   let parser_ =
     parser_of_kind_of_string ~kind:docv
-      (fun s -> Some (Alleles.Selection.Without s))
+      (fun s -> Some (Alleles.Selectors.Without s))
   in
-  value & opt_all (conv ~docv (parser_, Alleles.Selection.pp)) []
+  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
         & info ~doc ~docv without_command_line_args
 
 let num_alt_arg =
@@ -181,8 +183,8 @@ let num_alt_arg =
 
   in
   let open Arg in
-  let parser_ = (positive_int_parser (fun d -> Alleles.Selection.Number d)) in
-  let nconv = conv ~docv (parser_, Alleles.Selection.pp) in
+  let parser_ = (positive_int_parser (fun d -> Alleles.Selectors.Number d)) in
+  let nconv = conv ~docv (parser_, Alleles.Selectors.pp) in
   (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
 
 let do_not_ignore_suffixed_alleles_flag =
@@ -212,12 +214,6 @@ let remove_reference_flag =
   Arg.(value & flag & info ~doc ["no-reference"])
   *)
 
-let impute_flag =
-  let doc  = "Fill in the missing segments of alleles with an iterative \
-              algorithm that picks the closest allele with full length."
-  in
-  Arg.(value & flag & info ~doc ["impute"])
-
 let no_cache_flag =
   let doc =
     sprintf "Do not use a disk cache (in %s sub directory of the current \
@@ -233,18 +229,6 @@ let do_not_join_same_sequence_paths_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-join-same-sequence-paths"])
 
-let input_alignments ~impute file =
-  Alleles.Input.AlignmentFile (file, impute)
-
-let input_merges ~distance ~impute prefix =
-  Alleles.Input.MergeFromPrefix (prefix, distance, impute)
-
-let to_input ?alignment_file ?merge_file ~distance ~impute () =
-  match alignment_file, merge_file with
-  | _,          (Some prefix) -> Ok (input_merges ~distance ~impute prefix)
-  | (Some alignment_file), _  -> Ok (input_alignments ~impute alignment_file)
-  | None,                None -> Error "Either a file or merge argument must be specified"
-
 let option_to_list o =
   Option.value_map o ~default:[] ~f:(fun s -> [s])
 
@@ -255,11 +239,20 @@ let aggregate_selectors ?number_alleles
     @ without_list
     @ (option_to_list number_alleles)
     @ (if do_not_ignore_suffixed_alleles then
-        [Alleles.Selection.DoNotIgnoreSuffixed] else [])
+        [Alleles.Selectors.DoNotIgnoreSuffixed] else [])
+
+let to_allele_input ?alignment_file ?merge_file ?distance ~selectors =
+  let open Alleles.Input in
+  match merge_file with
+  | Some prefix   -> Ok (merge ?distance ~selectors prefix)
+  | None  ->
+      match alignment_file with
+      | Some path -> Ok (alignment ?distance ~selectors path)
+      | None      -> Error "Neither a file nor merge argument was specified."
 
 let to_filename_and_graph_args
   (* Allele information source *)
-  ?alignment_file ?merge_file ~distance ~impute
+    ?alignment_file ?merge_file ?distance
   (* Allele selectors *)
     ~regex_list
     ~specific_list
@@ -267,16 +260,17 @@ let to_filename_and_graph_args
     ?number_alleles
     ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
-  ~join_same_sequence =
-    to_input ?alignment_file ?merge_file ~distance ~impute () >>= fun input ->
-      let selectors =
-        aggregate_selectors ~regex_list ~specific_list ~without_list
-          ?number_alleles ~do_not_ignore_suffixed_alleles
-      in
-      let arg = {Ref_graph.selectors; join_same_sequence } in
-      let graph_arg = Cache.graph_args ~arg ~input in
-      let option_based_fname = Cache.graph_args_to_string graph_arg in
-      Ok (option_based_fname, graph_arg)
+    ~join_same_sequence =
+    let selectors =
+      aggregate_selectors ~regex_list ~specific_list ~without_list
+        ?number_alleles ~do_not_ignore_suffixed_alleles
+    in
+    to_allele_input ?alignment_file ?merge_file ?distance ~selectors
+      >>= fun input ->
+            let arg = { Ref_graph.join_same_sequence } in
+            let graph_arg = Cache.graph_args ~arg ~input in
+            let option_based_fname = Cache.graph_args_to_string graph_arg in
+            Ok (option_based_fname, graph_arg)
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in
@@ -302,13 +296,37 @@ let num_reads_arg =
   let doc = "Number of reads to take from the front of the FASTA file" in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["reads"])
 
-let distance_flag =
+let optional_distance_flag, defaulting_distance_flag =
   let open Distances in
-  let d = "How to compute the distance between alleles: " in
-  Arg.(value & vflag Trie
-    [ Trie,        info ~doc:(d ^ "trie based off of allele names.") ["trie"]
-    ; AverageExon, info ~doc:(d ^ "smallest shared exon distance.") ["ave-exon"]
-    ])
+  let opts =
+    [ Trie
+      , "trie based off of allele names."
+      , false
+      , "trie"
+    ; WeightedPerSegment
+      , "smallest shared weighted per segment distance."
+      , true
+      , "weighted-segment"
+    ; Reference
+      , "consider the reference the closest for all alleles."
+      , false
+      , "reference-distance"
+    ]
+  in
+  let r default =
+    fun s ->
+    sprintf "How to compute the distance between alleles: %s.%s"
+      s (if default then "default" else "")
+  in
+  let o = sprintf "How to compute the distance between alleles: %s. \
+             Specifying a distance argument will turn on imputation for
+             alleles over their missing segments."
+  in
+  let open Arg in
+  value & vflag None
+    (List.map opts ~f:(fun (opt,m,_,c) -> (Some opt, info ~doc:(o m) [c])))
+  , value & vflag WeightedPerSegment
+      (List.map opts ~f:(fun (opt,m,d,c) -> (opt, info ~doc:(r d m) [c])))
 
 let print_top_flag =
   let doc = "Print only the specified number (positive integer) of alleles" in
@@ -361,24 +379,6 @@ let reduce_resolution_arg =
   in
   value & opt (some one_to_three) None & info ~doc ["reduce-resolution"]
 
-let to_distance_targets_and_candidates alignment_file_opt merge_opt =
-  let open Mas_parser in
-  match alignment_file_opt, merge_opt with
-  | _, (Some prefix) ->
-      let gen = from_file (prefix ^ "_gen.txt") in
-      let nuc = from_file (prefix ^ "_nuc.txt") in
-      let t, c = Merge_mas.merge_mp_to_dc_inputs ~gen ~nuc in
-      Ok (nuc.reference, nuc.ref_elems, t, c)
-  | Some af, None ->
-      let mp = from_file af in
-      let targets =
-        List.fold_left mp.alt_elems ~init:StringMap.empty
-          ~f:(fun m (allele, alst) -> StringMap.add ~key:allele ~data:alst m)
-      in
-      Ok (mp.reference, mp.ref_elems, targets, targets)
-  | None, None  ->
-      Error "Either a file or merge argument must be specified"
-
 let probability_parser s =
   try
     let f = Scanf.sscanf s "%f" (fun x -> x) in
@@ -419,11 +419,15 @@ let max_number_mismatches_arg =
   Arg.(value & opt (some positive_int) None & info ~doc ~docv
         ["max-mismatches"])
 
+let read_size_override_argument = "read-size"
+
 let read_size_override_arg =
   let docv = "POSITIVE INTEGER" in
   let doc = "Override the number of bases to calculate the likelihood over, \
               instead of using the number of bases in the FASTQ." in
-  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["read-size"])
+  Arg.(value
+      & opt (some positive_int) None
+      & info ~doc ~docv [read_size_override_argument])
 
 let map_depth_argument = "map-depth"
 let map_depth_default = 5
@@ -492,3 +496,41 @@ let do_not_past_threshold_filter_flag =
              filter to short-circuit evaluations."
   in
   Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])
+
+let likelihood_first_flag =
+  let doc = "When printing the final per-allele likelihoods, print ordered \
+              by likelihood first. This will print all of the alleles, in a \
+              compressed format following the likelihood."
+  in
+  Arg.(value & flag & info ~doc ["likelihood-first"; "llhdfst"])
+
+let do_not_finish_singles_flag =
+  let doc = "Paired FASTQ files that may be created by downstream analysis may \
+             not guarantee that all of the reads are paired. When in paired \
+             mode (2 FASTQ files are passed), by default we'll continue \
+             evaluating the unpaired reads as if they were eingle. By passing \
+             this flag we'll skip them entirely and use only the paired reads."
+  in
+  Arg.(value & flag & info ~doc ["do-not-finish-singles"])
+
+let zygosity_report_size_argument = "zygosity-report-size"
+let zygosity_report_size_arg =
+  let open ParPHMM_drivers.Output in
+  let doc =
+    sprintf "Override the default number of allelic pairs reported as part of \
+             the zygosity portion. Defaults to %d." default_zygosity_report_size
+  in
+  Arg.(value & opt positive_int default_zygosity_report_size
+             & info ~doc [zygosity_report_size_argument])
+
+let number_processes_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Parallelize read processing across this number of processesors. \
+             By default the application is not parallelized as the user would \
+             most likely achieve greater efficiency by natively parallelizing \
+             across samples as opposed to parallelizing across reads. \
+             Furthermore the user MUST specify %S as well in this mode." 
+      read_size_override_argument
+  in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])
