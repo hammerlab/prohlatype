@@ -556,3 +556,28 @@ let number_processes_arg =
       read_size_override_argument
   in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])
+
+let split_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Split the processing of a read into this many smaller forward \
+      passes, that are then aggregated. This should decrease the run time cost \
+      of a full pass as the match probabilities, across alleles, are less \
+      distributed. This value $(b, must) divide the read\ size evenly. \
+      Becareful about splitting too much (setting this value too high) as \
+      longer reads align more accurately than shorter reads (specifically, \
+      10bp is too short while 25bp rarely gets filtered). If the resulting \
+      output results in too many filtered reads, consider using a smaller \
+      value."
+  in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["split"])
+
+let not_prealigned_flag =
+  let doc = "There are 2 PHMM implementations that differ in what kind of \
+             transitions they allow. The default assumes that reads will fit \
+             completely within the gene reference region (this allows us to \
+             make small optimizations). Pass this flag if the reads are not \
+             guaranteed to have this property and may overlap partly with the \
+             start or end of the region."
+  in
+  Arg.(value & flag & info ~doc ["not-prealigned"])

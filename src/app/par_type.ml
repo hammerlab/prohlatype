@@ -215,11 +215,14 @@ let type_
     band_warmup_arg
     band_number_arg
     band_radius_arg
+  (* outputting logic. *)
     likelihood_first
     zygosity_report_size
   (* how are we typing *)
+    split
     map_depth
     mode
+    not_prealigned
     forward_accuracy_opt
     number_processes_opt
     =
@@ -242,11 +245,13 @@ let type_
                 Some { ParPHMM.warmup; number; radius }
         in
         let check_rc = not not_check_rc in
+        let prealigned_transition_model = not not_prealigned in
         let past_threshold_filter = not do_not_past_threshold_filter in
         let finish_singles = not do_not_finish_singles in
         let conf =
-          ParPHMM_drivers.single_conf ?allele ~insert_p ?band
-            ?max_number_mismatches ~past_threshold_filter ~check_rc ()
+          ParPHMM_drivers.single_conf ?allele ~insert_p ?band ?split
+            ?max_number_mismatches ~prealigned_transition_model
+            ~past_threshold_filter ~check_rc ()
         in
         match mode with
         | `Viterbi ->
@@ -345,8 +350,10 @@ let () =
             $ likelihood_first_flag
             $ zygosity_report_size_arg
             (* How are we typing *)
+            $ split_arg
             $ map_depth_arg
             $ mode_flag
+            $ not_prealigned_flag
             $ forward_pass_accuracy_arg
             $ number_processes_arg
             (* $ map_allele_arg

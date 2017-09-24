@@ -390,7 +390,6 @@ module Set = struct
   let to_string  =
     string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string  i))
 
-
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
 
   let inside i l =

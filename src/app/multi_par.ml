@@ -156,8 +156,10 @@ let type_
     likelihood_first
     zygosity_report_size
   (* how are we typing *)
+    split
     map_depth
     not_incremental_pairs
+    not_prealigned
     forward_accuracy_opt
     number_processes_opt
     =
@@ -181,10 +183,12 @@ let type_
     | None,   None,   None    -> alignment_files, merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
+  let prealigned_transition_model = not not_prealigned in
   let incremental_pairs = not not_incremental_pairs in
   let finish_singles = not do_not_finish_singles in
-  let conf = Pd.multiple_conf ~insert_p ?band ?max_number_mismatches
-                ~past_threshold_filter ~incremental_pairs ()
+  let conf =
+    Pd.multiple_conf ~insert_p ?band ?max_number_mismatches ?split
+      ~prealigned_transition_model ~past_threshold_filter ~incremental_pairs ()
   in
   let need_read_size_r =
     to_read_size_dependent
@@ -321,8 +325,10 @@ let () =
             $ likelihood_first_flag
             $ zygosity_report_size_arg
             (* How are we typing *)
+            $ split_arg
             $ map_depth_arg
             $ do_not_use_incremental_pairs_flag
+            $ not_prealigned_flag
             $ forward_pass_accuracy_arg
             $ number_processes_arg
             (* $ map_allele_arg

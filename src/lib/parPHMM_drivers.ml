@@ -420,7 +420,13 @@ module Fastq_items = struct
 end (* Fastq_items *)
 
 type single_conf =
-  { allele                : string option
+  { prealigned_transition_model : bool
+  (** Use a transition model (transition probability between hidden states of
+      the Markov model that represent Start, End, Match, Insert and Delete),
+      that assumes the entire read will fit completely inside the reference
+      area. *)
+
+  ; allele                : string option
   (** Perform the operation against only the specified allele instead *)
 
   ; insert_p              : float option
@@ -439,16 +445,23 @@ type single_conf =
 
   ; check_rc              : bool
   (** Compare against the reverse complement of a read and take the best likelihood. *)
+
+  ; split                 : int option
+  (** Split the forward pass to operate over this many segments of the read.
+      The value must divide the read_length evenly or an exception is thrown. *)
   }
 
-let single_conf ?allele ?insert_p ?band ?max_number_mismatches
+let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
+  ~prealigned_transition_model
   ~past_threshold_filter ~check_rc () =
-    { allele
+    { prealigned_transition_model
+    ; allele
     ; insert_p
     ; band
     ; max_number_mismatches
     ; past_threshold_filter
     ; check_rc
+    ; split
     }
 
 type ('state, 'read_result) t =
@@ -530,20 +543,24 @@ module Forward = struct
         (Orientation.to_string ~take_regular
             Alleles_and_positions.string_of_list aapt))
 
-  let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
-    read_length parPHMM_t =
+  let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
+    ~prealigned_transition_model read_length parPHMM_t =
     match allele with
     | None ->
       let proc =
-        setup_single_pass ?insert_p ?max_number_mismatches ?band read_length
-        (*setup_single_pass_split ?insert_p ?max_number_mismatches ?band read_length*)
-        parPHMM_t
+        match split with
+        | None  ->
+          setup_single_pass ?insert_p ?max_number_mismatches ?band
+            ~prealigned_transition_model read_length parPHMM_t
+        | Some n ->
+          setup_splitting_pass ?insert_p ?max_number_mismatches ?band
+            ~prealigned_transition_model read_length n parPHMM_t
       in
       proc, parPHMM_t.alleles
     | Some allele ->
       let proc =
         setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
-          read_length allele parPHMM_t
+          ~prealigned_transition_model read_length allele parPHMM_t
       in
       let arr =
         let index_opt = Array.findi parPHMM_t.alleles ~f:(fun (a,_) -> a = allele) in
@@ -557,19 +574,14 @@ module Forward = struct
 
   let init conf ~read_length parPHMM_t opt =
     let { likelihood_first; zygosity_report_size; report_size } = opt in
-    let { allele; insert_p; band; max_number_mismatches; past_threshold_filter
-        ; _} = conf
+    let { prealigned_transition_model; allele; insert_p; band
+        ; max_number_mismatches; past_threshold_filter ; split; _} = conf
     in
     let open ParPHMM in
     let proc, allele_arr =
-      to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band
-        read_length parPHMM_t
+      to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
+        ~prealigned_transition_model read_length parPHMM_t
     in
-    (*printf "allele list: \n\t%s\n%!"
-      (parPHMM_t.alleles
-        |> Array.to_list
-        |> List.map ~f:(fun (a, _) -> a)
-        |> String.concat ~sep:"\t\n"); *)
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
     let forward pt r re = fst (forward report_size pt proc r re) in
@@ -666,14 +678,14 @@ module Viterbi = struct
   type opt = unit
 
   let init conf ~read_length parPHMM_t () =
-    let { allele; insert_p; _ } = conf in
+    let { prealigned_transition_model; allele; insert_p; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first in the specified ParPHMM.t allele list. *)
     let allele = Option.value ~default:(fst parPHMM_t.alleles.(0)) allele in
     let labels = allele ^ " ", "read " in
     let s, p =
       setup_single_allele_viterbi_pass ?insert_p ~allele
-        read_length parPHMM_t
+        ~prealigned_transition_model read_length parPHMM_t
     in
     let state = { results = [] } in
     let rec t = { single; paired; merge; output }
@@ -723,8 +735,15 @@ end (* Make_single *)
 (* Combine results from multiple loci. *)
 
 type multiple_conf =
-  { insert_p              : float option
+  { prealigned_transition_model : bool
+  (** Use a transition model (transition probability between hidden states of
+      the Markov model that represent Start, End, Match, Insert and Delete),
+      that assumes the entire read will fit completely inside the reference
+      area. *)
+
+  ; insert_p              : float option
   (* Override the default insert emission probability. *)
+
 
   ; band                  : ParPHMM.band_config option
   (* Perform banded passes. *)
@@ -737,20 +756,27 @@ type multiple_conf =
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
-  ; incremental_pairs : bool
+  ; incremental_pairs     : bool
   (* This option only applies to paired typing. Instead of naively modeling
      the two read pairs at the same time, use the first as guidance of which
      loci is the best, and then apply the second read to only the best loci.
      The default should be true. *)
+
+  ; split                 : int option
+  (** Split the forward pass to operate over this many segments of the read.
+      The value must divide the read_length evenly or an exception is thrown. *)
   }
 
-let multiple_conf ?insert_p ?band ?max_number_mismatches
+let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
+  ~prealigned_transition_model
   ~past_threshold_filter ~incremental_pairs () =
-    { insert_p
+    { prealigned_transition_model
+    ; insert_p
     ; band
     ; max_number_mismatches
     ; past_threshold_filter
     ; incremental_pairs
+    ; split
     }
 
 module Multiple_loci = struct
@@ -976,12 +1002,13 @@ module Multiple_loci = struct
 
   let init conf opt read_length parPHMM_t_lst =
     let { likelihood_first; zygosity_report_size; report_size } = opt in
-    let { insert_p; band; max_number_mismatches; _ } = conf in
+    let { prealigned_transition_model; insert_p; band; max_number_mismatches
+        ; split; _ } = conf in
     let paa =
       List.map_snd parPHMM_t_lst ~f:(fun parPHMM_t ->
         let proc, allele_arr =
           Forward.to_proc_allele_arr ?insert_p ?max_number_mismatches ?band
-            read_length parPHMM_t
+            ?split ~prealigned_transition_model read_length parPHMM_t
         in
         let n = Array.length allele_arr in
         proc, allele_arr, n)

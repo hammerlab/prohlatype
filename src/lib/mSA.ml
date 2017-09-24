@@ -135,8 +135,8 @@ module Alteration = struct
       (if p.full then "full" else "partial")
       p.start p.end_
 
-  let per_segment_list_to_string =
-    string_of_list ~sep:";" ~f:per_segment_to_string
+  let per_segment_list_to_string l =
+    string_of_list ~sep:";" ~f:per_segment_to_string l
 
   type t =
     { allele    : string

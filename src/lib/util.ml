@@ -216,8 +216,9 @@ let group_by_assoc l =
   in
   List.fold_left ~init:[] ~f:insert l
 
-let string_of_list ~sep ~f l =
-  String.concat ~sep (List.map ~f l)
+let string_of_list ?(show_empty=false) ~sep ~f = function
+  | [] -> if show_empty then "[]" else ""
+  | l  -> String.concat ~sep (List.map ~f l)
 
 let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
@@ -247,9 +248,13 @@ let manual_phred_llhd s1 s2 probability_of_error =
 
 let time s f =
   let n = Sys.time () in
-  let r = f () in
-  printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
-  r
+  try
+    let r = f () in
+    printf "%s, total running time in seconds: %f\n%!" s (Sys.time () -. n);
+    r
+  with e ->
+    printf "%s, failed in seconds: %f\n%!" s (Sys.time () -. n);
+    raise e
 
 let gc_between s f =
   let open Gc in
