@@ -157,6 +157,7 @@ let type_
     zygosity_report_size
   (* how are we typing *)
     split
+    first_read_best_log_gap
     map_depth
     not_incremental_pairs
     not_prealigned
@@ -188,7 +189,8 @@ let type_
   let finish_singles = not do_not_finish_singles in
   let conf =
     Pd.multiple_conf ~insert_p ?band ?max_number_mismatches ?split
-      ~prealigned_transition_model ~past_threshold_filter ~incremental_pairs ()
+      ?first_read_best_log_gap ~prealigned_transition_model
+      ~past_threshold_filter ~incremental_pairs ()
   in
   let need_read_size_r =
     to_read_size_dependent
@@ -272,7 +274,7 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
   in
-   let class1mgd_arg =
+  let class1mgd_arg =
     let docv  = "DIRECTORY" in
     let doc   = "Short-cut argument that expands the given dir to look for \
                   A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
@@ -287,6 +289,22 @@ let () =
                  To use both pairs pass this flag. "
     in
     Arg.(value & flag & info ~doc ["do-not-incremental-pair"])
+  in
+  let first_read_best_log_gap_arg =
+    let docv  = "POSITIVE FLOAT" in
+    let doc   =
+      "When performing paired read inference, for the sake of expediency we \
+      want to make a decision about the best (most likely aligned to read) \
+      gene based upon the first read; then we know the orientation of second \
+      read and where to measure. Unfortunately, sometimes the first read \
+      aligns almost equally well to different alleles within 2 genes. This \
+      value controls a band within which we'll keep the best genes (based on \
+      the likelihood of the firs read) and afterwards align the second. The \
+      likelihoods, for other genes, outside of this band are discarded. By \
+      default this value is set to |log_10 1/100| = 2. "
+    in
+    Arg.(value & opt (some positive_float) None
+               & info ~doc ~docv ["first-read-best-log-gap"])
   in
   let type_ =
     let version = "0.0.0" in
@@ -326,6 +344,7 @@ let () =
             $ zygosity_report_size_arg
             (* How are we typing *)
             $ split_arg
+            $ first_read_best_log_gap_arg
             $ map_depth_arg
             $ do_not_use_incremental_pairs_flag
             $ not_prealigned_flag

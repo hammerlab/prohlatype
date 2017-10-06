@@ -1414,20 +1414,6 @@ end (* ForwardSingleGen *)
 
 module PosMap = Map.Make(struct type t = int [@@deriving ord] end)
 
-let topn p k a i lst =
-  let rec loop added n lst =
-    if n >= k then
-      []
-    else
-      match lst with
-      | []         -> if added then [] else [a,i]
-      | (u,j) :: t -> if p a u && not added then
-                        (a,i) :: loop true (n + 1) lst
-                      else
-                        (u,j) :: loop added (n + 1)  t
-  in
-  loop false 0 lst
-
 let largest k a i lst = topn (>) k a i lst
 let smallest k a i lst = topn (<) k a i lst
 

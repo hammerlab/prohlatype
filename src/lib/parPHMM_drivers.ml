@@ -741,33 +741,45 @@ type multiple_conf =
       that assumes the entire read will fit completely inside the reference
       area. *)
 
-  ; insert_p              : float option
+  ; insert_p                : float option
   (* Override the default insert emission probability. *)
 
 
-  ; band                  : ParPHMM.band_config option
+  ; band                    : ParPHMM.band_config option
   (* Perform banded passes. *)
 
-  ; max_number_mismatches : int option
+  ; max_number_mismatches   : int option
   (* Max number of allowable mismatches to use a threshold filter for the
      forward pass. *)
 
-  ; past_threshold_filter : bool
+  ; past_threshold_filter   : bool
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
-  ; incremental_pairs     : bool
+  ; incremental_pairs       : bool
   (* This option only applies to paired typing. Instead of naively modeling
      the two read pairs at the same time, use the first as guidance of which
      loci is the best, and then apply the second read to only the best loci.
      The default should be true. *)
 
-  ; split                 : int option
+  ; split                   : int option
   (** Split the forward pass to operate over this many segments of the read.
       The value must divide the read_length evenly or an exception is thrown. *)
+
+  ; first_read_best_log_gap : float option
+  (** When performing paired read inference, for the sake of expediency we want
+      to make a decision about the best (most likely aligned to read) gene
+      based upon the first read; then we know the orientation of second read and
+      where to measure. Unfortunately, sometimes the first read aligns almost
+      equally well to different alleles within 2 genes. This value controls a
+      band within which we'll keep the best genes (based on the likelihood of the
+      firs read) and afterwards align the second. The likelihoods, for other
+      genes, outside of this band are discarded. By default this value is set
+      to |log_10 1/100|. *)
   }
 
 let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
+  ?first_read_best_log_gap
   ~prealigned_transition_model
   ~past_threshold_filter ~incremental_pairs () =
     { prealigned_transition_model
@@ -777,6 +789,7 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
     ; past_threshold_filter
     ; incremental_pairs
     ; split
+    ; first_read_best_log_gap
     }
 
 module Multiple_loci = struct
@@ -818,6 +831,54 @@ module Multiple_loci = struct
           sep (orientation_char_of_bool first_o)
           sep (sr_to_string first)
           sep (pass_result_to_short_string sep sr_to_string second)
+
+  let take_regular = Forward.take_regular_by_likelihood
+
+  let most_likely_orientation or_ =
+    Orientation.most_likely_between ~take_regular or_
+
+  (* true if s1 is better than s2 *)
+  let better_soi s1 s2 =
+    let l s = max_pm s.Forward.likelihood in
+    let open ParPHMM in
+    match s1, s2 with
+    | PairedDependent p1, PairedDependent p2  ->
+        begin
+          match p1.second, p2.second with
+          | Filtered _,    _             -> false
+          | _,             Filtered _    -> true
+          | Completed ss1, Completed ss2 -> l p1.first +. l ss1 > l p2.first +. l ss2
+        end
+    | PairedDependent p1, SingleRead sr2      ->
+        begin
+          match most_likely_orientation sr2 with
+          | Filtered  _                   -> true
+          | Completed (_, s)  ->
+              begin match p1.second with
+              | Filtered  _               -> l p1.first >= l s
+              | Completed _               -> true
+              end
+        end
+    | SingleRead sr1,     PairedDependent p2  ->
+        begin
+          match most_likely_orientation sr1 with
+          | Filtered _                    -> false
+          | Completed (_, s)  ->
+              begin match p2.second with
+              | Filtered  _               -> l s >= l p2.first
+              | Completed _               -> false
+              end
+        end
+    | SingleRead sr1,     SingleRead sr2      ->
+        begin
+          match most_likely_orientation sr1 with
+          | Filtered _                    -> false
+          | Completed (_, l1)      ->
+            begin match most_likely_orientation sr2 with
+            | Filtered  _                 -> true
+            | Completed (_, l2)           -> l l1 >= l l2
+            end
+        end
 
   type 'single_result paired =
     | FirstFiltered of
@@ -885,40 +946,29 @@ module Multiple_loci = struct
 
   type read_result = Forward.stat per_read
 
-  let take_regular = Forward.take_regular_by_likelihood
-
-  let most_likely_orientation or_ =
-    Orientation.most_likely_between ~take_regular or_
-
   (* A PairedDependent with completed second should be chosen over any SingleRead's.
      A PairedDependent with a Filtered second should be compared by first.
+     Compare 2 PairedDependent by both.
    *)
   let reduce_soi soi_lst =
     let open ParPHMM in
-    let rec update loci stat best tl =
-      let l = max_pm stat.Forward.likelihood in
-      match best with
-      | None                        -> loop (Some (l, loci, Single stat)) tl
-      | Some (bl, _, _) when l > bl -> loop (Some (l, loci, Single stat)) tl
-      | Some _                      -> loop best tl
-    and loop best = function
-      | []                -> best
-      | (loci, soi) :: tl ->
-          begin match soi with
-          (* ignore previous bests and remaining loci. *)
-          | PairedDependent { first; second; _ } ->
-              begin match second with
-              | Filtered _  -> update loci first best tl
-              | Completed s -> Some (0.0, loci, Paired (first, s))
-              end
-          | SingleRead or_                       ->
-              begin match most_likely_orientation or_ with
-              | Filtered _      -> loop best tl
-              | Completed (_,s) -> update loci s best tl
-              end
-          end
-    in
-    loop None soi_lst
+    List.reduce soi_lst ~f:(fun (l1, s1) (l2, s2) ->
+      if better_soi s1 s2 then
+        l1, s1
+      else
+        l2, s2)
+    |> Option.bind ~f:(fun (loci, soi) ->
+        match soi with
+        | PairedDependent { first; second; _} ->
+            begin match second with
+            | Filtered _  -> Some (loci, Single first)
+            | Completed s -> Some (loci, Paired (first, s))
+            end
+        | SingleRead  or_ ->
+            begin match most_likely_orientation or_ with
+            | Filtered _      -> None             (* After all that! *)
+            | Completed (_,s) -> Some (loci, Single s)
+            end)
 
   let map_soi_to_aap lst =
     List.map lst ~f:(fun (loci, soi) ->
@@ -996,7 +1046,7 @@ module Multiple_loci = struct
     | Single_or_incremental soi_lst ->
         begin match reduce_soi soi_lst with
         | None  -> eprintf "All read results filtered for %s\n%!" name
-        | Some (_bl, best_loci, best_stat)  ->
+        | Some (best_loci, best_stat)  ->
             assign_to_best best_loci best_stat
         end;
         let mrs = Single_or_incremental (map_soi_to_aap soi_lst) in
@@ -1015,6 +1065,27 @@ module Multiple_loci = struct
     List.iter prlst ~f:(fun {name; rrs} ->
       fprintf oc "%s\n%s\n" name
         (pp_to_string Alleles_and_positions.string_of_list rrs))
+
+  (* Easier to reason about this as a distance, hence >= 0 *)
+  let abs_logp_one_over_hundred = abs_float (log10 0.01)
+
+  type incremental_classification =
+    | LessLikely
+    | Within
+    | MoreLikely
+
+  let classify_likelihood ?(log_gap=abs_logp_one_over_hundred) ~best newl =
+    if newl <= best then begin
+      if (best -. newl) < log_gap then
+        Within
+      else
+        LessLikely
+    end else begin (* newl > best *)
+      if (newl -. best) < log_gap then
+        Within
+      else
+        MoreLikely
+    end
 
   let init conf opt read_length parPHMM_t_lst =
     let { likelihood_first; zygosity_report_size; report_size } = opt in
@@ -1050,9 +1121,10 @@ module Multiple_loci = struct
       in
       MPaired (List.rev res)
     in
+    let decreasing_likelihood = insert_sorted ( < ) in
     let incremental_paired name rd1 re1 rd2 re2 =
       let best, rest, _fpt1 =
-        List.fold_left paa ~init:(None, [], initial_pt)
+        List.fold_left paa ~init:([], [], initial_pt)
           ~f:(fun (best, acc, pt) (loci, (p, _, _)) ->
                 let result1, npt = forward pt p rd1 re1 in
                 match most_likely_orientation result1 with
@@ -1061,27 +1133,37 @@ module Multiple_loci = struct
                     best, nacc, npt
                 | ParPHMM.Completed (c, first) ->
                     let l = max_pm first.Forward.likelihood in
-                    begin match best with
-                    | None ->
-                        Some (loci, p, result1, c, first, l), acc, npt
-                    | Some (bloci, _bp, bresult1, _bcomp, _bfirst, bl) ->
-                        if l > bl then  (* new best *)
-                          let nacc = (bloci, SingleRead bresult1) :: acc in
-                          Some (loci, p, result1, c, first, l), nacc, npt
-                        else
-                          let nacc = (loci, SingleRead result1) :: acc in
-                          best, nacc, npt
-                    end)
+                    let for_second = loci, p, result1, c, first in
+                    match best with
+                    | []           ->
+                            [l, for_second], acc, npt
+                    | (bl, (bloci, _,_,_,_)) :: _ ->
+                        begin match classify_likelihood ~best:bl l with
+                        | LessLikely ->
+                            let nacc = (loci, SingleRead result1) :: acc in
+                            best, nacc, npt
+                        | MoreLikely ->
+                            let nacc =
+                              List.map best ~f:(fun (_, (l, _, r1, _, _)) -> (l, SingleRead r1))
+                              @ acc
+                            in
+                            [l, for_second], nacc, npt
+                        | Within     ->
+                            let nbest = decreasing_likelihood l for_second best in
+                            nbest, acc, npt
+                        end)
       in
       match best with
-      | None  ->
+      | []  ->
           eprintf "All loci were filtered for first read of %s, ignoring second.\n"
             name;
           Single_or_incremental (List.rev rest)
-      | Some (bloci, bp, _bresult1, first_o, first, _bl) ->
-          let second = specific_orientation bp (not first_o) rd2 re2 in
-          let nrest = (bloci, PairedDependent {first_o; first; second}) :: (List.rev rest) in
-          Single_or_incremental nrest
+      | lst ->
+          let seconds = List.map lst ~f:(fun (_l, (loci, p, _, first_o, first)) ->
+            let second = specific_orientation p (not first_o) rd2 re2 in
+            (loci, PairedDependent {first_o; first; second}))
+          in
+          Single_or_incremental (seconds @ (List.rev rest))
     in
     let rec state = { per_loci; per_read = []}
     and per_loci =
