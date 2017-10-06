@@ -788,7 +788,7 @@ module Multiple_loci = struct
     | PairedDependent of
       { first_o : bool
       ; first   : 'single_result
-      ; second  : 'single_result
+      ; second  : 'single_result ParPHMM.pass_result
       }
     (* Orientation and gene of 2nd read is determined by 1st. There is no
        {pass_result} since we're not going to apply a filter to the 2nd read.
@@ -804,6 +804,10 @@ module Multiple_loci = struct
   let orientation_char_of_bool reverse_complement =
     if reverse_complement then 'C' else 'R'
 
+  let pass_result_to_short_string sep sr_to_string = function
+    | ParPHMM.Filtered m -> sprintf "F%c%s" sep m
+    | ParPHMM.Completed r -> sr_to_string r
+
   let soi_to_string ?take_regular ?(sep='\t') sr_to_string soi =
     let ots = Orientation.to_string ?take_regular ~sep sr_to_string in
     match soi with
@@ -813,7 +817,7 @@ module Multiple_loci = struct
         sprintf "PairedDependent%c%c%c%s%c%s"
           sep (orientation_char_of_bool first_o)
           sep (sr_to_string first)
-          sep (sr_to_string second)
+          sep (pass_result_to_short_string sep sr_to_string second)
 
   type 'single_result paired =
     | FirstFiltered of
@@ -826,11 +830,12 @@ module Multiple_loci = struct
     | FirstOrientedSecond of
       { first_o : bool
       ; first   : 'single_result
-      ; second  : 'single_result
+      ; second  : 'single_result ParPHMM.pass_result
       }
     (* One of the orientations of the first wasn't filtered and we used
-       it to orient the second read. Similar to PairedDependent there is no
-       {pass_result} for second since we don't have a comparable filter. *)
+       it to orient the second read. There is a {pass_result} for second
+       because in the cases where we have a split, those may trigger a
+       filter that stops computation. *)
 
   let pr_to_string ?(sep='\t') sr_to_string pr =
     let ots = Orientation.to_string ~sep sr_to_string in
@@ -839,8 +844,9 @@ module Multiple_loci = struct
         sprintf "FirstFiltered%c%s%c%s" sep first sep (ots second)
     | FirstOrientedSecond { first_o; first; second } ->
         sprintf "FirstOrientedSecond%c%c%c%s%c%s"
-          sep (orientation_char_of_bool first_o) sep
-          (sr_to_string first) sep (sr_to_string second)
+          sep (orientation_char_of_bool first_o)
+          sep (sr_to_string first)
+          sep (pass_result_to_short_string sep sr_to_string second)
 
   type 'sr potentially_paired =
     | Single_or_incremental of (string * 'sr single_or_incremental) list
@@ -884,7 +890,9 @@ module Multiple_loci = struct
   let most_likely_orientation or_ =
     Orientation.most_likely_between ~take_regular or_
 
-  (* A PairedDependent should be chosen over any SingleRead's. *)
+  (* A PairedDependent with completed second should be chosen over any SingleRead's.
+     A PairedDependent with a Filtered second should be compared by first.
+   *)
   let reduce_soi soi_lst =
     let open ParPHMM in
     let rec update loci stat best tl =
@@ -897,27 +905,31 @@ module Multiple_loci = struct
       | []                -> best
       | (loci, soi) :: tl ->
           begin match soi with
-              (* ignore previous bests and remaining loci. *)
+          (* ignore previous bests and remaining loci. *)
           | PairedDependent { first; second; _ } ->
-              Some (0.0, loci, Paired (first, second))
+              begin match second with
+              | Filtered _  -> update loci first best tl
+              | Completed s -> Some (0.0, loci, Paired (first, s))
+              end
           | SingleRead or_                       ->
               begin match most_likely_orientation or_ with
               | Filtered _      -> loop best tl
               | Completed (_,s) -> update loci s best tl
               end
           end
-      in
-      loop None soi_lst
+    in
+    loop None soi_lst
 
   let map_soi_to_aap lst =
     List.map lst ~f:(fun (loci, soi) ->
       let n =
         match soi with
         | PairedDependent { first_o; first; second } ->
-            PairedDependent { first_o
-                            ; first = first.Forward.aap
-                            ; second = second.Forward.aap
-                            }
+            PairedDependent
+              { first_o
+              ; first = first.Forward.aap
+              ; second = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second
+              }
         | SingleRead oi                             ->
            SingleRead (Forward.just_aap_or oi)
       in
@@ -945,7 +957,10 @@ module Multiple_loci = struct
               | Completed (_, stat) -> loop (update loci stat (Single stat) best) tl
               end
           | FirstOrientedSecond { first; second } ->
-              loop (update loci second (Paired (first, second)) best) tl
+              begin match second with
+              | Filtered _          -> loop best tl
+              | Completed s         -> loop (update loci s (Paired (first, s)) best) tl
+              end
           end
     in
     loop None pr_lst
@@ -955,9 +970,10 @@ module Multiple_loci = struct
         | FirstFiltered { first; second } ->
             FirstFiltered { first; second = Forward.just_aap_or second }
         | FirstOrientedSecond { first_o; first; second } ->
-            FirstOrientedSecond { first_o
-                                ; first = first.Forward.aap
-                                ; second = second.Forward.aap })
+            FirstOrientedSecond
+              { first_o
+              ; first   = first.Forward.aap
+              ; second  = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second })
 
   let merge state { name ; rrs } =
     let open ParPHMM in
@@ -1015,10 +1031,8 @@ module Multiple_loci = struct
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
     let forward = Forward.forward report_size in
-    let filterless_single p rc r re =
-      match specific_orientation p (Forward.proc_to_stat report_size) rc r re with
-      | ParPHMM.Filtered m  -> invalid_argf "Filtered result %s without filter!" m
-      | ParPHMM.Completed s -> s
+    let specific_orientation p rc r re =
+      specific_orientation p (Forward.proc_to_stat report_size) rc r re
     in
     let ordinary_paired name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
@@ -1030,8 +1044,8 @@ module Multiple_loci = struct
                     let second, npt2 = forward pt2 p rd2 re2 in
                     npt1, npt2, (loci, FirstFiltered { first = m; second }) :: acc
                 | ParPHMM.Completed (first_o, first) ->
-                    let second = filterless_single p (not first_o) rd2 re2 in
-                    let npt2 = Past_threshold.update pt2 p (ParPHMM.Completed second) in
+                    let second = specific_orientation p (not first_o) rd2 re2 in
+                    let npt2 = Past_threshold.update pt2 p second in
                     npt1, npt2, (loci, FirstOrientedSecond { first_o; first; second }) :: acc)
       in
       MPaired (List.rev res)
@@ -1065,7 +1079,7 @@ module Multiple_loci = struct
             name;
           Single_or_incremental (List.rev rest)
       | Some (bloci, bp, _bresult1, first_o, first, _bl) ->
-          let second = filterless_single bp (not first_o) rd2 re2 in
+          let second = specific_orientation bp (not first_o) rd2 re2 in
           let nrest = (bloci, PairedDependent {first_o; first; second}) :: (List.rev rest) in
           Single_or_incremental nrest
     in

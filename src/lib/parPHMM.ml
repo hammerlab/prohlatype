@@ -2528,7 +2528,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
                             matched entire read."
               else if ref_length <= eff_read_length then
                 filter_is_past_thresholdf
-                  "Remaining reference %d is less than or equal to rmaining read length %d"
+                  "Remaining reference %d is less than or equal to remaining read length %d"
                     ref_length eff_read_length
               else begin
                 (* big_jump cs_start range; See above *)
