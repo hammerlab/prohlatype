@@ -477,20 +477,20 @@ module Forward_calcations_over_cells (R : Ring) = struct
     let t_m_s = constant (tm Match StartOrEnd) in
     let t_i_s = constant (tm Insert StartOrEnd) in
 
-    (*printf "t_s_m: %s\n" (R.to_string t_s_m);
-      printf "t_s_i: %s\n" (R.to_string t_s_i);
-      printf "t_m_m: %s\n" (R.to_string t_m_m);
-      printf "t_i_m: %s\n" (R.to_string t_i_m);
-      printf "t_d_m: %s\n" (R.to_string t_d_m);
+    (*printf "t_s_m : %s before %f\n" (R.to_string t_s_m) (tm StartOrEnd Match);
+    printf "t_s_i : %s before %f\n" (R.to_string t_s_i) (tm StartOrEnd Insert);
+    printf "t_m_m : %s before %f\n" (R.to_string t_m_m) (tm Match Match);
+    printf "t_i_m : %s before %f\n" (R.to_string t_i_m) (tm Insert Match);
+    printf "t_d_m : %s before %f\n" (R.to_string t_d_m) (tm Delete Match);
 
-      printf "t_m_i: %s\n" (R.to_string t_m_i);
-      printf "t_i_i: %s\n" (R.to_string t_i_i);
+    printf "t_m_i : %s before %f\n" (R.to_string t_m_i) (tm Match Insert);
+    printf "t_i_i : %s before %f\n" (R.to_string t_i_i) (tm Insert Insert);
 
-      printf "t_m_d: %s\n" (R.to_string t_m_d);
-      printf "t_d_d: %s\n" (R.to_string t_d_d);
+    printf "t_m_d : %s before %f\n" (R.to_string t_m_d) (tm Match Delete);
+    printf "t_d_d : %s before %f\n" (R.to_string t_d_d) (tm Delete Delete);
 
-      printf "t_m_s: %s\n" (R.to_string t_m_s);
-      printf "t_i_s: %s\n" (R.to_string t_i_s); *)
+    printf "t_m_s : %s before %f\n" (R.to_string t_m_s) (tm Match StartOrEnd);
+    printf "t_i_s : %s before %f\n" (R.to_string t_i_s) (tm Insert StartOrEnd); *)
 
     let insert_p = constant insert_p in
     let start_i = insert_p * t_s_i in
@@ -751,6 +751,14 @@ module type Workspace_intf = sig
       -> f:('a -> entry -> 'a)
       -> 'a
 
+  val foldi_over_row
+      : ?range:(int * int)
+      -> t
+      -> int
+      -> init:'a
+      -> f:('a -> int -> entry -> 'a)
+      -> 'a
+
   (* Fold over the final entries. These are the probabilities of finishing at
      a given reference position. These are then averaged to compute the final
      emission value. *)
@@ -820,6 +828,13 @@ module CommonWorkspace = struct
     let start, end_ = to_se range ws  in
     let rec loop k acc =
       if k >= end_ then acc else loop (k + 1) (f acc (get ws ~i ~k))
+    in
+    loop start init
+
+  let foldi_over_row ?range ws i ~init ~f =
+    let start, end_ = to_se range ws  in
+    let rec loop k acc =
+      if k >= end_ then acc else loop (k + 1) (f acc k (get ws ~i ~k))
     in
     loop start init
 
@@ -1525,9 +1540,7 @@ module ForwardMultipleGen (R : Ring) = struct
       end;
       r
     in
-    let end_ ws k =
-      Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_
-    in
+    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles R.zero in
@@ -2154,10 +2167,12 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   ; maximum_match
   }
 
-let highest_emission_position_pm number_alleles foldi_over_final =
+let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
   let init = pm_init_all ~number_alleles (LogProbabilities.zero, -1) in
   foldi_over_final ~init ~f:(fun hep_pm k em_pm ->
     Pm.merge hep_pm em_pm (fun (be, bk) e ->
+      if debug then
+        printf "at %d e %s\n" k (LogProbabilities.to_string e);
       if LogProbabilities.is_gap e then
         (be, bk)
       else if e > be then
@@ -2436,6 +2451,8 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
       }
     end else begin (* prealigned_transition_model *)
       let update ~cs_start ~ref_length =
+        (*printf "update cs_start: %d ref_length: %d eff_read_length: %d\n"
+          cs_start ref_length eff_read_length; *)
         let tm = Phmm.TransitionMatrix.prealigned ~ref_length eff_read_length in
         let r = F.recurrences ?insert_p tm eff_read_length number_alleles in
         tm, r, Some { cs_start; ref_length }
@@ -2459,10 +2476,15 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
                         bprob, bpos)
             in
             if best_pos = -1 then begin
-              let hepp = highest_emission_position_pm number_alleles
+              (*let hepp = highest_emission_position_pm (*~debug:true*) number_alleles
               (F.W.foldi_over_final ?range ws)
               in
-              invalid_argf "hmmm: range: %s, hepp: %s\n"
+              let () = F.W.foldi_over_row ?range ws (eff_read_length - 1)
+                ~init:() ~f:(fun () k e ->
+                  printf "at %d, final pm: %s\n"
+                    k (Pm.to_string e (cell_to_string LogProbabilities.to_string)))
+                in *)
+              invalid_argf "range: %s, hepp: %s\n"
                 (Option.value_map range ~default:"None"
                     ~f:(fun (s,e) -> sprintf "Some (%d,%d)" s e))
                 (Pm.to_string hepp (fun (lp, p) ->
@@ -2480,7 +2502,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
           if previous_start <> 0  (* Not the first segment that locates the read! *)
           && cs_start - previous_start > 2 * eff_read_length then
             filter_is_past_thresholdf
-              "highest emissions %d -> %d separated by more than 2x \
+              "new highest emissions %d, from %d separated by more than 2x \
               effective read length: %d."
                 cs_start previous_start eff_read_length
           else
@@ -2501,6 +2523,10 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
               if ref_length <= 2 then
                 filter_is_past_thresholdf "Best emission is at reference end before we \
                             matched entire read."
+              else if ref_length <= eff_read_length then
+                filter_is_past_thresholdf
+                  "Remaining reference %d is less than or equal to rmaining read length %d"
+                    ref_length eff_read_length
               else begin
                 big_jump cs_start range;
                 let ntm, nr, columns = update ~cs_start ~ref_length in
