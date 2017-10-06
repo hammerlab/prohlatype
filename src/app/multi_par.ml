@@ -159,7 +159,7 @@ let type_
     split
     first_read_best_log_gap
     map_depth
-    not_incremental_pairs
+    incremental_pairs
     not_prealigned
     forward_accuracy_opt
     number_processes_opt
@@ -185,7 +185,7 @@ let type_
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let prealigned_transition_model = not not_prealigned in
-  let incremental_pairs = not not_incremental_pairs in
+  let incremental_pairs = incremental_pairs in
   let finish_singles = not do_not_finish_singles in
   let conf =
     Pd.multiple_conf ~insert_p ?band ?max_number_mismatches ?split
@@ -281,27 +281,26 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
   in
-  let do_not_use_incremental_pairs_flag =
-    let doc   = "By default when performing paired typing, we use the first \
-                 (as specified by the read found in the first file on the \
-                 command line) pair, to determine which loci is the most \
-                 likely. This is faster but potentially less accurate. \
-                 To use both pairs pass this flag. "
+  let use_incremental_pairs_flag =
+    let doc   =
+      "When performing paired typing, use the first (as specified by the read \
+       found in the first file on the command line) pair, to determine which \
+       gene is the most likely. This is faster but potentially less accurate. "
     in
-    Arg.(value & flag & info ~doc ["do-not-incremental-pair"])
+    Arg.(value & flag & info ~doc ["incremental-pair"])
   in
   let first_read_best_log_gap_arg =
     let docv  = "POSITIVE FLOAT" in
     let doc   =
-      "When performing paired read inference, for the sake of expediency we \
-      want to make a decision about the best (most likely aligned to read) \
-      gene based upon the first read; then we know the orientation of second \
-      read and where to measure. Unfortunately, sometimes the first read \
-      aligns almost equally well to different alleles within 2 genes. This \
-      value controls a band within which we'll keep the best genes (based on \
-      the likelihood of the firs read) and afterwards align the second. The \
-      likelihoods, for other genes, outside of this band are discarded. By \
-      default this value is set to |log_10 1/100| = 2. "
+      "When performing incremental paired read inference, for the sake of \
+      expediency we want to make a decision about the best (most likely \
+      aligned to read) gene based upon the first read; then we know the \
+      orientation of second read and where to measure. Unfortunately, \
+      sometimes the first read aligns almost equally well to different alleles \
+      within 2 genes. This value controls a band within which we'll keep the \
+      best genes (based on the likelihood of the firs read) and afterwards \
+      align the second. The likelihoods, for other genes, outside of this \
+      band are discarded. By default this value is set to |log_10 1/100| = 2."
     in
     Arg.(value & opt (some positive_float) None
                & info ~doc ~docv ["first-read-best-log-gap"])
@@ -346,7 +345,7 @@ let () =
             $ split_arg
             $ first_read_best_log_gap_arg
             $ map_depth_arg
-            $ do_not_use_incremental_pairs_flag
+            $ use_incremental_pairs_flag
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg
             $ number_processes_arg

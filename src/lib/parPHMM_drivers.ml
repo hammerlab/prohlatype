@@ -756,15 +756,18 @@ type multiple_conf =
   (* Use the previous match likelihood, when available (ex. against reverse
      complement), as a threshold filter for the forward pass. *)
 
+  ; split                   : int option
+  (** Split the forward pass to operate over this many segments of the read.
+      The value must divide the read_length evenly or an exception is thrown. *)
+
   ; incremental_pairs       : bool
   (* This option only applies to paired typing. Instead of naively modeling
      the two read pairs at the same time, use the first as guidance of which
      loci is the best, and then apply the second read to only the best loci.
-     The default should be true. *)
-
-  ; split                   : int option
-  (** Split the forward pass to operate over this many segments of the read.
-      The value must divide the read_length evenly or an exception is thrown. *)
+     The default should is false as there seem to always be reads where the
+     first is too ambiguous and the error profile shifts such that
+     [first_read_best_log_gap] is not good enough. We need a better algorithm
+     for this. *)
 
   ; first_read_best_log_gap : float option
   (** When performing paired read inference, for the sake of expediency we want
