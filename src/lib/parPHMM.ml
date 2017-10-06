@@ -2497,6 +2497,9 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
         let ref_length = ref_length - non_gapped_cs_start in
         non_gapped_cs_start, ref_length
       in
+      (* In order for this logic to work it needs to properly incorpoate gaps.
+         Otherwise a gap of 15, not uncommon, seems to easily trigger this
+         check on reads of 100 with split of 4 -> eff read_length 25.
       let big_jump cs_start =
         Option.iter ~f:(fun (previous_start, _) ->
           if previous_start <> 0  (* Not the first segment that locates the read! *)
@@ -2507,7 +2510,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
                 cs_start previous_start eff_read_length
           else
             ())
-      in
+      in *)
       let single ?prev_threshold ?base_p ~read ~read_errors reverse_complement =
         (* We still do not have to clear the workspace, since a during the full
            we always start wide enough that we're clearing downstream cells
@@ -2528,7 +2531,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
                   "Remaining reference %d is less than or equal to rmaining read length %d"
                     ref_length eff_read_length
               else begin
-                big_jump cs_start range;
+                (* big_jump cs_start range; See above *)
                 let ntm, nr, columns = update ~cs_start ~ref_length in
                 let o = eff_read_length * n in
                 let read = access ~o reverse_complement read read_errors in
