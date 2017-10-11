@@ -5,6 +5,25 @@
 
 open Util
 
+type gene =
+  | A
+  | B
+  | C
+  | DRB1
+
+let string_to_gene = function
+  | "A"     -> A
+  | "B"     -> B
+  | "C"     -> C
+  | "DRB1"  -> DRB1
+  | x       -> invalid_argf "Unrecognized gene: %s" x
+
+let gene_to_string = function
+  | A -> "A"
+  | B -> "B"
+  | C -> "C"
+  | DRB1 -> "DRB1"
+
 let keys =
   [ "120021"; "120074"; "120984"; "122879"; "123768"; "125785"; "126119"
   ; "126966"; "127051"; "127079"; "127245"; "128964"; "130445"; "160426"
@@ -24,7 +43,7 @@ module Diploid = struct
   type t = Nomenclature.t * Nomenclature.t
 
   let init a1 a2 =
-    if Nomenclature.compare a1 a2 <= 0 then
+    if Nomenclature.compare_by_resolution a1 a2 <= 0 then
       (a1, a2)
     else
       (a2, a1)
@@ -39,22 +58,22 @@ module Diploid = struct
 
 end (* Diploid *)
 
-
 let to_correct_map data =
   List.fold_left data ~init:StringMap.empty ~f:(fun smap lst ->
     let k = List.nth_exn lst 4 in
     match Nomenclature.parse (List.nth_exn lst 1) with
-    | Error e       -> invalid_arg e
-    | Ok (gene, nc) ->
+    | Error e         -> invalid_arg e
+    | Ok (gene_s, nc) ->
+        let gene = string_to_gene gene_s in
         let l = try StringMap.find k smap with Not_found -> [] in
-       StringMap.add k ((gene, nc) :: l) smap)
+        StringMap.add k ((gene, nc) :: l) smap)
   |> StringMap.map ~f:(fun l ->
       group_by_assoc l
       |> List.filter_map ~f:(fun (gene, allele_lst) ->
             match allele_lst with
             | a1 :: a2 :: [] -> Some (gene, Diploid.init a1 a2)
             | _ -> eprintf "Odd! gene: %s has <2 or >2 alleles: %s\n"
-                    gene
+                    (gene_to_string gene)
                     (string_of_list ~sep:" " ~f:Nomenclature.resolution_and_suffix_opt_to_string allele_lst);
                    None))
 
@@ -67,8 +86,6 @@ let to_parse_state = function
   | "Zygosity:" :: []   -> `Zygosity
   | "Per Read:" :: []   -> `PerRead
   | _                   -> `Unknown
-
-type gene = string
 
 type z =
   { d : Diploid.t
@@ -105,10 +122,141 @@ let group_zygosities zlst =
       ; pr  = (List.hd_exn zlst).p
       })
 
+type per_read_allele_datum =
+  { allele    : string
+  ; position  : int
+  ; llhd      : float
+  }
+
+let parse_per_read_allele_datum s =
+  try
+  Scanf.sscanf s "%s@,%d,%f"
+    (fun allele position llhd -> { allele; position; llhd})
+  with e ->
+    eprintf "------------%s---------------\n%!" s;
+    raise e
+
+let parse_per_read_allele_datums s =
+  String.split ~on:(`Character ';') s
+  |> List.map ~f:parse_per_read_allele_datum
+
+(* Assume that most likely is first *)
+let to_llhd l =
+  (List.hd_exn l).llhd
+
+type filter_or_res =
+  | Filtered of string
+  | Res of { orientation : bool ; rads : per_read_allele_datum list}
+
+type per_read =
+  | SingleRead of filter_or_res * filter_or_res
+  | FirstOrientedSecond of { orientation : bool
+                           ; r1 : per_read_allele_datum list
+                           ; r2 : per_read_allele_datum list
+                           }
+  | FirstFiltered of string
+
+(* They'll always have the gene annotation! *)
+let reduce_per_read t1 t2 =
+  let (_, p1) = t1 in
+  let (_, p2) = t2 in
+  match p1, p2 with
+  | SingleRead (Filtered _, _), SingleRead _            -> t2
+  | SingleRead _              , SingleRead (Filtered _, _) -> t1
+  | SingleRead (Res r1, _)    , SingleRead (Res r2, _) ->
+      if to_llhd r1.rads >= to_llhd r2.rads then t1 else t2
+  | SingleRead _           , _            -> invalid_arg "NOT a single read!"
+  | _                      , SingleRead _ -> invalid_arg "NOT a single read!"
+  | FirstOrientedSecond f1 , FirstOrientedSecond f2 ->
+      if to_llhd f1.r1 >= to_llhd f2.r1 then t1 else t2
+  | FirstOrientedSecond _  , FirstFiltered _        -> t1
+  | FirstFiltered _        , FirstOrientedSecond _  -> t2
+  | _                      , _                      -> t1
+
+
+let rejoin_tabs = String.concat ~sep:"\t"
+
+let parse_single_read_filter_or_res = function
+  | "R" :: r1 :: "F" :: msg :: [] ->
+      SingleRead (Res {orientation = false; rads = parse_per_read_allele_datums r1}
+                 , Filtered msg)
+  | "C" :: r1 :: "F" :: msg :: [] ->
+      SingleRead (Res {orientation = true; rads = parse_per_read_allele_datums r1}
+                 , Filtered msg)
+  | "R" :: r1 :: "C" :: r2 :: [] ->
+      SingleRead ( Res {orientation = false; rads = parse_per_read_allele_datums r1}
+                 , Res {orientation = true; rads = parse_per_read_allele_datums r2})
+  | "C" :: r1 :: "R" :: r2 :: [] ->
+      SingleRead ( Res {orientation = true; rads = parse_per_read_allele_datums r1}
+                 , Res {orientation = false; rads = parse_per_read_allele_datums r2})
+  | "F" :: m1 :: "F" :: m2 :: [] ->
+      SingleRead ((Filtered m1), (Filtered m2))
+  | lst ->
+      invalid_argf "Unrecongized single_read format: %s"
+        (rejoin_tabs lst)
+
+let parse_first_oriented_second = function
+  | "C" :: r1 :: r2 :: [] ->
+      FirstOrientedSecond
+        { orientation = true
+        ; r1 = parse_per_read_allele_datums r1
+        ; r2 = parse_per_read_allele_datums r2
+        }
+  | "R" :: r1 :: r2 :: [] ->
+      FirstOrientedSecond
+        { orientation = false
+        ; r1 = parse_per_read_allele_datums r1
+        ; r2 = parse_per_read_allele_datums r2
+        }
+  | lst ->
+      invalid_argf "Unrecongized first_oriented_second format: %s"
+        (rejoin_tabs lst)
+
+let parse_post_gene_per_read = function
+  | "SingleRead" :: tl ->
+      parse_single_read_filter_or_res tl
+  | "FirstOrientedSecond" :: tl ->
+      parse_first_oriented_second tl
+  | "FirstFiltered" :: tl ->
+      FirstFiltered (rejoin_tabs tl)
+  | lst ->
+      invalid_argf "What type of read: %s"
+        (rejoin_tabs lst)
+
+let parse_per_read_line line =
+  match String.split ~on:(`Character '\t') line with
+  | "AF_A_gen__Distances.WeightedPerSegment" :: tl ->
+      [A,  parse_post_gene_per_read tl]
+  | "AF_B_gen__Distances.WeightedPerSegment" :: tl ->
+      [B,  parse_post_gene_per_read tl]
+  | "AF_C_gen__Distances.WeightedPerSegment" :: tl ->
+      [C,  parse_post_gene_per_read tl]
+  | _ ->
+      eprintf "Ingoring per_read line: %s" line;
+      []
+
+let parse_per_reads lst =
+  let rec loop acc = function
+    | []       -> List.rev acc
+    | "" :: tl -> eprintf "Empty read name: stopping! tl: %s" (rejoin_tabs tl);
+                  List.rev acc
+    | read_name :: l1 :: l2 :: l3 :: tl ->
+        let o1 = parse_per_read_line l1 in
+        let o2 = parse_per_read_line l2 in
+        let o3 = parse_per_read_line l3 in
+        let assoc = o1 @ o2 @ o3 in
+        loop ((read_name, assoc) :: acc) tl
+    | x :: []           -> eprintf "early stop: %s" x; List.rev acc
+    | y :: x :: []      -> eprintf "early stop: %s, %s" y x; List.rev acc
+    | z :: y :: x :: [] -> eprintf "early stop: %s, %s, %s" z y x; List.rev acc
+
+  in
+  loop [] lst
+
 type prohlatype_output =
   { likelihoods : (gene * (Nomenclature.t * float) list) list
   ; zygosities  : (gene * gz list) list
-  ; per_reads   : string list
+  ; per_reads   : (string * ((gene * per_read) list)) list
   }
 
 let load_prohlatype fname =
@@ -129,7 +277,7 @@ let load_prohlatype fname =
     | `Likelihood (gene, lacc) ->
         begin
           match lst with
-          | a :: l :: [] ->
+          | a :: l :: _il ->      (* TODO: Add imputation parsing logic. *)
               begin
                 match Nomenclature.parse a with
                 | Ok (g, res) ->
@@ -189,16 +337,20 @@ let load_prohlatype fname =
   in
   { likelihoods =
       List.filter_map fs ~f:(function
-        | `Likelihood (gene, lst) -> Some (gene, lst)
+        | `Likelihood (gene, lst) ->
+              Some (string_to_gene gene, lst)
         | _ -> None)
   ; zygosities  =
       List.filter_map fs ~f:(function
-        | `Zygosity (gene, lst) -> Some (gene, (group_zygosities lst))
+        | `Zygosity (gene, lst) ->
+              Some (string_to_gene gene, (group_zygosities lst))
         | _ -> None)
   ; per_reads   =
-    List.concat (List.filter_map fs ~f:(function
-        | `PerRead lst -> Some lst
-        | _ -> None))
+      List.concat (List.filter_map fs ~f:(function
+          | `PerRead lst -> Some lst
+          | _ -> None))
+      |> List.rev
+      |> parse_per_reads
   }
 
 type record =
@@ -222,7 +374,7 @@ let load_data ~dir ~fname_to_key =
 
 
 let classify correct_d glz =
-  let first = summarize_gz (List.hd_exn glz) in
+  (*let first = summarize_gz (List.hd_exn glz) in *)
   let rec loop = function
     | []       -> `Didn'tFindIt
     | gz :: tl ->
@@ -248,27 +400,39 @@ let classify1 a1 glz =
           `Single gz
         else
           loop tl
+  and start = function
+    | []       -> `Didn'tFindIt
+    | gz :: tl ->
+        if List.exists gz.dl ~f:(Diploid.one_lower_res_matches a1) then
+          `First gz
+        else
+          loop tl
   in
-  loop glz
+  start glz
 
 let lookup_result ~gene r =
   match List.Assoc.get gene r.ca with
-  | None  -> invalid_argf "Missing correct gene: %s type" gene
+  | None  -> invalid_argf "Missing correct gene: %s type" (gene_to_string gene)
   | Some d  ->
       begin match List.Assoc.get gene r.po.zygosities with
-      | None      -> invalid_argf "Missing zygosities output for gene %s" gene
+      | None      -> invalid_argf "Missing zygosities output for gene %s"
+                      (gene_to_string gene)
       | Some zlst ->
           begin match classify d zlst with
-          | `Didn'tFindIt  ->
+          | `Didn'tFindIt
+          | `Found _ ->
               let d1, d2 = d in
               if d1 = d2 then
                 match classify1 d1 zlst with
-                | `Single gz1   -> d, `NotHomozygous gz1
+                | `First gz1    -> d, `NotHomozygous gz1
+                | `Single gz1   -> d, `NotHomozygousNotEvenBest gz1
                 | `Didn'tFindIt -> d, `Didn'tFindIt
               else
                 let m1 = classify1 d1 zlst in
                 let m2 = classify1 d2 zlst in
                 begin match m1, m2 with
+                | `First gz1,    _              -> d, `OneRight gz1
+                | _ ,            `First gz2     -> d, `OneRight gz2
                 | `Single gz1,   `Single gz2    -> d, `Mixed (gz1, gz2)
                 | `Single _,     `Didn'tFindIt  -> d, m1
                 | `Didn'tFindIt, `Single _      -> d, m2
@@ -278,32 +442,83 @@ let lookup_result ~gene r =
           end
       end
 
+let lookup_results ~gene r =
+  StringMap.bindings r
+  |> List.map ~f:(fun (sample, record) ->
+      sample, lookup_result ~gene record) ;;
+
+ `First of gz
+
 type sample_summary =
   { perfect   : int * (string list)
   ; one_among : int * (string list)
+  ; one_right : int * (string list)
   ; found     : int * (string list)
   ; not_hmz   : int * (string list)
+  ; not_hmzne : int * (string list)
   ; single    : int * (string list)
   ; mixed     : int * (string list)
   ; didn't    : int * (string list)
+  ; first     : int * (string list)
   }
 
 let to_ss l =
-  let p = List.filter_map l ~f:(function | (s, (_, `Perfect)) -> Some s | _ -> None) in
+  let p = List.filter_map l ~f:(function | (s, (_, `PerfectFirst)) -> Some s | _ -> None) in
   let o = List.filter_map l ~f:(function | (s, (_, `OneAmong _)) -> Some s | _ -> None) in
+  let or_ = List.filter_map l ~f:(function | (s, (_, `OneRight _)) -> Some s | _ -> None) in
   let f = List.filter_map l ~f:(function | (s, (_, `Found _)) -> Some s | _ -> None) in
   let n = List.filter_map l ~f:(function | (s, (_, `NotHomozygous _)) -> Some s | _ -> None) in
+  let nne = List.filter_map l ~f:(function | (s, (_, `NotHomozygousNotEvenBest _)) -> Some s | _ -> None) in
   let s = List.filter_map l ~f:(function | (s, (_, `Single _)) -> Some s | _ -> None) in
   let m = List.filter_map l ~f:(function | (s, (_, `Mixed _)) -> Some s | _ -> None) in
   let d = List.filter_map l ~f:(function | (s, (_, `Didn'tFindIt)) -> Some s | _ -> None) in
+  let fi = List.filter_map l ~f:(function | (s, (_, `First _)) -> Some s | _ -> None) in
   { perfect   = List.length p, p
   ; one_among = List.length o, o
+  ; one_right = List.length or_, or_
   ; found     = List.length f, f
   ; not_hmz   = List.length n, n
+  ; not_hmzne = List.length nne, nne
   ; single    = List.length s, s
   ; mixed     = List.length m, m
   ; didn't    = List.length d, d
+  ; first     = List.length fi, fi
   }
+
+let reduce_prs prs =
+  Option.value_exn (List.reduce prs ~f:reduce_per_read)
+    ~msg:"Couldn't reduce PR's"
+
+let split_reads per_reads =
+  List.fold_left per_reads ~init:([],[],[]) ~f:(fun (ac,bc,cc) (rn, prlst) ->
+    let rr = reduce_prs prlst in
+    match rr with
+    | (A, p) -> (rn,p) :: ac, bc, cc
+    | (B, p) -> ac, (rn,p) :: bc, cc
+    | (C, p) -> ac, bc, (rn,p) :: cc
+    | (DRB1, _) -> invalid_arg "Doesn't support DRB1")
+
+let inrads a lst =
+  List.exists lst ~f:(fun r -> r.allele = a)
+
+let has_allele a = function
+  | SingleRead (Filtered _, _) -> false
+  | SingleRead (Res {rads; _}, _) -> inrads a rads
+  | FirstOrientedSecond {r1; r2; _} -> inrads a r1 || inrads a r2
+  | FirstFiltered _ -> false
+
+let coverage lst =
+  List.fold_left lst ~init:[] ~f:(fun acc (read, pr) ->
+    match pr with
+    | FirstFiltered msg ->
+        eprintf "Odd first filtered: %s %s" read msg; acc
+    | SingleRead (Filtered m, _) ->
+        eprintf "Odd SingleRead Filtered: %s %s" read m; acc
+    | SingleRead (Res {rads; _}, _)      ->
+        (List.hd_exn rads).position :: acc
+    | FirstOrientedSecond { r1; r2; _} ->
+        (List.hd_exn r1).position ::
+        (List.hd_exn r2).position :: acc)
 
 
 (*
