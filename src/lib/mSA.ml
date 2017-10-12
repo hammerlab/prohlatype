@@ -383,6 +383,7 @@ module Parser = struct
 
   type result =
     { align_date  : string
+    ; locus       : Nomenclature.locus
     ; reference   : string
     ; ref_elems   : string alignment_element list
     ; alt_elems   : alt list
@@ -407,7 +408,7 @@ module Parser = struct
     with End_of_file ->
       None
 
-  let from_in_channel boundary_schema ic =
+  let from_in_channel boundary_schema locus ic =
     let latest_reference_position = ref min_int in
     let update x = function
       (* Sometimes, the files position counting seems to disagree with this
@@ -527,32 +528,39 @@ module Parser = struct
             reversed.alt_htbl
         in
         { align_date
+        ; locus
         ; reference = reversed.ref
         ; ref_elems
         ; alt_elems
         }
 
   let from_file ?boundary_schema f =
-    let ic = open_in f in
+    let extension_less = Filename.chop_extension (Filename.basename f) in
+    let locus, last_after_underscore =
+      match String.split ~on:(`Character '_') extension_less with
+      | locus_s :: lau :: [] ->
+          begin match Nomenclature.parse_locus locus_s with
+          | Ok l    -> (l, lau)
+          | Error e -> invalid_argf "%s" e
+          end
+      | _ -> invalid_argf "Filename: %s doesn't match the \"locus_[prot|nuc|gene].txt format."
+              f
+    in
     let boundary_schema =
       match boundary_schema with
       | Some bs -> bs
       | None    ->
-          let extension_less = Filename.chop_extension (Filename.basename f) in
-          let last_after_underscore =
-            String.split ~on:(`Character '_') extension_less
-            |> List.rev
-          in
           match last_after_underscore with
-          | "prot" :: _ -> CDNA
-          | "nuc"  :: _ -> CDNA
-          | "gen"  :: _ -> GDNA
+          | "prot" -> CDNA
+          | "nuc"  -> CDNA
+          | "gen"  -> GDNA
           | _           ->
               invalid_argf "Unrecognized alignment file name: %s, unable to infer \
                             Boundary scheme." f
     in
+    let ic = open_in f in
     try
-      let r = from_in_channel boundary_schema ic in
+      let r = from_in_channel boundary_schema locus ic in
       close_in ic;
       r
     with e ->

@@ -88,29 +88,108 @@ let parse_resolution s =
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
-type gene = string
+(* This list was manually generated on 2017-10-12 and is unfortunately
+   hard-coded here. Much of the current work has been focused on making the
+   inference feasible for A,B,C (especially the imputation) that I would
+   strongly recommend that any extension require a thoughtful experimentation
+   with results on other genes. *)
+type locus =
+  | A
+  | B
+  | C
+  | DMA
+  | DMB
+  | DOA
+  | DOB
+  | DPA1
+  | DPA2
+  | DPB1
+  | DPB2
+  | DQA1
+  | DQB1
+  | DRA
+  | DRB1
+  | DRB3
+  | DRB4
+  | E
+  | F
+  | G
+  | HFE
+  | H
+  | J
+  | K
+  | L
+  | MICA
+  | MICB
+  | P
+  | TAP1
+  | TAP2
+  | T
+  | V
+  | W
+  | Y
+  [@@deriving show]
+
+let parse_locus = function
+  | "A"     -> Ok A
+  | "B"     -> Ok B
+  | "C"     -> Ok C
+  | "DMA"   -> Ok DMA
+  | "DMB"   -> Ok DMB
+  | "DOA"   -> Ok DOA
+  | "DOB"   -> Ok DOB
+  | "DPA1"  -> Ok DPA1
+  | "DPA2"  -> Ok DPA2
+  | "DPB1"  -> Ok DPB1
+  | "DPB2"  -> Ok DPB2
+  | "DQA1"  -> Ok DQA1
+  | "DQB1"  -> Ok DQB1
+  | "DRA"   -> Ok DRA
+  | "DRB1"  -> Ok DRB1
+  | "DRB3"  -> Ok DRB3
+  | "DRB4"  -> Ok DRB4
+  | "E"     -> Ok E
+  | "F"     -> Ok F
+  | "G"     -> Ok G
+  | "HFE"   -> Ok HFE
+  | "H"     -> Ok H
+  | "J"     -> Ok J
+  | "K"     -> Ok K
+  | "L"     -> Ok L
+  | "MICA"  -> Ok MICA
+  | "MICB"  -> Ok MICB
+  | "P"     -> Ok P
+  | "TAP1"  -> Ok TAP1
+  | "TAP2"  -> Ok TAP2
+  | "T"     -> Ok T
+  | "V"     -> Ok V
+  | "W"     -> Ok W
+  | "Y"     -> Ok Y
+  | l       -> error "Unrecognized locus: %s, please send a pull request!" l
+
 type t = resolution * suffix option
 
-let parse : string -> (gene * t, string) result =
+let parse : string -> (locus * t, string) result =
   fun s ->
     match String.split s ~on:(`Character '*') with
-    | [ g; n] -> parse_resolution n >>= fun p -> Ok (g, p)
+    | [ l; n] -> parse_locus l >>= fun l ->
+                    parse_resolution n >>= fun p -> Ok (l, p)
     | _ :: [] -> error "Did not find the '*' separator in %s" s
     | _       -> error "Found too many '*' separators in %s" s
 
 let parse_to_resolution_exn s =
   parse s |> unwrap_ok |> snd
 
-let resolution_to_string ?gene =
-  let gene_str = match gene with | None -> "" | Some g -> g ^ "*" in
+let resolution_to_string ?locus =
+  let ls = Option.value_map ~default:"" ~f:(fun l -> show_locus l ^ "*") locus in
   function
-  | One a             -> sprintf "%s%02d" gene_str a
-  | Two (a, b)        -> sprintf "%s%02d:%02d" gene_str a b
-  | Three (a, b, c)   -> sprintf "%s%02d:%02d:%02d" gene_str a b c
-  | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" gene_str a b c d
+  | One a             -> sprintf "%s%02d" ls a
+  | Two (a, b)        -> sprintf "%s%02d:%02d" ls a b
+  | Three (a, b, c)   -> sprintf "%s%02d:%02d:%02d" ls a b c
+  | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" ls a b c d
 
-let resolution_and_suffix_opt_to_string ?gene (r,so) =
-  sprintf "%s%s" (resolution_to_string ?gene r)
+let resolution_and_suffix_opt_to_string ?locus (r,so) =
+  sprintf "%s%s" (resolution_to_string ?locus r)
     (Option.value_map so ~default:"" ~f:suffix_to_string)
 
 let two_matches_full nr1 nr2 =

@@ -77,19 +77,26 @@ let alignment_arg =
 let merge_arg, merges_arg =
   let parser_ path =
     let s = Filename.basename path in
-    let n = path ^ "_nuc.txt" in
-    let g = path ^ "_gen.txt" in
-    if not (List.mem ~set:Alter_MSA.supported_genes s) then
-      `Error ("gene not supported: " ^ s)
-    else if not (Sys.file_exists n) then
-      `Error ("Nuclear alignment file doesn't exist: " ^ n)
-    else if not (Sys.file_exists g) then
-      `Error ("Genetic alignment file doesn't exist: " ^ n)
-    else
-      `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
+    match Nomenclature.parse_locus s with
+    | Error e -> `Error e
+    | Ok l ->
+        let n = path ^ "_nuc.txt" in
+        let g = path ^ "_gen.txt" in
+        if not (List.mem ~set:Alter_MSA.supported_loci l) then
+          `Error ("gene not supported: " ^ s)
+        else if not (Sys.file_exists n) then
+          `Error ("Nuclear alignment file doesn't exist: " ^ n)
+        else if not (Sys.file_exists g) then
+          `Error ("Genetic alignment file doesn't exist: " ^ n)
+        else
+          `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-  let docv = sprintf "[%s]" (String.concat ~sep:"|" Alter_MSA.supported_genes) in
+  let loci_s ~sep =
+    List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci
+    |> String.concat ~sep
+  in
+  let docv = sprintf "[%s]" (loci_s ~sep:"|") in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
             prefix path. Currently only supports %s genes. The argument must \
@@ -97,7 +104,7 @@ let merge_arg, merges_arg =
             Combines with the file arguments to determine the set of loci to \
             type at the same time. The set of alleles is defined by the \
             ones in the nuc file."
-      (String.concat ~sep:", " Alter_MSA.supported_genes)
+      (loci_s ~sep:", ")
   in
   Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
   , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])

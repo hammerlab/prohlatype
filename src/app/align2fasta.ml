@@ -6,7 +6,7 @@ let app_name = "align2fasta"
 
 let fail_on_parse a =
   match Nomenclature.parse a with
-  | Ok (g, r) -> g, r
+  | Ok (l, r) -> l, r
   | Error e   -> failwith e
 
 let alters_to_string = function
@@ -19,12 +19,15 @@ let against_mp ?width mp out =
   let open MSA.Parser in
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
-  let gene, ref_res = fail_on_parse mp.reference in
+  let locus, ref_res = fail_on_parse mp.reference in
   let oc = open_out out in
   try
     List.map mp.alt_elems ~f:(fun a ->
-        let g, r = fail_on_parse a.allele in
-          if g <> gene then failwithf "Different genes: %s vs %s" gene g;
+        let l, r = fail_on_parse a.allele in
+          if l <> locus then
+            failwithf "Different loci: %s vs %s"
+              (Nomenclature.show_locus locus)
+              (Nomenclature.show_locus l);
           r, a.allele, (allele_sequence ~reference ~allele:a.seq ()), a.alters)
     |> fun l -> ((ref_res, mp.reference, r, []) :: l)
     |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
