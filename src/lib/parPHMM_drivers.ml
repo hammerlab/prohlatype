@@ -312,6 +312,27 @@ end (* Likelihoods_and_zygosity *)
 
    TODO: Expose a separator argument. *)
 module Output = struct
+  
+  open Sexplib.Std
+
+  type locus = Nomenclature.locus
+  and per_allele_log_likelihood =
+    { allele : string
+    ; a_llhd : float
+    ; alters : MSA.Alteration.t list
+    }
+  and zygosity_log_likelihood =
+    { allele1 : string
+    ; allele2 : string
+    ; z_llhd  : float
+    ; prob    : float
+    }
+  and t =
+    { per_locus : locus * per_allele_log_likelihood list * zygosity_log_likelihood list
+    ; per_read  : unit list 
+    }
+  [@@deriving sexp]
+
 
   let compare2 (l1, _) (l2, _) =
     descending_float_cmp l1 l2
@@ -463,6 +484,12 @@ let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
     ; check_rc
     ; split
     }
+
+type output_config =
+  { likelihood : int option
+  ; zygosity   : int option
+  ; per_read   : int option
+  }
 
 type ('state, 'read_result) t =
   { single  : Biocaml_unix.Fastq.item -> 'read_result

@@ -14,6 +14,18 @@ let alters_to_string = function
   | lst -> sprintf " %s "
               (string_of_list lst ~sep:"," ~f:MSA.Alteration.to_string)
 
+let print_line ?width oc s =
+  match width with
+  | None   -> fprintf oc "%s\n" s
+  | Some w -> let n = String.length s in
+              let rec loop i =
+                if i > n then () else
+                  let length = min w (n - i) in
+                  fprintf oc "%s\n" (String.sub_exn s ~index:i ~length);
+                  loop (i + w)
+              in
+              loop 0
+
 let against_mp ?width mp out =
   let open MSA in
   let open MSA.Parser in

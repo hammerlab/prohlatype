@@ -1,5 +1,6 @@
 (** Decode HLA allele names. *)
 
+open Core_kernel.Std
 open Util
 
 type suffix =
@@ -28,21 +29,20 @@ let suffix_to_string = function
   | Q -> "Q"
 
 let int_of_string ?msg s =
-  let msg = Option.value msg ~default:(sprintf "int_of_string parsing: %s" s) in
-  match Int.of_string s with
-  | None   -> Error msg
-  | Some i -> Ok i
+  try
+    Ok (Int.of_string s)
+  with _ ->
+    Error (Option.value msg ~default:(sprintf "int_of_string parsing: %s" s)) 
 
 let trim_suffix s =
   let index = String.length s - 1 in
-  let c = String.get_exn s ~index in
+  let c = String.get s index in
   match suffix_opt_of_char c with
-  | Some su -> Ok (String.take s ~index, Some su)
+  | Some su -> Ok (String.prefix s index, Some su)
   | None    ->
     let msg = sprintf "Allele %s doesn't end on a known suffix or integer: %c" s c in
-    match int_of_string ~msg (String.drop s ~index) with
-    | Error m -> Error m
-    | Ok _    -> Ok (s, None)
+    int_of_string ~msg (String.suffix s index) 
+    |> Result.map ~f:(fun _ -> (s, None))
 
 let parse_ints lst =
   let rec loop acc = function
@@ -77,16 +77,16 @@ let compare_by_resolution (r1,_) (r2,_) =
   Pervasives.compare (to_quad r1) (to_quad r2)
 
 let parse_resolution s =
-  trim_suffix s >>=
+  Result.(trim_suffix s >>=
     fun (without_suffix, suffix_opt) ->
-      String.split ~on:(`Character ':') without_suffix
+      String.split ~on:':' without_suffix
       |> parse_ints  >>= function
           | []            -> Error (sprintf "Empty allele name: %s" without_suffix)
           | [ a ]         -> Ok (One a, suffix_opt)
           | [ a; b ]      -> Ok (Two (a, b), suffix_opt)
           | [ a; b; c]    -> Ok (Three (a, b, c), suffix_opt)
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
-          | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
+          | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix))
 
 (* This list was manually generated on 2017-10-12 and is unfortunately
    hard-coded here. Much of the current work has been focused on making the
@@ -128,7 +128,7 @@ type locus =
   | V
   | W
   | Y
-  [@@deriving show]
+  [@@deriving show, sexp]
 
 let parse_locus = function
   | "A"     -> Ok A
@@ -165,20 +165,20 @@ let parse_locus = function
   | "V"     -> Ok V
   | "W"     -> Ok W
   | "Y"     -> Ok Y
-  | l       -> error "Unrecognized locus: %s, please send a pull request!" l
+  | l       -> Result.failf "Unrecognized locus: %s, please send a pull request!" l
 
 type t = resolution * suffix option
 
 let parse : string -> (locus * t, string) result =
   fun s ->
-    match String.split s ~on:(`Character '*') with
-    | [ l; n] -> parse_locus l >>= fun l ->
-                    parse_resolution n >>= fun p -> Ok (l, p)
-    | _ :: [] -> error "Did not find the '*' separator in %s" s
-    | _       -> error "Found too many '*' separators in %s" s
+    match String.split s ~on:'*' with
+    | [ l; n] -> Result.(parse_locus l >>= fun l ->
+                            parse_resolution n >>= fun p -> Ok (l, p))
+    | _ :: [] -> Result.failf "Did not find the '*' separator in %s" s
+    | _       -> Result.failf "Found too many '*' separators in %s" s
 
 let parse_to_resolution_exn s =
-  parse s |> unwrap_ok |> snd
+  parse s |> Result.ok_or_failwith |> snd
 
 let resolution_to_string ?locus =
   let ls = Option.value_map ~default:"" ~f:(fun l -> show_locus l ^ "*") locus in
@@ -203,7 +203,7 @@ let two_matches_full nr1 nr2 =
         | Four (s1, s2, _, _) -> r1 = s1 && r2 = s2
       end
   | fnr ->
-      invalid_argf "Not Two resolution: %s " (resolution_to_string fnr)
+      invalid_argf "Not Two resolution: %s " (resolution_to_string fnr) ()
 
 module Trie (*: sig
 
@@ -228,7 +228,7 @@ end *) = struct
     loop [] lst
 
   let find_closest ~distance = function
-    | []      -> invalid_argf "Empty!"
+    | []      -> invalid_argf "Empty!" ()
     | h :: t  ->
         let rec loop a = function
           | []     -> a
@@ -255,26 +255,26 @@ end *) = struct
 
   let add n so l =
     let insert_final_level s v so l =
-      let eq _ = invalid_argf "Duplicate %s digit: %d" s v in
+      let eq _ = invalid_argf "Duplicate %s digit: %d" s v () in
       (insert_by_fst v) ~eq (v, Leaf so) l
     in
     let insert_above_final s v w so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v ()
         | (v, Level tl) -> v, Level (insert_final_level s w so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_two_above_final s v w x so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v ()
         | (v, Level tl) -> v, Level (insert_above_final s w x so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_three_above_final s v w x y so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v ()
         | (v, Level tl) -> v, Level (insert_two_above_final s w x y so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
@@ -304,7 +304,7 @@ end *) = struct
             match find_or_first d l4 with
             | (d, Leaf so)    -> Four (a, b, c, d), so
             | (d, Level _)    -> invalid_argf "Found more than 4 levels for %d:%d:%d:%d"
-                                    a b c d
+                                    a b c d ()
     in
     match n with
     | One a             -> lookup (Some a)  None     None     None

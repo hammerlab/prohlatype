@@ -9,7 +9,8 @@ open Graph
 
 type start =
   MSA.position *
-  (Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare])
+  (*(Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare]) *)
+  (Alleles.allele  )
     [@@deriving eq, ord]
 type sequence = string [@@deriving eq, ord, show]
 

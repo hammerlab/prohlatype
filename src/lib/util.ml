@@ -1,6 +1,6 @@
-include MoreLabels
-module String = Sosa.Native_bytes
-
+(*include MoreLabels 
+module String = Sosa.Native_bytes *)
+(*
 module NList = struct
   include Nonstd.List
 
@@ -12,7 +12,8 @@ module NList = struct
       (k1, f v1 v2))
 
 end (* NList *)
-
+*)
+(*
 module NArray = struct
   include Nonstd.Array
 
@@ -35,15 +36,18 @@ include (Nonstd : module type of Nonstd with module List := NList
 
 module List = NList
 module Array = NArray
+*)
 
+(*
 let invalid_argf ?(prefix="") fmt =
-  ksprintf invalid_arg ("%s" ^^ fmt) prefix
+  Printf.ksprintf invalid_arg ("%s" ^^ fmt) prefix
 
 let failwithf fmt =
-  ksprintf failwith fmt
+  Printf.ksprintf failwith fmt
+  *)
+(*let id x = x *)
 
-let id x = x
-
+(*
 let result_bind ~f oe =
   match oe with
   | Error e -> Error e
@@ -68,7 +72,7 @@ let error_bind ~f oe =
   | Error e -> f e
   | Ok o    -> Ok o
 
-let error fmt = ksprintf (fun s -> Error s) fmt
+let error fmt = Printf.ksprintf (fun s -> Error s) fmt
 
 let unwrap_ok = function
   | Ok o    -> o
@@ -77,55 +81,64 @@ let unwrap_ok = function
 let unwrap_error = function
   | Ok _    -> invalid_argf "Not Error in unwrap_error."
   | Error e -> e
+  *)
 
-let print_line ?width oc s =
-  match width with
-  | None   -> fprintf oc "%s\n" s
-  | Some w -> let n = String.length s in
-              let rec loop i =
-                if i > n then () else
-                  let length = min w (n - i) in
-                  fprintf oc "%s\n" (String.sub_exn s ~index:i ~length);
-                  loop (i + w)
-              in
-              loop 0
+open Core_kernel.Std
 
 let short_seq s =
   let n = String.length s in
   if n > 10 then
-    sprintf "%s...%s"
-      (String.slice_exn ~finish:4 s) (String.slice_exn ~start:(n-3) s)
+    Printf.sprintf "%s...%s" (String.prefix s 4) (String.suffix s 3)
   else
     s
 
+let string_split_at s ~index =
+  let sindex = String.length s - index in
+  if sindex < 0 then
+    String.prefix s index, ""
+  else
+    String.prefix s index, String.suffix s sindex
+
 let index_string s index =
-  let (b, a) = String.split_at s ~index in
+  let (b, a) = string_split_at s ~index in
   b ^ "." ^ a
 
-let _pair_of_empty_strings = String.empty, String.empty
+let _pair_of_empty_strings = "", ""
+
 (** Compare two strings and display vertical bars for mismatches. *)
 let manual_comp_display ?(msm_offset=0) ?width ?(labels=_pair_of_empty_strings) s1 s2 =
   let msm = ref msm_offset in
   let mismatch_string =
     String.mapi s1 ~f:(fun index c1 ->
-      match String.get s2 ~index with
+      try
+        let c2 = String.get s2 index in
+        if Char.equal c2 c1 then
+          ' '
+        else begin
+          msm := !msm + 1;
+          '|'
+        end
+      with (Invalid_argument _) ->
+        msm := !msm + 1;
+        'X')
+      (*match String.get s2 index with
       | None                 -> incr msm; 'X'
       | Some c2 when c1 = c2 -> ' '
-      | Some _ (*c1 <> c2*)  -> incr msm; '|')
+      | Some _ (*c1 <> c2*)  -> incr msm; '|' *)
   in
-  let ms = string_of_int !msm in
+  let ms = Int.to_string !msm in
   let n  = String.length ms in
   let top, bottom = labels in
   let label_length = max (max (String.length top) (String.length bottom)) n in
-  let top_row = sprintf "%-*s%s" label_length top s1 in
-  let mid_row = sprintf "%*s%s" label_length ms mismatch_string in
-  let bot_row = sprintf "%-*s%s" label_length bottom s2 in
-  let index = Option.value width ~default:max_int in
+  let top_row = Printf.sprintf "%-*s%s" label_length top s1 in
+  let mid_row = Printf.sprintf "%*s%s" label_length ms mismatch_string in
+  let bot_row = Printf.sprintf "%-*s%s" label_length bottom s2 in
+  let index = Option.value width ~default:1000 in
   let rec loop acc t m b =
-    let t, tl = String.split_at t ~index in
-    let m, ml = String.split_at m ~index in
-    let b, bl = String.split_at b ~index in
-    let nacc = (sprintf "%s\n%s\n%s" t m b) :: acc in
+    let t, tl = string_split_at t ~index in
+    let m, ml = string_split_at m ~index in
+    let b, bl = string_split_at b ~index in
+    let nacc = (Printf.sprintf "%s\n%s\n%s" t m b) :: acc in
     if String.is_empty tl && String.is_empty ml && String.is_empty bl then
       String.concat ~sep:"\n" (List.rev nacc)
     else
@@ -134,21 +147,22 @@ let manual_comp_display ?(msm_offset=0) ?width ?(labels=_pair_of_empty_strings) 
   loop [] top_row mid_row bot_row
 
 let mismatch_indices s1 s2 =
-  String.fold2_exn s1 s2 ~init:(0, []) ~f:(fun (i, a) c1 c2 ->
-    if c1 = c2 then (i + 1, a) else (i + 1, i :: a))
+  String.foldi s1 ~init:(0, []) ~f:(fun index (i, a) c1 ->
+    let c2 = String.get s2 index in
+    if Char.equal c1 c2 then (i + 1, a) else (i + 1, i :: a))
   |> snd
   |> List.rev
 
 let insert_chars ?(every=120) ?(token=';') ics s =
-  String.to_character_list s
+  String.to_list s
   |> List.fold_left ~init:(0,[]) ~f:(fun (i, acc) c ->
-      if i > every && c = token then
+      if i > every && Char.equal c token then
         (0, ics @ (c :: acc))
       else
         (i + 1, c :: acc))
   |> snd
   |> List.rev
-  |> String.of_character_list
+  |> String.of_char_list
 
 let complement = function
   | 'A' -> 'T'
@@ -159,14 +173,15 @@ let complement = function
 
 let reverse_complement s =
   String.fold s ~init:[] ~f:(fun l c -> complement c :: l)
-  |> String.of_character_list
+  |> String.of_char_list
 
+(*
 let list_fold_ok lst ~f ~init =
   let rec loop acc = function
     | []      -> Ok acc
     | h :: t  -> f acc h >>= fun a -> loop a t
-  in
-  loop init lst
+  in 
+  loop init lst *)
 
 let opt_is_true = function
   | Some true  -> true
@@ -181,21 +196,20 @@ let list_map_consecutives f lst =
   in
   loop [] lst
 
-module StringSet = Set.Make (struct
-  type t = string [@@deriving ord]
-end)
+(*
+module StringSet = struct
+  include Set.M (String)
 
-module StringMap = Map.Make (struct
-  type t = string [@@deriving ord]
-end)
+module StringMap = Map.M (String)
+*)
 
 let string_set_of_list lst =
-  List.fold_left lst ~init:StringSet.empty
-    ~f:(fun s e -> StringSet.add e s)
+  List.fold_left lst ~init:(Set.empty String.comparator)
+    ~f:(fun s e -> Set.add s e)
 
 let string_map_of_assoc asc =
-  List.fold_left asc ~init:StringMap.empty
-    ~f:(fun acc (key, data) -> StringMap.add ~key ~data acc)
+  List.fold_left asc ~init:(Map.empty String.comparator) 
+    ~f:(fun acc (key, data) -> Map.add ~key ~data acc)
 
 let remove_and_assoc el list =
   let rec loop acc = function
@@ -205,12 +219,21 @@ let remove_and_assoc el list =
   in
   loop [] list
 
+(*
 let assoc v l =
-  Option.value_exn ~msg:"Not found" (List.Assoc.get v l)
+  Option.value_exn ~msg:"Not found" (List.Assoc.find v l)
+  *)
+let list_assoc_remove_and_get el list =
+  let rec loop acc = function
+    | []                      -> None
+    | (e, v) :: t when e = el -> Some (v, (List.rev acc @ t))
+    | h :: t                  -> loop (h :: acc) t
+  in
+  loop [] list
 
 let group_by_assoc l =
   let insert assoc (k, v) =
-    match List.Assoc.remove_and_get k assoc with
+    match list_assoc_remove_and_get k assoc with
     | None              -> (k,[v]) :: assoc
     | Some (cv, rassoc) -> (k, v ::cv) :: rassoc
   in
@@ -220,31 +243,34 @@ let string_of_list ?(show_empty=false) ~sep ~f = function
   | [] -> if show_empty then "[]" else ""
   | l  -> String.concat ~sep (List.map ~f l)
 
-let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
-  let lmp = log (er /. (float (alph_size - 1))) in
-  let lcp = log (1. -. er) in
-  let c = (float len) -. mismatches in
-  c *. lcp +. mismatches *. lmp
+let log_likelihood ?(alphabet_size=4) ?(er=0.01) ~len mismatches =
+  let bs = Float.of_int (alphabet_size - 1) in
+  let lmp = Float.(log (er / bs)) in
+  let lcp = Float.(log (1. - er)) in
+  let c = Float.(of_int len - mismatches) in
+  Float.(c * lcp + mismatches * lmp)
 
-let likelihood ?alph_size ?er ~len m =
-  exp (log_likelihood ?alph_size ?er ~len m)
+let likelihood ?alphabet_size ?er ~len m =
+  Float.exp (log_likelihood ?alphabet_size ?er ~len m)
 
 type too_short =
   | TooShort of { desired: int ; actual: int}
   [@@deriving show]
 
 let manual_phred_llhd_lst s1 s2 probability_of_error =
-  String.fold2_exn s1 s2 ~init:(0, []) ~f:(fun (i, a) c1 c2 ->
-    if c1 = c2 then
-      (i + 1, (`m (log1p (-. probability_of_error.(i)))) :: a)
+  String.foldi s1 ~init:(0, []) ~f:(fun index (i, a) c1 ->
+    let c2 = String.get s2 index in
+    if Char.equal c1 c2 then
+      (i + 1, (`m Float.(log1p (-probability_of_error.(i)))) :: a)
     else
-      (i + 1, (`X (log (probability_of_error.(i) /. 3.)) :: a)))
+      (i + 1, (`X Float.(log (probability_of_error.(i) / 3.0)) :: a)))
   |> snd
   |> List.rev
 
 let manual_phred_llhd s1 s2 probability_of_error =
   manual_phred_llhd_lst s1 s2 probability_of_error
-  |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)
+  |> List.fold_left ~init:0.
+      ~f:(fun s -> function | `m p | `X p -> Float.(s + p))
 
 let time s f =
   let n = Sys.time () in
@@ -257,10 +283,10 @@ let time s f =
     raise e
 
 let gc_between s f =
-  let open Gc in
-  let before = stat () in
+  let open Gc.Stat in
+  let before = Gc.stat () in
   let r = f () in
-  let after = stat () in
+  let after = Gc.stat () in
   printf "%s Gc change: \n\
     \t { minor_words : %f;\n\
     \t   promoted_words : %f;\n\
