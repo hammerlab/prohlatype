@@ -1,5 +1,5 @@
-PACKAGES=unix ppx_deriving.std nonstd sosa ocamlgraph cmdliner biocaml.unix parany
-SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving nonstd sosa ocamlgraph cmdliner biocaml parany
+PACKAGES=unix ppx_deriving.std ppx_deriving_yojson nonstd sosa ocamlgraph cmdliner biocaml.unix parany
+SETUP_PACKAGE_NAMES=ocamlfind ocamlbuild ppx_deriving ppx_deriving_yojson nonstd sosa ocamlgraph cmdliner biocaml parany
 TOOLS=mhc2gpdf par_type multi_par align2fasta allele_distances
 TESTS=test_parsing round_trip benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 

@@ -128,7 +128,7 @@ type locus =
   | V
   | W
   | Y
-  [@@deriving show]
+  [@@deriving show { with_path = false } , yojson]
 
 let parse_locus = function
   | "A"     -> Ok A

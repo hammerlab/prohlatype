@@ -6,7 +6,7 @@
 open Util
 
 (* This refers to the alignment position.  *)
-type position = int [@@deriving eq, ord, show]
+type position = int [@@deriving eq, ord, show, yojson]
 
 let is_nucleotide allele  = function
   | 'A' | 'C' | 'G' | 'T' -> true
@@ -26,7 +26,7 @@ type boundary_label =
   | UTR3
   | Exon of int
   | Intron of int
-  [@@deriving eq, ord]
+  [@@deriving eq, ord, show, yojson]
 
 let next_boundary_label_gdna = function
   | UTR5     -> Some (Exon 1)
@@ -127,7 +127,7 @@ module Alteration = struct
     ; type_ : boundary_label
     ; start : position
     ; end_  : position
-    } [@@deriving eq, ord]
+    } [@@deriving eq, ord, show, yojson]
 
   let per_segment_to_string p =
     sprintf "[%s:%s:%d,%d)"
@@ -143,7 +143,7 @@ module Alteration = struct
     ; why       : string
     ; distance  : float
     ; positions : per_segment list
-    }
+    } [@@deriving show, yojson]
 
   let to_string { allele; why; distance; positions } =
     sprintf "%s %s (d: %f) positions: [%s]"

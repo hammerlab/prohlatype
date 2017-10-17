@@ -68,6 +68,7 @@ module Orientation = struct
     { regular     : 'a pass_result
     ; complement  : 'a pass_result
     }
+    [@@deriving yojson]
 
   let map ~f t =
     { regular    = f t.regular
@@ -149,10 +150,12 @@ module Alleles_and_positions = struct
 
   open ParPHMM
 
-  (* Likelyhood emission, allele, position of highest emission. *)
-  type t = (float * string * int) list
+  type datum = per_allele_datum
+  and t = datum list
+    [@@deriving yojson]
 
-  let to_string (e,a,p) = sprintf "%s,%d,%0.5f" a p e
+  let to_string {allele; llhd; position} =
+    sprintf "%s,%d,%0.5f" allele position llhd
 
   let string_of_list =
     string_of_list ~sep:";" ~f:to_string
@@ -160,9 +163,9 @@ module Alleles_and_positions = struct
   (* Descending *)
   let descending_cmp l1 l2 =
     match l1, l2 with
-    | [],  _                           -> -1  (* Should error? *)
-    | _ , []                           -> 1
-    | (e1, _, _) :: _, (e2, _, _) :: _ -> descending_float_cmp e1 e2
+    | [],  _            -> -1  (* Should error? *)
+    | _ , []            -> 1
+    | t1  :: _, t2 :: _ -> descending_float_cmp t1.llhd t2.llhd
 
 end (* Alleles_and_positions *)
 
@@ -222,9 +225,19 @@ module Zygosity_array = struct
     let k = k_n t.n i j in
     t.l.(k) <- t.l.(k) +. likelihood
 
+  type best_size =
+    | NonZero
+    | Spec of int
+    | NoSpec
+
   (* log likelihood, probability, index 1st, index 2nd *)
-  let best ?size t likelihood_arr =
-    let desired_size = max 1 (Option.value size ~default:(storage_size t.n)) in
+  let best size t likelihood_arr =
+    let desired_size, nz =
+      match size with
+      | NonZero -> storage_size t.n, true
+      | Spec n  -> max 1 n, false
+      | NoSpec  -> storage_size t.n, false
+    in
     let sorted_insert l i j current_size lst =
       let rec insert lst =
         match lst with
@@ -278,7 +291,16 @@ module Zygosity_array = struct
       Array.fold_left ~init:0. ~f t.l
       |> fun init -> Array.fold_left ~init ~f likelihood_arr
     in
-    List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
+    if nz then
+      List.filter_map most_likely ~f:(fun (l, ij) ->
+        let p = prob l /. ns in
+        (* This isn't necessarily the right notion of zero. *)
+        if p > !ParPHMM.dx then
+          Some (l, prob l /. ns, ij)
+        else
+          None)
+    else
+      List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
 
 end (* Zygosity_array *)
 
@@ -313,78 +335,154 @@ end (* Likelihoods_and_zygosity *)
    TODO: Expose a separator argument. *)
 module Output = struct
 
-  let compare2 (l1, _) (l2, _) =
-    descending_float_cmp l1 l2
+  type locus = Nomenclature.locus
+  and per_allele_log_likelihood =
+    { allele : string
+    ; a_llhd : float
+    ; alters : MSA.Alteration.t list
+    }
+  and zygosity_log_likelihood =
+    { allele1 : string
+    ; allele2 : string
+    ; z_llhd  : float
+    ; prob    : float
+    }
+  and per_locus =
+    { locus       : locus
+    ; zygosity    : zygosity_log_likelihood list
+    ; per_allele  : per_allele_log_likelihood array
+    }
+  and 'p per_read =
+    { name : string
+    ; d    : 'p
+    }
+  and 'p t =
+    { per_loci  : per_locus list
+    ; per_reads : 'p per_read list
+    }
+  [@@deriving yojson]
 
-  let compare4 (l1, r1, _a1, _m1) (l2, r2, _a2, _m1) =
-    let lc = descending_float_cmp l1 l2 in
-    if lc <> 0 then
+  type format_spec =
+    [ `TabSeparated
+    | `Json
+    ]
+
+  type 'd format_ =
+    | TabSeparated of ('d -> string)
+    | Json of ('d -> Yojson.Safe.json)
+
+  (* Control how much information to print out. If not specified (ie None) then
+     print everything. This makes sense for num_likelihoods and num_per_read
+     but not for num_zygosities (and maybe not so much for num_likelihoods).
+     Set to Some 0 to not print anything. *)
+  type depth =
+    { num_likelihoods : int option
+    ; num_zygosities  : Zygosity_array.best_size
+    ; num_per_read    : int option
+    }
+
+  let default_depth =
+    { num_likelihoods = None
+    ; num_zygosities  = Zygosity_array.NonZero
+    ; num_per_read    = None
+    }
+
+  let cmp_pall pl1 pl2 =
+    let lc = descending_float_cmp pl1.a_llhd pl2.a_llhd in
+    if lc <>  0 then
       lc
     else
-      Nomenclature.compare_by_resolution r1 r2
+      (* To Schwartz transform or not ? *)
+      Nomenclature.(compare_by_resolution
+        (parse_to_resolution_exn pl1.allele)
+        (parse_to_resolution_exn pl2.allele))
 
-  let by_likelihood_arr allele_arr final_likelihoods =
-    let o =
-      Array.mapi allele_arr ~f:(fun i (a, m) ->
-        final_likelihoods.(i)
-        , Nomenclature.parse_to_resolution_exn a
-        , a
-        , m)
+  let create_pl size locus allele_arr allele_llhd_arr zt =
+    let per_allele =
+      Array.mapi allele_arr ~f:(fun i (allele, alters) ->
+        { allele; a_llhd = allele_llhd_arr.(i); alters })
     in
-    Array.sort o ~cmp:compare4;
-    o
+    Array.sort ~cmp:cmp_pall per_allele;
+    let zygosity =
+      let zb = Zygosity_array.best size zt allele_llhd_arr in
+      List.map zb ~f:(fun (l, p, ijlist) ->
+        List.map ijlist ~f:(fun (i, j) ->
+          { allele1 = fst allele_arr.(i)
+          ; allele2 = fst allele_arr.(j)
+          ; z_llhd  = l
+          ; prob    = p
+          }))
+      |> List.concat
+    in
+    { locus
+    ; per_allele
+    ; zygosity
+    }
 
-  let allele_first o oc =
-    Array.iter o ~f:(fun (l, _, a, alts) ->
+  let create per_loci per_reads =
+    { per_loci; per_reads }
+
+  let shrink d t =
+    let shrink_list l =
+      Option.value_map ~default:l ~f:(List.take l)
+    in
+    let shrink_array a =
+      Option.value_map ~default:a ~f:(fun l ->
+          Array.sub a ~pos:0 ~len:(min l (Array.length a)))
+    in
+    let shrink_pl { locus; per_allele; zygosity } =
+      { locus
+      ; per_allele = shrink_array per_allele d.num_likelihoods
+      ; zygosity = zygosity (* Shrunk on construction. *)
+      }
+    in
+    { per_loci = List.map t.per_loci ~f:shrink_pl
+    ; per_reads = shrink_list t.per_reads d.num_per_read
+    }
+
+  let array_iter_on_non_empty f b = function
+    | [||] -> ()
+    | a    -> ignore (b ()); Array.iter ~f a
+
+  let list_iter_on_non_empty f b = function
+    | []   -> ()
+    | lst  -> ignore (b ()); List.iter ~f lst
+
+  let tabs oc d_to_string { per_loci; per_reads } =
+    let open Nomenclature in
+    let alters_to_string a =
+      string_of_list ~show_empty:false ~sep:";"
+        ~f:MSA.Alteration.to_string a
+    in
+    let fprint_per_allele_log_likelihood { allele; a_llhd; alters } =
       fprintf oc "%16s\t%0.20f\t%s\n"
-        a l (string_of_list ~sep:";" ~f:MSA.Alteration.to_string alts))
-
-  (* Ignore Alter.info *)
-  let likelihood_first allele_arr allele_llhd_arr oc =
-    let o =
-      Array.mapi allele_arr ~f:(fun i (a, _m) -> allele_llhd_arr.(i), a)
-      |> Array.to_list
-      |> group_by_assoc
-      |> List.map ~f:(fun (l, alst) ->
-            let clst = Alleles.CompressNames.f alst in
-            l, String.concat ~sep:";" clst)
-      |> List.sort ~cmp:compare2
+        allele a_llhd (alters_to_string alters)
     in
-    List.iter o ~f:(fun (l, a) -> fprintf oc "%0.20f\t%16s\n" l a)
+    let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
+      fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n"
+        allele1 allele2 z_llhd prob
+    in
+    List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
+      list_iter_on_non_empty
+        fprint_zygosity_log_likelihood
+        (fun () -> fprintf oc "Zygosity %s:\n" (show_locus locus))
+        zygosity;
+      array_iter_on_non_empty
+        fprint_per_allele_log_likelihood
+        (fun () -> fprintf oc "Likelihood %s:\n" (show_locus locus))
+        per_allele);
+    list_iter_on_non_empty
+      (fun { name; d} -> fprintf oc "%s%s\n" name (d_to_string d))
+      (fun () -> fprintf oc "Per Read:\n")
+      per_reads
 
-  let default_zygosity_report_size = 100
+  let json oc d_to_yojson t =
+    let yj = to_yojson d_to_yojson t in
+    Yojson.Safe.to_channel ~std:true oc yj
 
-  (* Ignore Alter.info *)
-  let zygosity ?(size=default_zygosity_report_size) likelihood_first
-    allele_arr allele_llhd_arr zt oc =
-    fprintf oc "Zygosity:\n";
-    let open Zygosity_array in
-    let zb = best ~size zt allele_llhd_arr in
-    if likelihood_first then
-      List.iter zb ~f:(fun (l, p, ijlist) ->
-        let alleles_str =
-          string_of_list ijlist ~sep:"\t" ~f:(fun (i,j) ->
-            sprintf "%s,%s" (fst allele_arr.(i)) (fst allele_arr.(j)))
-        in
-        fprintf oc "%0.20f\t%0.4f\t%16s\n" l p alleles_str)
-    else
-      List.iter zb ~f:(fun (l, p, ijlist) ->
-        List.iter ijlist ~f:(fun (i, j) ->
-          fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n"
-            (fst allele_arr.(i)) (fst allele_arr.(j)) l p))
-
-  let output_likelihood lfirst allele_arr allele_llhd_arr oc =
-    let o = by_likelihood_arr allele_arr allele_llhd_arr in
-    fprintf oc "Likelihood:\n";
-    if lfirst then
-      likelihood_first allele_arr allele_llhd_arr oc
-    else
-      allele_first o oc
-
-  let f lfirst zygosity_report_size allele_arr allele_llhd_arr zt oc =
-    output_likelihood lfirst allele_arr allele_llhd_arr oc;
-    zygosity ~size:zygosity_report_size lfirst allele_arr
-      allele_llhd_arr zt oc
+  let f oc t d = function
+    | TabSeparated d_to_string -> tabs oc d_to_string (shrink d t)
+    | Json d_to_yojson         -> json oc d_to_yojson (shrink d t)
 
 end (* Output *)
 
@@ -464,17 +562,17 @@ let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
     ; split
     }
 
-type ('state, 'read_result) t =
+type ('state, 'read_result) worker =
   { single  : Biocaml_unix.Fastq.item -> 'read_result
   ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> 'read_result
   ; merge   : 'state -> 'read_result -> unit
   ; output  : 'state -> out_channel -> unit
   }
 
-type forward_opt =
-  { likelihood_first     : bool
-  ; zygosity_report_size : int
-  ; report_size          : int
+type output_opt =
+  { allele_depth  : int
+  ; output_format : Output.format_spec
+  ; depth         : Output.depth
   }
 
 module Forward = struct
@@ -486,27 +584,26 @@ module Forward = struct
     ; likelihood : float mt
     }
 
-  let proc_to_stat report_size proc _comp =
-    { aap        = proc.best_allele_pos report_size
+  let proc_to_stat allele_depth proc _comp =
+    { aap        = proc.best_allele_pos allele_depth
     ; likelihood = proc.per_allele_llhd ()
     }
 
-  let forward report_size past_threshold proc read read_errors =
-    time (sprintf "forward of report_size: %d; past_threshold: %s; read: %s"
-            report_size (Past_threshold.to_string past_threshold)
+  let forward allele_depth past_threshold proc read read_errors =
+    time (sprintf "forward of allele_depth: %d; past_threshold: %s; read: %s"
+            allele_depth (Past_threshold.to_string past_threshold)
               (String.sub_exn read ~index:0 ~length:10))
     (fun () ->
-      Orientation.check past_threshold (proc_to_stat report_size) proc read read_errors)
+      Orientation.check past_threshold (proc_to_stat allele_depth)
+        proc read read_errors)
 
-  type per_read =
-    { name  : string
-    ; aapt  : Alleles_and_positions.t Orientation.t
-    }
+  type aapt = Alleles_and_positions.t Orientation.t [@@deriving yojson]
 
   type state =
-    { per_allele_lhood  : float array
+    { locus             : Nomenclature.locus
+    ; per_allele_lhood  : float array
     ; zygosity          : Zygosity_array.t
-    ; mutable per_reads : per_read list
+    ; mutable per_reads : aapt Output.per_read list
     }
 
   type read_result =
@@ -523,25 +620,42 @@ module Forward = struct
   let take_regular_by_likelihood  r c =
     higher_value_in_first r.likelihood c.likelihood
 
-  let update_state_single t name stat_or =
+  let cons_per_reads state name stat_or =
+    let d = just_aap_or stat_or in
+    state.per_reads <- { Output.name; d } :: state.per_reads
+
+  let update_state_single state name stat_or =
     let take_regular = take_regular_by_likelihood in
-    t.per_reads <- { name; aapt = just_aap_or stat_or } :: t.per_reads;
+    cons_per_reads state name stat_or;
     let pr = Orientation.most_likely_between stat_or ~take_regular in
     match pr with
-    | Filtered m        -> printf "For %s: %s\n" name m
+    | Filtered m        ->
+        printf "Both orientations filtered %s: %s\n" name m
     | Completed (_c, s) ->
         Likelihoods_and_zygosity.add_ll_and_lz
-          t.per_allele_lhood t.zygosity s.likelihood
+          state.per_allele_lhood state.zygosity s.likelihood
 
-  let output_state likelihood_first zygosity_report_size allele_arr t oc =
+  let output_state oo allele_arr state oc =
     let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
-    Output.f likelihood_first zygosity_report_size allele_arr
-      t.per_allele_lhood t.zygosity oc;
-    fprintf oc "Per Read:\n";
-    List.iter t.per_reads ~f:(fun {name; aapt} ->
-      fprintf oc "%s\n\t%s\n" name
-        (Orientation.to_string ~take_regular
-            Alleles_and_positions.string_of_list aapt))
+    let size = oo.depth.Output.num_zygosities in
+    let ot =
+      let pl = Output.create_pl size state.locus allele_arr
+                state.per_allele_lhood state.zygosity in
+      Output.create [pl] state.per_reads
+    in
+    let of_ =
+      match oo.output_format with
+      | `TabSeparated ->
+        let aapt_to_string aapt =
+          sprintf "\n\t%s"
+            (Orientation.to_string ~take_regular
+                Alleles_and_positions.string_of_list aapt)
+        in
+        Output.TabSeparated aapt_to_string
+      | `Json ->
+        Output.Json aapt_to_yojson
+    in
+    Output.f oc ot oo.depth of_
 
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
     ~prealigned_transition_model read_length parPHMM_t =
@@ -570,10 +684,9 @@ module Forward = struct
       in
       proc, arr
 
-  type opt = forward_opt
+  type opt = output_opt
 
-  let init conf ~read_length parPHMM_t opt =
-    let { likelihood_first; zygosity_report_size; report_size } = opt in
+  let init conf ~read_length parPHMM_t oo =
     let { prealigned_transition_model; allele; insert_p; band
         ; max_number_mismatches; past_threshold_filter ; split; _} = conf
     in
@@ -584,8 +697,9 @@ module Forward = struct
     in
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
-    let forward pt r re = fst (forward report_size pt proc r re) in
-    let rec state = { per_allele_lhood; zygosity; per_reads; }
+    let forward pt r re = fst (forward oo.allele_depth pt proc r re) in
+    let rec state =
+      { locus = parPHMM_t.locus; per_allele_lhood; zygosity; per_reads; }
     and per_allele_lhood = proc.init_global_state ()
     and zygosity = Zygosity_array.init (Array.length allele_arr)
     and per_reads = []
@@ -602,7 +716,7 @@ module Forward = struct
             let r2 = forward initial_pt rd2 re2 in
             { name; stat = Paired (r1, r2)}
         | Completed (c, _)  ->
-            let r2 = Orientation.specific proc (proc_to_stat report_size)
+            let r2 = Orientation.specific proc (proc_to_stat oo.allele_depth)
                       (not c) rd2 re2 in
             { name; stat = Paired (r1, r2)})
     and merge state rr =
@@ -611,7 +725,7 @@ module Forward = struct
       | Paired (s1, s2) -> update_state_single state (rr.name ^ " 1") s1;
                            update_state_single state (rr.name ^ " 2") s2
     and output t oc =
-      output_state likelihood_first zygosity_report_size allele_arr t oc
+      output_state oo allele_arr t oc
     and t = { single; paired; merge; output }
     in
     t, state
@@ -717,7 +831,7 @@ module type S = sig
            -> read_length:int
            -> ParPHMM.t
            -> opt
-           -> (state, read_result) t * state
+           -> (state, read_result) worker * state
 
 end (* S *)
 
@@ -797,11 +911,7 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
 
 module Multiple_loci = struct
 
-  type 'single_result single_or_incremental =
-    | SingleRead of 'single_result Orientation.t
-    (* We'll test both regular and complement options. *)
-
-    | PairedDependent of
+  type 'single_result paired_dependent =
       { first_o : bool
       ; first   : 'single_result
       ; second  : 'single_result ParPHMM.pass_result
@@ -816,6 +926,11 @@ module Multiple_loci = struct
        separate and then just multiply (log -> add) the results together. This
        is the desired outcome for paired reads as it is the most
        descriminative. *)
+  and 'single_result single_or_incremental =
+    | SingleRead of 'single_result Orientation.t
+    (* We'll test both regular and complement options. *)
+    | PairedDependent of 'single_result paired_dependent
+    [@@deriving yojson]
 
   let orientation_char_of_bool reverse_complement =
     if reverse_complement then 'C' else 'R'
@@ -883,38 +998,45 @@ module Multiple_loci = struct
             end
         end
 
-  type 'single_result paired =
-    | FirstFiltered of
-      { first   : string
-      ; second  : 'single_result Orientation.t
-      }
+  type 'single_result first_filtered =
+    { ff_first  : string
+    ; ff_second : 'single_result Orientation.t
+    }
     (* Both orientations of the first read were filtered, so the 2nd read is
        entirely independent of the first. This can occur if we have a filter
        (such as past threshold from another loci) that ignores that loci. *)
-    | FirstOrientedSecond of
-      { first_o : bool
-      ; first   : 'single_result
-      ; second  : 'single_result ParPHMM.pass_result
-      }
+  and 'single_result first_oriented_second =
+    { first_o : bool
+    ; first   : 'single_result
+    ; second  : 'single_result ParPHMM.pass_result
+    }
     (* One of the orientations of the first wasn't filtered and we used
        it to orient the second read. There is a {pass_result} for second
        because in the cases where we have a split, those may trigger a
        filter that stops computation. *)
+  and 'single_result paired =
+    | FirstFiltered of 'single_result first_filtered
+    | FirstOrientedSecond of 'single_result first_oriented_second
+    [@@deriving yojson]
 
   let pr_to_string ?(sep='\t') sr_to_string pr =
     let ots = Orientation.to_string ~sep sr_to_string in
     match pr with
-    | FirstFiltered { first; second}                 ->
-        sprintf "FirstFiltered%c%s%c%s" sep first sep (ots second)
+    | FirstFiltered { ff_first; ff_second}                 ->
+        sprintf "FirstFiltered%c%s%c%s" sep ff_first sep (ots ff_second)
     | FirstOrientedSecond { first_o; first; second } ->
         sprintf "FirstOrientedSecond%c%c%c%s%c%s"
           sep (orientation_char_of_bool first_o)
           sep (sr_to_string first)
           sep (pass_result_to_short_string sep sr_to_string second)
 
-  type 'sr potentially_paired =
-    | Single_or_incremental of (string * 'sr single_or_incremental) list
-    | MPaired of ((string * 'sr paired) list)   (* M for multi to not conflict with Paired *)
+  (* Can be GADT, pp = potentially paired *)
+  type 'sr pp =
+    | Single_or_incremental of
+        (Nomenclature.locus * 'sr single_or_incremental) list
+    | MPaired of                  (* M for multi to not conflict with Paired *)
+        ((Nomenclature.locus * 'sr paired) list)
+    [@@deriving yojson]
 
   let aap_soi_to_string =
     let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
@@ -923,28 +1045,30 @@ module Multiple_loci = struct
   let pp_to_string ?(sep='\t') sr_to_string = function
     | Single_or_incremental soi_lst ->
         string_of_list soi_lst ~sep:"\n" ~f:(fun (l, s) ->
-          sprintf "%s%c%s" l sep (aap_soi_to_string ~sep sr_to_string s))
+          sprintf "%s%c%s" (Nomenclature.show_locus l) sep
+            (aap_soi_to_string ~sep sr_to_string s))
     | MPaired pr_lst ->
         string_of_list pr_lst ~sep:"\n" ~f:(fun (l, p) ->
-          sprintf "%s%c%s" l sep (pr_to_string ~sep sr_to_string p))
+          sprintf "%s%c%s" (Nomenclature.show_locus l) sep
+            (pr_to_string ~sep sr_to_string p))
+
+  type pd = Alleles_and_positions.t pp
 
   type 'sr per_read =
     { name  : string
-    ; rrs   : 'sr potentially_paired
+    ; rrs   : 'sr pp
     }
 
-  type per_loci =
-    { loci        : string
+  (* Easily convert to Output.per_locus *)
+  type per_locus =
+    { pl_locus    : Nomenclature.locus
+    ; allele_arr  : (string * MSA.Alteration.t list) array
     ; likelihood  : float array
     ; zygosity    : Zygosity_array.t
     }
-
   type state =
-    { per_loci          : per_loci list
-
-    ; mutable per_read  : Alleles_and_positions.t per_read list
-    (* At the final state we'll discard the individual likelihood float array's
-       and just store the alleles and positions. *)
+    { per_loci          : per_locus list
+    ; mutable per_reads : pd Output.per_read list
     }
 
   type read_result = Forward.stat per_read
@@ -1004,8 +1128,8 @@ module Multiple_loci = struct
       | []               -> best
       | (loci, pr) :: tl ->
           begin match pr with
-          | FirstFiltered { second } ->
-              begin match most_likely_orientation second with
+          | FirstFiltered { ff_second } ->
+              begin match most_likely_orientation ff_second with
               | Filtered  _         -> loop best tl
               | Completed (_, stat) -> loop (update loci stat (Single stat) best) tl
               end
@@ -1020,17 +1144,21 @@ module Multiple_loci = struct
 
   let map_pr_to_aap lst =
     List.map_snd lst ~f:(function
-        | FirstFiltered { first; second } ->
-            FirstFiltered { first; second = Forward.just_aap_or second }
+        | FirstFiltered { ff_first; ff_second } ->
+            FirstFiltered { ff_first; ff_second = Forward.just_aap_or ff_second }
         | FirstOrientedSecond { first_o; first; second } ->
             FirstOrientedSecond
               { first_o
               ; first   = first.Forward.aap
-              ; second  = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second })
+              ; second  = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second
+              })
+
+  let cons_per_reads state name d =
+    state.per_reads <- { Output.name; d } :: state.per_reads
 
   let merge state { name ; rrs } =
     let open ParPHMM in
-    let assign_to_per_loci { loci; likelihood; zygosity } = function
+    let assign_to_per_locus { likelihood; zygosity; _ } = function
       | Single stat ->
           Likelihoods_and_zygosity.add_ll_and_lz
             likelihood zygosity stat.Forward.likelihood
@@ -1040,28 +1168,26 @@ module Multiple_loci = struct
           Likelihoods_and_zygosity.add_ll_and_lz
             likelihood zygosity s2.Forward.likelihood
     in
-    let assign_to_best best_loci best_stat =
+    let assign_to_best best_locus best_stat =
       List.iter state.per_loci ~f:(fun pl ->
-        if best_loci = pl.loci then
-          assign_to_per_loci pl best_stat)
+        if best_locus = pl.pl_locus then
+          assign_to_per_locus pl best_stat)
     in
     match rrs with
     | Single_or_incremental soi_lst ->
         begin match reduce_soi soi_lst with
         | None  -> eprintf "All read results filtered for %s\n%!" name
-        | Some (best_loci, best_stat)  ->
-            assign_to_best best_loci best_stat
+        | Some (best_locus, best_stat)  ->
+            assign_to_best best_locus best_stat
         end;
-        let mrs = Single_or_incremental (map_soi_to_aap soi_lst) in
-        state.per_read <- { name; rrs = mrs } :: state.per_read
+        cons_per_reads state name (Single_or_incremental (map_soi_to_aap soi_lst))
     | MPaired pr_lst ->
         begin match reduce_mpr pr_lst with
         | None -> eprintf "All 2nd read results filtered for %s\n%!" name
-        | Some (_bl, best_loci, best_stat)  ->
-            assign_to_best best_loci best_stat
+        | Some (_bl, best_locus, best_stat)  ->
+            assign_to_best best_locus best_stat
         end;
-        let mrs = MPaired (map_pr_to_aap pr_lst) in
-        state.per_read <- { name; rrs = mrs } :: state.per_read
+        cons_per_reads state name (MPaired (map_pr_to_aap pr_lst))
 
   let output_per_reads prlst oc =
     fprintf oc "Per Read:\n";
@@ -1091,36 +1217,35 @@ module Multiple_loci = struct
     end
 
   let init conf opt read_length parPHMM_t_lst =
-    let { likelihood_first; zygosity_report_size; report_size } = opt in
     let { prealigned_transition_model; insert_p; band; max_number_mismatches
         ; split; _ } = conf in
     let paa =
-      List.map_snd parPHMM_t_lst ~f:(fun parPHMM_t ->
+      List.map parPHMM_t_lst ~f:(fun parPHMM_t ->
         let proc, allele_arr =
           Forward.to_proc_allele_arr ?insert_p ?max_number_mismatches ?band
             ?split ~prealigned_transition_model read_length parPHMM_t
         in
         let n = Array.length allele_arr in
-        proc, allele_arr, n)
+        parPHMM_t.ParPHMM.locus, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
-    let forward = Forward.forward report_size in
+    let forward = Forward.forward opt.allele_depth in
     let specific_orientation p rc r re =
-      specific_orientation p (Forward.proc_to_stat report_size) rc r re
+      specific_orientation p (Forward.proc_to_stat opt.allele_depth) rc r re
     in
     let ordinary_paired name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
-          ~f:(fun (pt1, pt2, acc) (loci, (p, _, _)) ->
+          ~f:(fun (pt1, pt2, acc) (locus, p, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
                 match most_likely_orientation result1 with
                 | ParPHMM.Filtered  m ->
-                    let second, npt2 = forward pt2 p rd2 re2 in
-                    npt1, npt2, (loci, FirstFiltered { first = m; second }) :: acc
+                    let ff_second, npt2 = forward pt2 p rd2 re2 in
+                    npt1, npt2, (locus, FirstFiltered { ff_first = m; ff_second }) :: acc
                 | ParPHMM.Completed (first_o, first) ->
                     let second = specific_orientation p (not first_o) rd2 re2 in
                     let npt2 = Past_threshold.update pt2 p second in
-                    npt1, npt2, (loci, FirstOrientedSecond { first_o; first; second }) :: acc)
+                    npt1, npt2, (locus, FirstOrientedSecond { first_o; first; second }) :: acc)
       in
       MPaired (List.rev res)
     in
@@ -1128,26 +1253,26 @@ module Multiple_loci = struct
     let incremental_paired name rd1 re1 rd2 re2 =
       let best, rest, _fpt1 =
         List.fold_left paa ~init:([], [], initial_pt)
-          ~f:(fun (best, acc, pt) (loci, (p, _, _)) ->
+          ~f:(fun (best, acc, pt) (locus, p, _, _) ->
                 let result1, npt = forward pt p rd1 re1 in
                 match most_likely_orientation result1 with
                 | ParPHMM.Filtered m ->
-                    let nacc = (loci, SingleRead result1) :: acc in
+                    let nacc = (locus, SingleRead result1) :: acc in
                     best, nacc, npt
                 | ParPHMM.Completed (c, first) ->
                     let l = max_pm first.Forward.likelihood in
-                    let for_second = loci, p, result1, c, first in
+                    let for_second = locus, p, result1, c, first in
                     match best with
                     | []           ->
                             [l, for_second], acc, npt
-                    | (bl, (bloci, _,_,_,_)) :: _ ->
+                    | (bl, (_,_,_,_,_)) :: _ ->
                         begin match classify_likelihood ~best:bl l with
                         | LessLikely ->
-                            let nacc = (loci, SingleRead result1) :: acc in
+                            let nacc = (locus, SingleRead result1) :: acc in
                             best, nacc, npt
                         | MoreLikely ->
                             let nacc =
-                              List.map best ~f:(fun (_, (l, _, r1, _, _)) -> (l, SingleRead r1))
+                              List.map best ~f:(fun (_, (locus, _, r1, _, _)) -> (locus, SingleRead r1))
                               @ acc
                             in
                             [l, for_second], nacc, npt
@@ -1162,18 +1287,19 @@ module Multiple_loci = struct
             name;
           Single_or_incremental (List.rev rest)
       | lst ->
-          let seconds = List.map lst ~f:(fun (_l, (loci, p, _, first_o, first)) ->
+          let seconds = List.map lst ~f:(fun (_l, (locus, p, _, first_o, first)) ->
             let second = specific_orientation p (not first_o) rd2 re2 in
-            (loci, PairedDependent {first_o; first; second}))
+            (locus, PairedDependent {first_o; first; second}))
           in
           Single_or_incremental (seconds @ (List.rev rest))
     in
-    let rec state = { per_loci; per_read = []}
+    let rec state = { per_loci; per_reads = []}
     and per_loci =
-      List.map paa ~f:(fun (loci, (p, _, number_alleles)) ->
-        { loci
+      List.map paa ~f:(fun (pl_locus, p, allele_arr, number_alleles) ->
+        { pl_locus
+        ; allele_arr
         ; likelihood = p.ParPHMM.init_global_state ()
-        ; zygosity = Zygosity_array.init number_alleles
+        ; zygosity   = Zygosity_array.init number_alleles
         })
     in
     let rec t = { single; paired; merge; output }
@@ -1182,9 +1308,9 @@ module Multiple_loci = struct
         { name
         ; rrs =
             List.fold_left paa ~init:(initial_pt, [])
-                ~f:(fun (pt, acc) (loci, (p, _, _)) ->
+                ~f:(fun (pt, acc) (locus, p, _, _) ->
                       let r, npt = forward pt p read read_errors in
-                      npt, (loci, SingleRead r) :: acc)
+                      npt, (locus, SingleRead r) :: acc)
             |> snd                                 (* Discard final threshold *)
             |> List.rev                                (* Restore loci order. *)
             |> fun l -> Single_or_incremental l
@@ -1199,12 +1325,24 @@ module Multiple_loci = struct
               ordinary_paired name rd1 re1 rd2 re2
         })
     and output state oc =
-      List.iter2 paa state.per_loci
-        ~f:(fun (_, (_, allele_arr, _)) { loci; likelihood; zygosity; _} ->
-              fprintf oc "%s\n" loci;
-              Output.f likelihood_first zygosity_report_size
-                allele_arr likelihood zygosity oc);
-      output_per_reads state.per_read oc
+      let pl_lst =
+        List.map state.per_loci
+          ~f:(fun { pl_locus; allele_arr; likelihood; zygosity } ->
+                Output.create_pl opt.depth.Output.num_zygosities pl_locus
+                  allele_arr likelihood zygosity)
+      in
+      let ot = Output.create pl_lst state.per_reads in
+      let of_ =
+        match opt.output_format with
+        | `TabSeparated ->
+          let out_to_string rrp =
+            sprintf "\n%s" (pp_to_string Alleles_and_positions.string_of_list rrp)
+          in
+          Output.TabSeparated out_to_string
+        | `Json ->
+          Output.Json (pp_to_yojson Alleles_and_positions.to_yojson)
+      in
+      Output.f oc ot opt.depth of_
     in
     t, state
 

@@ -216,11 +216,13 @@ let type_
     band_number_arg
     band_radius_arg
   (* outputting logic. *)
-    likelihood_first
+    allele_depth
+    likelihood_report_size
     zygosity_report_size
+    per_reads_report_size
+    output_format
   (* how are we typing *)
     split
-    map_depth
     mode
     not_prealigned
     forward_accuracy_opt
@@ -258,9 +260,14 @@ let type_
             viterbi read_size_override need_read_size conf fastq_file_list
               number_of_reads specific_reads finish_singles
         | `Forward ->
-            let opt = { ParPHMM_drivers.likelihood_first
-                      ; zygosity_report_size
-                      ; report_size = map_depth
+            let opt = { ParPHMM_drivers.allele_depth
+                      ; output_format
+                      ; depth =
+                          { ParPHMM_drivers.Output.num_likelihoods =
+                                                     likelihood_report_size
+                          ; num_zygosities         = zygosity_report_size
+                          ; num_per_read           = per_reads_report_size
+                          }
                       } in
             begin match number_processes_opt with
             | None  ->
@@ -347,11 +354,13 @@ let () =
             $ band_warmup_arg
             $ number_bands_arg
             $ band_radius_arg
-            $ likelihood_first_flag
+            $ allele_depth_arg
+            $ likelihood_report_size_arg
             $ zygosity_report_size_arg
+            $ per_reads_report_size_arg
+            $ output_format_flag
             (* How are we typing *)
             $ split_arg
-            $ map_depth_arg
             $ mode_flag
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg

@@ -1211,6 +1211,7 @@ end (* Perform_forward_calculation *)
 type 'a pass_result =
   | Completed of 'a
   | Filtered of string
+  [@@deriving yojson]
 
 let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
@@ -1933,7 +1934,8 @@ module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
 module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
 
 type t =
-  { align_date      : string
+  { locus           : Nomenclature.locus
+  ; align_date      : string
   ; alleles         : (string * MSA.Alteration.t list) array        (* Canonical order. *)
   ; number_alleles  : int
   ; emissions_a     : base_emissions array
@@ -1945,7 +1947,7 @@ let construct input =
   else begin
     let open MSA.Parser in
     Alleles.Input.construct input >>= fun mp ->
-      let { reference; ref_elems; alt_elems; align_date} = mp in
+      let { locus; reference; ref_elems; alt_elems; align_date} = mp in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
       List.iter alt_elems ~f:(fun a ->
@@ -1956,7 +1958,7 @@ let construct input =
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in
-      Ok { align_date; alleles; number_alleles; emissions_a }
+      Ok { locus; align_date; alleles; number_alleles; emissions_a }
   end
 
 let save_pphmm t =
@@ -2059,10 +2061,18 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
   in
   single, paired
 
+
 (* The forward pass return type requires a bit more subtlety as we want
    diagnostic ability; to debug and to pass along values for downstream filters.
    Therefore these passes return a structure that can (1) execute the pass
    (ex [single]) and (2) interrogate the result (ex [best_allele_pos]). *)
+
+type per_allele_datum =
+  { allele    : string                                            (* allele *)
+  ; llhd      : float                                (* likelihood emission *)
+  ; position  : int                         (* position of highest emission *)
+  }
+  [@@deriving yojson]
 
 type proc =
   { init_global_state : unit -> float array
@@ -2083,7 +2093,7 @@ type proc =
      for the result of a pass. The accessors below allow the user to extract
      more purposeful information. *)
 
-  ; best_allele_pos : int -> (float * string * int) list
+  ; best_allele_pos : int -> per_allele_datum list
   (* After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
@@ -2140,7 +2150,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
       ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
     |> snd
-    |> List.map ~f:(fun (l, i) -> (l, allele, i))
+    |> List.map ~f:(fun (llhd, position) -> { allele; llhd; position})
   in
   let per_allele_llhd () =
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
@@ -2173,10 +2183,10 @@ let to_best_allele_pos alleles foldi_over_final get_emission_pm n =
   let emission_pm = get_emission_pm () in
   Pm.fold_indices_and_values emission_pm ~init:[]
       ~f:(fun acc i emission -> lgn emission i acc)
-  |> List.map ~f:(fun (e, i) ->
+  |> List.map ~f:(fun (llhd, i) ->
       let allele = alleles.(i) in
-      let _, best_pos = Pm.get hepp i in
-      (e, allele, best_pos))
+      let _, position = Pm.get hepp i in
+      { allele; llhd; position})
 
 (* Return
   1. a function to process one read

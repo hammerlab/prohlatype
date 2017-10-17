@@ -439,15 +439,25 @@ let read_size_override_arg =
 let map_depth_argument = "map-depth"
 let map_depth_default = 5
 
-let map_depth_arg =
+let allele_depth_arg =
   let docv = "POSITIVE INTEGER" in
   let doc =
     sprintf "Specify a positive integer to indicate the number of best alleles \
-             and positions to report. Defaults to %d."
+             and positions to report. Defaults to %d. Be cautious about \
+             increasing this number as keeping track of this data can slow \
+             down the final analysis."
       map_depth_default
   in
   Arg.(value & opt positive_int map_depth_default
              & info ~doc ~docv [map_depth_argument])
+
+let output_format_flag =
+  Arg.(value & vflag `TabSeparated
+    [ `TabSeparated
+      , info ~doc:("Output results in a tab separated format. Default.") ["tab"]
+    ; `Json
+      , info ~doc:("Output results in JSON. Not the default.") ["json"]
+    ])
 
 (* Band arguments
 let not_band_flag =
@@ -542,15 +552,63 @@ let do_not_finish_singles_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-finish-singles"])
 
+let likelihood_report_size_argument = "likelihood-report-size"
+let likelihood_report_size_arg =
+  let open ParPHMM_drivers.Output in
+  let docv = "POSITIVE INTEGER" in
+  let doc = "Override the default number of individual allele likelihoods to \
+    report. In general, this is $(b,not) the desired outcome; we should \
+    consider the likelihoods of diploids (referred to as zygosity here). \
+    None-the-less this can be useful for relative allele diagnosis. By \
+    default, a value will be reported for all alleles."
+  in
+  Arg.(value & opt (some non_negative_int) None
+             & info ~doc ~docv [likelihood_report_size_argument])
+
+let non_negative_zygosity =
+  let open ParPHMM_drivers.Zygosity_array in
+  let non_negative_int_parser =
+    fun s ->
+      try
+        let d = Scanf.sscanf s "%d" (fun x -> x) in
+        if d < 0 then
+          Error (`Msg (s ^ " is negative"))
+        else if d = 0 then
+          Ok NoSpec
+        else
+          Ok (Spec d)
+      with Scanf.Scan_failure msg ->
+        Error (`Msg msg)
+  in
+  Arg.conv ~docv:"NON-NEGATIVE INTEGER"
+    (non_negative_int_parser
+    , fun frmt zas ->
+        match zas with
+        | NoSpec  -> Format.fprintf frmt "%d" 0
+        | Spec d  -> Format.fprintf frmt "%d" d
+        | NonZero -> Format.fprintf frmt "")
+
 let zygosity_report_size_argument = "zygosity-report-size"
 let zygosity_report_size_arg =
-  let open ParPHMM_drivers.Output in
+  let open ParPHMM_drivers.Zygosity_array in
+  let docv = "POSITIVE INTEGER" in
   let doc =
-    sprintf "Override the default number of allelic pairs reported as part of \
-             the zygosity portion. Defaults to %d." default_zygosity_report_size
+    "Override the default number of allelic pairs reported as part of the \
+    zygosity portion. By defaults only the pairs that have non-zero \
+    probability will be reported. Set this value to zero to not report \
+    any values."
   in
-  Arg.(value & opt positive_int default_zygosity_report_size
-             & info ~doc [zygosity_report_size_argument])
+  Arg.(value & opt non_negative_zygosity NonZero
+             & info ~doc ~docv [zygosity_report_size_argument])
+
+let per_reads_report_size_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Override the number of (per)-read information to report. By \
+      default all of the per-read information is reported."
+  in
+  Arg.(value & opt (some non_negative_int) None
+             & info ~doc ~docv ["per-read-report-size"])
 
 let number_processes_arg =
   let docv = "POSITIVE INTEGER" in

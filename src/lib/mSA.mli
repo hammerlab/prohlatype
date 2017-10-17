@@ -110,6 +110,8 @@ module Alteration : sig
   val per_segment_to_string : per_segment -> string
   val per_segment_list_to_string : per_segment list -> bytes
   type t = { allele : string; why : string; distance : float; positions : per_segment list; }
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> (t, string) result
   val to_string : t -> string
 
 end (* Alteration *)

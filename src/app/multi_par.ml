@@ -21,10 +21,8 @@ let to_read_size_dependent
     | inputs ->
       Ok (fun read_size ->
             List.map inputs ~f:(fun input ->
-              let name = Alleles.Input.to_string input in
               let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
-              let pt = Cache.par_phmm ~skip_disk_cache par_phmm_arg in
-              name, pt))
+              Cache.par_phmm ~skip_disk_cache par_phmm_arg))
 
 module Pd = ParPHMM_drivers
 module Pdml = Pd.Multiple_loci
@@ -153,12 +151,15 @@ let type_
     band_warmup_arg
     band_number_arg
     band_radius_arg
-    likelihood_first
+  (* outputting logic. *)
+    allele_depth
+    likelihood_report_size
     zygosity_report_size
+    per_reads_report_size
+    output_format
   (* how are we typing *)
     split
     first_read_best_log_gap
-    map_depth
     incremental_pairs
     not_prealigned
     forward_accuracy_opt
@@ -194,13 +195,16 @@ let type_
   in
   let need_read_size_r =
     to_read_size_dependent
-      ~alignment_files ~merge_files ~distance
-      ~skip_disk_cache
+      ~alignment_files ~merge_files ~distance ~skip_disk_cache
   in
   let opt =
-    { Pd.likelihood_first
-    ; zygosity_report_size
-    ; report_size = map_depth
+    { ParPHMM_drivers.allele_depth
+    ; output_format
+    ; depth =
+        { ParPHMM_drivers.Output.num_likelihoods = likelihood_report_size
+        ; num_zygosities         = zygosity_report_size
+        ; num_per_read           = per_reads_report_size
+        }
     }
   in
   match need_read_size_r with
@@ -339,12 +343,15 @@ let () =
             $ band_warmup_arg
             $ number_bands_arg
             $ band_radius_arg
-            $ likelihood_first_flag
+            (* output logic. *)
+            $ allele_depth_arg
+            $ likelihood_report_size_arg
             $ zygosity_report_size_arg
+            $ per_reads_report_size_arg
+            $ output_format_flag
             (* How are we typing *)
             $ split_arg
             $ first_read_best_log_gap_arg
-            $ map_depth_arg
             $ use_incremental_pairs_flag
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg
