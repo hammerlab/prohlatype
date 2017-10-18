@@ -26,7 +26,7 @@ let to_read_size_dependent
               Cache.par_phmm ~skip_disk_cache par_phmm_arg))
 
 (* These are convenience selectors that choose more than one locus at a time. *)
-let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir 
+let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
   alignment_files merge_files =
   match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
   | Some d, _,      _       ->
@@ -179,8 +179,6 @@ let type_
     output_format
   (* how are we typing *)
     split
-    first_read_best_log_gap
-    incremental_pairs
     not_prealigned
     forward_accuracy_opt
     number_processes_opt
@@ -200,12 +198,12 @@ let type_
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let prealigned_transition_model = not not_prealigned in
-  let incremental_pairs = incremental_pairs in
   let finish_singles = not do_not_finish_singles in
   let conf =
     Pd.multiple_conf ~insert_p ?band ?max_number_mismatches ?split
-      ?first_read_best_log_gap ~prealigned_transition_model
-      ~past_threshold_filter ~incremental_pairs ()
+      ~prealigned_transition_model
+      ~past_threshold_filter
+      ()
   in
   let need_read_size_r =
     to_read_size_dependent
@@ -299,30 +297,6 @@ let () =
                  alignment files or merge arguments." in
     Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
   in
-  let use_incremental_pairs_flag =
-    let doc   =
-      "When performing paired typing, use the first (as specified by the read \
-       found in the first file on the command line) pair, to determine which \
-       gene is the most likely. This is faster but potentially less accurate. "
-    in
-    Arg.(value & flag & info ~doc ["incremental-pair"])
-  in
-  let first_read_best_log_gap_arg =
-    let docv  = "POSITIVE FLOAT" in
-    let doc   =
-      "When performing incremental paired read inference, for the sake of \
-      expediency we want to make a decision about the best (most likely \
-      aligned to read) gene based upon the first read; then we know the \
-      orientation of second read and where to measure. Unfortunately, \
-      sometimes the first read aligns almost equally well to different alleles \
-      within 2 genes. This value controls a band within which we'll keep the \
-      best genes (based on the likelihood of the firs read) and afterwards \
-      align the second. The likelihoods, for other genes, outside of this \
-      band are discarded. By default this value is set to |log_10 1/100| = 2."
-    in
-    Arg.(value & opt (some positive_float) None
-               & info ~doc ~docv ["first-read-best-log-gap"])
-  in
   let type_ =
     let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
@@ -365,8 +339,6 @@ let () =
             $ output_format_flag
             (* How are we typing *)
             $ split_arg
-            $ first_read_best_log_gap_arg
-            $ use_incremental_pairs_flag
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg
             $ number_processes_arg

@@ -4,18 +4,15 @@ open Util
 
 module Pm = Partition_map
 
-let max_arr = Array.fold_left ~init:neg_infinity ~f:max
-let max_pm = Pm.fold_values ~init:neg_infinity ~f:max
+let max_pm = Pm.fold_values ~init:ParPHMM.Lp.zero ~f:ParPHMM.Lp.max
 
 let higher_value_in_first e1 e2 =
   let r1 = max_pm e1 in
   let r2 = max_pm e2 in
-  r1 >= r2
+  ParPHMM.Lp.(r2 <= r1)
 
-let descending_float_cmp f1 f2 =
-  if f1 > f2 then -1
-  else if f1 = f2 then 0
-  else 1
+let descending_lg_llhd_cmp f1 f2 =
+  ParPHMM.Lp.compare f2 f1 (* Just reverse the order *)
 
 (* What to do when we know the result of a previous run. *)
 module Past_threshold = struct
@@ -25,19 +22,19 @@ module Past_threshold = struct
   type t =
     [ `Don't
     | `Start
-    | `Set of float
+    | `Set of Lp.t
     ]
 
   let to_string = function
     | `Don't  -> "Don't"
     | `Start  -> "Start"
-    | `Set v  -> sprintf "Set %f" v
+    | `Set v  -> sprintf "Set %s" (Lp.to_string v)
 
   let init b =
     if b then `Start else `Don't
 
   let new_ prev_threshold proc =
-    max prev_threshold (proc.maximum_match ())
+    Lp.max prev_threshold (proc.maximum_match ())
 
   let new_value prev_threshold proc = function
     | Filtered _  -> prev_threshold
@@ -46,7 +43,7 @@ module Past_threshold = struct
   let update prev_threshold proc pr =
     match prev_threshold with
     | `Don't  -> `Don't
-    | `Start  -> `Set (new_value neg_infinity proc pr)
+    | `Start  -> `Set (new_value Lp.zero proc pr)
     | `Set pv -> `Set (new_value pv proc pr)
 
 end  (* Past_threshold *)
@@ -132,7 +129,7 @@ module Orientation = struct
         { regular; complement }, `Don't
     | `Start ->
         let regular = do_work false in
-        let prev_threshold = Past_threshold.new_value neg_infinity proc regular in
+        let prev_threshold = Past_threshold.new_value Lp.zero proc regular in
         let complement = do_work ~prev_threshold true in
         let last_threshold = Past_threshold.new_value prev_threshold proc complement in
         { regular; complement }, `Set last_threshold
@@ -155,7 +152,7 @@ module Alleles_and_positions = struct
     [@@deriving yojson]
 
   let to_string {allele; llhd; position} =
-    sprintf "%s,%d,%0.5f" allele position llhd
+    sprintf "%s,%d,%s" allele position (Lp.to_string ~precision:5 llhd)
 
   let string_of_list =
     string_of_list ~sep:";" ~f:to_string
@@ -165,13 +162,15 @@ module Alleles_and_positions = struct
     match l1, l2 with
     | [],  _            -> -1  (* Should error? *)
     | _ , []            -> 1
-    | t1  :: _, t2 :: _ -> descending_float_cmp t1.llhd t2.llhd
+    | t1  :: _, t2 :: _ -> descending_lg_llhd_cmp t1.llhd t2.llhd
 
 end (* Alleles_and_positions *)
 
 (* Storing the log likelihoods of heterozygous pairs.
    Homozygous is equivalent to the individual pairs. *)
 module Zygosity_array = struct
+
+  open ParPHMM
 
   (* Not exactly the triangular number, T_(n-1);
      just have less subtractions this way. *)
@@ -207,7 +206,7 @@ module Zygosity_array = struct
   (* Top triangle of pair wise comparison *)
   type t =
     { n : int
-    ; l : float array
+    ; l : Lp.t array
     }
 
   let storage_size number_alleles =
@@ -216,14 +215,14 @@ module Zygosity_array = struct
   let init number_alleles =
     let s = storage_size number_alleles in
     { n = number_alleles
-    ; l = Array.make s 0.
+    ; l = Array.make s Lp.zero
     }
 
   let add t ~allele1 ~allele2 likelihood =
     let i = min allele1 allele2 in
     let j = max allele1 allele2 in
     let k = k_n t.n i j in
-    t.l.(k) <- t.l.(k) +. likelihood
+    t.l.(k) <- Lp.(t.l.(k) + likelihood)
 
   type best_size =
     | NonZero
@@ -238,6 +237,17 @@ module Zygosity_array = struct
       | Spec n  -> max 1 n, false
       | NoSpec  -> storage_size t.n, false
     in
+(* Create a sorted, grouped, and constrained, list of the paired likelihoods.
+  The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
+  point we don't care about the tail only about where there is actual
+  probability mass. But in-order to properly normalize we need the max
+  likelihood of all values (for the log-sum-exp trick) and a normalizing
+  constant.
+
+  [sorted_insert] keeps an ascending list list of the [desired_size] highest
+  likelihoods (all indices of the inner list have the same likelihood: grouped),
+  such that only these values are afterwards exported.
+  *)
     let sorted_insert l i j current_size lst =
       let rec insert lst =
         match lst with
@@ -285,21 +295,26 @@ module Zygosity_array = struct
     in
     let most_likely = List.rev_map ~f:(fun (l, _n, ijlst) -> (l, ijlst)) res in
     let maxl, _ = List.hd_exn most_likely in
-    let prob l = 10. ** (l -. maxl) in
+    (*printf "maxl: %20.20f \n%!" maxl; *)
+    let prob = Lp.probability ~maxl in
+(* Compute the normalizing constant. *)
     let ns =
       let f s l = s +. prob l in
-      Array.fold_left ~init:0. ~f t.l
-      |> fun init -> Array.fold_left ~init ~f likelihood_arr
+      let heterozygous_sum = Array.fold_left ~init:0. ~f t.l in
+      Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
     in
-    if nz then
+    if nz then begin
+      (*printf "hoooray nonzero requested! %20.20f \n%!" ns; *)
       List.filter_map most_likely ~f:(fun (l, ij) ->
+        (*printf "l: %0.20f, p:%0.20f, %s \n%!" l (prob l)
+          (string_of_list ~sep:";" ~f:(fun (i,j) -> sprintf "%d,%d" i j) ij); *)
         let p = prob l /. ns in
         (* This isn't necessarily the right notion of zero. *)
         if p > !ParPHMM.dx then
           Some (l, prob l /. ns, ij)
         else
           None)
-    else
+    end else
       List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
 
 end (* Zygosity_array *)
@@ -307,10 +322,11 @@ end (* Zygosity_array *)
 module Likelihoods_and_zygosity = struct
 
   (* TODO: We're opening Util which has likehood defined. *)
+  open ParPHMM
 
   let add_ll state_llhd llhd =
     Pm.iter_set llhd ~f:(fun i v ->
-      state_llhd.(i) <- state_llhd.(i) +. v)
+      state_llhd.(i) <- Lp.(state_llhd.(i) + v))
 
   let add_lz zygosity llhd =
     Pm.iter_set llhd ~f:(fun allele1 v1 ->
@@ -335,16 +351,18 @@ end (* Likelihoods_and_zygosity *)
    TODO: Expose a separator argument. *)
 module Output = struct
 
+  open ParPHMM
+
   type locus = Nomenclature.locus
   and per_allele_log_likelihood =
     { allele : string
-    ; a_llhd : float
+    ; a_llhd : Lp.t
     ; alters : MSA.Alteration.t list
     }
   and zygosity_log_likelihood =
     { allele1 : string
     ; allele2 : string
-    ; z_llhd  : float
+    ; z_llhd  : Lp.t
     ; prob    : float
     }
   and per_locus =
@@ -388,7 +406,7 @@ module Output = struct
     }
 
   let cmp_pall pl1 pl2 =
-    let lc = descending_float_cmp pl1.a_llhd pl2.a_llhd in
+    let lc = descending_lg_llhd_cmp pl1.a_llhd pl2.a_llhd in
     if lc <>  0 then
       lc
     else
@@ -455,12 +473,12 @@ module Output = struct
         ~f:MSA.Alteration.to_string a
     in
     let fprint_per_allele_log_likelihood { allele; a_llhd; alters } =
-      fprintf oc "%16s\t%0.20f\t%s\n"
-        allele a_llhd (alters_to_string alters)
+      fprintf oc "%16s\t%s\t%s\n"
+        allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
-      fprintf oc "%16s\t%16s\t%0.20f\t%0.4f\n"
-        allele1 allele2 z_llhd prob
+      fprintf oc "%16s\t%16s\t%s\t%0.4f\n"
+        allele1 allele2 (Lp.to_string ~precision:20 z_llhd) prob
     in
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
       list_iter_on_non_empty
@@ -581,7 +599,7 @@ module Forward = struct
 
   type stat =
     { aap        : Alleles_and_positions.t
-    ; likelihood : float mt
+    ; likelihood : Lp.t mt
     }
 
   let proc_to_stat allele_depth proc _comp =
@@ -601,7 +619,7 @@ module Forward = struct
 
   type state =
     { locus             : Nomenclature.locus
-    ; per_allele_lhood  : float array
+    ; per_allele_lhood  : Lp.t array
     ; zygosity          : Zygosity_array.t
     ; mutable per_reads : aapt Output.per_read list
     }
@@ -751,8 +769,8 @@ module Viterbi = struct
   let viterbi_result_to_string ?(width=250) ?(labels=("reference ", "read "))
     {reverse_complement; emission; path_list} =
     let separate ?(from="") rc { reference; read; start; end_ } =
-      sprintf "Reverse complement: %b, final emission: %f, path length: %d from %d to %d %s\n%s"
-        rc emission (List.length path_list) start end_ from
+      sprintf "Reverse complement: %b, final emission: %s, path length: %d from %d to %d %s\n%s"
+        rc (Lp.to_string emission) (List.length path_list) start end_ from
         (manual_comp_display ~width ~labels reference read)
     in
     match to_strings path_list with
@@ -776,8 +794,8 @@ module Viterbi = struct
           let reference = s1.reference ^ allele_i ^ s2.reference in
           let read = s1.read ^ read_i ^ s2.read in
           let msm_offset = - actual_size in
-          sprintf "Reverse complement: %b, final emission: %f, path length: %d from %d to %d %s->%s\n%s"
-            rc1 emission (List.length path_list) s1.start s2.end_ f1 f2
+          sprintf "Reverse complement: %b, final emission: %s, path length: %d from %d to %d %s->%s\n%s"
+            rc1 (Lp.to_string emission) (List.length path_list) s1.start s2.end_ f1 f2
             (manual_comp_display ~msm_offset ~width ~labels reference read)
 
   type read_result =
@@ -874,6 +892,12 @@ type multiple_conf =
   (** Split the forward pass to operate over this many segments of the read.
       The value must divide the read_length evenly or an exception is thrown. *)
 
+  (* Not robust see comment below
+  Incremental logic has been disabled ... it still introduced errors over a
+  small but discoverable set of reads. Maybe there is a way to revive it and
+  make it robust, because it does make things faster but for now it is
+  commented out because it violates the LogProbability.t abstraction
+
   ; incremental_pairs       : bool
   (* This option only applies to paired typing. Instead of naively modeling
      the two read pairs at the same time, use the first as guidance of which
@@ -883,38 +907,44 @@ type multiple_conf =
      [first_read_best_log_gap] is not good enough. We need a better algorithm
      for this. *)
 
+  One idea to make things better:
   ; first_read_best_log_gap : float option
   (** When performing paired read inference, for the sake of expediency we want
       to make a decision about the best (most likely aligned to read) gene
       based upon the first read; then we know the orientation of second read and
-      where to measure. Unfortunately, sometimes the first read aligns almost
+      where to measure. Unfortunately, sometimes, the first read aligns almost
       equally well to different alleles within 2 genes. This value controls a
       band within which we'll keep the best genes (based on the likelihood of the
-      firs read) and afterwards align the second. The likelihoods, for other
+      first read) and afterwards align the second. The likelihoods, for other
       genes, outside of this band are discarded. By default this value is set
       to |log_10 1/100|. *)
+*)
   }
 
 let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
-  ?first_read_best_log_gap
   ~prealigned_transition_model
-  ~past_threshold_filter ~incremental_pairs () =
+  ~past_threshold_filter
+  (*~incremental_pairs *)
+  (*?first_read_best_log_gap *)
+  () =
     { prealigned_transition_model
     ; insert_p
     ; band
     ; max_number_mismatches
     ; past_threshold_filter
-    ; incremental_pairs
     ; split
-    ; first_read_best_log_gap
+    (*; incremental_pairs
+      ; first_read_best_log_gap *)
     }
 
 module Multiple_loci = struct
 
+  open ParPHMM
+
   type 'single_result paired_dependent =
       { first_o : bool
       ; first   : 'single_result
-      ; second  : 'single_result ParPHMM.pass_result
+      ; second  : 'single_result pass_result
       }
     (* Orientation and gene of 2nd read is determined by 1st. There is no
        {pass_result} since we're not going to apply a filter to the 2nd read.
@@ -936,8 +966,8 @@ module Multiple_loci = struct
     if reverse_complement then 'C' else 'R'
 
   let pass_result_to_short_string sep sr_to_string = function
-    | ParPHMM.Filtered m -> sprintf "F%c%s" sep m
-    | ParPHMM.Completed r -> sr_to_string r
+    | Filtered m -> sprintf "F%c%s" sep m
+    | Completed r -> sr_to_string r
 
   let soi_to_string ?take_regular ?(sep='\t') sr_to_string soi =
     let ots = Orientation.to_string ?take_regular ~sep sr_to_string in
@@ -958,14 +988,13 @@ module Multiple_loci = struct
   (* true if s1 is better than s2 *)
   let better_soi s1 s2 =
     let l s = max_pm s.Forward.likelihood in
-    let open ParPHMM in
     match s1, s2 with
     | PairedDependent p1, PairedDependent p2  ->
         begin
           match p1.second, p2.second with
           | Filtered _,    _             -> false
           | _,             Filtered _    -> true
-          | Completed ss1, Completed ss2 -> l p1.first +. l ss1 > l p2.first +. l ss2
+          | Completed ss1, Completed ss2 -> Lp.(l p2.first + l ss2 < l p1.first + l ss1)
         end
     | PairedDependent p1, SingleRead sr2      ->
         begin
@@ -973,7 +1002,7 @@ module Multiple_loci = struct
           | Filtered  _                   -> true
           | Completed (_, s)  ->
               begin match p1.second with
-              | Filtered  _               -> l p1.first >= l s
+              | Filtered  _               -> Lp.(l s <= l p1.first)
               | Completed _               -> true
               end
         end
@@ -983,7 +1012,7 @@ module Multiple_loci = struct
           | Filtered _                    -> false
           | Completed (_, s)  ->
               begin match p2.second with
-              | Filtered  _               -> l s >= l p2.first
+              | Filtered  _               -> Lp.(l p2.first <= l s)
               | Completed _               -> false
               end
         end
@@ -994,7 +1023,7 @@ module Multiple_loci = struct
           | Completed (_, l1)      ->
             begin match most_likely_orientation sr2 with
             | Filtered  _                 -> true
-            | Completed (_, l2)           -> l l1 >= l l2
+            | Completed (_, l2)           -> Lp.(l l2 <= l l1)
             end
         end
 
@@ -1008,7 +1037,7 @@ module Multiple_loci = struct
   and 'single_result first_oriented_second =
     { first_o : bool
     ; first   : 'single_result
-    ; second  : 'single_result ParPHMM.pass_result
+    ; second  : 'single_result pass_result
     }
     (* One of the orientations of the first wasn't filtered and we used
        it to orient the second read. There is a {pass_result} for second
@@ -1063,7 +1092,7 @@ module Multiple_loci = struct
   type per_locus =
     { pl_locus    : Nomenclature.locus
     ; allele_arr  : (string * MSA.Alteration.t list) array
-    ; likelihood  : float array
+    ; likelihood  : Lp.t array
     ; zygosity    : Zygosity_array.t
     }
   type state =
@@ -1078,7 +1107,6 @@ module Multiple_loci = struct
      Compare 2 PairedDependent by both.
    *)
   let reduce_soi soi_lst =
-    let open ParPHMM in
     List.reduce soi_lst ~f:(fun (l1, s1) (l2, s2) ->
       if better_soi s1 s2 then
         l1, s1
@@ -1105,7 +1133,7 @@ module Multiple_loci = struct
             PairedDependent
               { first_o
               ; first = first.Forward.aap
-              ; second = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second
+              ; second = map_completed ~f:(fun s -> s.Forward.aap) second
               }
         | SingleRead oi                             ->
            SingleRead (Forward.just_aap_or oi)
@@ -1123,20 +1151,19 @@ module Multiple_loci = struct
       | Some (bl, _, _) when l > bl -> Some (l, loci, pr)
       | Some _                      -> best
     in
-    let open ParPHMM in
-    let rec loop best = function
-      | []               -> best
+    let rec loop current_best = function
+      | []               -> current_best
       | (loci, pr) :: tl ->
           begin match pr with
           | FirstFiltered { ff_second } ->
               begin match most_likely_orientation ff_second with
-              | Filtered  _         -> loop best tl
-              | Completed (_, stat) -> loop (update loci stat (Single stat) best) tl
+              | Filtered  _      -> loop current_best tl
+              | Completed (_, s) -> loop (update loci s (Single s) current_best) tl
               end
           | FirstOrientedSecond { first; second } ->
               begin match second with
-              | Filtered _          -> loop best tl
-              | Completed s         -> loop (update loci s (Paired (first, s)) best) tl
+              | Filtered _  -> loop current_best tl
+              | Completed s -> loop (update loci s (Paired (first, s)) current_best) tl
               end
           end
     in
@@ -1150,14 +1177,13 @@ module Multiple_loci = struct
             FirstOrientedSecond
               { first_o
               ; first   = first.Forward.aap
-              ; second  = ParPHMM.map_completed ~f:(fun s -> s.Forward.aap) second
+              ; second  = map_completed ~f:(fun s -> s.Forward.aap) second
               })
 
   let cons_per_reads state name d =
     state.per_reads <- { Output.name; d } :: state.per_reads
 
   let merge state { name ; rrs } =
-    let open ParPHMM in
     let assign_to_per_locus { likelihood; zygosity; _ } = function
       | Single stat ->
           Likelihoods_and_zygosity.add_ll_and_lz
@@ -1195,7 +1221,7 @@ module Multiple_loci = struct
       fprintf oc "%s\n%s\n" name
         (pp_to_string Alleles_and_positions.string_of_list rrs))
 
-  (* Easier to reason about this as a distance, hence >= 0 *)
+  (*   Easier to reason about this as a distance, hence >= 0
   let abs_logp_one_over_hundred = abs_float (log10 0.01)
 
   type incremental_classification =
@@ -1214,7 +1240,7 @@ module Multiple_loci = struct
         Within
       else
         MoreLikely
-    end
+    end *)
 
   let init conf opt read_length parPHMM_t_lst =
     let { prealigned_transition_model; insert_p; band; max_number_mismatches
@@ -1226,7 +1252,7 @@ module Multiple_loci = struct
             ?split ~prealigned_transition_model read_length parPHMM_t
         in
         let n = Array.length allele_arr in
-        parPHMM_t.ParPHMM.locus, proc, allele_arr, n)
+        parPHMM_t.locus, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
     let forward = Forward.forward opt.allele_depth in
@@ -1239,27 +1265,27 @@ module Multiple_loci = struct
           ~f:(fun (pt1, pt2, acc) (locus, p, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
                 match most_likely_orientation result1 with
-                | ParPHMM.Filtered  m ->
+                | Filtered  m ->
                     let ff_second, npt2 = forward pt2 p rd2 re2 in
                     npt1, npt2, (locus, FirstFiltered { ff_first = m; ff_second }) :: acc
-                | ParPHMM.Completed (first_o, first) ->
+                | Completed (first_o, first) ->
                     let second = specific_orientation p (not first_o) rd2 re2 in
                     let npt2 = Past_threshold.update pt2 p second in
                     npt1, npt2, (locus, FirstOrientedSecond { first_o; first; second }) :: acc)
       in
       MPaired (List.rev res)
     in
-    let decreasing_likelihood = insert_sorted ( < ) in
-    let incremental_paired name rd1 re1 rd2 re2 =
+    (*let decreasing_likelihood = insert_sorted ( < ) in
+      let incremental_paired name rd1 re1 rd2 re2 =
       let best, rest, _fpt1 =
         List.fold_left paa ~init:([], [], initial_pt)
           ~f:(fun (best, acc, pt) (locus, p, _, _) ->
                 let result1, npt = forward pt p rd1 re1 in
                 match most_likely_orientation result1 with
-                | ParPHMM.Filtered m ->
+                | Filtered m ->
                     let nacc = (locus, SingleRead result1) :: acc in
                     best, nacc, npt
-                | ParPHMM.Completed (c, first) ->
+                | Completed (c, first) ->
                     let l = max_pm first.Forward.likelihood in
                     let for_second = locus, p, result1, c, first in
                     match best with
@@ -1292,13 +1318,13 @@ module Multiple_loci = struct
             (locus, PairedDependent {first_o; first; second}))
           in
           Single_or_incremental (seconds @ (List.rev rest))
-    in
+    in *)
     let rec state = { per_loci; per_reads = []}
     and per_loci =
       List.map paa ~f:(fun (pl_locus, p, allele_arr, number_alleles) ->
         { pl_locus
         ; allele_arr
-        ; likelihood = p.ParPHMM.init_global_state ()
+        ; likelihood = p.init_global_state ()
         ; zygosity   = Zygosity_array.init number_alleles
         })
     in
@@ -1319,9 +1345,9 @@ module Multiple_loci = struct
      Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
         { name
         ; rrs =
-            if conf.incremental_pairs then
+            (*if conf.incremental_pairs then
               incremental_paired name rd1 re1 rd2 re2
-            else
+            else *)
               ordinary_paired name rd1 re1 rd2 re2
         })
     and output state oc =
