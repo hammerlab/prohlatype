@@ -5,6 +5,7 @@ let app_name = "multi_par"
 
 let (//) = Filename.concat
 
+
 let to_read_size_dependent
   (* Allele information source *)
     ~alignment_files ~merge_files ~distance
@@ -23,6 +24,23 @@ let to_read_size_dependent
             List.map inputs ~f:(fun input ->
               let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
               Cache.par_phmm ~skip_disk_cache par_phmm_arg))
+
+(* These are convenience selectors that choose more than one locus at a time. *)
+let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir 
+  alignment_files merge_files =
+  match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
+  | Some d, _,      _       ->
+      (d // "A_gen.txt") :: (d // "B_gen.txt") :: (d // "C_gen.txt") :: alignment_files
+      , merge_files
+  | None,   Some d, _       ->
+      (d // "A_nuc.txt") :: (d // "B_nuc.txt") :: (d // "C_nuc.txt") :: alignment_files
+      , merge_files
+  | None,   None,   Some d  ->
+      alignment_files
+      , (d // "A") :: (d // "B") :: (d // "C") :: merge_files
+  | None,   None,   None    ->
+      alignment_files
+      , merge_files
 
 module Pd = ParPHMM_drivers
 module Pdml = Pd.Multiple_loci
@@ -137,7 +155,9 @@ let type_
     class1_gen_dir
     class1_nuc_dir
     class1_mgd_dir
-    alignment_files merge_files distance
+    alignment_files
+    merge_files
+    distance
   (* Process *)
     skip_disk_cache
   (* What to do? *)
@@ -175,14 +195,8 @@ let type_
             Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
-    match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
-    | Some d, _,      _       ->
-        [ d // "A_gen.txt" ; d // "B_gen.txt" ; d // "C_gen.txt" ], []
-    | None,   Some d, _       ->
-        [ d // "A_nuc.txt" ; d // "B_nuc.txt" ; d // "C_nuc.txt" ], []
-    | None,   None,   Some d  ->
-        [], [ d // "A" ; d // "B" ; d // "C" ]
-    | None,   None,   None    -> alignment_files, merge_files
+    class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+      alignment_files merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let prealigned_transition_model = not not_prealigned in
