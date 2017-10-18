@@ -624,10 +624,7 @@ module Forward = struct
     ; mutable per_reads : aapt Output.per_read list
     }
 
-  type read_result =
-    { name  : string
-    ; stat  : stat Orientation.t single_or_paired
-    }
+  type read_result = stat Orientation.t single_or_paired Output.per_read
 
   let just_aap = function
     | Filtered m   -> Filtered m
@@ -724,7 +721,7 @@ module Forward = struct
     in
     let rec single fqi =
       Fastq_items.single fqi ~k:(fun name read read_errors ->
-        { name; stat = Single (forward initial_pt read read_errors) })
+        { Output.name; d = Single (forward initial_pt read read_errors) })
     and paired fq1 fq2 =
       let take_regular = take_regular_by_likelihood in
       Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
@@ -732,16 +729,16 @@ module Forward = struct
         match Orientation.most_likely_between r1 ~take_regular with
         | Filtered m  ->
             let r2 = forward initial_pt rd2 re2 in
-            { name; stat = Paired (r1, r2)}
+            { Output.name; d = Paired (r1, r2)}
         | Completed (c, _)  ->
             let r2 = Orientation.specific proc (proc_to_stat oo.allele_depth)
                       (not c) rd2 re2 in
-            { name; stat = Paired (r1, r2)})
+            { Output.name; d = Paired (r1, r2)})
     and merge state rr =
-      match rr.stat with
-      | Single stat_or  -> update_state_single state rr.name  stat_or
-      | Paired (s1, s2) -> update_state_single state (rr.name ^ " 1") s1;
-                           update_state_single state (rr.name ^ " 2") s2
+      match rr.Output.d with
+      | Single stat_or  -> update_state_single state rr.Output.name  stat_or
+      | Paired (s1, s2) -> update_state_single state (rr.Output.name ^ " 1") s1;
+                           update_state_single state (rr.Output.name ^ " 2") s2
     and output t oc =
       output_state oo allele_arr t oc
     and t = { single; paired; merge; output }
@@ -1081,12 +1078,14 @@ module Multiple_loci = struct
           sprintf "%s%c%s" (Nomenclature.show_locus l) sep
             (pr_to_string ~sep sr_to_string p))
 
-  type pd = Alleles_and_positions.t pp
-
-  type 'sr per_read =
+  (*type 'sr per_read =
     { name  : string
     ; rrs   : 'sr pp
-    }
+    } *)
+
+  type read_result = Forward.stat Output.per_read
+
+  type pd = Alleles_and_positions.t pp
 
   (* Easily convert to Output.per_locus *)
   type per_locus =
@@ -1099,8 +1098,6 @@ module Multiple_loci = struct
     { per_loci          : per_locus list
     ; mutable per_reads : pd Output.per_read list
     }
-
-  type read_result = Forward.stat per_read
 
   (* A PairedDependent with completed second should be chosen over any SingleRead's.
      A PairedDependent with a Filtered second should be compared by first.
@@ -1183,7 +1180,7 @@ module Multiple_loci = struct
   let cons_per_reads state name d =
     state.per_reads <- { Output.name; d } :: state.per_reads
 
-  let merge state { name ; rrs } =
+  let merge state { Output.name ; d } =
     let assign_to_per_locus { likelihood; zygosity; _ } = function
       | Single stat ->
           Likelihoods_and_zygosity.add_ll_and_lz
@@ -1199,7 +1196,7 @@ module Multiple_loci = struct
         if best_locus = pl.pl_locus then
           assign_to_per_locus pl best_stat)
     in
-    match rrs with
+    match d with
     | Single_or_incremental soi_lst ->
         begin match reduce_soi soi_lst with
         | None  -> eprintf "All read results filtered for %s\n%!" name
@@ -1214,12 +1211,6 @@ module Multiple_loci = struct
             assign_to_best best_locus best_stat
         end;
         cons_per_reads state name (MPaired (map_pr_to_aap pr_lst))
-
-  let output_per_reads prlst oc =
-    fprintf oc "Per Read:\n";
-    List.iter prlst ~f:(fun {name; rrs} ->
-      fprintf oc "%s\n%s\n" name
-        (pp_to_string Alleles_and_positions.string_of_list rrs))
 
   (*   Easier to reason about this as a distance, hence >= 0
   let abs_logp_one_over_hundred = abs_float (log10 0.01)
@@ -1331,8 +1322,8 @@ module Multiple_loci = struct
     let rec t = { single; paired; merge; output }
     and single fqi =
       Fastq_items.single fqi ~k:(fun name read read_errors ->
-        { name
-        ; rrs =
+        { Output.name
+        ; d =
             List.fold_left paa ~init:(initial_pt, [])
                 ~f:(fun (pt, acc) (locus, p, _, _) ->
                       let r, npt = forward pt p read read_errors in
@@ -1343,12 +1334,11 @@ module Multiple_loci = struct
         })
     and paired fq1 fq2 =
      Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
-        { name
-        ; rrs =
-            (*if conf.incremental_pairs then
-              incremental_paired name rd1 re1 rd2 re2
-            else *)
-              ordinary_paired name rd1 re1 rd2 re2
+        { Output.name
+        ; d = (*if conf.incremental_pairs then
+                  incremental_paired name rd1 re1 rd2 re2
+                else *)
+                  ordinary_paired name rd1 re1 rd2 re2
         })
     and output state oc =
       let pl_lst =
