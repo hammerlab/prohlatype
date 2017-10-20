@@ -1509,7 +1509,7 @@ module ForwardMultipleGen (R : Ring) = struct
     }*)
 
   let per_allele_emission_arr len =
-    Array.make len R.zero
+    Array.make len R.one
 
   module Fc = Forward_calcations_over_cells(R)
   module Ff = ForwardFilters(R)
@@ -2050,6 +2050,13 @@ let lookup_allele_or_fail t ~allele =
   | Some allele_index ->
       allele_index
 
+type viterbi_proc =
+  { single  : read:bytes -> read_errors:float array -> viterbi_result
+  ; paired  : read1:bytes -> read_errors1:float array
+            -> read2:bytes -> read_errors2:float array
+            -> viterbi_result
+  }
+
 let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
   read_length ~allele t =
   let allele_index = lookup_allele_or_fail t ~allele in
@@ -2098,7 +2105,7 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
     let c = result true ws in
     most_likely_viterbi r c
   in
-  single, paired
+  { single; paired }
 
 
 (* The forward pass return type requires a bit more subtlety as we want
@@ -2194,7 +2201,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   let per_allele_llhd () =
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
   in
-  let init_global_state () = [| Lp.zero |] in
+  let init_global_state () = [| Lp.one |] in
   { single
   ; best_allele_pos
   ; per_allele_llhd

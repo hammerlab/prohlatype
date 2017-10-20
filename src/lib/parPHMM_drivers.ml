@@ -215,14 +215,14 @@ module Zygosity_array = struct
   let init number_alleles =
     let s = storage_size number_alleles in
     { n = number_alleles
-    ; l = Array.make s Lp.zero
+    ; l = Array.make s Lp.one
     }
 
   let add t ~allele1 ~allele2 likelihood =
     let i = min allele1 allele2 in
     let j = max allele1 allele2 in
     let k = k_n t.n i j in
-    t.l.(k) <- Lp.(t.l.(k) + likelihood)
+    t.l.(k) <- Lp.(t.l.(k) * likelihood)
 
   type best_size =
     | NonZero
@@ -326,7 +326,7 @@ module Likelihoods_and_zygosity = struct
 
   let add_ll state_llhd llhd =
     Pm.iter_set llhd ~f:(fun i v ->
-      state_llhd.(i) <- Lp.(state_llhd.(i) + v))
+      state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
   let add_lz zygosity llhd =
     Pm.iter_set llhd ~f:(fun allele1 v1 ->
@@ -535,6 +535,12 @@ module Fastq_items = struct
 
 end (* Fastq_items *)
 
+type output_opt =
+  { allele_depth  : int
+  ; output_format : Output.format_spec
+  ; depth         : Output.depth
+  }
+
 type single_conf =
   { prealigned_transition_model : bool
   (** Use a transition model (transition probability between hidden states of
@@ -565,11 +571,14 @@ type single_conf =
   ; split                 : int option
   (** Split the forward pass to operate over this many segments of the read.
       The value must divide the read_length evenly or an exception is thrown. *)
+
+  ; output_opt            : output_opt
   }
 
 let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
   ~prealigned_transition_model
-  ~past_threshold_filter ~check_rc () =
+  ~past_threshold_filter ~check_rc
+  ~output_opt () =
     { prealigned_transition_model
     ; allele
     ; insert_p
@@ -578,29 +587,42 @@ let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
     ; past_threshold_filter
     ; check_rc
     ; split
+    ; output_opt
     }
 
-type ('state, 'read_result) worker =
-  { single  : Biocaml_unix.Fastq.item -> 'read_result
-  ; paired  : Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> 'read_result
-  ; merge   : 'state -> 'read_result -> unit
-  ; output  : 'state -> out_channel -> unit
-  }
+module type Worker = sig
 
-type output_opt =
-  { allele_depth  : int
-  ; output_format : Output.format_spec
-  ; depth         : Output.depth
-  }
+  type conf
+  type input
+  type state
+  type read_result
 
-module Forward = struct
+  val init      : conf -> read_length:int -> input -> state
+  val single    : state -> Biocaml_unix.Fastq.item -> read_result
+  val paired    : state -> Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> read_result
+  val merge     : state -> read_result -> unit
+  val output    : state -> out_channel -> unit
+
+end (* Worker *)
+
+(* It conforms the Worker signature, but I'm not limiting it to it. *)
+module Forward (* : Worker *) = struct
+
+  type conf = single_conf
+  type input = ParPHMM.t
 
   open ParPHMM
+
+  let empty_mt = Pm.empty_a
 
   type stat =
     { aap        : Alleles_and_positions.t
     ; likelihood : Lp.t mt
     }
+
+  let stat_to_string { aap; likelihood } =
+    sprintf "%s\n%s" (Alleles_and_positions.string_of_list aap)
+      (Pm.to_string likelihood (Lp.to_string ~precision:3))
 
   let proc_to_stat allele_depth proc _comp =
     { aap        = proc.best_allele_pos allele_depth
@@ -617,11 +639,17 @@ module Forward = struct
 
   type aapt = Alleles_and_positions.t Orientation.t [@@deriving yojson]
 
+  type opt = output_opt
+
   type state =
     { locus             : Nomenclature.locus
     ; per_allele_lhood  : Lp.t array
     ; zygosity          : Zygosity_array.t
     ; mutable per_reads : aapt Output.per_read list
+    ; initial_pt        : Past_threshold.t
+    ; proc              : ParPHMM.proc
+    ; allele_arr        : (string * MSA.Alteration.t list) array
+    ; opt               : output_opt
     }
 
   type read_result = stat Orientation.t single_or_paired Output.per_read
@@ -650,28 +678,6 @@ module Forward = struct
         Likelihoods_and_zygosity.add_ll_and_lz
           state.per_allele_lhood state.zygosity s.likelihood
 
-  let output_state oo allele_arr state oc =
-    let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
-    let size = oo.depth.Output.num_zygosities in
-    let ot =
-      let pl = Output.create_pl size state.locus allele_arr
-                state.per_allele_lhood state.zygosity in
-      Output.create [pl] state.per_reads
-    in
-    let of_ =
-      match oo.output_format with
-      | `TabSeparated ->
-        let aapt_to_string aapt =
-          sprintf "\n\t%s"
-            (Orientation.to_string ~take_regular
-                Alleles_and_positions.string_of_list aapt)
-        in
-        Output.TabSeparated aapt_to_string
-      | `Json ->
-        Output.Json aapt_to_yojson
-    in
-    Output.f oc ot oo.depth of_
-
   let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
     ~prealigned_transition_model read_length parPHMM_t =
     match allele with
@@ -699,9 +705,7 @@ module Forward = struct
       in
       proc, arr
 
-  type opt = output_opt
-
-  let init conf ~read_length parPHMM_t oo =
+  let init conf ~read_length parPHMM_t =
     let { prealigned_transition_model; allele; insert_p; band
         ; max_number_mismatches; past_threshold_filter ; split; _} = conf
     in
@@ -712,43 +716,69 @@ module Forward = struct
     in
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
-    let forward pt r re = fst (forward oo.allele_depth pt proc r re) in
-    let rec state =
-      { locus = parPHMM_t.locus; per_allele_lhood; zygosity; per_reads; }
-    and per_allele_lhood = proc.init_global_state ()
-    and zygosity = Zygosity_array.init (Array.length allele_arr)
-    and per_reads = []
+    { locus            = parPHMM_t.locus
+    ; per_allele_lhood = proc.init_global_state ()
+    ; zygosity         = Zygosity_array.init (Array.length allele_arr)
+    ; per_reads        = []
+    ; initial_pt
+    ; proc
+    ; allele_arr
+    ; opt              = conf.output_opt
+    }
+
+  let single { initial_pt; proc; opt; _} fqi =
+    let forward pt r re = fst (forward opt.allele_depth pt proc r re) in
+    Fastq_items.single fqi ~k:(fun name read read_errors ->
+      { Output.name; d = Single (forward initial_pt read read_errors) })
+
+  let paired { initial_pt; proc; opt } fq1 fq2 =
+    let forward pt r re = fst (forward opt.allele_depth pt proc r re) in
+    let take_regular = take_regular_by_likelihood in
+    Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+      let r1 = forward initial_pt rd1 re1 in
+      match Orientation.most_likely_between r1 ~take_regular with
+      | Filtered m  ->
+          let r2 = forward initial_pt rd2 re2 in
+          { Output.name; d = Paired (r1, r2)}
+      | Completed (c, _)  ->
+          let r2 = Orientation.specific proc (proc_to_stat opt.allele_depth)
+                    (not c) rd2 re2 in
+          { Output.name; d = Paired (r1, r2)})
+
+  let merge state rr =
+    match rr.Output.d with
+    | Single stat_or  -> update_state_single state rr.Output.name stat_or
+    | Paired (s1, s2) -> update_state_single state (rr.Output.name ^ " 1") s1;
+                         update_state_single state (rr.Output.name ^ " 2") s2
+  let output state oc =
+    let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
+    let size = state.opt.depth.Output.num_zygosities in
+    let ot =
+      let pl = Output.create_pl size state.locus state.allele_arr
+                state.per_allele_lhood state.zygosity in
+      Output.create [pl] state.per_reads
     in
-    let rec single fqi =
-      Fastq_items.single fqi ~k:(fun name read read_errors ->
-        { Output.name; d = Single (forward initial_pt read read_errors) })
-    and paired fq1 fq2 =
-      let take_regular = take_regular_by_likelihood in
-      Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
-        let r1 = forward initial_pt rd1 re1 in
-        match Orientation.most_likely_between r1 ~take_regular with
-        | Filtered m  ->
-            let r2 = forward initial_pt rd2 re2 in
-            { Output.name; d = Paired (r1, r2)}
-        | Completed (c, _)  ->
-            let r2 = Orientation.specific proc (proc_to_stat oo.allele_depth)
-                      (not c) rd2 re2 in
-            { Output.name; d = Paired (r1, r2)})
-    and merge state rr =
-      match rr.Output.d with
-      | Single stat_or  -> update_state_single state rr.Output.name  stat_or
-      | Paired (s1, s2) -> update_state_single state (rr.Output.name ^ " 1") s1;
-                           update_state_single state (rr.Output.name ^ " 2") s2
-    and output t oc =
-      output_state oo allele_arr t oc
-    and t = { single; paired; merge; output }
+    let of_ =
+      match state.opt.output_format with
+      | `TabSeparated ->
+        let aapt_to_string aapt =
+          sprintf "\n\t%s"
+            (Orientation.to_string ~take_regular
+                Alleles_and_positions.string_of_list aapt)
+        in
+        Output.TabSeparated aapt_to_string
+      | `Json ->
+        Output.Json aapt_to_yojson
     in
-    t, state
+    Output.f oc ot state.opt.depth of_
 
 end (* Forward *)
 
 (* A map of reads to a Viterbi decoded path *)
 module Viterbi = struct
+
+  type conf = single_conf
+  type input = ParPHMM.t
 
   open ParPHMM
   open Path
@@ -802,64 +832,40 @@ module Viterbi = struct
 
   type state =
     { mutable results : read_result list
+    ; vfuncs          : viterbi_proc
+    ; labels          : string * string
     }
 
   type opt = unit
 
-  let init conf ~read_length parPHMM_t () =
+  let init conf ~read_length parPHMM_t =
     let { prealigned_transition_model; allele; insert_p; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first in the specified ParPHMM.t allele list. *)
     let allele = Option.value ~default:(fst parPHMM_t.alleles.(0)) allele in
-    let labels = allele ^ " ", "read " in
-    let s, p =
-      setup_single_allele_viterbi_pass ?insert_p ~allele
-        ~prealigned_transition_model read_length parPHMM_t
-    in
-    let state = { results = [] } in
-    let rec t = { single; paired; merge; output }
-    and single =
-      Fastq_items.single ~k:(fun name read read_errors ->
-        { name; res = s read read_errors})
-    and paired fq1 fq2 =
-      Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
-        { name; res =  p rd1 re1 rd2 re2})
-    and merge state pr =
+    { results = []
+    ; vfuncs  = setup_single_allele_viterbi_pass ?insert_p ~allele
+                  ~prealigned_transition_model read_length parPHMM_t
+    ; labels = allele ^ " ", "read "
+    }
+
+  let single { vfuncs; _} =
+    Fastq_items.single ~k:(fun name read read_errors ->
+      { name; res = vfuncs.single ~read ~read_errors})
+
+  let paired { vfuncs; _} fq1 fq2 =
+    Fastq_items.paired fq1 fq2 ~k:(fun name read1 read_errors1 read2 read_errors2 ->
+      { name; res = vfuncs.paired ~read1 ~read_errors1 ~read2 ~read_errors2})
+
+  let merge state pr =
       state.results <- pr :: state.results
-    and output state oc =
-      List.iter state.results ~f:(fun {name; res } ->
+
+  let output { results; labels; _} oc =
+      List.iter results ~f:(fun {name; res } ->
         fprintf oc "%s:\n%s\n" name (viterbi_result_to_string ~labels res))
-    in
-    t, state
 
 end (* Viterbi *)
 
-(** Single Loci Drivers **)
-module type S = sig
-
-  type state
-  type read_result
-
-  type opt
-
-  val init : single_conf
-           -> read_length:int
-           -> ParPHMM.t
-           -> opt
-           -> (state, read_result) worker * state
-
-end (* S *)
-
-module Make_single (S : S) = struct
-
-  let init = S.init
-
-  let single d fqi = d.single fqi
-  let paired d fq1 fq2 = d.paired fq1 fq2
-  let merge d s r = d.merge s r
-  let output d s oc = d.output s oc
-
-end (* Make_single *)
 
 (* Combine results from multiple loci. *)
 
@@ -888,6 +894,8 @@ type multiple_conf =
   ; split                   : int option
   (** Split the forward pass to operate over this many segments of the read.
       The value must divide the read_length evenly or an exception is thrown. *)
+
+  ; output_opt              : output_opt
 
   (* Not robust see comment below
   Incremental logic has been disabled ... it still introduced errors over a
@@ -921,6 +929,7 @@ type multiple_conf =
 let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
   ~prealigned_transition_model
   ~past_threshold_filter
+  ~output_opt
   (*~incremental_pairs *)
   (*?first_read_best_log_gap *)
   () =
@@ -930,11 +939,15 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
     ; max_number_mismatches
     ; past_threshold_filter
     ; split
+    ; output_opt
     (*; incremental_pairs
       ; first_read_best_log_gap *)
     }
 
 module Multiple_loci = struct
+
+  type conf = multiple_conf
+  type input = ParPHMM.t list
 
   open ParPHMM
 
@@ -1078,14 +1091,7 @@ module Multiple_loci = struct
           sprintf "%s%c%s" (Nomenclature.show_locus l) sep
             (pr_to_string ~sep sr_to_string p))
 
-  (*type 'sr per_read =
-    { name  : string
-    ; rrs   : 'sr pp
-    } *)
-
-  type read_result = Forward.stat Output.per_read
-
-  type pd = Alleles_and_positions.t pp
+  type read_result = Forward.stat pp Output.per_read
 
   (* Easily convert to Output.per_locus *)
   type per_locus =
@@ -1096,7 +1102,12 @@ module Multiple_loci = struct
     }
   type state =
     { per_loci          : per_locus list
-    ; mutable per_reads : pd Output.per_read list
+    ; mutable per_reads : Alleles_and_positions.t pp Output.per_read list
+    ; single_read       : bytes -> float array -> Forward.stat pp
+    ; ordinary_paired   : string -> bytes -> float array
+                                 -> bytes -> float array
+                                 -> Forward.stat pp
+    ; opt               : Forward.opt
     }
 
   (* A PairedDependent with completed second should be chosen over any SingleRead's.
@@ -1177,40 +1188,8 @@ module Multiple_loci = struct
               ; second  = map_completed ~f:(fun s -> s.Forward.aap) second
               })
 
-  let cons_per_reads state name d =
-    state.per_reads <- { Output.name; d } :: state.per_reads
-
-  let merge state { Output.name ; d } =
-    let assign_to_per_locus { likelihood; zygosity; _ } = function
-      | Single stat ->
-          Likelihoods_and_zygosity.add_ll_and_lz
-            likelihood zygosity stat.Forward.likelihood
-      | Paired (s1, s2) ->
-          Likelihoods_and_zygosity.add_ll_and_lz
-            likelihood zygosity s1.Forward.likelihood;
-          Likelihoods_and_zygosity.add_ll_and_lz
-            likelihood zygosity s2.Forward.likelihood
-    in
-    let assign_to_best best_locus best_stat =
-      List.iter state.per_loci ~f:(fun pl ->
-        if best_locus = pl.pl_locus then
-          assign_to_per_locus pl best_stat)
-    in
-    match d with
-    | Single_or_incremental soi_lst ->
-        begin match reduce_soi soi_lst with
-        | None  -> eprintf "All read results filtered for %s\n%!" name
-        | Some (best_locus, best_stat)  ->
-            assign_to_best best_locus best_stat
-        end;
-        cons_per_reads state name (Single_or_incremental (map_soi_to_aap soi_lst))
-    | MPaired pr_lst ->
-        begin match reduce_mpr pr_lst with
-        | None -> eprintf "All 2nd read results filtered for %s\n%!" name
-        | Some (_bl, best_locus, best_stat)  ->
-            assign_to_best best_locus best_stat
-        end;
-        cons_per_reads state name (MPaired (map_pr_to_aap pr_lst))
+  let cons_per_reads state pr =
+    state.per_reads <- pr :: state.per_reads
 
   (*   Easier to reason about this as a distance, hence >= 0
   let abs_logp_one_over_hundred = abs_float (log10 0.01)
@@ -1233,9 +1212,9 @@ module Multiple_loci = struct
         MoreLikely
     end *)
 
-  let init conf opt read_length parPHMM_t_lst =
+  let init conf ~read_length parPHMM_t_lst =
     let { prealigned_transition_model; insert_p; band; max_number_mismatches
-        ; split; _ } = conf in
+        ; split; output_opt; _ } = conf in
     let paa =
       List.map parPHMM_t_lst ~f:(fun parPHMM_t ->
         let proc, allele_arr =
@@ -1246,9 +1225,18 @@ module Multiple_loci = struct
         parPHMM_t.locus, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
-    let forward = Forward.forward opt.allele_depth in
+    let forward = Forward.forward output_opt.allele_depth in
     let specific_orientation p rc r re =
-      specific_orientation p (Forward.proc_to_stat opt.allele_depth) rc r re
+      specific_orientation p (Forward.proc_to_stat output_opt.allele_depth) rc r re
+    in
+    let single_read read read_errors =
+      List.fold_left paa ~init:(initial_pt, [])
+            ~f:(fun (pt, acc) (locus, p, _, _) ->
+                  let r, npt = forward pt p read read_errors in
+                  npt, (locus, SingleRead r) :: acc)
+      |> snd                                 (* Discard final threshold *)
+      |> List.rev                                (* Restore loci order. *)
+      |> fun l -> Single_or_incremental l
     in
     let ordinary_paired name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
@@ -1310,56 +1298,191 @@ module Multiple_loci = struct
           in
           Single_or_incremental (seconds @ (List.rev rest))
     in *)
-    let rec state = { per_loci; per_reads = []}
-    and per_loci =
+    { per_loci =
       List.map paa ~f:(fun (pl_locus, p, allele_arr, number_alleles) ->
         { pl_locus
         ; allele_arr
         ; likelihood = p.init_global_state ()
         ; zygosity   = Zygosity_array.init number_alleles
         })
+    ; per_reads = []
+    ; single_read
+    ; ordinary_paired
+    ; opt       = output_opt
+    }
+
+  let single { single_read; _} fqi =
+    Fastq_items.single fqi ~k:(fun name read read_errors ->
+      { Output.name
+      ; d = single_read read read_errors
+      })
+
+  let paired { ordinary_paired; _} fq1 fq2 =
+    Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+      { Output.name
+      ; d = ordinary_paired name rd1 re1 rd2 re2
+      })
+
+  let merge state pr =
+    let assign_to_per_locus { likelihood; zygosity; _ } = function
+      | Single stat ->
+          Likelihoods_and_zygosity.add_ll_and_lz
+            likelihood zygosity stat.Forward.likelihood
+      | Paired (s1, s2) ->
+          Likelihoods_and_zygosity.add_ll_and_lz
+            likelihood zygosity s1.Forward.likelihood;
+          Likelihoods_and_zygosity.add_ll_and_lz
+            likelihood zygosity s2.Forward.likelihood
     in
-    let rec t = { single; paired; merge; output }
-    and single fqi =
-      Fastq_items.single fqi ~k:(fun name read read_errors ->
-        { Output.name
-        ; d =
-            List.fold_left paa ~init:(initial_pt, [])
-                ~f:(fun (pt, acc) (locus, p, _, _) ->
-                      let r, npt = forward pt p read read_errors in
-                      npt, (locus, SingleRead r) :: acc)
-            |> snd                                 (* Discard final threshold *)
-            |> List.rev                                (* Restore loci order. *)
-            |> fun l -> Single_or_incremental l
-        })
-    and paired fq1 fq2 =
-     Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
-        { Output.name
-        ; d = (*if conf.incremental_pairs then
-                  incremental_paired name rd1 re1 rd2 re2
-                else *)
-                  ordinary_paired name rd1 re1 rd2 re2
-        })
-    and output state oc =
-      let pl_lst =
-        List.map state.per_loci
-          ~f:(fun { pl_locus; allele_arr; likelihood; zygosity } ->
-                Output.create_pl opt.depth.Output.num_zygosities pl_locus
-                  allele_arr likelihood zygosity)
-      in
-      let ot = Output.create pl_lst state.per_reads in
-      let of_ =
-        match opt.output_format with
-        | `TabSeparated ->
-          let out_to_string rrp =
-            sprintf "\n%s" (pp_to_string Alleles_and_positions.string_of_list rrp)
-          in
-          Output.TabSeparated out_to_string
-        | `Json ->
-          Output.Json (pp_to_yojson Alleles_and_positions.to_yojson)
-      in
-      Output.f oc ot opt.depth of_
+    let assign_to_best best_locus best_stat =
+      List.iter state.per_loci ~f:(fun pl ->
+        if best_locus = pl.pl_locus then
+          assign_to_per_locus pl best_stat)
     in
-    t, state
+    let nd =
+      match pr.Output.d with
+      | Single_or_incremental soi_lst ->
+          begin match reduce_soi soi_lst with
+          | None  -> eprintf "All read results filtered for %s\n%!" pr.Output.name
+          | Some (best_locus, best_stat)  ->
+              assign_to_best best_locus best_stat
+          end;
+          Single_or_incremental (map_soi_to_aap soi_lst)
+      | MPaired pr_lst ->
+          begin match reduce_mpr pr_lst with
+          | None -> eprintf "All 2nd read results filtered for %s\n%!" pr.Output.name
+          | Some (_bl, best_locus, best_stat)  ->
+              assign_to_best best_locus best_stat
+          end;
+          MPaired (map_pr_to_aap pr_lst)
+    in
+    cons_per_reads state {pr with Output.d = nd}
+
+  let output state oc =
+    let pl_lst =
+      List.map state.per_loci
+        ~f:(fun { pl_locus; allele_arr; likelihood; zygosity } ->
+              Output.create_pl state.opt.depth.Output.num_zygosities pl_locus
+                allele_arr likelihood zygosity)
+    in
+    let ot = Output.create pl_lst state.per_reads in
+    let of_ =
+      match state.opt.output_format with
+      | `TabSeparated ->
+        let out_to_string rrp =
+          sprintf "\n%s" (pp_to_string Alleles_and_positions.string_of_list rrp)
+        in
+        Output.TabSeparated out_to_string
+      | `Json ->
+        Output.Json (pp_to_yojson Alleles_and_positions.to_yojson)
+    in
+    Output.f oc ot state.opt.depth of_
 
 end (* Multiple_loci *)
+
+module Sequential (W : Worker) = struct
+
+  let init rp conf read_length =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_length"
+                read_length)
+        (fun () -> rp read_length)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> W.init conf ~read_length pt)
+
+  let single conf =
+    fun acc fqi ->
+      match acc with
+      | `Setup rp ->
+          let read_length = String.length fqi.Biocaml_unix.Fastq.sequence in
+          let s = init rp conf read_length in
+          W.merge s (W.single s fqi);
+          `Set s
+      | `Set s ->
+          W.merge s (W.single s fqi);
+          `Set s
+
+  let paired conf =
+    fun acc fq1 fq2 ->
+      match acc with
+      | `Setup rp ->
+          let read_length = String.length fq1.Biocaml_unix.Fastq.sequence in
+          let s = init rp conf read_length in
+          W.merge s (W.paired s fq1 fq2);
+          `Set s
+      | `Set s ->
+          W.merge s (W.paired s fq1 fq2);
+          `Set s
+
+  let across_fastq conf ?number_of_reads ~specific_reads file init =
+    let f = single conf in
+    try
+      Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
+      |> function
+          | `Setup _ -> eprintf "Didn't find any reads."
+          | `Set  s  -> W.output s stdout
+    with Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired ~finish_singles conf ?number_of_reads ~specific_reads
+    file1 file2 init =
+    let f = paired conf in
+    try
+      begin
+        if finish_singles then
+          let fs = single conf in
+          let ff = fs in
+          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
+            ~init ~f ~ff ~fs
+        else
+          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
+      end
+      |> function
+          | `BothFinished o
+          | `FinishedSingle o
+          | `OneReadPairedFinished (_, o)
+          | `StoppedByFilter o
+          | `DesiredReads o ->
+              match o with
+              | `Setup _ -> eprintf "Didn't find any reads."
+              | `Set s   -> W.output s stdout
+    with Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Sequential *)
+
+module Parallel (W : Worker) = struct
+
+  let init rp conf read_length =
+    let pt =
+      time (sprintf "Setting up ParPHMM transitions with %d read_length"
+        read_length)
+        (fun () -> rp read_length)
+    in
+    time "Allocating forward pass workspace"
+      (fun () -> W.init conf ~read_length pt)
+
+  let across_fastq conf ?number_of_reads ~specific_reads ~nprocs file state =
+    try
+      let map fqi = W.single state fqi in
+      let mux rr = W.merge state rr in
+      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
+      W.output state stdout
+    with Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+  let across_paired conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
+    let map = function
+      | Single fqi      -> W.single state fqi
+      | Paired (f1, f2) -> W.paired state f1 f2
+    in
+    let mux rr = W.merge state rr in
+    try
+      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
+        ~nprocs ~map ~mux file1 file2;
+      W.output state stdout
+    with Fastq_items.Read_error_parsing e ->
+      eprintf "%s" e
+
+end (* Parallel *)

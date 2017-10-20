@@ -26,168 +26,58 @@ let to_read_size_dependent
                 let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
                 Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
-module BoilerPlate (S : ParPHMM_drivers.S) = struct
+module Pd = ParPHMM_drivers
+module Bv = Pd.Sequential(Pd.Viterbi)
 
-  module D = ParPHMM_drivers.Make_single(S)
-
-  let init conf rp read_size opt =
-    let pt =
-      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-        (fun () -> rp read_size)
-    in
-    time "Allocating forward pass workspace"
-      (fun () -> D.init conf read_size pt opt)
-
-  let single conf opt =
-    fun acc fqi ->
-      match acc with
-      | `Setup rp ->
-          let read_size = String.length fqi.Biocaml_unix.Fastq.sequence in
-          let t, s = init conf rp read_size opt in
-          D.merge t s (D.single t fqi);
-          `Set (t, s)
-      | `Set (t,s) ->
-          D.merge t s (D.single t fqi);
-          acc
-
-  let paired conf opt =
-    fun acc fq1 fq2 ->
-      match acc with
-      | `Setup rp ->
-          let read_size = String.length fq1.Biocaml_unix.Fastq.sequence in
-          let t, s = init conf rp read_size opt in
-          D.merge t s (D.paired t fq1 fq2);
-          `Set (t, s)
-      | `Set (t, s) ->
-          D.merge t s (D.paired t fq1 fq2);
-          acc
-
-  let across_fastq conf opt ?number_of_reads ~specific_reads file init =
-    let f = single conf opt in
-    try
-      Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
-      |> function
-          | `Setup _    -> eprintf "Didn't find any reads."
-          | `Set (t, s) -> D.output t s stdout
-    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
-
-  let across_paired ~finish_singles conf opt ?number_of_reads ~specific_reads
-    file1 file2 init =
-    let f = paired conf opt in
-    try
-      begin
-        if finish_singles then
-          let fs = single conf opt in
-          let ff = fs in
-          Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
-            ~init ~f ~ff ~fs
-        else
-          Fastq.fold_paired ?number_of_reads ~specific_reads file1 file2 ~init ~f
-      end
-      |> function
-          | `BothFinished o
-          | `FinishedSingle o
-          | `OneReadPairedFinished (_, o)
-          | `StoppedByFilter o
-          | `DesiredReads o ->
-              match o with
-              | `Setup _    -> eprintf "Didn't find any reads."
-              | `Set (t, s) -> D.output t s stdout
-    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
-
-end (* BoilerPlate *)
-
-module Bv = BoilerPlate(ParPHMM_drivers.Viterbi)
-
-let viterbi read_size_override need_read_size conf fastq_file_list
+let viterbi read_length_override need_read_length conf fastq_file_list
   number_of_reads specific_reads finish_singles =
   let init =
-    match read_size_override with
-    | None   -> `Setup need_read_size
-    | Some r -> `Set (Bv.init conf need_read_size r ())
+    match read_length_override with
+    | None   -> `Setup need_read_length
+    | Some r -> `Set (Bv.init need_read_length conf r)
   in
   match fastq_file_list with
   | []              -> invalid_argf "Cmdliner lied!"
-  | [fastq]         -> Bv.across_fastq conf ()
+  | [fastq]         -> Bv.across_fastq conf
                             ?number_of_reads ~specific_reads fastq init
-  | [read1; read2]  -> Bv.across_paired ~finish_singles conf ()
+  | [read1; read2]  -> Bv.across_paired ~finish_singles conf
                             ?number_of_reads ~specific_reads read1 read2 init
   | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                           (List.length lst)
 
-module Bf = BoilerPlate(ParPHMM_drivers.Forward)
+module Bf = Pd.Sequential(Pd.Forward)
 
-let forward opt read_size_override need_read_size conf fastq_file_list
+let forward read_size_override need_read_size conf fastq_file_list
   number_of_reads specific_reads finish_singles =
   let init =
     match read_size_override with
     | None   -> `Setup need_read_size
-    | Some r -> `Set (Bf.init conf need_read_size r opt)
+    | Some r -> `Set (Bf.init need_read_size conf r)
   in
   match fastq_file_list with
   | []              -> invalid_argf "Cmdliner lied!"
-  | [fastq]         -> Bf.across_fastq conf opt
+  | [fastq]         -> Bf.across_fastq conf
                           ?number_of_reads ~specific_reads fastq init
-  | [read1; read2]  -> Bf.across_paired ~finish_singles conf opt
+  | [read1; read2]  -> Bf.across_paired ~finish_singles conf
                           ?number_of_reads ~specific_reads read1 read2 init
   | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                         (List.length lst)
 
-module Parallel (S : ParPHMM_drivers.S) = struct
+module Pf = Pd.Parallel(Pd.Forward)
 
-  module D = ParPHMM_drivers.Make_single(S)
-
-  let init conf rp read_size opt =
-    let pt =
-      time (sprintf "Setting up ParPHMM transitions with %d read_size" read_size)
-        (fun () -> rp read_size)
-    in
-    time "Allocating forward pass workspace"
-      (fun () -> D.init conf read_size pt opt)
-
-  let across_fastq conf opt ?number_of_reads ~specific_reads ~nprocs
-    file driver state =
-    try
-      let map fqi = D.single driver fqi in
-      let mux rr = D.merge driver state rr in
-      Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
-      D.output driver state stdout
-    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
-
-  let across_paired conf opt ?number_of_reads ~specific_reads ~nprocs
-    file1 file2 driver state =
-    let map = function
-      | Single fqi      -> D.single driver fqi
-      | Paired (f1, f2) -> D.paired driver f1 f2
-    in
-    let mux rr = D.merge driver state rr in
-    try
-      Fastq.fold_paired_parany ?number_of_reads ~specific_reads
-        ~nprocs ~map ~mux file1 file2;
-      D.output driver state stdout
-    with ParPHMM_drivers.Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
-
-end (* Parallel *)
-
-module Pf = Parallel(ParPHMM_drivers.Forward)
-
-let p_forward opt read_size_override need_read_size conf fastq_file_list
+let p_forward read_size_override need_read_size conf fastq_file_list
   number_of_reads specific_reads finish_singles nprocs =
   match read_size_override with
   | None   -> invalid_argf "Must specify read size for pallel!"
-  | Some r -> let driver, state = Pf.init conf need_read_size r opt in
+  | Some r -> let state = Pf.init need_read_size conf r in
               begin match fastq_file_list with
               | []              -> invalid_argf "Cmdliner lied!"
-              | [fastq]         -> Pf.across_fastq conf opt
+              | [fastq]         -> Pf.across_fastq conf
                                       ?number_of_reads ~specific_reads ~nprocs
-                                      fastq driver state
-              | [read1; read2]  -> Pf.across_paired conf opt
+                                      fastq state
+              | [read1; read2]  -> Pf.across_paired conf
                                       ?number_of_reads ~specific_reads ~nprocs
-                                      read1 read2 driver state
+                                      read1 read2 state
               | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                                     (List.length lst)
               end
@@ -250,31 +140,32 @@ let type_
         let prealigned_transition_model = not not_prealigned in
         let past_threshold_filter = not do_not_past_threshold_filter in
         let finish_singles = not do_not_finish_singles in
+        let output_opt =
+          { ParPHMM_drivers.allele_depth
+          ; output_format
+          ; depth =
+            { ParPHMM_drivers.Output.num_likelihoods = likelihood_report_size
+            ; num_zygosities         = zygosity_report_size
+            ; num_per_read           = per_reads_report_size
+            }
+          }
+        in
         let conf =
           ParPHMM_drivers.single_conf ?allele ~insert_p ?band ?split
             ?max_number_mismatches ~prealigned_transition_model
-            ~past_threshold_filter ~check_rc ()
+            ~past_threshold_filter ~check_rc ~output_opt ()
         in
         match mode with
         | `Viterbi ->
             viterbi read_size_override need_read_size conf fastq_file_list
               number_of_reads specific_reads finish_singles
         | `Forward ->
-            let opt = { ParPHMM_drivers.allele_depth
-                      ; output_format
-                      ; depth =
-                          { ParPHMM_drivers.Output.num_likelihoods =
-                                                     likelihood_report_size
-                          ; num_zygosities         = zygosity_report_size
-                          ; num_per_read           = per_reads_report_size
-                          }
-                      } in
             begin match number_processes_opt with
             | None  ->
-                forward opt read_size_override need_read_size conf fastq_file_list
+                forward read_size_override need_read_size conf fastq_file_list
                   number_of_reads specific_reads finish_singles
             | Some n ->
-                p_forward opt read_size_override need_read_size conf fastq_file_list
+                p_forward read_size_override need_read_size conf fastq_file_list
                   number_of_reads specific_reads finish_singles n
             end
 
