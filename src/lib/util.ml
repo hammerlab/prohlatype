@@ -298,9 +298,18 @@ let gc_between s f =
       (after.stack_size - before.stack_size);
   r
 
-type 'a single_or_paired =
-  | Single of 'a
-  | Paired of ('a * 'a)
+module Sp = struct
+
+  type 'a t =
+    | Single of 'a
+    | Paired of ('a * 'a)
+  [@@deriving yojson]
+
+  let map f = function
+    | Single  v       -> Single (f v)
+    | Paired (v1, v2) -> Paired (f v1, f v2)
+
+end
 
 (* Maintain a sorted association list of the top n items. *)
 let topn p k a i lst =

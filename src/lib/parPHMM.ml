@@ -971,9 +971,9 @@ module Path = struct
     in
     let rec first start reada refa = function
       | E end_ :: [] ->
-          Single { reference = List.rev refa |> String.of_character_list
-                 ; read = List.rev reada |> String.of_character_list
-                 ; start ; end_ }
+          Sp.Single { reference = List.rev refa |> String.of_character_list
+                    ; read = List.rev reada |> String.of_character_list
+                    ; start ; end_ }
       | E end_ :: S nstart :: tl ->
           let r1 =
             { reference = List.rev refa |> String.of_character_list
@@ -981,7 +981,7 @@ module Path = struct
             ; start ; end_ }
           in
           let r2 = second nstart [] [] tl in
-          Paired (r1, r2)
+          Sp.Paired (r1, r2)
       |  _ :: []
       | [] -> invalid_argf "Didn't end with an end"
 
