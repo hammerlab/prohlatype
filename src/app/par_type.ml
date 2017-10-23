@@ -110,6 +110,7 @@ let type_
     allele_depth
     likelihood_report_size
     zygosity_report_size
+    zygosity_non_zero_value
     per_reads_report_size
     output_format
   (* how are we typing *)
@@ -146,7 +147,9 @@ let type_
           ; output_format
           ; depth =
             { ParPHMM_drivers.Output.num_likelihoods = likelihood_report_size
-            ; num_zygosities         = zygosity_report_size
+            ; num_zygosities         = Common_options.to_num_zygosities
+                                        ~zygosity_non_zero_value
+                                        ~zygosity_report_size
             ; num_per_read           = per_reads_report_size
             }
           }
@@ -249,6 +252,7 @@ let () =
             $ allele_depth_arg
             $ likelihood_report_size_arg
             $ zygosity_report_size_arg
+            $ zygosity_non_zero_value_arg
             $ per_reads_report_size_arg
             $ output_format_flag
             (* How are we typing *)

@@ -584,22 +584,41 @@ let non_negative_zygosity =
     (non_negative_int_parser
     , fun frmt zas ->
         match zas with
-        | NoSpec  -> Format.fprintf frmt "%d" 0
-        | Spec d  -> Format.fprintf frmt "%d" d
-        | NonZero -> Format.fprintf frmt "")
+        | NoSpec    -> Format.fprintf frmt "%d" 0
+        | Spec d    -> Format.fprintf frmt "%d" d
+        | NonZero v -> Format.fprintf frmt "%f" v)
 
 let zygosity_report_size_argument = "zygosity-report-size"
 let zygosity_report_size_arg =
-  let open ParPHMM_drivers.Zygosity_array in
+  let open ParPHMM_drivers in
   let docv = "POSITIVE INTEGER" in
   let doc =
-    "Override the default number of allelic pairs reported as part of the \
-    zygosity portion. By defaults only the pairs that have non-zero \
-    probability will be reported. Set this value to zero to not report \
-    any values."
+    sprintf "Override the default number of allelic pairs reported as part of \
+      the zygosity portion. By defaults only the pairs that have non-zero \
+      (> %f) probability will be reported. Set this value to zero to not \
+      report any values."
+      Zygosity_array.default_non_zero
   in
-  Arg.(value & opt non_negative_zygosity NonZero
+  Arg.(value & opt non_negative_zygosity
+                      Zygosity_array.(NonZero default_non_zero)
              & info ~doc ~docv [zygosity_report_size_argument])
+
+let zygosity_non_zero_value_arg =
+  let open ParPHMM_drivers in
+  let docv = "POSITIVE FLOAT" in
+  let doc =
+    sprintf "Override the default lowerbound of non-zero zygosities. The \
+      default (%0.5f) probability might be too high for some scenarios, such \
+      as if there are too few reads. This argument overrides %s."
+      Zygosity_array.default_non_zero zygosity_report_size_argument
+  in
+  Arg.(value & opt (some positive_float) None
+             & info ~doc ~docv ["zygosity-non-zero"])
+
+let to_num_zygosities ~zygosity_non_zero_value ~zygosity_report_size =
+  Option.value_map zygosity_non_zero_value
+    ~f:(fun v -> ParPHMM_drivers.Zygosity_array.NonZero v)
+    ~default:zygosity_report_size
 
 let per_reads_report_size_arg =
   let docv = "POSITIVE INTEGER" in

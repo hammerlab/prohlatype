@@ -225,18 +225,22 @@ module Zygosity_array = struct
     t.l.(k) <- Lp.(t.l.(k) * likelihood)
 
   type best_size =
-    | NonZero
+    | NonZero of float
     | Spec of int
     | NoSpec
+
+  let default_non_zero = 0.0001
 
   (* log likelihood, probability, index 1st, index 2nd *)
   let best size likelihood_arr t =
     let desired_size, nz =
       match size with
-      | NonZero -> storage_size t.n, true
-      | Spec n  -> max 1 n, false
-      | NoSpec  -> storage_size t.n, false
+      | NonZero v -> storage_size t.n, Some v
+      | Spec n    -> max 1 n, None
+      | NoSpec    -> storage_size t.n, None
     in
+    printf "Looking for best %d with %s\n"
+      desired_size (Option.value_map nz ~default:"None" ~f:(sprintf "%0.20f"));
 (* Create a sorted, grouped, and constrained, list of the paired likelihoods.
   The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
   point we don't care about the tail, only about where there is actual
@@ -295,27 +299,27 @@ module Zygosity_array = struct
     in
     let most_likely = List.rev_map ~f:(fun (l, _n, ijlist) -> (l, ijlist)) res in
     let maxl, _ = List.hd_exn most_likely in
-    (*printf "maxl: %20.20f \n%!" maxl; *)
-    let prob = Lp.probability ~maxl in
-(* Compute the normalizing constant. *)
-    let ns =
-      let f s l = s +. prob l in
-      let heterozygous_sum = Array.fold_left ~init:0. ~f t.l in
-      Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
-    in
-    if nz then begin
-      (*printf "hoooray nonzero requested! %20.20f \n%!" ns; *)
-      List.filter_map most_likely ~f:(fun (l, ij) ->
-        (*printf "l: %0.20f, p:%0.20f, %s \n%!" l (prob l)
-          (string_of_list ~sep:";" ~f:(fun (i,j) -> sprintf "%d,%d" i j) ij); *)
-        let p = prob l /. ns in
-        (* This isn't necessarily the right notion of zero. *)
-        if p > !ParPHMM.dx then
-          Some (l, prob l /. ns, ij)
-        else
-          None)
-    end else
-      List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
+    (* If we've never added any values then just return empty list. *)
+    if maxl = Lp.one then
+      []
+    else
+      let prob = Lp.probability ~maxl in
+  (* Compute the normalizing constant. *)
+      let ns =
+        let f s l = s +. prob l in
+        let heterozygous_sum = Array.fold_left ~init:0. ~f t.l in
+        Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
+      in
+      match nz with
+      | Some lb ->
+        List.filter_map most_likely ~f:(fun (l, ij) ->
+          let p = prob l /. ns in
+          if p > lb then     (* This isn't necessarily the right notion of zero. *)
+            Some (l, p, ij)
+          else
+            None)
+      | None ->
+          List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
 
 end (* Zygosity_array *)
 
@@ -401,7 +405,7 @@ module Output = struct
 
   let default_depth =
     { num_likelihoods = None
-    ; num_zygosities  = Zygosity_array.NonZero
+    ; num_zygosities  = Zygosity_array.(NonZero default_non_zero)
     ; num_per_read    = None
     }
 
@@ -476,7 +480,7 @@ module Output = struct
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
-      fprintf oc "%16s\t%16s\t%s\t%0.4f\n"
+      fprintf oc "%16s\t%16s\t%s\t%0.6f\n"
         allele1 allele2 (Lp.to_string ~precision:20 z_llhd) prob
     in
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
@@ -1154,7 +1158,8 @@ module Multiple_loci :
 
   let final_read_info_to_string { most_likely; aaps } =
     sprintf "%s\n%s"
-      (Option.value_map most_likely ~default:"Unassigned!"
+      (Option.value_map most_likely
+        ~default:"Unassigned! Is the non-zero threshold too high?"
         ~f:(fun (l, a) -> sprintf "%s %s" (Nomenclature.show_locus l) a))
       (pp_to_string Alleles_and_positions.string_of_list aaps)
 
@@ -1476,8 +1481,8 @@ module Multiple_loci :
             | Some (bl, _) -> if bl >= l then s else Some (l, ioj)))
       in
       Option.map lopt ~f:(fun (_l, i) ->
-          let allele_arr = to_locus_allele_arr locus in
-          locus, (fst allele_arr.(i)))
+        let allele_arr = to_locus_allele_arr locus in
+        locus, (fst allele_arr.(i)))
     in
     let f_per_reads = List.map per_reads ~f:(fun pr ->
       let { ml; aaps } = pr.Output.d in
