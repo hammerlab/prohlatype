@@ -27,56 +27,46 @@ let to_read_size_dependent
                 Cache.par_phmm ~skip_disk_cache par_phmm_args)
 
 module Pd = ParPHMM_drivers
-module Bf = Pd.Sequential(Pd.Forward)
 
-let forward read_length_override need_read_length conf fastq_file_list
-  number_of_reads specific_reads finish_singles =
-  let init =
-    match read_length_override with
-    | None   -> `Setup need_read_length
-    | Some r -> `Set (Bf.init need_read_length conf r)
-  in
-  match fastq_file_list with
-  | []              -> invalid_argf "Cmdliner lied!"
-  | [fastq]         -> Bf.across_fastq conf
-                          ?number_of_reads ~specific_reads fastq init
-  | [read1; read2]  -> Bf.across_paired ~finish_singles conf
-                          ?number_of_reads ~specific_reads read1 read2 init
-  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
-                        (List.length lst)
+(*Wrap Execution *)
+module We (W : Pd.Worker) = struct
 
-module Bv = Pd.Sequential(Pd.Viterbi)
+  module E = Pd.Sequential(W)
 
-let viterbi read_length_override need_read_length conf fastq_file_list
-  number_of_reads specific_reads finish_singles =
-  let init =
-    match read_length_override with
-    | None   -> `Setup need_read_length
-    | Some r -> `Set (Bv.init need_read_length conf r)
-  in
-  match fastq_file_list with
-  | []              -> invalid_argf "Cmdliner lied!"
-  | [fastq]         -> Bv.across_fastq conf
+  let f ~log_oc ~data_oc read_length_override need_read_length conf fastq_file_list
+    number_of_reads specific_reads finish_singles =
+    let init =
+      match read_length_override with
+      | None   -> `Setup need_read_length
+      | Some r -> `Set (E.init log_oc need_read_length conf r)
+    in
+    match fastq_file_list with
+    | []              -> invalid_argf "Cmdliner lied!"
+    | [fastq]         -> E.across_fastq ~log_oc ~data_oc conf
                             ?number_of_reads ~specific_reads fastq init
-  | [read1; read2]  -> Bv.across_paired ~finish_singles conf
+    | [read1; read2]  -> E.across_paired ~log_oc ~data_oc ~finish_singles conf
                             ?number_of_reads ~specific_reads read1 read2 init
-  | lst             -> invalid_argf "More than 2, %d fastq files specified!"
+    | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                           (List.length lst)
 
+end (* We *)
+
+module Wef = We(Pd.Forward)
+module Wev = We(Pd.Viterbi)
 
 module Pf = Pd.Parallel(Pd.Forward)
 
-let p_forward read_length_override need_read_length conf fastq_file_list
-  number_of_reads specific_reads finish_singles nprocs =
+let p_forward ~log_oc ~data_oc read_length_override need_read_length conf
+  fastq_file_list number_of_reads specific_reads finish_singles nprocs =
   match read_length_override with
   | None   -> invalid_argf "Must specify read size for pallel!"
-  | Some r -> let state = Pf.init need_read_length conf r in
+  | Some r -> let state = Pf.init log_oc need_read_length conf r in
               begin match fastq_file_list with
               | []              -> invalid_argf "Cmdliner lied!"
-              | [fastq]         -> Pf.across_fastq conf
+              | [fastq]         -> Pf.across_fastq ~log_oc ~data_oc conf
                                       ?number_of_reads ~specific_reads ~nprocs
                                       fastq state
-              | [read1; read2]  -> Pf.across_paired conf
+              | [read1; read2]  -> Pf.across_paired ~log_oc ~data_oc conf
                                       ?number_of_reads ~specific_reads ~nprocs
                                       read1 read2 state
               | lst             -> invalid_argf "More than 2, %d fastq files specified!"
@@ -113,6 +103,7 @@ let type_
     zygosity_non_zero_value
     per_reads_report_size
     output_format
+    output
   (* how are we typing *)
     split
     mode
@@ -122,6 +113,7 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
+  let log_oc, data_oc = Common_options.setup_oc output output_format in
   to_read_size_dependent
     ?alignment_file ?merge_file ~distance
     ~regex_list ~specific_list ~without_list ?number_alleles
@@ -161,16 +153,18 @@ let type_
         in
         match mode with
         | `Viterbi ->
-            viterbi read_length_override need_read_length conf fastq_file_list
-              number_of_reads specific_reads finish_singles
+            Wev.f ~log_oc ~data_oc read_length_override need_read_length conf
+              fastq_file_list number_of_reads specific_reads finish_singles
         | `Forward ->
             begin match number_processes_opt with
             | None  ->
-                forward read_length_override need_read_length conf fastq_file_list
-                  number_of_reads specific_reads finish_singles
+                Wef.f ~log_oc ~data_oc  read_length_override need_read_length
+                  conf fastq_file_list number_of_reads specific_reads
+                  finish_singles
             | Some n ->
-                p_forward read_length_override need_read_length conf fastq_file_list
-                  number_of_reads specific_reads finish_singles n
+                p_forward~log_oc ~data_oc  read_length_override need_read_length
+                  conf fastq_file_list number_of_reads specific_reads
+                  finish_singles n
             end
 
 let () =
@@ -255,6 +249,7 @@ let () =
             $ zygosity_non_zero_value_arg
             $ per_reads_report_size_arg
             $ output_format_flag
+            $ output_arg
             (* How are we typing *)
             $ split_arg
             $ mode_flag

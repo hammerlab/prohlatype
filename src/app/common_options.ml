@@ -347,21 +347,6 @@ let specific_read_args =
       & opt_all string []
       & info ~doc ~docv ["sr"; "specific-read"])
 
-let default_error_fname =
-  "typing_errors.log"
-
-let error_output_flag =
-  let doc dest =
-    sprintf "Output errors such as sequences that don't match to %s. \
-              By default output is written to %s." dest default_error_fname
-  in
-  Arg.(value & vflag `InputPrefixed
-    [ `Stdout,        info ~doc:(doc "standard output") ["error-stdout"]
-    ; `Stderr,        info ~doc:(doc "standard error") ["error-stderr"]
-    ; `DefaultFile,   info ~doc:(doc "default filename") ["error-default"]
-    ; `InputPrefixed, info ~doc:(doc "input prefixed") ["error-input-prefixed"]
-    ])
-
 let reduce_resolution_arg =
   let doc  = "Reduce the resolution of the PDF, to a lower number of \
               \"digits\". The general HLA allele nomenclature \
@@ -665,3 +650,25 @@ let not_prealigned_flag =
              start or end of the region."
   in
   Arg.(value & flag & info ~doc ["not-prealigned"])
+
+let output_arg =
+  let docv = "FILENAME PREFIX" in
+  let doc = "Change output from stdout to files that are prefixed with the \
+    specified argument. A log file will be generated with the the \".log\" \
+    suffix. Data output will be written to a file with either the \".tsv\" \
+    or \".json\" suffix."
+  in
+  Arg.(value & opt (some string) None
+             & info ~doc ~docv ["o"; "output"])
+
+let setup_oc output format_ =
+  match output with
+  | None   -> stdout, stdout
+  | Some f ->
+      let suffix =
+        match format_ with
+        | `TabSeparated -> "tsv"
+        | `Json -> "json"
+      in
+      register_oc (sprintf "%s.log" f)
+      , register_oc (sprintf "%s.%s" f suffix)

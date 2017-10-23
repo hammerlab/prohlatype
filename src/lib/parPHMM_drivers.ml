@@ -239,8 +239,6 @@ module Zygosity_array = struct
       | Spec n    -> max 1 n, None
       | NoSpec    -> storage_size t.n, None
     in
-    printf "Looking for best %d with %s\n"
-      desired_size (Option.value_map nz ~default:"None" ~f:(sprintf "%0.20f"));
 (* Create a sorted, grouped, and constrained, list of the paired likelihoods.
   The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
   point we don't care about the tail, only about where there is actual
@@ -515,19 +513,19 @@ module Fastq_items = struct
   let repf fmt =
     ksprintf (fun s -> raise (Read_error_parsing s)) fmt
 
-  let single fqi ~k =
+  let single oc fqi ~k =
     let open Core_kernel.Std in
     let open Biocaml_unix.Fastq in
-    time (sprintf "updating on single read %s" fqi.name) (fun () ->
+    time oc (sprintf "updating on single read %s" fqi.name) (fun () ->
       match Fastq.phred_log_probs fqi.qualities with
       | Result.Error e        -> repf "%s" (Error.to_string_hum e)
       | Result.Ok read_errors -> k fqi.name fqi.sequence read_errors)
 
-  let paired fq1 fq2 ~k =
+  let paired oc fq1 fq2 ~k =
     let open Biocaml_unix.Fastq in
     let open Core_kernel.Std in
     assert (fq1.name = fq2.name);
-    time (sprintf "updating on double read %s" fq1.name) (fun () ->
+    time oc (sprintf "updating on double read %s" fq1.name) (fun () ->
       match Fastq.phred_log_probs fq1.Biocaml_unix.Fastq.qualities with
       | Result.Error e       -> repf "%s" (Error.to_string_hum e)
       | Result.Ok re1 ->
@@ -601,9 +599,20 @@ module type Worker = sig
   type read_result
   type final_state
 
-  val init      : conf -> read_length:int -> input -> state
-  val single    : state -> Biocaml_unix.Fastq.item -> read_result
-  val paired    : state -> Biocaml_unix.Fastq.item -> Biocaml_unix.Fastq.item -> read_result
+  val init      : out_channel
+                  -> conf
+                  -> read_length:int
+                  -> input
+                  -> state
+  val single    : out_channel
+                  -> state
+                  -> Biocaml_unix.Fastq.item
+                  -> read_result
+  val paired    : out_channel
+                  -> state
+                  -> Biocaml_unix.Fastq.item
+                  -> Biocaml_unix.Fastq.item
+                  -> read_result
   val merge     : state -> read_result -> unit
   val finalize  : state -> final_state
   val output    : final_state -> out_channel -> unit
@@ -635,8 +644,8 @@ module Forward (* : Worker *) = struct
     ; likelihood = proc.per_allele_llhd ()
     }
 
-  let forward allele_depth past_threshold proc read read_errors =
-    time (sprintf "forward of allele_depth: %d; past_threshold: %s; read: %s"
+  let forward oc allele_depth past_threshold proc read read_errors =
+    time oc (sprintf "forward of allele_depth: %d; past_threshold: %s; read: %s"
             allele_depth (Past_threshold.to_string past_threshold)
               (String.sub_exn read ~index:0 ~length:10))
     (fun () ->
@@ -703,7 +712,7 @@ module Forward (* : Worker *) = struct
       in
       proc, arr
 
-  let init conf ~read_length parPHMM_t =
+  let init _oc conf ~read_length parPHMM_t =
     let { prealigned_transition_model; allele; insert_p; band
         ; max_number_mismatches; past_threshold_filter ; split; _} = conf
     in
@@ -724,18 +733,18 @@ module Forward (* : Worker *) = struct
     ; opt              = conf.output_opt
     }
 
-  let single { initial_pt; proc; opt; _} fqi =
-    let forward pt r re = fst (forward opt.allele_depth pt proc r re) in
-    Fastq_items.single fqi ~k:(fun name read read_errors ->
+  let single oc { initial_pt; proc; opt; _} fqi =
+    let forward pt r re = fst (forward oc opt.allele_depth pt proc r re) in
+    Fastq_items.single oc fqi ~k:(fun name read read_errors ->
       { Output.name; d = Sp.Single (forward initial_pt read read_errors) })
 
   let take_regular_by_likelihood  r c =
     higher_value_in_first r.likelihood c.likelihood
 
-  let paired { initial_pt; proc; opt } fq1 fq2 =
-    let forward pt r re = fst (forward opt.allele_depth pt proc r re) in
+  let paired oc { initial_pt; proc; opt } fq1 fq2 =
+    let forward pt r re = fst (forward oc opt.allele_depth pt proc r re) in
     let take_regular = take_regular_by_likelihood in
-    Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+    Fastq_items.paired oc fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
       let r1 = forward initial_pt rd1 re1 in
       match Orientation.most_likely_between r1 ~take_regular with
       | Filtered m  ->
@@ -797,9 +806,9 @@ module Forward (* : Worker *) = struct
     let of_ =
       match state.opt.output_format with
       | `TabSeparated ->
-        Output.TabSeparated aapt_to_string
+          Output.TabSeparated aapt_to_string
       | `Json ->
-        Output.Json aapt_to_yojson
+          Output.Json aapt_to_yojson
     in
     Output.f oc ot state.opt.depth of_
 
@@ -874,7 +883,7 @@ module Viterbi :
 
   type opt = unit
 
-  let init conf ~read_length parPHMM_t =
+  let init _oc conf ~read_length parPHMM_t =
     let { prealigned_transition_model; allele; insert_p; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first in the specified ParPHMM.t allele list. *)
@@ -885,12 +894,12 @@ module Viterbi :
     ; labels = allele ^ " ", "read "
     }
 
-  let single { vfuncs; _} =
-    Fastq_items.single ~k:(fun name read read_errors ->
+  let single oc { vfuncs; _} =
+    Fastq_items.single oc ~k:(fun name read read_errors ->
       { name; res = vfuncs.single ~read ~read_errors})
 
-  let paired { vfuncs; _} fq1 fq2 =
-    Fastq_items.paired fq1 fq2 ~k:(fun name read1 read_errors1 read2 read_errors2 ->
+  let paired oc { vfuncs; _} fq1 fq2 =
+    Fastq_items.paired oc fq1 fq2 ~k:(fun name read1 read_errors1 read2 read_errors2 ->
       { name; res = vfuncs.paired ~read1 ~read_errors1 ~read2 ~read_errors2})
 
   let merge state pr =
@@ -1299,7 +1308,7 @@ module Multiple_loci :
         MoreLikely
     end *)
 
-  let init conf ~read_length parPHMM_t_lst =
+  let init oc conf ~read_length parPHMM_t_lst =
     let { prealigned_transition_model; insert_p; band; max_number_mismatches
         ; split; output_opt; _ } = conf in
     let paa =
@@ -1312,7 +1321,7 @@ module Multiple_loci :
         parPHMM_t.ParPHMM.locus, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
-    let forward = Forward.forward output_opt.allele_depth in
+    let forward = Forward.forward oc output_opt.allele_depth in
     let specific_orientation p rc r re =
       specific_orientation p (Forward.proc_to_stat output_opt.allele_depth) rc r re
     in
@@ -1398,14 +1407,14 @@ module Multiple_loci :
     ; opt       = output_opt
     }
 
-  let single { single_read; _} fqi =
-    Fastq_items.single fqi ~k:(fun name read read_errors ->
+  let single oc { single_read; _} fqi =
+    Fastq_items.single oc fqi ~k:(fun name read read_errors ->
       { Output.name
       ; d = single_read read read_errors
       })
 
-  let paired { ordinary_paired; _} fq1 fq2 =
-    Fastq_items.paired fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
+  let paired oc { ordinary_paired; _} fq1 fq2 =
+    Fastq_items.paired oc fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
       { Output.name
       ; d = ordinary_paired name rd1 re1 rd2 re2
       })
@@ -1516,16 +1525,24 @@ module type Execution = sig
   type input
   type state
 
-  val init : (int -> input) -> conf -> int -> state
+  val init : out_channel
+           -> (int -> input)
+           -> conf
+           -> int
+           -> state
 
-  val across_fastq : conf
+  val across_fastq : log_oc:out_channel
+                   -> data_oc:out_channel
+                   -> conf
                    -> ?number_of_reads:int
                    -> specific_reads:string list
                    -> string
                    -> [ `Setup of int -> input | `Set of state ]
                    -> unit
 
-  val across_paired : finish_singles:bool
+  val across_paired : log_oc:out_channel
+                    -> data_oc:out_channel
+                    -> finish_singles:bool
                     -> conf
                     -> ?number_of_reads:int
                     -> specific_reads:string list
@@ -1546,56 +1563,56 @@ module Sequential (W : Worker) :
   type input = W.input
   type state = W.state
 
-  let init rp conf read_length =
+  let init oc rp conf read_length =
     let pt =
-      time (sprintf "Setting up ParPHMM transitions with %d read_length"
+      time oc (sprintf "Setting up ParPHMM transitions with %d read_length"
                 read_length)
         (fun () -> rp read_length)
     in
-    time "Allocating forward pass workspace"
-      (fun () -> W.init conf ~read_length pt)
+    time oc "Allocating forward pass workspace"
+      (fun () -> W.init oc conf ~read_length pt)
 
-  let single conf =
+  let single oc conf =
     fun acc fqi ->
       match acc with
       | `Setup rp ->
           let read_length = String.length fqi.Biocaml_unix.Fastq.sequence in
-          let s = init rp conf read_length in
-          W.merge s (W.single s fqi);
+          let s = init oc rp conf read_length in
+          W.merge s (W.single oc s fqi);
           `Set s
       | `Set s ->
-          W.merge s (W.single s fqi);
+          W.merge s (W.single oc s fqi);
           `Set s
 
-  let paired conf =
+  let paired oc conf =
     fun acc fq1 fq2 ->
       match acc with
       | `Setup rp ->
           let read_length = String.length fq1.Biocaml_unix.Fastq.sequence in
-          let s = init rp conf read_length in
-          W.merge s (W.paired s fq1 fq2);
+          let s = init oc rp conf read_length in
+          W.merge s (W.paired oc s fq1 fq2);
           `Set s
       | `Set s ->
-          W.merge s (W.paired s fq1 fq2);
+          W.merge s (W.paired oc s fq1 fq2);
           `Set s
 
-  let across_fastq conf ?number_of_reads ~specific_reads file init =
-    let f = single conf in
+  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads file init =
+    let f = single log_oc conf in
     try
       Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
       |> function
           | `Setup _ -> eprintf "Didn't find any reads."
-          | `Set  s  -> W.output (W.finalize s) stdout
+          | `Set  s  -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
       eprintf "%s" e
 
-  let across_paired ~finish_singles conf ?number_of_reads ~specific_reads
+  let across_paired ~log_oc ~data_oc ~finish_singles conf ?number_of_reads ~specific_reads
     file1 file2 init =
-    let f = paired conf in
+    let f = paired log_oc conf in
     try
       begin
         if finish_singles then
-          let fs = single conf in
+          let fs = single log_oc conf in
           let ff = fs in
           Fastq.fold_paired_both ?number_of_reads ~specific_reads file1 file2
             ~init ~f ~ff ~fs
@@ -1610,7 +1627,7 @@ module Sequential (W : Worker) :
           | `DesiredReads o ->
               match o with
               | `Setup _ -> eprintf "Didn't find any reads."
-              | `Set s   -> W.output (W.finalize s) stdout
+              | `Set s   -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
       eprintf "%s" e
 
@@ -1618,34 +1635,34 @@ end (* Sequential *)
 
 module Parallel (W : Worker) = struct
 
-  let init rp conf read_length =
+  let init oc rp conf read_length =
     let pt =
-      time (sprintf "Setting up ParPHMM transitions with %d read_length"
+      time oc (sprintf "Setting up ParPHMM transitions with %d read_length"
         read_length)
         (fun () -> rp read_length)
     in
-    time "Allocating forward pass workspace"
-      (fun () -> W.init conf ~read_length pt)
+    time oc "Allocating forward pass workspace"
+      (fun () -> W.init oc conf ~read_length pt)
 
-  let across_fastq conf ?number_of_reads ~specific_reads ~nprocs file state =
+  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file state =
     try
-      let map fqi = W.single state fqi in
+      let map fqi = W.single log_oc state fqi in
       let mux rr = W.merge state rr in
       Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
-      W.output (W.finalize state) stdout
+      W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
       eprintf "%s" e
 
-  let across_paired conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
+  let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
     let map = function
-      | Sp.Single fqi      -> W.single state fqi
-      | Sp.Paired (f1, f2) -> W.paired state f1 f2
+      | Sp.Single fqi      -> W.single log_oc state fqi
+      | Sp.Paired (f1, f2) -> W.paired log_oc state f1 f2
     in
     let mux rr = W.merge state rr in
     try
       Fastq.fold_paired_parany ?number_of_reads ~specific_reads
         ~nprocs ~map ~mux file1 file2;
-      W.output (W.finalize state) stdout
+      W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
       eprintf "%s" e
 

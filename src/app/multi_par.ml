@@ -76,6 +76,7 @@ let type_
     zygosity_non_zero_value
     per_reads_report_size
     output_format
+    output
   (* how are we typing *)
     split
     not_prealigned
@@ -84,6 +85,7 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
+  let log_oc, data_oc = Common_options.setup_oc output output_format in
   let band =
     let open Option in
       band_warmup_arg >>= fun warmup ->
@@ -129,13 +131,13 @@ let type_
             let init =
               match read_size_override with
               | None   -> `Setup need_read_size
-              | Some r -> `Set (Sequential.init need_read_size conf r)
+              | Some r -> `Set (Sequential.init log_oc need_read_size conf r)
             in
             begin match fastq_file_lst with
             | []              -> invalid_argf "Cmdliner lied!"
-            | [fastq]         -> Sequential.across_fastq conf
+            | [fastq]         -> Sequential.across_fastq ~log_oc ~data_oc conf
                                     ?number_of_reads ~specific_reads fastq init
-            | [read1; read2]  -> Sequential.across_paired ~finish_singles conf
+            | [read1; read2]  -> Sequential.across_paired ~log_oc ~data_oc ~finish_singles conf
                                     ?number_of_reads ~specific_reads read1 read2 init
             | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                                   (List.length lst)
@@ -144,13 +146,13 @@ let type_
             let r = Option.value_exn read_size_override
                       ~msg:"Must specify read size override in parallel mode"
             in
-            let state = Parallel.init need_read_size conf r in
+            let state = Parallel.init log_oc need_read_size conf r in
             begin match fastq_file_lst with
             | []              -> invalid_argf "Cmdliner lied!"
-            | [fastq]         -> Parallel.across_fastq conf
+            | [fastq]         -> Parallel.across_fastq ~log_oc ~data_oc conf
                                     ?number_of_reads ~specific_reads ~nprocs
                                     fastq state
-            | [read1; read2]  -> Parallel.across_paired conf
+            | [read1; read2]  -> Parallel.across_paired ~log_oc ~data_oc conf
                                     ?number_of_reads ~specific_reads ~nprocs
                                     read1 read2 state
             | lst             -> invalid_argf "More than 2, %d fastq files specified!"
@@ -239,22 +241,13 @@ let () =
             $ zygosity_non_zero_value_arg
             $ per_reads_report_size_arg
             $ output_format_flag
+            $ output_arg
             (* How are we typing *)
             $ split_arg
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg
             $ number_processes_arg
-            (* $ map_allele_arg
-            $ filter_flag $ multi_pos_flag $ stat_flag $ likelihood_error_arg
-              $ upto_kmer_hood_arg
-              $ allto_kmer_hood_arg
-            (* Output *)
-            $ print_top_flag
-              $ do_not_normalize_flag
-              $ bucket_arg
-              $ error_output_flag
-              $ reduce_resolution_arg *)
-        , info app_name ~version ~doc ~man)
+         , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with
   | `Ok ()           -> exit 0
