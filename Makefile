@@ -80,6 +80,10 @@ homologous:
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native
 
+benchmark:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -package core_bench -tag thread -I src/lib -I src/app benchmark_single.native
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package oml -package core_bench -tag thread -I src/lib -I src/app benchmark_full.native
+
 tools:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app $(foreach t, $(TOOLS),$(t).native)
 
