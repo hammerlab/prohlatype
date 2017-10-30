@@ -14,7 +14,7 @@ build:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma prohlatype.cmxa
 
 setup:
-	opam pin add -k git ppx_deriving https://github.com/gasche/ppx_deriving.git\#4.05-support && \
+	opam pin add -k git ppx_deriving https://github.com/ocaml-ppx/ppx_deriving.git#4.1-maintenance && \
 	opam pin add -k git ppx_deriving_yojson https://github.com/rleonid/ppx_deriving_yojson.git\#gasche_405 && \
 	opam -y install $(SETUP_PACKAGE_NAMES)
 
