@@ -16,7 +16,7 @@ build:
 setup:
 	opam pin add -k git ppx_deriving https://github.com/ocaml-ppx/ppx_deriving.git#4.1-maintenance && \
 	opam pin add -k git ppx_deriving_yojson https://github.com/rleonid/ppx_deriving_yojson.git\#gasche_405 && \
-	opam -y install $(SETUP_PACKAGE_NAMES)
+	opam install -y $(SETUP_PACKAGE_NAMES)
 
 #cli:
 #	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib -I src/app cli.native
