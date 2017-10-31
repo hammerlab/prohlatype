@@ -229,7 +229,7 @@ let fold_paired_parany ?number_of_reads ?(specific_reads=[])
         stop_r := s;
         if display then begin
           incr count_r;
-          Util.Paired (r1, r2)
+          Util.Sp.Paired (r1, r2)
         end else
           read ()
       and read () =
@@ -297,11 +297,11 @@ let fold_paired_parany ?number_of_reads ?(specific_reads=[])
           | `OneAtATime (h :: t, l) ->
               state_ref := `OneAtATime (t, l);
               incr count_r;
-              Util.Single h
+              Util.Sp.Single h
           | `OneAtATime ([], h :: t) ->
               state_ref := `OneAtATime ([], t);
               incr count_r;
-              Util.Single h
+              Util.Sp.Single h
       in
       Parany.run ~verbose:false ~csize:1 ~nprocs ~demux:read ~work:map ~mux))
 

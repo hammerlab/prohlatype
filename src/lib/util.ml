@@ -246,22 +246,22 @@ let manual_phred_llhd s1 s2 probability_of_error =
   manual_phred_llhd_lst s1 s2 probability_of_error
   |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)
 
-let time s f =
+let time oc s f =
   let n = Sys.time () in
   try
     let r = f () in
-    printf "%s, total running time in seconds: %f\n%!" s (Sys.time () -. n);
+    fprintf oc "%s, total running time in seconds: %f\n%!" s (Sys.time () -. n);
     r
   with e ->
-    printf "%s, failed in seconds: %f\n%!" s (Sys.time () -. n);
+    fprintf oc "%s, failed in seconds: %f\n%!" s (Sys.time () -. n);
     raise e
 
-let gc_between s f =
+let gc_between oc s f =
   let open Gc in
   let before = stat () in
   let r = f () in
   let after = stat () in
-  printf "%s Gc change: \n\
+  fprintf oc "%s Gc change: \n\
     \t { minor_words : %f;\n\
     \t   promoted_words : %f;\n\
     \t   major_words : %f;\n\
@@ -298,9 +298,18 @@ let gc_between s f =
       (after.stack_size - before.stack_size);
   r
 
-type 'a single_or_paired =
-  | Single of 'a
-  | Paired of ('a * 'a)
+module Sp = struct
+
+  type 'a t =
+    | Single of 'a
+    | Paired of ('a * 'a)
+  [@@deriving yojson]
+
+  let map f = function
+    | Single  v       -> Single (f v)
+    | Paired (v1, v2) -> Paired (f v1, f v2)
+
+end
 
 (* Maintain a sorted association list of the top n items. *)
 let topn p k a i lst =
@@ -326,3 +335,8 @@ let insert_sorted p a i l =
                       (u, j) :: loop t
   in
   loop l
+
+let register_oc fname =
+  let oc = open_out fname in
+  at_exit (fun () -> close_out_noerr oc);
+  oc

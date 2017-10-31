@@ -201,7 +201,10 @@ let close_enough x y =
 module type Ring = sig
 
   type t
-  val to_string : t -> string
+
+  val to_yojson : t -> Yojson.Safe.json
+  val of_yojson : Yojson.Safe.json -> (t, string) result
+  val to_string : ?precision:int -> t -> string
   val zero : t
   val one  : t
 
@@ -213,6 +216,8 @@ module type Ring = sig
   val ( / ) : t -> t -> t
   val max   : t -> t -> t
   val ( < ) : t -> t -> bool
+  val ( <= ) : t -> t -> bool
+  val compare : t -> t -> int
 
   val close_enough : t -> t -> bool
 
@@ -226,10 +231,12 @@ module type Ring = sig
   (* Complement probability. *)
   val complement_probability : float -> t
 
+  val probability : ?maxl:t -> t -> float
+
 end (* Ring *)
 
 module MultiplicativeProbability = struct
-  type t = float
+  type t = float [@@deriving yojson]
   let zero  = 0.
   let one   = 1.
 
@@ -246,6 +253,13 @@ module MultiplicativeProbability = struct
       if is_gap y then false else
         x < y
 
+  let ( <= ) x y =
+    if is_gap x then true else
+      if is_gap y then false else
+        x <= y
+
+  let compare (x : float) y = compare x y
+
   let close_enough x y =
     close_enough x y
 
@@ -257,15 +271,20 @@ module MultiplicativeProbability = struct
   let times_one_third p =
     p /. 3.
 
-  let to_string = sprintf "%f"
+  let to_string ?(precision=10) t =
+    sprintf "%.*f" precision t
+
+  let probability ?maxl x = x
 
 end (* MultiplicativeProbability *)
 
-module LogProbabilities = struct
+module LogProbability : Ring = struct
 
   type t = float
+  [@@deriving yojson]
 
-  let to_string = sprintf "%f"
+  let to_string ?(precision=10) t =
+    sprintf "%.*f" precision t
 
   let zero  = neg_infinity
   let one   = 0.  (* log10 1. *)
@@ -291,6 +310,16 @@ module LogProbabilities = struct
       if is_gap y then false else
         x < y
 
+  let ( <= ) x y =
+    if is_gap x then true else
+      if is_gap y then false else
+        x <= y
+
+  let compare x y =
+    if is_gap x then -1 else
+      if is_gap y then 1 else
+        compare x y
+
   let close_enough x y =
     close_enough x y
 
@@ -302,6 +331,12 @@ module LogProbabilities = struct
 
   let complement_probability lq =
     log10 (1. -. (exp10 lq))
+
+  (* Embed the log-sum-exp procedure in converting back to probabilities *)
+  let probability ?maxl l =
+    match maxl with
+    | None    -> exp10 l
+    | Some ml -> exp10 (l -. ml)
 
   (* The base error (qualities) are generally know. To avoid repeating the manual
     calculation (as described above) of the log quality to log (1. -. base error)
@@ -356,7 +391,9 @@ module LogProbabilities = struct
               log10_one_minus_l_manual x
  *)
 
-end (* LogProbabilities *)
+end (* LogProbability *)
+
+module Lp = LogProbability
 
 (* For every k there are 3 possible states. *)
 type 'a cell =
@@ -934,9 +971,9 @@ module Path = struct
     in
     let rec first start reada refa = function
       | E end_ :: [] ->
-          Single { reference = List.rev refa |> String.of_character_list
-                 ; read = List.rev reada |> String.of_character_list
-                 ; start ; end_ }
+          Sp.Single { reference = List.rev refa |> String.of_character_list
+                    ; read = List.rev reada |> String.of_character_list
+                    ; start ; end_ }
       | E end_ :: S nstart :: tl ->
           let r1 =
             { reference = List.rev refa |> String.of_character_list
@@ -944,7 +981,7 @@ module Path = struct
             ; start ; end_ }
           in
           let r2 = second nstart [] [] tl in
-          Paired (r1, r2)
+          Sp.Paired (r1, r2)
       |  _ :: []
       | [] -> invalid_argf "Didn't end with an end"
 
@@ -1211,6 +1248,7 @@ end (* Perform_forward_calculation *)
 type 'a pass_result =
   | Completed of 'a
   | Filtered of string
+  [@@deriving yojson]
 
 let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
@@ -1925,15 +1963,18 @@ module ForwardMultipleGen (R : Ring) = struct
 
 end (* ForwardMultipleGen *)
 
-(* Instantiate the actual passes over the 2 implemented probability rings. *)
+(* Instantiate the actual passes over the 2 implemented probability rings.
+   But we'll only use the LogProbability in production as one can see from the
+   drivers. *)
 module ForwardS = ForwardSingleGen(MultiplicativeProbability)
-module ForwardSLogSpace = ForwardSingleGen(LogProbabilities)
+module ForwardSLogSpace = ForwardSingleGen(Lp)
 
 module ForwardM = ForwardMultipleGen(MultiplicativeProbability)
-module ForwardMLogSpace = ForwardMultipleGen (LogProbabilities)
+module ForwardMLogSpace = ForwardMultipleGen (Lp)
 
 type t =
-  { align_date      : string
+  { locus           : Nomenclature.locus
+  ; align_date      : string
   ; alleles         : (string * MSA.Alteration.t list) array        (* Canonical order. *)
   ; number_alleles  : int
   ; emissions_a     : base_emissions array
@@ -1945,7 +1986,7 @@ let construct input =
   else begin
     let open MSA.Parser in
     Alleles.Input.construct input >>= fun mp ->
-      let { reference; ref_elems; alt_elems; align_date} = mp in
+      let { locus; reference; ref_elems; alt_elems; align_date} = mp in
       let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
       let state_a = init_state base_arr in
       List.iter alt_elems ~f:(fun a ->
@@ -1956,7 +1997,7 @@ let construct input =
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in
-      Ok { align_date; alleles; number_alleles; emissions_a }
+      Ok { locus; align_date; alleles; number_alleles; emissions_a }
   end
 
 let save_pphmm t =
@@ -1996,8 +2037,8 @@ let access ?(o=0) rc read read_prob =
 (*** Full Forward Pass *)
 
 type viterbi_result =
-  { reverse_complement : bool       (* Was the reverse complement best? *)
-  ; emission           : float      (* Final emission likelihood *)
+  { reverse_complement : bool             (* Was the reverse complement best? *)
+  ; emission           : Lp.t                    (* Final emission likelihood *)
   ; path_list          : Path.t list
   }
 
@@ -2008,6 +2049,13 @@ let lookup_allele_or_fail t ~allele =
       invalid_argf "%s not found among the list of alleles!" allele
   | Some allele_index ->
       allele_index
+
+type viterbi_proc =
+  { single  : read:bytes -> read_errors:float array -> viterbi_result
+  ; paired  : read1:bytes -> read_errors1:float array
+            -> read2:bytes -> read_errors2:float array
+            -> viterbi_result
+  }
 
 let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
   read_length ~allele t =
@@ -2057,25 +2105,33 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
     let c = result true ws in
     most_likely_viterbi r c
   in
-  single, paired
+  { single; paired }
+
 
 (* The forward pass return type requires a bit more subtlety as we want
    diagnostic ability; to debug and to pass along values for downstream filters.
    Therefore these passes return a structure that can (1) execute the pass
    (ex [single]) and (2) interrogate the result (ex [best_allele_pos]). *)
 
+type per_allele_datum =
+  { allele    : string                                            (* allele *)
+  ; llhd      : Lp.t                                 (* likelihood emission *)
+  ; position  : int                         (* position of highest emission *)
+  }
+  [@@deriving yojson]
+
 type proc =
-  { init_global_state : unit -> float array
+  { init_global_state : unit -> Lp.t array
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
-  ; single            : ?prev_threshold:float
-                      -> ?base_p:float mt             (* ascending partition map. *)
+  ; single            : ?prev_threshold:Lp.t
+                      -> ?base_p:Lp.t mt          (* ascending partition map. *)
                       (* NOTE: Be careful about passing in a base_p. It could
                          slow down the calculation dramnatically, so have think
                          carefully about whether these values couldn't be
                          factored out. *)
                       -> read:string
-                      -> read_errors:float array
+                      -> read_errors:float array    (* also enforce that these are log p ?*)
                       -> bool                          (* reverse_complement *)
                       -> unit pass_result
   (* Perform a forward pass. We purposefully only signal whether we fully
@@ -2083,18 +2139,18 @@ type proc =
      for the result of a pass. The accessors below allow the user to extract
      more purposeful information. *)
 
-  ; best_allele_pos : int -> (float * string * int) list
+  ; best_allele_pos : int -> per_allele_datum list
   (* After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd : unit -> float mt
+  ; per_allele_llhd : unit -> Lp.t mt
   (* If we're not interested in diagnostics, but just the end result, we want
-     the per allele likelihood: *)
+     the per allele likelihood. *)
 
   (* For paired reads when we want to know the next base. *)
-  ; maximum_match   : unit -> float
+  ; maximum_match   : unit -> Lp.t
   (* We might also want to get a possible threshold value for future passes. *)
   }
 
@@ -2114,8 +2170,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   let ref_length = Array.length allele_a in
   let ws = ForwardSLogSpace.W.generate ~ref_length ~read_length in
   let maximum_match () =
-    ForwardSLogSpace.W.fold_over_row ws (read_length - 1) ~init:neg_infinity
-      ~f:(fun v c -> max v c.match_)
+    ForwardSLogSpace.W.fold_over_row ws (read_length - 1)
+      ~init:Lp.zero ~f:(fun v c -> Lp.max v c.match_)
   in
   (* For comparison against all of the alleles we want to have the same
     transition probabilities, that depends upon the reference size.
@@ -2140,12 +2196,12 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
       ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
     |> snd
-    |> List.map ~f:(fun (l, i) -> (l, allele, i))
+    |> List.map ~f:(fun (llhd, position) -> { allele; llhd; position})
   in
   let per_allele_llhd () =
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
   in
-  let init_global_state () = [| LogProbabilities.one |] in
+  let init_global_state () = [| Lp.one |] in
   { single
   ; best_allele_pos
   ; per_allele_llhd
@@ -2154,12 +2210,12 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   }
 
 let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
-  let init = pm_init_all ~number_alleles (LogProbabilities.zero, -1) in
+  let init = pm_init_all ~number_alleles (Lp.zero, -1) in
   foldi_over_final ~init ~f:(fun hep_pm k em_pm ->
     Pm.merge hep_pm em_pm (fun (be, bk) e ->
       if debug then
-        printf "at %d e %s\n" k (LogProbabilities.to_string e);
-      if LogProbabilities.is_gap e then
+        printf "at %d e %s\n" k (Lp.to_string e);
+      if Lp.is_gap e then
         (be, bk)
       else if e > be then
         (e, k)
@@ -2173,10 +2229,10 @@ let to_best_allele_pos alleles foldi_over_final get_emission_pm n =
   let emission_pm = get_emission_pm () in
   Pm.fold_indices_and_values emission_pm ~init:[]
       ~f:(fun acc i emission -> lgn emission i acc)
-  |> List.map ~f:(fun (e, i) ->
+  |> List.map ~f:(fun (llhd, i) ->
       let allele = alleles.(i) in
-      let _, best_pos = Pm.get hepp i in
-      (e, allele, best_pos))
+      let _, position = Pm.get hepp i in
+      { allele; llhd; position})
 
 (* Return
   1. a function to process one read
@@ -2293,39 +2349,39 @@ let non_gapped_emissions_arr arr =
 module Splitting_state = struct
 
   type t =
-    { mutable emission_pm   : (Pm.ascending, LogProbabilities.t) Pm.t
-    ; mutable maximum_match : LogProbabilities.t
+    { mutable emission_pm   : (Pm.ascending, Lp.t) Pm.t
+    ; mutable maximum_match : Lp.t
     (* The splitting passes incur an etra start/stop emission probability
       that makes them difficult to compare against the normal version.
       We're going to keep track of these values and then remove the
       probabilities from the final emission. *)
-    ; mutable scaling       : LogProbabilities.t list
+    ; mutable scaling       : Lp.t list
     }
 
   let init number_alleles =
-    { emission_pm = pm_init_all ~number_alleles LogProbabilities.one
-    ; maximum_match = LogProbabilities.one
+    { emission_pm = pm_init_all ~number_alleles Lp.one
+    ; maximum_match = Lp.one
     ; scaling = []
     }
 
   let reset ss =
     ss.emission_pm <-
-      pm_init_all ~number_alleles:(Pm.size ss.emission_pm) LogProbabilities.one;
-    ss.maximum_match <- LogProbabilities.one;
+      pm_init_all ~number_alleles:(Pm.size ss.emission_pm) Lp.one;
+    ss.maximum_match <- Lp.one;
     ss.scaling <- []
 
   let add_emission ss em mm =
-    ss.emission_pm <- Pm.merge ss.emission_pm em (LogProbabilities.( * ));
-    ss.maximum_match <- LogProbabilities.(ss.maximum_match * mm)
+    ss.emission_pm <- Pm.merge ss.emission_pm em (Lp.( * ));
+    ss.maximum_match <- Lp.(ss.maximum_match * mm)
 
   let add_scaling ss v =
     ss.scaling <- v :: ss.scaling
 
   let finish ss =
-    let pr = List.fold_left ss.scaling ~init:LogProbabilities.one
-        ~f:LogProbabilities.( * ) in
+    let pr = List.fold_left ss.scaling ~init:Lp.one
+        ~f:Lp.( * ) in
     ss.emission_pm <- Pm.map ss.emission_pm
-      ~f:(fun e -> LogProbabilities.(e / pr))
+      ~f:(fun e -> Lp.(e / pr))
 
 end (* Splitting_state *)
 
@@ -2394,8 +2450,8 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
               let nfilter = update nf_init in
               if n > 0 then begin
                 let open Phmm.TransitionMatrix in
-                Splitting_state.add_scaling ss (LogProbabilities.constant (tm StartOrEnd Match));
-                Splitting_state.add_scaling ss (LogProbabilities.constant (tm Match StartOrEnd))
+                Splitting_state.add_scaling ss (Lp.constant (tm StartOrEnd Match));
+                Splitting_state.add_scaling ss (Lp.constant (tm Match StartOrEnd))
               end;
               merge_after_pass ();
               loop (n + 1) nfilter
@@ -2454,7 +2510,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
               (F.W.foldi_over_final ?range ws)
             in
             let _, best_pos =
-              Pm.fold_indices_and_values hepp ~init:(LogProbabilities.zero, -1)
+              Pm.fold_indices_and_values hepp ~init:(Lp.zero, -1)
                 ~f:(fun (bprob, bpos) i (prob, pos) ->
                       if prob > bprob then
                         prob, pos
@@ -2468,13 +2524,13 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
               let () = F.W.foldi_over_row ?range ws (eff_read_length - 1)
                 ~init:() ~f:(fun () k e ->
                   printf "at %d, final pm: %s\n"
-                    k (Pm.to_string e (cell_to_string LogProbabilities.to_string)))
+                    k (Pm.to_string e (cell_to_string Lp.to_string)))
                 in *)
               invalid_argf "range: %s, hepp: %s\n"
                 (Option.value_map range ~default:"None"
                     ~f:(fun (s,e) -> sprintf "Some (%d,%d)" s e))
                 (Pm.to_string hepp (fun (lp, p) ->
-                  sprintf "(%s, %d)" (LogProbabilities.to_string lp) p))
+                  sprintf "(%s, %d)" (Lp.to_string lp) p))
             end else
               best_pos
           end
@@ -2525,8 +2581,8 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
                 let nf_init = F.Pfc.full ?columns ~filter ws nr ~reference ~read in
                 if n > 0 then begin
                   let open Phmm.TransitionMatrix in
-                  Splitting_state.add_scaling ss (LogProbabilities.constant (ntm StartOrEnd Match));
-                  Splitting_state.add_scaling ss (LogProbabilities.constant (ntm Match StartOrEnd))
+                  Splitting_state.add_scaling ss (Lp.constant (ntm StartOrEnd Match));
+                  Splitting_state.add_scaling ss (Lp.constant (ntm Match StartOrEnd))
                 end;
                 let new_range = cs_start, cs_start + ref_length in
                 merge_after_pass ~range:new_range ();
