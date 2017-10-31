@@ -6,28 +6,28 @@ matrix:
   fast_finish: true
   include:
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=parsing
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=parsing
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mas
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mas
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=round
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=round
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=alleleDiffA
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=alleleDiffA
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=biologicalKmers
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=biologicalKmers
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=impute
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=impute
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeA
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeA
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeB
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeB
     - os: linux
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2 TEST=mergeC
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeC
 
     # At the moment bootstrapping OCaml on OSX takes too long, for the sake of
     # simplicity just test compilation
     - os: osx
-      env: OCAML_VERSION=4.03 OPAM_VERSION=1.2.2
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2
 
 script:
   - bash -ex .travis-ocaml.sh
