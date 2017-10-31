@@ -9,7 +9,7 @@ echo B_gen    && ./biological_kmers.native B_gen
 echo B_nuc    && ./biological_kmers.native B_nuc      "B*44:02:01:02S" "B*07:44N" "fB*07:44N"
 echo C_gen    && ./biological_kmers.native C_gen
 echo C_nuc    && ./biological_kmers.native C_nuc      "C*04:09N"
-echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"
+#echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"
 echo DRB1_gen && ./biological_kmers.native DRB1_gen   "DRB1*15:02:01:01" "DRB1*12:01:01:01"
 echo DMA_gen  && ./biological_kmers.native DMA_gen
 echo DMA_nuc  && ./biological_kmers.native DMA_nuc
@@ -34,7 +34,7 @@ echo DRA_nuc  && ./biological_kmers.native DRA_nuc
 echo DRB1_gen && ./biological_kmers.native DRB1_gen   "DRB1*12:01:01:01" "DRB1*15:02:01:01"
 echo DRB3_gen && ./biological_kmers.native DRB3_gen
 echo DRB4_gen && ./biological_kmers.native DRB4_gen
-echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"
+#echo DRB_nuc  && ./biological_kmers.native DRB_nuc    "DRB4*01:03:01:02N"
 echo E_gen    && ./biological_kmers.native E_gen
 echo E_nuc    && ./biological_kmers.native E_nuc
 echo F_gen    && ./biological_kmers.native F_gen
