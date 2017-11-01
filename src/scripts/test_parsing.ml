@@ -33,7 +33,7 @@ let to_fnames ?fname ?suffix dir =
   let not_readme s =
     try
       (* Get the original, not Sosa strings *)
-      not ((StringLabels.lowercase (Filename.chop_extension (Filename.basename s)))
+      not ((StringLabels.lowercase_ascii (Filename.chop_extension (Filename.basename s)))
             = "readme")
     with Invalid_argument _ ->  (* files without extensions. *)
         false
@@ -142,6 +142,10 @@ let test_result r =
   |> List.iter ~f:(fun check -> all_sequences_in_result check r)
 
 
+let odd_locus f = 
+  String.take (Filename.basename f) ~index:5 = "Class"
+  || String.take (Filename.basename f) ~index:3 = "DRB"
+   
 let () =
   let n = Array.length Sys.argv in
   if !Sys.interactive then
@@ -150,12 +154,15 @@ let () =
     let fname = if n <= 1 then None else Some (Sys.argv.(1)) in
     to_fnames ?fname (imgthla_dir // "alignments")
     |> List.fold_left ~init:0 ~f:(fun s f ->
-        try
-          let p = MSA.Parser.from_file f in
-          test_result p;
-          printf "parsed and checked %s\n%!" f;
+        if odd_locus f then
           s
-        with e ->
-          printf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
-          -1)
+        else
+          try
+            let p = MSA.Parser.from_file f in
+            test_result p;
+            printf "parsed and checked %s\n%!" f;
+            s
+          with e ->
+            printf "failed to parse %s\n%s\n%!" f (Printexc.to_string e);
+            -1)
     |> exit

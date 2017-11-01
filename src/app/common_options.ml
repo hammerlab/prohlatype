@@ -77,19 +77,26 @@ let alignment_arg =
 let merge_arg, merges_arg =
   let parser_ path =
     let s = Filename.basename path in
-    let n = path ^ "_nuc.txt" in
-    let g = path ^ "_gen.txt" in
-    if not (List.mem ~set:Alter_MSA.supported_genes s) then
-      `Error ("gene not supported: " ^ s)
-    else if not (Sys.file_exists n) then
-      `Error ("Nuclear alignment file doesn't exist: " ^ n)
-    else if not (Sys.file_exists g) then
-      `Error ("Genetic alignment file doesn't exist: " ^ n)
-    else
-      `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
+    match Nomenclature.parse_locus s with
+    | Error e -> `Error e
+    | Ok l ->
+        let n = path ^ "_nuc.txt" in
+        let g = path ^ "_gen.txt" in
+        if not (List.mem ~set:Alter_MSA.supported_loci l) then
+          `Error ("gene not supported: " ^ s)
+        else if not (Sys.file_exists n) then
+          `Error ("Nuclear alignment file doesn't exist: " ^ n)
+        else if not (Sys.file_exists g) then
+          `Error ("Genetic alignment file doesn't exist: " ^ n)
+        else
+          `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-  let docv = sprintf "[%s]" (String.concat ~sep:"|" Alter_MSA.supported_genes) in
+  let loci_s ~sep =
+    List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci
+    |> String.concat ~sep
+  in
+  let docv = sprintf "[%s]" (loci_s ~sep:"|") in
   let doc  =
     sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
             prefix path. Currently only supports %s genes. The argument must \
@@ -97,7 +104,7 @@ let merge_arg, merges_arg =
             Combines with the file arguments to determine the set of loci to \
             type at the same time. The set of alleles is defined by the \
             ones in the nuc file."
-      (String.concat ~sep:", " Alter_MSA.supported_genes)
+      (loci_s ~sep:", ")
   in
   Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
   , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
@@ -340,21 +347,6 @@ let specific_read_args =
       & opt_all string []
       & info ~doc ~docv ["sr"; "specific-read"])
 
-let default_error_fname =
-  "typing_errors.log"
-
-let error_output_flag =
-  let doc dest =
-    sprintf "Output errors such as sequences that don't match to %s. \
-              By default output is written to %s." dest default_error_fname
-  in
-  Arg.(value & vflag `InputPrefixed
-    [ `Stdout,        info ~doc:(doc "standard output") ["error-stdout"]
-    ; `Stderr,        info ~doc:(doc "standard error") ["error-stderr"]
-    ; `DefaultFile,   info ~doc:(doc "default filename") ["error-default"]
-    ; `InputPrefixed, info ~doc:(doc "input prefixed") ["error-input-prefixed"]
-    ])
-
 let reduce_resolution_arg =
   let doc  = "Reduce the resolution of the PDF, to a lower number of \
               \"digits\". The general HLA allele nomenclature \
@@ -432,15 +424,25 @@ let read_size_override_arg =
 let map_depth_argument = "map-depth"
 let map_depth_default = 5
 
-let map_depth_arg =
+let allele_depth_arg =
   let docv = "POSITIVE INTEGER" in
   let doc =
     sprintf "Specify a positive integer to indicate the number of best alleles \
-             and positions to report. Defaults to %d."
+             and positions to report. Defaults to %d. Be cautious about \
+             increasing this number as keeping track of this data can slow \
+             down the final analysis."
       map_depth_default
   in
   Arg.(value & opt positive_int map_depth_default
              & info ~doc ~docv [map_depth_argument])
+
+let output_format_flag =
+  Arg.(value & vflag `TabSeparated
+    [ `TabSeparated
+      , info ~doc:("Output results in a tab separated format. Default.") ["tab"]
+    ; `Json
+      , info ~doc:("Output results in JSON. Not the default.") ["json"]
+    ])
 
 (* Band arguments
 let not_band_flag =
@@ -535,15 +537,82 @@ let do_not_finish_singles_flag =
   in
   Arg.(value & flag & info ~doc ["do-not-finish-singles"])
 
+let likelihood_report_size_argument = "likelihood-report-size"
+let likelihood_report_size_arg =
+  let open ParPHMM_drivers.Output in
+  let docv = "POSITIVE INTEGER" in
+  let doc = "Override the default number of individual allele likelihoods to \
+    report. In general, this is $(b,not) the desired outcome; we should \
+    consider the likelihoods of diploids (referred to as zygosity here). \
+    None-the-less this can be useful for relative allele diagnosis. By \
+    default, a value will be reported for all alleles."
+  in
+  Arg.(value & opt (some non_negative_int) None
+             & info ~doc ~docv [likelihood_report_size_argument])
+
+let non_negative_zygosity =
+  let open ParPHMM_drivers.Zygosity_array in
+  let non_negative_int_parser =
+    fun s ->
+      try
+        let d = Scanf.sscanf s "%d" (fun x -> x) in
+        if d < 0 then
+          Error (`Msg (s ^ " is negative"))
+        else if d = 0 then
+          Ok NoSpec
+        else
+          Ok (Spec d)
+      with Scanf.Scan_failure msg ->
+        Error (`Msg msg)
+  in
+  Arg.conv ~docv:"NON-NEGATIVE INTEGER"
+    (non_negative_int_parser
+    , fun frmt zas ->
+        match zas with
+        | NoSpec    -> Format.fprintf frmt "%d" 0
+        | Spec d    -> Format.fprintf frmt "%d" d
+        | NonZero v -> Format.fprintf frmt "%f" v)
+
 let zygosity_report_size_argument = "zygosity-report-size"
 let zygosity_report_size_arg =
-  let open ParPHMM_drivers.Output in
+  let open ParPHMM_drivers in
+  let docv = "POSITIVE INTEGER" in
   let doc =
     sprintf "Override the default number of allelic pairs reported as part of \
-             the zygosity portion. Defaults to %d." default_zygosity_report_size
+      the zygosity portion. By defaults only the pairs that have non-zero \
+      (> %f) probability will be reported. Set this value to zero to not \
+      report any values."
+      Zygosity_array.default_non_zero
   in
-  Arg.(value & opt positive_int default_zygosity_report_size
-             & info ~doc [zygosity_report_size_argument])
+  Arg.(value & opt non_negative_zygosity
+                      Zygosity_array.(NonZero default_non_zero)
+             & info ~doc ~docv [zygosity_report_size_argument])
+
+let zygosity_non_zero_value_arg =
+  let open ParPHMM_drivers in
+  let docv = "POSITIVE FLOAT" in
+  let doc =
+    sprintf "Override the default lowerbound of non-zero zygosities. The \
+      default (%0.5f) probability might be too high for some scenarios, such \
+      as if there are too few reads. This argument overrides %s."
+      Zygosity_array.default_non_zero zygosity_report_size_argument
+  in
+  Arg.(value & opt (some positive_float) None
+             & info ~doc ~docv ["zygosity-non-zero"])
+
+let to_num_zygosities ~zygosity_non_zero_value ~zygosity_report_size =
+  Option.value_map zygosity_non_zero_value
+    ~f:(fun v -> ParPHMM_drivers.Zygosity_array.NonZero v)
+    ~default:zygosity_report_size
+
+let per_reads_report_size_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Override the number of (per)-read information to report. By \
+      default all of the per-read information is reported."
+  in
+  Arg.(value & opt (some non_negative_int) None
+             & info ~doc ~docv ["per-read-report-size"])
 
 let number_processes_arg =
   let docv = "POSITIVE INTEGER" in
@@ -556,3 +625,50 @@ let number_processes_arg =
       read_size_override_argument
   in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])
+
+let split_arg =
+  let docv = "POSITIVE INTEGER" in
+  let doc =
+    sprintf "Split the processing of a read into this many smaller forward \
+      passes, that are then aggregated. This should decrease the run time cost \
+      of a full pass as the match probabilities, across alleles, are less \
+      distributed. This value $(b, must) divide the read\ size evenly. \
+      Becareful about splitting too much (setting this value too high) as \
+      longer reads align more accurately than shorter reads (specifically, \
+      10bp is too short while 25bp rarely gets filtered). If the resulting \
+      output results in too many filtered reads, consider using a smaller \
+      value."
+  in
+  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["split"])
+
+let not_prealigned_flag =
+  let doc = "There are 2 PHMM implementations that differ in what kind of \
+             transitions they allow. The default assumes that reads will fit \
+             completely within the gene reference region (this allows us to \
+             make small optimizations). Pass this flag if the reads are not \
+             guaranteed to have this property and may overlap partly with the \
+             start or end of the region."
+  in
+  Arg.(value & flag & info ~doc ["not-prealigned"])
+
+let output_arg =
+  let docv = "FILENAME PREFIX" in
+  let doc = "Change output from stdout to files that are prefixed with the \
+    specified argument. A log file will be generated with the the \".log\" \
+    suffix. Data output will be written to a file with either the \".tsv\" \
+    or \".json\" suffix."
+  in
+  Arg.(value & opt (some string) None
+             & info ~doc ~docv ["o"; "output"])
+
+let setup_oc output format_ =
+  match output with
+  | None   -> stdout, stdout
+  | Some f ->
+      let suffix =
+        match format_ with
+        | `TabSeparated -> "tsv"
+        | `Json -> "json"
+      in
+      register_oc (sprintf "%s.log" f)
+      , register_oc (sprintf "%s.%s" f suffix)

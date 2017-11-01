@@ -3,8 +3,8 @@
 open Util
 open MSA
 
-(* The set of genes for which I've tested these algorithms. *)
-let supported_genes = [ "A"; "B"; "C"]
+(* The set of loci for which I've tested these algorithms.  *)
+let supported_loci = [ Nomenclature.A; Nomenclature.B; Nomenclature.C]
 
 (* Filter out the string sequence elements. *)
 let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
@@ -1048,6 +1048,7 @@ end (* Merge *) = struct
           diff_alts dl instr nuc_mp same ref_g ref_n >>= fun diff_alt_elems ->
             let nalt_elems = same_alt_elems @ diff_alt_elems in
             Ok ({ align_date = gen_mp.align_date
+                ; locus      = gen_mp.locus
                 ; reference  = gen_mp.reference
                 ; ref_elems  = new_ref_elems
                 ; alt_elems  = sort_alts_by_nomenclature nalt_elems

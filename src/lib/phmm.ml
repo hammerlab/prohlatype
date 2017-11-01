@@ -1,4 +1,4 @@
-(* From Improving SNP discovery by base alignment quality *)
+(* Modified from 'Improving SNP discovery by base alignment quality' *)
 open Util
 
 type probabilities =
@@ -7,10 +7,11 @@ type probabilities =
   ; ending        : float     (* gamma *)
   }
 
-let default_transition_probabilities ?(read_length=100) () =
+let transition_probabilities ?(length=100) () =
   { gap_open      = 0.001
   ; gap_extension = 0.1
-  ; ending        = 1. /. (2.0 *. float read_length)
+  ; ending        = 1. /. (2.0 *. float length)
+  (* 2 because we transition to End from Insert or Match. *)
   }
 
 let default_insert_probability = 0.25
@@ -29,13 +30,8 @@ module TransitionMatrix = struct
   let deletion_idx  = 2
   let start_end_idx = 3 (* Compress the two nodes ala the Samtools note. *)
 
-  let init_m ?(model_probs=`Default) ~ref_length read_length =
-    let mp =
-      match model_probs with
-      | `Default                 -> default_transition_probabilities ~read_length ()
-      | `WithAverageReadLength l -> default_transition_probabilities ~read_length:l ()
-      | `Specific model          -> model
-    in
+  let init_m ~ref_length read_length =
+    let mp = transition_probabilities ~length:read_length () in
     (* Rename the probabilities to follow the convention in the paper.
       Still uncertain if it actually makes it easier to understand transition
       probability calculations. *)
@@ -45,13 +41,48 @@ module TransitionMatrix = struct
     let tm = Array.make_matrix ~dimx:4 ~dimy:4 0. in
     let ll = float ref_length in
     let open Float in
-    tm.(match_idx).(match_idx)            <- (1. - 2. * alpha) (* (1. - gamma)*);
-    tm.(match_idx).(insertion_idx)        <- alpha (* (1. - gamma)*);
-    tm.(match_idx).(deletion_idx)         <- alpha (* (1. - gamma)*);
+    tm.(match_idx).(match_idx)            <- (1. - 2. * alpha) * (1. - gamma);
+    tm.(match_idx).(insertion_idx)        <- alpha * (1. - gamma);
+    tm.(match_idx).(deletion_idx)         <- alpha * (1. - gamma);
     tm.(match_idx).(start_end_idx)        <- gamma;
 
-    tm.(insertion_idx).(match_idx)        <- (1. - beta) (* (1. - gamma)*);
-    tm.(insertion_idx).(insertion_idx)    <- beta (* (1. - gamma)*);
+    tm.(insertion_idx).(match_idx)        <- (1. - beta) * (1. - gamma);
+    tm.(insertion_idx).(insertion_idx)    <- beta * (1. - gamma);
+    (*tm.(insertion_idx).(deletion_idx)   <- 0.; *)
+    tm.(insertion_idx).(start_end_idx)    <- gamma;
+
+    tm.(deletion_idx).(match_idx)         <- (1. - beta);
+    (*tm.(deletion_idx).(insertion_idx)   <- 0.; *)
+    tm.(deletion_idx).(deletion_idx)      <- beta;
+    (*tm.(deletion_idx).(end_idx)         <- 0.; *)
+
+    tm.(start_end_idx).(match_idx)        <- (1. - alpha) / ll;
+    tm.(start_end_idx).(insertion_idx)    <- alpha / ll;
+    (*tm.(start_end_idx).(deletion_idx)   <- 0.; *)
+    (*tm.(start_end_idx).(start_end_idx)  <- 0.; *)
+    tm
+
+  let prealigned_m ~ref_length read_length =
+    (* reference_length - read_length, since we can only fully fit in that
+       number of elements.*)
+    let effective_ref_length = ref_length - read_length in
+    let mp = transition_probabilities ~length:effective_ref_length () in
+    let alpha = mp.gap_open in
+    let beta  = mp.gap_extension in
+    let gamma = mp.ending in
+    let tm = Array.make_matrix ~dimx:4 ~dimy:4 0. in
+    (* Note that if a read is prealigned to the area, even though we know where
+       in the region it will start and end, we'll only constrict the end ...
+       *)
+    let ll = float ref_length in
+    let open Float in
+    tm.(match_idx).(match_idx)            <- (1. - 2. * alpha);
+    tm.(match_idx).(insertion_idx)        <- alpha;
+    tm.(match_idx).(deletion_idx)         <- alpha;
+    tm.(match_idx).(start_end_idx)        <- gamma;
+
+    tm.(insertion_idx).(match_idx)        <- (1. - beta);
+    tm.(insertion_idx).(insertion_idx)    <- beta;
     (*tm.(insertion_idx).(deletion_idx)   <- 0.; *)
     tm.(insertion_idx).(start_end_idx)    <- gamma;
 
@@ -77,18 +108,22 @@ module TransitionMatrix = struct
     | Delete
     | StartOrEnd
 
-  let init ?(model_probs=`Default) ~ref_length read_length =
-    let tm = init_m ~model_probs ~ref_length read_length in
-    (*print_matrix tm;*)
-    let to_index = function
-      | Match      -> match_idx
-      | Insert     -> insertion_idx
-      | Delete     -> deletion_idx
-      | StartOrEnd -> start_end_idx
-    in
-    fun f t -> tm.(to_index f).(to_index t)
+  let to_index = function
+    | Match      -> match_idx
+    | Insert     -> insertion_idx
+    | Delete     -> deletion_idx
+    | StartOrEnd -> start_end_idx
+
+  let init ~ref_length read_length =
+    let tm = init_m ~ref_length read_length in
+    fun from to_ -> tm.(to_index from).(to_index to_)
+
+  let prealigned ~ref_length read_length =
+    let tm = prealigned_m ~ref_length read_length in
+    fun from to_ -> tm.(to_index from).(to_index to_)
 
   type t = state -> state -> float
+
 end (* TransitionMatrix *)
 
 (** DEPRECATED
@@ -152,10 +187,10 @@ let create_workspace_matrix ~read_length ~ref_length =
     - Make N tolerant for sequences/reads. This would require changing p_c_m to
       return a uniform error probability (ie 1) ?
     - Transition to computing everything in logs. *)
-let forward_gen recurrences ?m ~normalize ?model_probs ~refs ~read read_probs =
+let forward_gen recurrences ?m ~normalize ~refs ~read read_probs =
   let read_length = String.length read in   (* l *)
   let ref_length = String.length refs in    (* L *)
-  let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
+  let tm = TransitionMatrix.init ~ref_length read_length in
   let insert_prob = 0.25 in (* There are 4 characters, assume equality. *)
   let p_c_m i k =
     if String.get_exn read i = String.get_exn refs k then
@@ -322,9 +357,9 @@ let recover_path vm =
   | 2 -> prev_delete last pos []
   | x -> assert false
 
-let viterbi ?(normalize=true) ?model_probs ~refs ~read read_probs =
+let viterbi ?(normalize=true) ~refs ~read read_probs =
   let vm, _ =
-    forward_gen viterbi_recurrences ~normalize ?model_probs
+    forward_gen viterbi_recurrences ~normalize
       ~refs ~read read_probs
   in
   vm, recover_path vm
@@ -401,10 +436,10 @@ let backward_recurrences ref_size =
               end
  }
 
-let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
+let backward_gen recurrences ~normalize ~refs ~read read_probs =
   let read_length = String.length read in   (* l *)
   let ref_length = String.length refs in    (* L *)
-  let tm = TransitionMatrix.init ?model_probs ~ref_length read_length in
+  let tm = TransitionMatrix.init ~ref_length read_length in
   let insert_prob = 0.25 in
   let p_c_m i k =
     if k = ref_length || i = ref_length then
@@ -458,9 +493,9 @@ let backward_gen recurrences ~normalize ?model_probs ~refs ~read read_probs =
 let backward ?(normalize=true) =
   backward_gen ~normalize backward_recurrences
 
-let posterior ?(normalize=true) ?model_probs ~refs ~read read_probs =
-  let fm, lh = forward ~normalize ?model_probs ~refs ~read read_probs in
-  let bm, _ = backward ~normalize ?model_probs ~refs ~read read_probs in
+let posterior ?(normalize=true) ~refs ~read read_probs =
+  let fm, lh = forward ~normalize ~refs ~read read_probs in
+  let bm, _ = backward ~normalize ~refs ~read read_probs in
   let mm =
     Array.mapi fm ~f:(fun i fmr ->
       Array.mapi fmr ~f:(fun j v -> v *. bm.(i).(j) /. lh))

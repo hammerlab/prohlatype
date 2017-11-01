@@ -216,8 +216,9 @@ let group_by_assoc l =
   in
   List.fold_left ~init:[] ~f:insert l
 
-let string_of_list ~sep ~f l =
-  String.concat ~sep (List.map ~f l)
+let string_of_list ?(show_empty=false) ~sep ~f = function
+  | [] -> if show_empty then "[]" else ""
+  | l  -> String.concat ~sep (List.map ~f l)
 
 let log_likelihood ?(alph_size=4) ?(er=0.01) ~len mismatches =
   let lmp = log (er /. (float (alph_size - 1))) in
@@ -245,18 +246,22 @@ let manual_phred_llhd s1 s2 probability_of_error =
   manual_phred_llhd_lst s1 s2 probability_of_error
   |> List.fold_left ~init:0. ~f:(fun s -> function | `m p | `X p -> s +. p)
 
-let time s f =
+let time oc s f =
   let n = Sys.time () in
-  let r = f () in
-  printf "%s total running time in seconds: %f\n%!" s (Sys.time () -. n);
-  r
+  try
+    let r = f () in
+    fprintf oc "%s, total running time in seconds: %f\n%!" s (Sys.time () -. n);
+    r
+  with e ->
+    fprintf oc "%s, failed in seconds: %f\n%!" s (Sys.time () -. n);
+    raise e
 
-let gc_between s f =
+let gc_between oc s f =
   let open Gc in
   let before = stat () in
   let r = f () in
   let after = stat () in
-  printf "%s Gc change: \n\
+  fprintf oc "%s Gc change: \n\
     \t { minor_words : %f;\n\
     \t   promoted_words : %f;\n\
     \t   major_words : %f;\n\
@@ -293,6 +298,45 @@ let gc_between s f =
       (after.stack_size - before.stack_size);
   r
 
-type 'a single_or_paired =
-  | Single of 'a
-  | Paired of ('a * 'a)
+module Sp = struct
+
+  type 'a t =
+    | Single of 'a
+    | Paired of ('a * 'a)
+  [@@deriving yojson]
+
+  let map f = function
+    | Single  v       -> Single (f v)
+    | Paired (v1, v2) -> Paired (f v1, f v2)
+
+end
+
+(* Maintain a sorted association list of the top n items. *)
+let topn p k a i lst =
+  let rec loop added n lst =
+    if n >= k then
+      []
+    else
+      match lst with
+      | []         -> if added then [] else [a,i]
+      | (u,j) :: t -> if p a u && not added then
+                        (a,i) :: loop true (n + 1) lst
+                      else
+                        (u,j) :: loop added (n + 1)  t
+  in
+  loop false 0 lst
+
+let insert_sorted p a i l =
+  let rec loop lst = match lst with
+    | []         -> [a, i]
+    | (u,j) :: t -> if p a u then
+                      (a, i) :: lst
+                    else
+                      (u, j) :: loop t
+  in
+  loop l
+
+let register_oc fname =
+  let oc = open_out fname in
+  at_exit (fun () -> close_out_noerr oc);
+  oc
