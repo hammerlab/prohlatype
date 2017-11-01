@@ -251,17 +251,20 @@ module Zygosity_array = struct
   such that only these values are afterwards exported.
   *)
     let sorted_insert l i j current_size lst =
-      let rec insert lst =
-        match lst with
-        | []     -> [l, 1, [i,j]]
-        | h :: t ->
-            let hl, hn, hv = h in
-            if l > hl then
-              h :: insert t
-            else if l = hl then
-              (hl, hn + 1, (i,j) :: hv) :: t
-            else (* l < hl *)
-              (l, 1, [i,j]) :: lst
+      let insert lst =
+        let rec loop acc lst =
+          match lst with
+          | []     -> List.rev acc @ [l, 1, [i,j]]
+          | h :: t ->
+              let hl, hn, hv = h in
+              if l > hl then
+                loop (h :: acc) t
+              else if l = hl then
+                List.rev acc @ ((hl, hn + 1, (i,j) :: hv) :: t)
+              else (* l < hl *)
+                List.rev acc @ ((l, 1, [i,j]) :: lst)
+        in
+        loop [] lst
       in
       match lst with
       | []
