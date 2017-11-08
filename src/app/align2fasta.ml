@@ -141,14 +141,14 @@ let () =
             by looking borrowing from the allele closest in the nomenclature \
             trie:"
       ; `Pre (sprintf
-          "\t%s --alignment path-to-IMGTHLA/alignments/A_gen.txt --trie -o hla_a_trie_imputed.fasta"
+          "\t%s --alignment path-to-IMGTHLA/alignments/A_gen.txt --trie -o hla_a_trie_imputed"
            app_name)
       ; `P "To create a fasta for all class I genes (A,B,C) that $(b,merges) \
             their gDNA (ex. C_gen.txt) and the cDNA (ex. C_nuc.txt) derived \
             alleles using a weighted by segment (exon's) distance similarity \
             to fill in missing intron/UTR segments:"
       ; `Pre (sprintf
-          "\t%s --class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd.fasta"
+          "\t%s --class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd"
           app_name)
       ]
     in
