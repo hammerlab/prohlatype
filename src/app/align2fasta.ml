@@ -148,7 +148,7 @@ let () =
             alleles using a weighted by segment (exon's) distance similarity \
             to fill in missing intron/UTR segments:"
       ; `Pre (sprintf
-          "\t%s--class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd.fasta "
+          "\t%s --class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd.fasta"
           app_name)
       ]
     in
