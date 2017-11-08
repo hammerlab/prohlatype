@@ -74,6 +74,8 @@ let alignment_arg =
               allele selector to modify this set." in
   Arg.(value & opt (some file) None & info ~doc ~docv ["alignment"])
 
+let merge_argument = "merge"
+
 let merge_arg, merges_arg =
   let parser_ path =
     let s = Filename.basename path in
@@ -106,8 +108,8 @@ let merge_arg, merges_arg =
             ones in the nuc file."
       (loci_s ~sep:", ")
   in
-  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; "merge"])
-  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; "merge"])
+  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; merge_argument])
+  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; merge_argument])
 
 (*** Allele selector arguments. ***)
 let regex_command_line_args = ["allele-regex"]
@@ -303,21 +305,25 @@ let num_reads_arg =
   let doc = "Number of reads to take from the front of the FASTA file" in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["reads"])
 
+let trie_argument = "trie"
+let weighted_per_segment_argument = "weighted-segment"
+let reference_distance_argument = "reference-distance"
+
 let optional_distance_flag, defaulting_distance_flag =
   let open Distances in
   let opts =
     [ Trie
-      , "trie based off of allele names."
+      , "trie based off of allele names"
       , false
-      , "trie"
+      , trie_argument
     ; WeightedPerSegment
-      , "smallest shared weighted per segment distance."
+      , "smallest shared weighted per segment distance"
       , true
-      , "weighted-segment"
+      , weighted_per_segment_argument
     ; Reference
-      , "consider the reference the closest for all alleles."
+      , "consider the reference the closest for all alleles"
       , false
-      , "reference-distance"
+      , reference_distance_argument
     ]
   in
   let r default =

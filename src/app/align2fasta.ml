@@ -79,17 +79,51 @@ let () =
   in
   let convert =
     let version = "0.0.0" in
-    let doc = "Transform MHC IMGT alignments to fasta." in
-    let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
-        repo
+    let doc = "Transform IMGT/HLA's alignments to fasta." in
+    let bugs =
+      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
+              repo
     in
+    let desc =
+      let open Common_options in
+      [ `P (sprintf
+           "%s is a program that transforms IMGT/HLA's per locus alignment \
+            files to FASTA files. The alignments are the text files found in \
+            the alignments folder and start with
+            \"HLA-A Genomic Sequence Alignments\"." app_name)
+
+      ; `P "The IMGT-HLA database already distributes FASTA files for the \
+            MHC genes in their database, so why create a tool to recreate \
+            them? One minor reason is that, rarely, the alignment information \
+            may be inconsistent with the FASTA files. Because downstream tools \
+            in this project rely upon the alignment information as the \
+            ground-truth, this tool may be helpful."
+
+      ; `P (sprintf
+           "The raison d'être for this tool is to invoke powerful processing \
+            algorithms in this project to impute the missing parts of alleles \
+            in a given gene. At the time of the creation of this project we \
+            have incomplete sequence information for all of the (sometimes \
+            thousands) alleles. To alleviate the sparseness one may specify \
+            distance arguments (%s, %s, or %s) that will invoke imputation \
+            logic for the missing segments. One may also ask for merged loci \
+            which will combine the alleles whose data is derived from gDNA \
+            with those derived from cDNA. Finally, one may tailor the list of \
+            gene's and/or alleles to include in the output."
+              trie_argument
+              weighted_per_segment_argument
+              reference_distance_argument)
+      ]
+    in
+
     let man =
-      [ `S "AUTHORS"
+      let open Manpage in
+      [ `S s_authors
       ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
-      ; `P bug
+      ; `S s_description
+      ; `Blocks desc
+      ; `S s_bugs
+      ; `P bugs
       ]
     in
     Term.(const convert
