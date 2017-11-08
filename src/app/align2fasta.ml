@@ -104,7 +104,7 @@ let () =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
               repo
     in
-    let desc =
+    let description =
       let open Common_options in
       [ `P (sprintf
            "%s is a program that transforms IMGT/HLA's per locus alignment \
@@ -135,15 +135,33 @@ let () =
               reference_distance_argument)
       ]
     in
-
+    let examples =
+      [ `P "To create a fasta for HLA-A from genetic DNA sequenced alleles \
+            where the missing data (typically at the ends) has been imputed \
+            by looking borrowing from the allele closest in the nomenclature \
+            trie:"
+      ; `Pre (sprintf
+          "\t%s --alignment path-to-IMGTHLA/alignments/A_gen.txt --trie -o hla_a_trie_imputed.fasta"
+           app_name)
+      ; `P "To create a fasta for all class I genes (A,B,C) that $(b,merges) \
+            their gDNA (ex. C_gen.txt) and the cDNA (ex. C_nuc.txt) derived \
+            alleles using a weighted by segment (exon's) distance similarity \
+            to fill in missing intron/UTR segments:"
+      ; `Pre (sprintf
+          "\t%s--class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd.fasta "
+          app_name)
+      ]
+    in
     let man =
       let open Manpage in
-      [ `S s_authors
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `S s_description
-      ; `Blocks desc
+      [ `S s_description
+      ; `Blocks description
+      ; `S s_examples
+      ; `Blocks examples
       ; `S s_bugs
       ; `P bugs
+      ; `S s_authors
+      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
       ]
     in
     Term.(const convert
