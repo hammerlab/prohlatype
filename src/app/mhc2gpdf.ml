@@ -1,6 +1,29 @@
 
 open Util
 
+let to_filename_and_graph_args
+  (* Allele information source *)
+    ?alignment_file ?merge_file ?distance
+  (* Allele selectors *)
+    ~regex_list
+    ~specific_list
+    ~without_list
+    ?number_alleles
+    ~do_not_ignore_suffixed_alleles
+  (* Graph modifiers. *)
+    ~join_same_sequence =
+    let selectors =
+      Common_options.aggregate_selectors ~regex_list ~specific_list ~without_list
+        ?number_alleles ~do_not_ignore_suffixed_alleles
+    in
+    Common_options.to_allele_input ?alignment_file ?merge_file ?distance ~selectors
+      >>= fun input ->
+            let arg = { Ref_graph.join_same_sequence } in
+            let graph_arg = Cache.graph_args ~arg ~input in
+            let option_based_fname = Cache.graph_args_to_string graph_arg in
+            Ok (option_based_fname, graph_arg)
+
+
 let construct
   (* input *)
   alignment_file merge_file distance
@@ -19,7 +42,7 @@ let construct
   let open Cache in
   let join_same_sequence = (not not_join_same_seq) in
   let fname_cargs_result =
-    Common_options.to_filename_and_graph_args
+    to_filename_and_graph_args
       ?alignment_file ?merge_file ?distance
       ~specific_list ~regex_list ~without_list ?number_alleles
       ~do_not_ignore_suffixed_alleles

@@ -14,30 +14,38 @@ let alters_to_string = function
   | lst -> sprintf " %s "
               (string_of_list lst ~sep:"," ~f:MSA.Alteration.to_string)
 
-let against_mp ?width mp out =
+let with_oc out f =
+  let oc = open_out out in
+  try
+    f oc;
+    close_out oc
+  with e ->
+    close_out oc;
+    raise e
+
+let single_mp ?width oc mp =
   let open MSA in
   let open MSA.Parser in
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
   let locus, ref_res = fail_on_parse mp.reference in
-  let oc = open_out out in
-  try
-    List.map mp.alt_elems ~f:(fun a ->
-        let l, r = fail_on_parse a.allele in
-          if l <> locus then
-            failwithf "Different loci: %s vs %s"
-              (Nomenclature.show_locus locus)
-              (Nomenclature.show_locus l);
-          r, a.allele, (allele_sequence ~reference ~allele:a.seq ()), a.alters)
-    |> fun l -> ((ref_res, mp.reference, r, []) :: l)
-    |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
-    |> List.iter ~f:(fun (_, a, s, alters) ->
-      fprintf oc ">%s%slength: %d\n" a (alters_to_string alters) (String.length s);
-      print_line ?width oc s);
-    close_out oc
-  with e ->
-    close_out oc;
-    raise e
+  List.map mp.alt_elems ~f:(fun a ->
+      let l, r = fail_on_parse a.allele in
+      if l <> locus then
+        failwithf "Different loci: %s vs %s"
+          (Nomenclature.show_locus locus)
+          (Nomenclature.show_locus l);
+      let aseq = allele_sequence ~reference ~allele:a.seq () in
+      r, a.allele, aseq, a.alters)
+  |> fun l -> ((ref_res, mp.reference, r, []) :: l)
+  |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
+  |> List.iter ~f:(fun (_, a, s, alters) ->
+      fprintf oc ">%s%slength: %d\n"
+        a (alters_to_string alters) (String.length s);
+      print_line ?width oc s)
+
+let against_mps ?width out mplst =
+  with_oc out (fun oc -> List.iter ~f:(single_mp ?width oc) mplst)
 
 let convert
   (* output destination. *)
@@ -45,6 +53,9 @@ let convert
   (* output option *)
   width
   (* input *)
+  class1_gen_dir
+  class1_nuc_dir
+  class1_mgd_dir
   alignment_file merge_file
   (* optional distance to trigger imputation, merging *)
   distance
@@ -56,11 +67,20 @@ let convert
     aggregate_selectors ~regex_list ~specific_list ~without_list
       ?number_alleles ~do_not_ignore_suffixed_alleles
   in
-  to_allele_input ?alignment_file ?merge_file ?distance ~selectors >>= fun i ->
-    Alleles.Input.construct i >>= fun mp ->
-      let ofiledefault = Alleles.Input.to_short_fname_prefix i in
+  let opt_to_lst = Option.value_map ~default:[] ~f:(fun s -> [s]) in
+  let alignment_files, merge_files =
+    class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+      (opt_to_lst alignment_file)
+      (opt_to_lst merge_file)
+  in
+  to_allele_inputs ~alignment_files ~merge_files ?distance ~selectors >>= function
+    |  []    -> Error "No input sent"
+    | h :: t ->
+      let ofiledefault = Alleles.Input.to_short_fname_prefix h in
       let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
-      Ok (against_mp ?width mp out)
+      list_fold_ok (h :: t) ~init:[] ~f:(fun acc i ->
+          Alleles.Input.construct i >>= fun mp -> Ok (mp :: acc))
+        >>= fun mplst -> Ok (against_mps ?width out (List.rev mplst))
 
 let () =
   let open Cmdliner in
@@ -130,7 +150,12 @@ let () =
           $ output_fname_arg
           $ width_arg
           (* Allele information source *)
-          $ alignment_arg $ merge_arg $ optional_distance_flag
+          $ class1gen_arg
+          $ class1nuc_arg
+          $ class1mgd_arg
+          $ alignment_arg
+          $ merge_arg
+          $ optional_distance_flag
           (* Allele selectors *)
           $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
           $ do_not_ignore_suffixed_alleles_flag

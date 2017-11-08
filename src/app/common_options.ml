@@ -4,6 +4,8 @@ module Ns = String
 open Util
 open Cmdliner
 
+let (//) = Filename.concat
+
 let repo = "prohlatype"
 
 (*** Basic command line parsers and printers. ***)
@@ -201,7 +203,7 @@ let do_not_ignore_suffixed_alleles_flag =
             'Q') to indicate special conditions such as null alleles ('N') or \
             questionable expression ('Q'). Often times, these alleles can \
             complicate prohlatype as reads sometimes align suprisingly well \
-            to them (ex. HLA-A*11:50Q) as opposed to the true validated \
+            to them (ex. HLA-A*11:50Q) as opposed to the true \
             allele. For the purposes of having a clearer typing algorithm we \
             exclude all such alleles from IMGT by default. For rare cases or \
             diagnostic purposes one can pass this flag to bring them back \
@@ -259,27 +261,17 @@ let to_allele_input ?alignment_file ?merge_file ?distance ~selectors =
       | Some path -> Ok (alignment ?distance ~selectors path)
       | None      -> Error "Neither a file nor merge argument was specified."
 
-let to_filename_and_graph_args
-  (* Allele information source *)
-    ?alignment_file ?merge_file ?distance
-  (* Allele selectors *)
-    ~regex_list
-    ~specific_list
-    ~without_list
-    ?number_alleles
-    ~do_not_ignore_suffixed_alleles
-  (* Graph modifiers. *)
-    ~join_same_sequence =
-    let selectors =
-      aggregate_selectors ~regex_list ~specific_list ~without_list
-        ?number_alleles ~do_not_ignore_suffixed_alleles
-    in
-    to_allele_input ?alignment_file ?merge_file ?distance ~selectors
-      >>= fun input ->
-            let arg = { Ref_graph.join_same_sequence } in
-            let graph_arg = Cache.graph_args ~arg ~input in
-            let option_based_fname = Cache.graph_args_to_string graph_arg in
-            Ok (option_based_fname, graph_arg)
+(* The more than one case. *)
+let to_allele_inputs ~alignment_files ~merge_files ?distance ~selectors =
+  let als =
+    List.map alignment_files ~f:(Alleles.Input.alignment ?distance ~selectors)
+  in
+  let mls =
+    List.map merge_files ~f:(Alleles.Input.merge ?distance ~selectors)
+  in
+  match als @ mls with
+  | []     -> Error "Neither a merge nor alignment file specified!"
+  | inputs -> Ok inputs
 
 let verbose_flag =
   let doc = "Print progress messages to stdout." in
@@ -678,3 +670,41 @@ let setup_oc output format_ =
       in
       register_oc (sprintf "%s.log" f)
       , register_oc (sprintf "%s.%s" f suffix)
+
+let class1gen_arg =
+  let docv  = "DIRECTORY" in
+  let doc   = "Short-cut argument that expands the given dir to look for \
+                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                alignment files or merge arguments." in
+  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
+
+let class1nuc_arg =
+  let docv  = "DIRECTORY" in
+  let doc   = "Short-cut argument that expands the given dir to look for \
+                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                alignment files or merge arguments." in
+  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
+
+let class1mgd_arg =
+  let docv  = "DIRECTORY" in
+  let doc   = "Short-cut argument that expands the given dir to look for \
+                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
+                alignment files or merge arguments." in
+  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
+
+(* These are convenience selectors that choose more than one locus at a time. *)
+let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+  alignment_files merge_files =
+  match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
+  | Some d, _,      _       ->
+      (d // "A_gen.txt") :: (d // "B_gen.txt") :: (d // "C_gen.txt") :: alignment_files
+      , merge_files
+  | None,   Some d, _       ->
+      (d // "A_nuc.txt") :: (d // "B_nuc.txt") :: (d // "C_nuc.txt") :: alignment_files
+      , merge_files
+  | None,   None,   Some d  ->
+      alignment_files
+      , (d // "A") :: (d // "B") :: (d // "C") :: merge_files
+  | None,   None,   None    ->
+      alignment_files
+      , merge_files
