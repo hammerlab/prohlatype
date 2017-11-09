@@ -3,44 +3,18 @@ open Util
 
 let app_name = "multi_par"
 
-let (//) = Filename.concat
-
-
 let to_read_size_dependent
   (* Allele information source *)
-    ~alignment_files ~merge_files ~distance
-    ~skip_disk_cache =
-    let selectors = [] in           (* Selectors NOT supported, on purpose! *)
-    let als =
-      List.map alignment_files ~f:(Alleles.Input.alignment ~selectors ~distance)
-    in
-    let mls =
-      List.map merge_files ~f:(Alleles.Input.merge ~selectors ~distance)
-    in
-    match als @ mls with
-    | []     -> Error "Neither a merge nor alignment file specified!"
-    | inputs ->
+  ~alignment_files ~merge_files ~distance
+  (* Cache management *)
+  ~skip_disk_cache =
+  Common_options.to_allele_inputs ~alignment_files ~merge_files ~distance
+    ~selectors:[] (* Selectors NOT supported, on purpose! *)
+    >>= fun inputs ->
       Ok (fun read_size ->
-            List.map inputs ~f:(fun input ->
-              let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
-              Cache.par_phmm ~skip_disk_cache par_phmm_arg))
-
-(* These are convenience selectors that choose more than one locus at a time. *)
-let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
-  alignment_files merge_files =
-  match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
-  | Some d, _,      _       ->
-      (d // "A_gen.txt") :: (d // "B_gen.txt") :: (d // "C_gen.txt") :: alignment_files
-      , merge_files
-  | None,   Some d, _       ->
-      (d // "A_nuc.txt") :: (d // "B_nuc.txt") :: (d // "C_nuc.txt") :: alignment_files
-      , merge_files
-  | None,   None,   Some d  ->
-      alignment_files
-      , (d // "A") :: (d // "B") :: (d // "C") :: merge_files
-  | None,   None,   None    ->
-      alignment_files
-      , merge_files
+          List.map inputs ~f:(fun input ->
+            let par_phmm_arg = Cache.par_phmm_args ~input ~read_size in
+            Cache.par_phmm ~skip_disk_cache par_phmm_arg))
 
 module Pd = ParPHMM_drivers
 
@@ -94,7 +68,7 @@ let type_
             Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
-    class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+    Common_options.class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
       alignment_files merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
@@ -178,27 +152,6 @@ let () =
                seen this many mismatches." in
     Arg.(value & opt (some positive_int) None & info ~doc ~docv
           ["max-mismatches"])
-  in
-  let class1gen_arg =
-    let docv  = "DIRECTORY" in
-    let doc   = "Short-cut argument that expands the given dir to look for \
-                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                 alignment files or merge arguments." in
-    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
-  in
-  let class1nuc_arg =
-    let docv  = "DIRECTORY" in
-    let doc   = "Short-cut argument that expands the given dir to look for \
-                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                 alignment files or merge arguments." in
-    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
-  in
-  let class1mgd_arg =
-    let docv  = "DIRECTORY" in
-    let doc   = "Short-cut argument that expands the given dir to look for \
-                  A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                 alignment files or merge arguments." in
-    Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
   in
   let type_ =
     let version = "0.0.0" in
