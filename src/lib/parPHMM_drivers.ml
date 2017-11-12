@@ -229,7 +229,7 @@ module Zygosity_array = struct
     | Spec of int
     | NoSpec
 
-  let default_non_zero = 0.0001
+  let default_non_zero = 0.000001
 
   (* log likelihood, probability, index 1st, index 2nd *)
   let best size likelihood_arr t =
