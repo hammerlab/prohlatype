@@ -1061,7 +1061,9 @@ module Multiple_loci (* :
     | PairedDependent p1, PairedDependent p2  ->
         begin
           match p1.second, p2.second with
-          | Completed ss1, Completed ss2 -> Lp.(l p2.first + l ss2 < l p1.first + l ss1)
+          | Completed ss1, Completed ss2 -> let s2 = Lp.(l p2.first * l ss2) in
+                                            let s1 = Lp.(l p1.first * l ss1) in
+                                            Lp.(s2 < s1)
           | Filtered _,    _             -> false
           | _,             Filtered _    -> true
         end
@@ -1258,7 +1260,9 @@ module Multiple_loci (* :
     | FirstOrientedSecond f1, FirstOrientedSecond f2 ->
         begin
           match f1.second, f2.second with
-          | Completed ss1, Completed ss2 -> Lp.(l f2.first + l ss2 < l f1.first + l ss1)
+          | Completed ss1, Completed ss2 -> let s1 = Lp.(l f1.first * l ss1) in
+                                            let s2 = Lp.(l f2.first * l ss2) in
+                                            Lp.(s2 < s1)
           | Filtered _,    _             -> false
           | _,             Filtered _    -> true
         end
