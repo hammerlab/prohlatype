@@ -33,6 +33,13 @@ let int_of_string ?msg s =
   | None   -> Error msg
   | Some i -> Ok i
 
+let positive_int_of_string ?msg s =
+  int_of_string ?msg s >>= fun x ->
+    if x > 0 then
+      Ok x
+    else
+      error "non-positive value in allele name: %s" s
+
 let trim_suffix s =
   let index = String.length s - 1 in
   let c = String.get_exn s ~index in
@@ -44,12 +51,12 @@ let trim_suffix s =
     | Error m -> Error m
     | Ok _    -> Ok (s, None)
 
-let parse_ints lst =
+let parse_positive_ints lst =
   let rec loop acc = function
     | []     -> Ok (List.rev acc)
     | h :: t ->
         begin
-          match int_of_string h with
+          match positive_int_of_string h with
           | Ok x    -> loop (x :: acc) t
           | Error e -> Error e
         end
@@ -62,31 +69,55 @@ type resolution =
   | Three of int * int * int
   | Four of int * int * int * int
 
-(* This logic compares alleles such that the sorted order is the same as in the
-   alignment files. Without doing too much work the resulting order has a
-   tremendous impact on performance: For example, ParPHMM forward passes are at
-   least twice as fast because of the resulting partition_maps are more
-   compressed! *)
-let compare_by_resolution (r1,_) (r2,_) =
-  let to_quad = function
-    | One a           -> [ a; -1; -1; -1 ]
-    | Two (a,b)       -> [ a;  b; -1; -1 ]
-    | Three (a,b,c)   -> [ a;  b;  c; -1 ]
-    | Four (a,b,c,d)  -> [ a;  b;  c;  d ]
-  in
-  Pervasives.compare (to_quad r1) (to_quad r2)
-
 let parse_resolution s =
   trim_suffix s >>=
     fun (without_suffix, suffix_opt) ->
       String.split ~on:(`Character ':') without_suffix
-      |> parse_ints  >>= function
+      |> parse_positive_ints  >>= function
           | []            -> Error (sprintf "Empty allele name: %s" without_suffix)
           | [ a ]         -> Ok (One a, suffix_opt)
           | [ a; b ]      -> Ok (Two (a, b), suffix_opt)
           | [ a; b; c]    -> Ok (Three (a, b, c), suffix_opt)
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
           | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
+
+type distance = int * int * int * int
+  [@@deriving eq, ord, show]
+
+let distance_to_string (a,b,c,d) =
+  sprintf "(%d,%d,%d,%d)" a b c d
+
+(* All of the actual alleles have a non-zero value in their fields and we
+   check for that, so we can use 0 as the lowest value to compare against. *)
+let resolution_to_distance = function
+  | One a           -> (a, 0, 0, 0)
+  | Two (a,b)       -> (a, b, 0, 0)
+  | Three (a,b,c)   -> (a, b, c, 0)
+  | Four (a,b,c,d)  -> (a, b, c, d)
+
+type t = resolution * suffix option
+
+(* This logic compares alleles such that the sorted order is the same as in the
+   alignment files. Without doing too much work the resulting order has a
+   tremendous impact on performance: For example, ParPHMM forward passes are at
+   least twice as fast because the resulting partition_maps are more
+   compressed! *)
+let compare_by_resolution (r1,_) (r2,_) =
+  compare_distance (resolution_to_distance r1) (resolution_to_distance r2)
+
+let distance ?n (r1, _) (r2, _) =
+  let c =
+    match n with
+    | None   -> fun _ x -> x
+    | Some d -> fun o x -> if o < d then x else 0
+  in
+  let a1, b1, c1, d1 = resolution_to_distance r1 in
+  let a2, b2, c2, d2 = resolution_to_distance r2 in
+  ( c 0 (abs (a1 - a2))
+  , c 1 (abs (b1 - b2))
+  , c 2 (abs (c1 - c2))
+  , c 3 (abs (d1 - d2))
+  )
 
 (* This list was manually generated on 2017-10-12 and is unfortunately
    hard-coded here. Much of the current work has been focused on making the
@@ -167,8 +198,6 @@ let parse_locus = function
   | "Y"     -> Ok Y
   | l       -> error "Unrecognized locus: %s, please send a pull request!" l
 
-type t = resolution * suffix option
-
 let parse : string -> (locus * t, string) result =
   fun s ->
     match String.split s ~on:(`Character '*') with
@@ -188,9 +217,15 @@ let resolution_to_string ?locus =
   | Three (a, b, c)   -> sprintf "%s%02d:%02d:%02d" ls a b c
   | Four (a, b, c, d) -> sprintf "%s%02d:%02d:%02d:%02d" ls a b c d
 
-let resolution_and_suffix_opt_to_string ?locus (r,so) =
+let to_string ?locus (r,so) =
   sprintf "%s%s" (resolution_to_string ?locus r)
     (Option.value_map so ~default:"" ~f:suffix_to_string)
+
+let reduce_two (r, _) = match r with
+  | One a             -> One a
+  | Two (a, b)
+  | Three (a, b, _)
+  | Four (a, b, _, _) -> Two (a, b)
 
 let two_matches_full nr1 nr2 =
   match (fst nr1) with                     (* Match on just the name, ignore suffix *)
@@ -312,4 +347,80 @@ end *) = struct
     | Three (a, b, c)   -> lookup (Some a) (Some b) (Some c)  None
     | Four (a, b, c, d) -> lookup (Some a) (Some b) (Some c) (Some d)
 
-end
+end (* Trie *)
+
+module Diploid = struct
+
+  type tt =
+    { lower : t
+    ; upper : t
+    }
+
+  let init a1 a2 =
+    if compare_by_resolution a1 a2 <= 0 then
+      { lower = a1
+      ; upper = a2
+      }
+    else
+      { lower = a2
+      ; upper = a1
+      }
+
+  let reduce_two t =
+    { lower = reduce_two t.lower, None
+    ; upper = reduce_two t.upper, None
+    }
+
+  let lower_res_matches t1 t2 =
+    two_matches_full t1.lower t1.upper &&
+    two_matches_full t2.lower t2.upper
+
+  let one_lower_res_matches l t =
+    two_matches_full l t.lower ||
+    two_matches_full l t.upper
+
+  let to_string ?(sep='\t') {lower; upper} =
+    sprintf "%s%c%s"
+      (to_string lower)
+      sep
+      (to_string upper)
+
+  module Distance = struct
+
+    type t =
+      | Straight of (distance * distance)
+      | Crossed of (distance * distance)
+
+    let to_lowest_form_pair d1 d2 =
+      if compare_distance d1 d2 <= 0 then (d1, d2) else (d2, d1)
+
+    let to_lowest_form = function
+      | Straight (d1, d2) -> to_lowest_form_pair d1 d2
+      | Crossed (d1, d2)  -> to_lowest_form_pair d1 d2
+
+    let compare_dpaired = [%derive.ord: distance * distance]
+
+    let compare a b =
+      compare_dpaired (to_lowest_form a) (to_lowest_form b)
+
+    let of_diploid ?n t1 t2 =
+      let d1 = Straight (distance ?n t1.lower t2.lower
+                        , distance ?n t1.upper t2.upper) in
+      let d2 = Crossed (distance ?n t1.lower t2.upper
+                       , distance ?n t1.upper t2.lower) in
+      if compare d1 d2 <= 0 then
+        d1
+      else
+        d2
+
+    let to_string = function
+      | Straight (d1, d2) -> sprintf "S %s %s"
+                                (distance_to_string d1) (distance_to_string d2)
+      | Crossed  (d1, d2) -> sprintf "C %s %s"
+                                (distance_to_string d1) (distance_to_string d2)
+
+  end (* Distance *)
+
+  let distance = Distance.of_diploid
+
+end (* Diploid *)

@@ -34,7 +34,11 @@ module Past_threshold = struct
     if b then `Start else `Don't
 
   let new_ prev_threshold proc =
-    Lp.max prev_threshold (proc.maximum_match ())
+    let mm = proc.maximum_match () in
+    let () = printf "threshold should be the max of prev: %s and max_match %s\n%!"
+        (Lp.to_string prev_threshold) (Lp.to_string mm)
+    in
+    Lp.max prev_threshold mm
 
   let new_value prev_threshold proc = function
     | Filtered _  -> prev_threshold
@@ -65,7 +69,7 @@ module Orientation = struct
     { regular     : 'a pass_result
     ; complement  : 'a pass_result
     }
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let map ~f t =
     { regular    = f t.regular
@@ -134,10 +138,13 @@ module Orientation = struct
         let last_threshold = Past_threshold.new_value prev_threshold proc complement in
         { regular; complement }, `Set last_threshold
     | `Set v ->
+        let () = printf "Set %s\n" (Lp.to_string v) in
         let regular = do_work ~prev_threshold:v false in
         let prev_threshold = Past_threshold.new_value v proc regular in
+        let () = printf "reg prev_threshold %s \n" (Lp.to_string prev_threshold) in
         let complement = do_work ~prev_threshold true in
         let last_threshold = Past_threshold.new_value prev_threshold proc complement in
+        let () = printf "comp last_threshold %s \n" (Lp.to_string last_threshold) in
         { regular; complement; }, `Set last_threshold
 
 end (* Orientation *)
@@ -149,7 +156,7 @@ module Alleles_and_positions = struct
 
   type datum = per_allele_datum
   and t = datum list
-    [@@deriving yojson]
+  [@@deriving show,yojson]
 
   let to_string {allele; llhd; position} =
     sprintf "%s,%d,%s" allele position (Lp.to_string ~precision:5 llhd)
@@ -477,21 +484,25 @@ module Output = struct
         ~f:MSA.Alteration.to_string a
     in
     let fprint_per_allele_log_likelihood { allele; a_llhd; alters } =
-      fprintf oc "%16s\t%s\t%s\n"
+      fprintf oc "%-16s\t%s\t%s\n"
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
-      fprintf oc "%16s\t%16s\t%s\t%0.6f\n"
+      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\n"
         allele1 allele2 (Lp.to_string ~precision:20 z_llhd) prob
     in
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
-        (fun () -> fprintf oc "Zygosity %s:\n" (show_locus locus))
+        (fun () ->
+           fprintf oc "Zygosity %s:\nAllele 1\tAllele 2\tlog likelihood\tProb\n"
+             (show_locus locus))
         zygosity;
       array_iter_on_non_empty
         fprint_per_allele_log_likelihood
-        (fun () -> fprintf oc "Likelihood %s:\n" (show_locus locus))
+        (fun () ->
+           fprintf oc "Likelihood %s:\nAllele\tlog likelihood\tImputation Description\n"
+             (show_locus locus))
         per_allele);
     list_iter_on_non_empty
       (fun { name; d} -> fprintf oc "%s%s\n" name (d_to_string d))
@@ -648,9 +659,9 @@ module Forward (* : Worker *) = struct
     }
 
   let forward oc allele_depth past_threshold proc read read_errors =
-    time oc (sprintf "forward of allele_depth: %d; past_threshold: %s; read: %s"
-            allele_depth (Past_threshold.to_string past_threshold)
-              (String.sub_exn read ~index:0 ~length:10))
+    time oc (sprintf "forward of %s, allele_depth: %d; past_threshold: %s; read: %s"
+      proc.ParPHMM.name allele_depth (Past_threshold.to_string past_threshold)
+        (String.sub_exn read ~index:0 ~length:10))
     (fun () ->
       Orientation.check past_threshold (proc_to_stat allele_depth)
         proc read read_errors)
@@ -929,7 +940,6 @@ type multiple_conf =
   ; insert_p                : float option
   (* Override the default insert emission probability. *)
 
-
   ; band                    : ParPHMM.band_config option
   (* Perform banded passes. *)
 
@@ -994,10 +1004,12 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
       ; first_read_best_log_gap *)
     }
 
-module Multiple_loci :
+(* Conforms to this signature but I'm not imposing it to expose all of the
+   yojson input/output logic. *)
+module Multiple_loci (* :
   Worker with type input = ParPHMM.t list
           and type conf = multiple_conf
-  = struct
+  *) = struct
 
   type conf = multiple_conf
   type input = ParPHMM.t list
@@ -1023,7 +1035,7 @@ module Multiple_loci :
     | SingleRead of 'single_result Orientation.t
     (* We'll test both regular and complement options. *)
     | PairedDependent of 'single_result paired_dependent
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let orientation_char_of_bool reverse_complement =
     if reverse_complement then 'C' else 'R'
@@ -1109,7 +1121,7 @@ module Multiple_loci :
   and 'single_result paired =
     | FirstFiltered of 'single_result first_filtered
     | FirstOrientedSecond of 'single_result first_oriented_second
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let pr_to_string ?(sep='\t') sr_to_string pr =
     let ots = Orientation.to_string ~sep sr_to_string in
@@ -1342,6 +1354,10 @@ module Multiple_loci :
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
           ~f:(fun (pt1, pt2, acc) (locus, p, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
+                let () = printf "pt1: %s -> npt1: %s\n%!"
+                    (Past_threshold.to_string pt1)
+                    (Past_threshold.to_string npt1)
+                in
                 match most_likely_orientation result1 with
                 | Filtered  m ->
                     let ff_second, npt2 = forward pt2 p rd2 re2 in

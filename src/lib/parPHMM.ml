@@ -202,6 +202,7 @@ module type Ring = sig
 
   type t
 
+  val pp : Format.formatter -> t -> unit
   val to_yojson : t -> Yojson.Safe.json
   val of_yojson : Yojson.Safe.json -> (t, string) result
   val to_string : ?precision:int -> t -> string
@@ -236,7 +237,7 @@ module type Ring = sig
 end (* Ring *)
 
 module MultiplicativeProbability = struct
-  type t = float [@@deriving yojson]
+  type t = float [@@deriving show,yojson]
   let zero  = 0.
   let one   = 1.
 
@@ -281,7 +282,7 @@ end (* MultiplicativeProbability *)
 module LogProbability : Ring = struct
 
   type t = float
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
   let to_string ?(precision=10) t =
     sprintf "%.*f" precision t
@@ -1248,7 +1249,7 @@ end (* Perform_forward_calculation *)
 type 'a pass_result =
   | Completed of 'a
   | Filtered of string
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
 let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
@@ -2118,10 +2119,13 @@ type per_allele_datum =
   ; llhd      : Lp.t                                 (* likelihood emission *)
   ; position  : int                         (* position of highest emission *)
   }
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
 type proc =
-  { init_global_state : unit -> Lp.t array
+  { name              : string
+  (* Give it a name of what we're processing. *)
+
+  ; init_global_state : unit -> Lp.t array
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
   ; single            : ?prev_threshold:Lp.t
@@ -2202,7 +2206,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
   in
   let init_global_state () = [| Lp.one |] in
-  { single
+  { name = sprintf "Single allele %s" allele
+  ; single
   ; best_allele_pos
   ; per_allele_llhd
   ; init_global_state
@@ -2289,7 +2294,8 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
           let filter = Filter.join filter1 filter2 in
           wrap filter
     in
-    { single
+    { name = sprintf "Locus: %s" (Nomenclature.show_locus t.locus)
+    ; single
     ; best_allele_pos
     ; per_allele_llhd
     ; maximum_match
@@ -2485,7 +2491,12 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
             in
             wrap filter update
       in
-      { single
+      let name =
+        sprintf "Locus %s splitting %d (not prealigned)"
+            (Nomenclature.show_locus t.locus) number_of_splits
+      in
+      { name
+      ; single
       ; best_allele_pos
       ; per_allele_llhd
       ; maximum_match
@@ -2623,7 +2634,12 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
             in
             wrap to_filter
       in
-      { single
+      let name =
+        sprintf "Locus %s splitting %d (prealigned)"
+            (Nomenclature.show_locus t.locus) number_of_splits
+      in
+      { name
+      ; single
       ; best_allele_pos
       ; per_allele_llhd
       ; maximum_match
