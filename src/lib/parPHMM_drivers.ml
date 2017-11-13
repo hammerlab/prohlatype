@@ -35,9 +35,6 @@ module Past_threshold = struct
 
   let new_ prev_threshold proc =
     let mm = proc.maximum_match () in
-    let () = printf "threshold should be the max of prev: %s and max_match %s\n%!"
-        (Lp.to_string prev_threshold) (Lp.to_string mm)
-    in
     Lp.max prev_threshold mm
 
   let new_value prev_threshold proc = function
@@ -138,13 +135,10 @@ module Orientation = struct
         let last_threshold = Past_threshold.new_value prev_threshold proc complement in
         { regular; complement }, `Set last_threshold
     | `Set v ->
-        let () = printf "Set %s\n" (Lp.to_string v) in
         let regular = do_work ~prev_threshold:v false in
         let prev_threshold = Past_threshold.new_value v proc regular in
-        let () = printf "reg prev_threshold %s \n" (Lp.to_string prev_threshold) in
         let complement = do_work ~prev_threshold true in
         let last_threshold = Past_threshold.new_value prev_threshold proc complement in
-        let () = printf "comp last_threshold %s \n" (Lp.to_string last_threshold) in
         { regular; complement; }, `Set last_threshold
 
 end (* Orientation *)
@@ -1354,10 +1348,6 @@ module Multiple_loci (* :
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
           ~f:(fun (pt1, pt2, acc) (locus, p, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
-                let () = printf "pt1: %s -> npt1: %s\n%!"
-                    (Past_threshold.to_string pt1)
-                    (Past_threshold.to_string npt1)
-                in
                 match most_likely_orientation result1 with
                 | Filtered  m ->
                     let ff_second, npt2 = forward pt2 p rd2 re2 in
