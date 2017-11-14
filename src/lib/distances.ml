@@ -18,7 +18,7 @@ module Trie_distances = struct
       StringMap.bindings targets |> list_fold_ok ~init:StringMap.empty ~f:(fun m (ta, _) ->
         parse ta >>= fun (locus, (allele_resolution, suffix_opt)) ->
           let closest_allele_res = Trie.nearest allele_resolution trie in
-          let closest_allele_str = resolution_and_suffix_opt_to_string ~locus closest_allele_res in
+          let closest_allele_str = to_string ~locus closest_allele_res in
           Ok (StringMap.add ~key:ta ~data:[(closest_allele_str, 1.)] m))
 
 end (* Trie_distances *)

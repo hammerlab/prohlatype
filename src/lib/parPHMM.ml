@@ -202,6 +202,7 @@ module type Ring = sig
 
   type t
 
+  val pp : Format.formatter -> t -> unit
   val to_yojson : t -> Yojson.Safe.json
   val of_yojson : Yojson.Safe.json -> (t, string) result
   val to_string : ?precision:int -> t -> string
@@ -236,7 +237,7 @@ module type Ring = sig
 end (* Ring *)
 
 module MultiplicativeProbability = struct
-  type t = float [@@deriving yojson]
+  type t = float [@@deriving show,yojson]
   let zero  = 0.
   let one   = 1.
 
@@ -281,7 +282,7 @@ end (* MultiplicativeProbability *)
 module LogProbability : Ring = struct
 
   type t = float
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
   let to_string ?(precision=10) t =
     sprintf "%.*f" precision t
@@ -1248,7 +1249,7 @@ end (* Perform_forward_calculation *)
 type 'a pass_result =
   | Completed of 'a
   | Filtered of string
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
 let pass_result_to_string c_to_s = function
   | Completed c -> sprintf "Completed: %s" (c_to_s c)
@@ -1452,8 +1453,8 @@ end (* ForwardSingleGen *)
 
 module PosMap = Map.Make(struct type t = int [@@deriving ord] end)
 
-let largest k a i lst = topn (>) k a i lst
-let smallest k a i lst = topn (<) k a i lst
+let largest k a i lst = topn ~greater:(>) k a i lst
+let smallest k a i lst = topn ~greater:(<) k a i lst
 
 (* Band config *)
 type band_config =
@@ -1486,7 +1487,47 @@ module ForwardMultipleGen (R : Ring) = struct
 
   let max_of_ws_row ?range ws r =
     W.fold_over_row ?range ws r ~init:R.zero
-    ~f:(fun v fpm -> R.max v (pm_max_cell_by_match fpm))
+      ~f:(fun v fpm -> R.max v (pm_max_cell_by_match fpm))
+
+  let max_pm_of_ws_row ?range ws r =
+    W.fold_over_row ?range ws r ~init:(R.zero, Pm.empty_a)
+      ~f:(fun (bv,bpm) fpm ->
+            let nv = pm_max_cell_by_match fpm in
+            if R.(bv < nv) then
+              (nv, fpm)
+            else
+              (bv, bpm))
+    |> snd
+
+  let median_of_pm apm =
+    let values_with_size =
+      Pm.fold_set_sizes_and_values apm ~init:[]
+        ~f:(fun acc nv v -> insert_sorted ~greater:R.( < ) v nv acc)
+    in
+    let n = Pm.size apm in
+    let m = n / 2 in
+    let even = n mod 2 = 0 in
+    let rec loop number_seen = function
+      | []           -> invalid_argf "Didn't find a median after %d values" n
+      | (v, nv) :: t ->
+          let new_number_seen = number_seen + nv in
+          if new_number_seen > m then
+            v
+          else if new_number_seen = m then begin
+            if even then
+              match t with
+              | []          -> invalid_argf "Didn't find a median after odd midpoint %d values" n
+              | (v1,_) :: _ -> R.((v + v) / (constant 2.))
+            else (* not even *)
+              v
+          end else loop new_number_seen t
+    in
+    loop 0 values_with_size
+
+  let maximum_positions_median_match ?range ws r =
+    max_pm_of_ws_row ?range ws r
+    |> Pm.map ~f:(fun c -> c.match_)
+    |> median_of_pm
 
   (* offset and emission probabilties
   type 'a oeps = (int * 'a) Cm.t
@@ -2118,10 +2159,13 @@ type per_allele_datum =
   ; llhd      : Lp.t                                 (* likelihood emission *)
   ; position  : int                         (* position of highest emission *)
   }
-  [@@deriving yojson]
+  [@@deriving show,yojson]
 
 type proc =
-  { init_global_state : unit -> Lp.t array
+  { name              : string
+  (* Give it a name of what we're processing. *)
+
+  ; init_global_state : unit -> Lp.t array
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
   ; single            : ?prev_threshold:Lp.t
@@ -2139,19 +2183,24 @@ type proc =
      for the result of a pass. The accessors below allow the user to extract
      more purposeful information. *)
 
-  ; best_allele_pos : int -> per_allele_datum list
+  ; best_allele_pos   : int -> per_allele_datum list
   (* After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd : unit -> Lp.t mt
+  ; per_allele_llhd   : unit -> Lp.t mt
   (* If we're not interested in diagnostics, but just the end result, we want
      the per allele likelihood. *)
 
-  (* For paired reads when we want to know the next base. *)
-  ; maximum_match   : unit -> Lp.t
-  (* We might also want to get a possible threshold value for future passes. *)
+  ; maximum_positions_median_match : unit -> Lp.t
+  (* This value is used as a short-circuiting threshold filter for subsequent
+   * passes. For the position with the maximum emission, chose the median emission
+   * probability. The maximum position allows us to situate the read as best as we
+   * can, but choosing the median (as opposed to again the max) is a bit more robust
+   * since there are alleles between _loci_ that can always match against a read
+   * better than another loci. This provides a slightly more robust method so that we
+   * don't short-circuit the evaluation too early. *)
   }
 
 (* Single, for one allele, forward pass *)
@@ -2169,7 +2218,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   in
   let ref_length = Array.length allele_a in
   let ws = ForwardSLogSpace.W.generate ~ref_length ~read_length in
-  let maximum_match () =
+  let maximum_positions_median_match () =
     ForwardSLogSpace.W.fold_over_row ws (read_length - 1)
       ~init:Lp.zero ~f:(fun v c -> Lp.max v c.match_)
   in
@@ -2202,11 +2251,12 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
   in
   let init_global_state () = [| Lp.one |] in
-  { single
+  { name = sprintf "Single allele %s" allele
+  ; single
   ; best_allele_pos
   ; per_allele_llhd
   ; init_global_state
-  ; maximum_match
+  ; maximum_positions_median_match
   }
 
 let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
@@ -2258,7 +2308,9 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
     to_best_allele_pos alleles (F.W.foldi_over_final ws)
       per_allele_llhd n
   in
-  let maximum_match () = F.max_of_ws_row ws (read_length - 1) in
+  let maximum_positions_median_match () =
+    F.maximum_positions_median_match ws (read_length - 1)
+  in
   let reference i = emissions_a.(i) in
   let init_global_state () = F.per_allele_emission_arr t.number_alleles in
   let normal () =
@@ -2289,10 +2341,11 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
           let filter = Filter.join filter1 filter2 in
           wrap filter
     in
-    { single
+    { name = sprintf "Locus: %s" (Nomenclature.show_locus t.locus)
+    ; single
     ; best_allele_pos
     ; per_allele_llhd
-    ; maximum_match
+    ; maximum_positions_median_match
     ; init_global_state
     }
   in
@@ -2313,7 +2366,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
     ; best_alleles
     ; per_allele_llhd
     ; init_global_state
-    ; maximum_match (* TODO: Not quite right for bands. *)
+    ; maximum_positions_median_match (* TODO: Not quite right for bands. *)
     } *)
   in
   match band with
@@ -2350,7 +2403,7 @@ module Splitting_state = struct
 
   type t =
     { mutable emission_pm   : (Pm.ascending, Lp.t) Pm.t
-    ; mutable maximum_match : Lp.t
+    ; mutable max_med_match : Lp.t
     (* The splitting passes incur an etra start/stop emission probability
       that makes them difficult to compare against the normal version.
       We're going to keep track of these values and then remove the
@@ -2360,19 +2413,19 @@ module Splitting_state = struct
 
   let init number_alleles =
     { emission_pm = pm_init_all ~number_alleles Lp.one
-    ; maximum_match = Lp.one
+    ; max_med_match = Lp.one
     ; scaling = []
     }
 
   let reset ss =
     ss.emission_pm <-
       pm_init_all ~number_alleles:(Pm.size ss.emission_pm) Lp.one;
-    ss.maximum_match <- Lp.one;
+    ss.max_med_match <- Lp.one;
     ss.scaling <- []
 
   let add_emission ss em mm =
     ss.emission_pm <- Pm.merge ss.emission_pm em (Lp.( * ));
-    ss.maximum_match <- Lp.(ss.maximum_match * mm)
+    ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
     ss.scaling <- v :: ss.scaling
@@ -2420,12 +2473,13 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
     let alleles = Array.map ~f:fst alleles in
     let ss = Splitting_state.init number_alleles in
     let merge_after_pass ?range () =
-      let max_of_pass = F.max_cell_of_ws_row ?range ws (read_length - 1) in
       let em = F.W.get_emission ws in
-      Splitting_state.add_emission ss em max_of_pass.match_;
+      (* Close enough ? *)
+      let max_med_em = F.maximum_positions_median_match ?range ws (read_length - 1) in
+      Splitting_state.add_emission ss em max_med_em;
     in
     let per_allele_llhd () = ss.Splitting_state.emission_pm in
-    let maximum_match () = ss.Splitting_state.maximum_match in
+    let maximum_positions_median_match () = ss.Splitting_state.max_med_match in
     let best_allele_pos n =
       to_best_allele_pos alleles (F.W.foldi_over_final ws)
         per_allele_llhd n
@@ -2485,10 +2539,15 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
             in
             wrap filter update
       in
-      { single
+      let name =
+        sprintf "Locus %s splitting %d (not prealigned)"
+            (Nomenclature.show_locus t.locus) number_of_splits
+      in
+      { name
+      ; single
       ; best_allele_pos
       ; per_allele_llhd
-      ; maximum_match
+      ; maximum_positions_median_match
       ; init_global_state
       }
     end else begin (* prealigned_transition_model *)
@@ -2623,10 +2682,15 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
             in
             wrap to_filter
       in
-      { single
+      let name =
+        sprintf "Locus %s splitting %d (prealigned)"
+            (Nomenclature.show_locus t.locus) number_of_splits
+      in
+      { name
+      ; single
       ; best_allele_pos
       ; per_allele_llhd
-      ; maximum_match
+      ; maximum_positions_median_match
       ; init_global_state
       }
     end

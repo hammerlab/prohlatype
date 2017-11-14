@@ -718,16 +718,18 @@ let assoc_remove_and_get el list =
   loop [] list
 
 (* Conversion *)
+
+let ascending_t l =
+  List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
+    match assoc_remove_and_get v acc with
+    | None           -> (v, Set.of_interval i) :: acc
+    | Some (s, nacc) -> (v, i :: s) :: nacc)      (* Set abstraction is leaky atm, this reverses. *)
+  |> List.map ~f:(fun (v, s) -> Set.first_pos s, s, v)
+  |> List.sort ~cmp:(fun (p1, _, _) (p2, _, _) -> compare p1 p2)
+  |> List.map ~f:(fun (_, s, v) -> (s,v))
+
 let ascending = function
-  | Desc l ->
-      List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
-        match assoc_remove_and_get v acc with
-        | None           -> (v, Set.of_interval i) :: acc
-        | Some (s, nacc) -> (v, i :: s) :: nacc)        (* Set abstraction is leaky atm, this reverses. *)
-      |> List.map ~f:(fun (v, s) -> Set.first_pos s, s, v)
-      |> List.sort ~cmp:(fun (p1, _, _) (p2, _, _) -> compare p1 p2)
-      |> List.map ~f:(fun (_, s, v) -> (s,v))
-      |> fun l -> Asc l                               (* assert (ascending_invariant l); *)
+  | Desc l -> Asc (ascending_t l)                              (* assert (ascending_invariant l); *)
 
 let descending = function
   | Asc l ->
@@ -946,6 +948,13 @@ let fold_values : type o a. (o, a) t -> init:'b -> f:('b -> a -> 'b) -> 'b =
   fun l ~init ~f -> match l with
     | Desc ld -> List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
     | Asc la  -> List.fold_left la ~init ~f:(fun acc (_l, v) -> f acc v)
+
+let fold_set_sizes_and_values : type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =
+  fun l ~init ~f ->
+    let ascf = List.fold_left ~init ~f:(fun acc (l, v) -> f acc (Set.size l) v) in
+    match l with
+    | Desc ld -> ascf (ascending_t ld)              (* TODO: Probably could be faster. *)
+    | Asc la  -> ascf la
 
 let fold_indices_and_values :
   type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =

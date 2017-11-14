@@ -5,24 +5,12 @@
 
 open Util
 
-type gene =
-  | A
-  | B
-  | C
-  | DRB1
+let string_to_locus s =
+  match Nomenclature.parse_locus s with
+  | Ok l    -> l
+  | Error e -> invalid_arg e
 
-let string_to_gene = function
-  | "A"     -> A
-  | "B"     -> B
-  | "C"     -> C
-  | "DRB1"  -> DRB1
-  | x       -> invalid_argf "Unrecognized gene: %s" x
-
-let gene_to_string = function
-  | A -> "A"
-  | B -> "B"
-  | C -> "C"
-  | DRB1 -> "DRB1"
+let locus_to_string = Nomenclature.show_locus
 
 let keys =
   [ "120021"; "120074"; "120984"; "122879"; "123768"; "125785"; "126119"
@@ -38,762 +26,464 @@ let keys =
 
 let _hdr :: data = Csv.load res_fname
 
-module Diploid = struct
-
-  type t = Nomenclature.t * Nomenclature.t
-
-  let init a1 a2 =
-    if Nomenclature.compare_by_resolution a1 a2 <= 0 then
-      (a1, a2)
-    else
-      (a2, a1)
-
-  let lower_res_matches (l1, l2) (h1, h2) =
-    Nomenclature.two_matches_full l1 h1 &&
-    Nomenclature.two_matches_full l2 h2
-
-  let one_lower_res_matches l (h1, h2) =
-    Nomenclature.two_matches_full l h1 ||
-    Nomenclature.two_matches_full l h2
-
-end (* Diploid *)
-
 let to_correct_map data =
   List.fold_left data ~init:StringMap.empty ~f:(fun smap lst ->
     let k = List.nth_exn lst 4 in
     match Nomenclature.parse (List.nth_exn lst 1) with
     | Error e         -> invalid_arg e
-    | Ok (gene_s, nc) ->
-        let gene = string_to_gene gene_s in
+    | Ok (locus, nc) ->
         let l = try StringMap.find k smap with Not_found -> [] in
-        StringMap.add k ((gene, nc) :: l) smap)
+        StringMap.add k ((locus, nc) :: l) smap)
   |> StringMap.map ~f:(fun l ->
       group_by_assoc l
-      |> List.filter_map ~f:(fun (gene, allele_lst) ->
+      |> List.filter_map ~f:(fun (locus, allele_lst) ->
             match allele_lst with
-            | a1 :: a2 :: [] -> Some (gene, Diploid.init a1 a2)
-            | _ -> eprintf "Odd! gene: %s has <2 or >2 alleles: %s\n"
-                    (gene_to_string gene)
-                    (string_of_list ~sep:" " ~f:Nomenclature.resolution_and_suffix_opt_to_string allele_lst);
+            | a1 :: a2 :: [] -> Some (locus, Nomenclature.Diploid.init a1 a2)
+            | _ -> eprintf "Odd! locus: %s has <2 or >2 alleles: %s\n"
+                    (locus_to_string locus)
+                    (string_of_list ~sep:" " ~f:Nomenclature.to_string allele_lst);
                    None))
 
-let tab_character = '\t'
+let f_of_yojson =
+  ParPHMM_drivers.(Output.of_yojson Multiple_loci.final_read_info_of_yojson)
 
-let headers = ["Likelihood:"; "Zygosity:"; "Per Read:"]
-
-let to_parse_state = function
-  | "Likelihood:" :: [] -> `Likelihood
-  | "Zygosity:" :: []   -> `Zygosity
-  | "Per Read:" :: []   -> `PerRead
-  | _                   -> `Unknown
-
-type z =
-  { d : Diploid.t
-  ; l : float
-  ; p : float
-  }
-
-(* Grouped zygosities. *)
-type gz =
-  { dl  : Diploid.t list          (* All pairs have the same likelihood/probability *)
-  ; idx : int                     (* Index of the group. *)
-  ; li  : float                   (* Likelihood *)
-  ; pr  : float                   (* Probability *)
-  }
-
-let summarize_gz gz =
-  let open Nomenclature in
-  match gz.dl with
-  | (a1, a2) :: [] -> sprintf "1 %s %s" (resolution_and_suffix_opt_to_string a1)
-                          (resolution_and_suffix_opt_to_string a2)
-  | (a1, a2) :: _  -> sprintf "%f (1/%d) %s\t%s" gz.pr (List.length gz.dl)
-                          (resolution_and_suffix_opt_to_string a1)
-                          (resolution_and_suffix_opt_to_string a2)
-  | []             -> invalid_arg "can't summarize empty gz!"
-
-let group_zygosities zlst =
-  List.map zlst ~f:(fun z -> (z.l, z))
-  |> group_by_assoc
-  |> List.sort ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1)  (* Make sure descending *)
-  |> List.mapi ~f:(fun i (l, zlst) ->
-      { dl  = List.map ~f:(fun z -> z.d) zlst
-      ; idx = i
-      ; li  = l
-      ; pr  = (List.hd_exn zlst).p
-      })
-
-type per_read_allele_datum =
-  { allele    : string
-  ; position  : int
-  ; llhd      : float
-  }
-
-let parse_per_read_allele_datum s =
-  try
-  Scanf.sscanf s "%s@,%d,%f"
-    (fun allele position llhd -> { allele; position; llhd})
-  with e ->
-    eprintf "------------%s---------------\n%!" s;
-    raise e
-
-let parse_per_read_allele_datums s =
-  String.split ~on:(`Character ';') s
-  |> List.map ~f:parse_per_read_allele_datum
-
-(* Assume that most likely is first *)
-let to_llhd l =
-  (List.hd_exn l).llhd
-
-type filter_or_res =
-  | Filtered of string
-  | Res of { orientation : bool ; rads : per_read_allele_datum list}
-
-type per_read =
-  | SingleRead of filter_or_res * filter_or_res
-  | FirstOrientedSecond of { orientation : bool
-                           ; r1 : per_read_allele_datum list
-                           ; r2 : per_read_allele_datum list
-                           }
-  | FirstFiltered of string
-
-(* They'll always have the gene annotation! *)
-let reduce_per_read t1 t2 =
-  let (_, p1) = t1 in
-  let (_, p2) = t2 in
-  match p1, p2 with
-  | SingleRead (Filtered _, _), SingleRead _            -> t2
-  | SingleRead _              , SingleRead (Filtered _, _) -> t1
-  | SingleRead (Res r1, _)    , SingleRead (Res r2, _) ->
-      if to_llhd r1.rads >= to_llhd r2.rads then t1 else t2
-  | SingleRead _           , _            -> invalid_arg "NOT a single read!"
-  | _                      , SingleRead _ -> invalid_arg "NOT a single read!"
-  | FirstOrientedSecond f1 , FirstOrientedSecond f2 ->
-      if to_llhd f1.r1 >= to_llhd f2.r1 then t1 else t2
-  | FirstOrientedSecond _  , FirstFiltered _        -> t1
-  | FirstFiltered _        , FirstOrientedSecond _  -> t2
-  | _                      , _                      -> t1
-
-
-let rejoin_tabs = String.concat ~sep:"\t"
-
-let parse_single_read_filter_or_res = function
-  | "R" :: r1 :: "F" :: msg :: [] ->
-      SingleRead (Res {orientation = false; rads = parse_per_read_allele_datums r1}
-                 , Filtered msg)
-  | "C" :: r1 :: "F" :: msg :: [] ->
-      SingleRead (Res {orientation = true; rads = parse_per_read_allele_datums r1}
-                 , Filtered msg)
-  | "R" :: r1 :: "C" :: r2 :: [] ->
-      SingleRead ( Res {orientation = false; rads = parse_per_read_allele_datums r1}
-                 , Res {orientation = true; rads = parse_per_read_allele_datums r2})
-  | "C" :: r1 :: "R" :: r2 :: [] ->
-      SingleRead ( Res {orientation = true; rads = parse_per_read_allele_datums r1}
-                 , Res {orientation = false; rads = parse_per_read_allele_datums r2})
-  | "F" :: m1 :: "F" :: m2 :: [] ->
-      SingleRead ((Filtered m1), (Filtered m2))
-  | lst ->
-      invalid_argf "Unrecongized single_read format: %s"
-        (rejoin_tabs lst)
-
-let parse_first_oriented_second = function
-  | "C" :: r1 :: r2 :: [] ->
-      FirstOrientedSecond
-        { orientation = true
-        ; r1 = parse_per_read_allele_datums r1
-        ; r2 = parse_per_read_allele_datums r2
-        }
-  | "R" :: r1 :: r2 :: [] ->
-      FirstOrientedSecond
-        { orientation = false
-        ; r1 = parse_per_read_allele_datums r1
-        ; r2 = parse_per_read_allele_datums r2
-        }
-  | lst ->
-      invalid_argf "Unrecongized first_oriented_second format: %s"
-        (rejoin_tabs lst)
-
-let parse_post_gene_per_read = function
-  | "SingleRead" :: tl ->
-      parse_single_read_filter_or_res tl
-  | "FirstOrientedSecond" :: tl ->
-      parse_first_oriented_second tl
-  | "FirstFiltered" :: tl ->
-      FirstFiltered (rejoin_tabs tl)
-  | lst ->
-      invalid_argf "What type of read: %s"
-        (rejoin_tabs lst)
-
-let parse_per_read_line line =
-  match String.split ~on:(`Character '\t') line with
-  | "AF_A_gen__Distances.WeightedPerSegment" :: tl ->
-      [A,  parse_post_gene_per_read tl]
-  | "AF_B_gen__Distances.WeightedPerSegment" :: tl ->
-      [B,  parse_post_gene_per_read tl]
-  | "AF_C_gen__Distances.WeightedPerSegment" :: tl ->
-      [C,  parse_post_gene_per_read tl]
-  | _ ->
-      eprintf "Ingoring per_read line: %s" line;
-      []
-
-let parse_per_reads lst =
-  let rec loop acc = function
-    | []       -> List.rev acc
-    | "" :: tl -> eprintf "Empty read name: stopping! tl: %s" (rejoin_tabs tl);
-                  List.rev acc
-    | read_name :: l1 :: l2 :: l3 :: tl ->
-        let o1 = parse_per_read_line l1 in
-        let o2 = parse_per_read_line l2 in
-        let o3 = parse_per_read_line l3 in
-        let assoc = o1 @ o2 @ o3 in
-        loop ((read_name, assoc) :: acc) tl
-    | x :: []           -> eprintf "early stop: %s" x; List.rev acc
-    | y :: x :: []      -> eprintf "early stop: %s, %s" y x; List.rev acc
-    | z :: y :: x :: [] -> eprintf "early stop: %s, %s, %s" z y x; List.rev acc
-
-  in
-  loop [] lst
-
-type prohlatype_output =
-  { likelihoods : (gene * (Nomenclature.t * float) list) list
-  ; zygosities  : (gene * gz list) list
-  ; per_reads   : (string * ((gene * per_read) list)) list
-  }
-
-let load_prohlatype fname =
-  let separator = tab_character in
-  let sep = sprintf "%c" tab_character in
-  let line l = String.concat ~sep l in
-  let rec parse state lst =
-    let searching_for, acc = state in
-    match searching_for with
-    | `Unknown  ->
-        begin match to_parse_state lst with
-        | `Unknown    -> eprintf "ignoring: %s\n" (line lst);
-                         state
-        | `Likelihood -> (`Likelihood ("", []), acc)
-        | `Zygosity   -> (`Zygosity ("", []), acc)
-        | `PerRead    -> (`PerRead [], acc)
-        end
-    | `Likelihood (gene, lacc) ->
-        begin
-          match lst with
-          | a :: l :: _il ->      (* TODO: Add imputation parsing logic. *)
-              begin
-                match Nomenclature.parse a with
-                | Ok (g, res) ->
-                    if gene = "" || g = gene then
-                      `Likelihood (g, (res, float_of_string l) :: lacc), acc
-                    else (* g <> gene *)
-                      invalid_argf "new gene %s in %s likelihood section!" g gene
-                | Error e ->
-                    eprintf "Parse error in likelihood: %s" e;
-                    let nstate = `Unknown, (`Likelihood (gene, (List.rev lacc)) :: acc) in
-                    parse nstate lst
-              end
-          | []  -> eprintf "Odd empty line\n";
-                  `Unknown, (`Likelihood (gene, (List.rev lacc)) :: acc)
-          | _   -> let nstate = `Unknown, (`Likelihood (gene, List.rev lacc)) :: acc in
-                   parse nstate lst
-        end
-    | `Zygosity (gene, zacc) ->
-        begin match lst with
-        | a :: b :: l :: p :: [] ->
-            begin match Nomenclature.parse a, Nomenclature.parse b with
-            | Ok (ga, a1), Ok (gb, a2) ->
-                if gene = "" || (ga = gene && gb = gene) then
-                  let z =
-                    { d = Diploid.init a1 a2
-                    ; l = float_of_string l
-                    ; p = float_of_string p
-                    }
-                  in
-                  `Zygosity (ga, z :: zacc), acc
-                else
-                  invalid_argf "new gene %s, %s in %s zygosity section!" ga gb gene
-            | Error e, _
-            | _ , Error e ->
-                eprintf "Parse error in zygosity: %s" e;
-                let nstate = `Unknown, (`Zygosity (gene, List.rev zacc)) :: acc in
-                parse nstate lst
-            end
-        | [] -> eprintf "Odd empty line\n";
-                `Unknown, (`Zygosity (gene, List.rev zacc) :: acc)
-        | _  -> let nstate = `Unknown, (`Zygosity (gene, List.rev zacc) :: acc) in
-                parse nstate lst
-        end
-    | `PerRead pacc ->
-        `PerRead ((line lst) :: pacc), acc
-  in
-  let final_state, acc =
-    Csv.load ~separator fname
-    |> List.fold_left ~init:(`Unknown, []) ~f:parse
-  in
-  let fs =
-    match final_state with
-    | `Unknown      -> eprintf "Finished as Unknown ?"; acc
-    | `Likelihood _ -> eprintf "Finished as Likelihood ?"; (final_state :: acc)
-    | `Zygosity _   -> eprintf "Finished as Zygosity ?"; (final_state :: acc)
-    | `PerRead _    -> final_state :: acc
-  in
-  { likelihoods =
-      List.filter_map fs ~f:(function
-        | `Likelihood (gene, lst) ->
-              Some (string_to_gene gene, lst)
-        | _ -> None)
-  ; zygosities  =
-      List.filter_map fs ~f:(function
-        | `Zygosity (gene, lst) ->
-              Some (string_to_gene gene, (group_zygosities lst))
-        | _ -> None)
-  ; per_reads   =
-      List.concat (List.filter_map fs ~f:(function
-          | `PerRead lst -> Some lst
-          | _ -> None))
-      |> List.rev
-      |> parse_per_reads
-  }
+let of_file f =
+  Yojson.Safe.stream_from_file f
+  |> Stream.next (* only one element per file. *)
+  |> f_of_yojson
+  |> unwrap_ok
 
 type record =
-  { ca : (gene * Diploid.t) list
-  ; po : prohlatype_output
+  { ca : (Nomenclature.locus * Nomenclature.Diploid.tt) list
+  ; po : ParPHMM_drivers.Multiple_loci.final_read_info ParPHMM_drivers.Output.t
   }
+
+let verbose_ref = ref true
 
 let load_data ~dir ~fname_to_key =
   let correct = to_correct_map data in
   Sys.readdir dir
   |> Array.to_list
   |> List.fold_left ~init:StringMap.empty ~f:(fun jmap file ->
-      let k = fname_to_key file in
-      let po = load_prohlatype (Filename.concat dir file) in
-      try
-        let ca = StringMap.find k correct in
-        StringMap.add k {ca; po} jmap
-      with Not_found ->
-        eprintf "Didn't find key %s in correct results! Ignoring" k;
+      if !verbose_ref then printf "At %s\n%!" file;
+      if Filename.check_suffix file ".json" then
+        let k = fname_to_key file in
+        let po = of_file (Filename.concat dir file) in
+        try
+          let ca = StringMap.find k correct in
+          StringMap.add k {ca; po} jmap
+        with Not_found ->
+          eprintf "Didn't find key %s in correct results! Ignoring" k;
+          jmap
+      else
         jmap)
 
+let diploid_of_zll { ParPHMM_drivers.Output.allele1; allele2; _} =
+  match Nomenclature.parse allele1 with
+  | Error e         -> invalid_arg e
+  | Ok (_l, nt1)    ->
+      match Nomenclature.parse allele2 with
+      | Error e     -> invalid_arg e
+      | Ok (_, nt2) -> Nomenclature.Diploid.init nt1 nt2
 
-let classify correct_d glz =
-  (*let first = summarize_gz (List.hd_exn glz) in *)
-  let rec loop = function
-    | []       -> `Didn'tFindIt
-    | gz :: tl ->
-        if List.exists gz.dl ~f:(Diploid.lower_res_matches correct_d) then begin
-          if gz.idx = 0 then begin
-            let n = List.length gz.dl in
-            if n = 1 then
-              `PerfectFirst
-            else
-              `OneAmong (n, gz.pr)
-          end else
-            `Found gz
+let most_likely_minimum_diploid_distance ref_diploid = function
+  | []     -> invalid_arg "Empty prohlatype zygosity list!"
+  | h :: t ->
+    let dd = Nomenclature.Diploid.distance ~n:2 ref_diploid in
+    let dh = dd (diploid_of_zll h) in
+    List.fold_left t ~init:(h, dh) ~f:(fun (bz, bd) zll ->
+        let nd = dd (diploid_of_zll zll) in
+        let c = Nomenclature.Diploid.Distance.compare bd nd in
+        if c < 0 then
+          (bz, bd)
+        else if c = 0 then begin
+          (* Have the same distance -> choose the most likely zll! *)
+          if bz.ParPHMM_drivers.Output.prob >= zll.ParPHMM_drivers.Output.prob then
+            (bz, bd)
+          else
+            (zll, nd)
         end else
-          loop tl
-  in
-  loop glz
+          (zll, nd))
 
-let classify1 a1 glz =
-  let rec loop = function
-    | []       -> `Didn'tFindIt
-    | gz :: tl ->
-        if List.exists gz.dl ~f:(Diploid.one_lower_res_matches a1) then
-          `Single gz
-        else
-          loop tl
-  and start = function
-    | []       -> `Didn'tFindIt
-    | gz :: tl ->
-        if List.exists gz.dl ~f:(Diploid.one_lower_res_matches a1) then
-          `First gz
-        else
-          loop tl
-  in
-  start glz
+(* How do we classify/categorize the resulting distances when our reference
+   (or "validated") data has a resolution of two (ex. A*01:02) *)
 
-let lookup_result ~gene r =
-  match List.Assoc.get gene r.ca with
-  | None  -> invalid_argf "Missing correct gene: %s type" (gene_to_string gene)
-  | Some d  ->
-      begin match List.Assoc.get gene r.po.zygosities with
-      | None      -> invalid_argf "Missing zygosities output for gene %s"
-                      (gene_to_string gene)
-      | Some zlst ->
-          begin match classify d zlst with
-          | `Didn'tFindIt
-          | `Found _ ->
-              let d1, d2 = d in
-              if d1 = d2 then
-                match classify1 d1 zlst with
-                | `First gz1    -> d, `NotHomozygous gz1
-                | `Single gz1   -> d, `NotHomozygousNotEvenBest gz1
-                | `Didn'tFindIt -> d, `Didn'tFindIt
-              else
-                let m1 = classify1 d1 zlst in
-                let m2 = classify1 d2 zlst in
-                begin match m1, m2 with
-                | `First gz1,    _              -> d, `OneRight gz1
-                | _ ,            `First gz2     -> d, `OneRight gz2
-                | `Single gz1,   `Single gz2    -> d, `Mixed (gz1, gz2)
-                | `Single _,     `Didn'tFindIt  -> d, m1
-                | `Didn'tFindIt, `Single _      -> d, m2
-                | `Didn'tFindIt, _              -> d, m1
-              end
-          | s -> d, s
-          end
+type distance_category_vs_two_depth_spec =
+  (* But prohlatypes output can have more resolution. *)
+  | BothRight of
+      { number_of_alternatives    : int
+      (* For the designated validated 2 type, was is the sum of the 2 digit
+       * resolution probability. *)
+      ; matched_2_res_probability : float
+      }
+  (* One has (0,0,_,_) and the other has (a1, a2, _, _)
+   * where not both a1 and a2 = 0 *)
+  | OneRight of
+      { number_of_alternatives  : int
+      ; right_is_first          : bool
+      ; right                   : string
+      ; wrong                   : string
+      ; versus                  : string
+      ; wrong_homozygosity      : bool
+      }
+  (* (a1, a2, _, _), (b1, b2, _, _), (a1 <> 0 || a2 <> 0)
+                         && (b1 <> 0 || b2 <> 0) *)
+  | Different of
+      { number_of_alternatives  : int
+      ; most_likely_probability : float
+      ; right1                  : string
+      ; right2                  : string
+      ; versus1                 : string
+      ; versus2                 : string
+      ; wrong_homozygosity      : bool
+      }
+  [@@deriving show]
+
+let second_digit_mismatches d =
+  let open Nomenclature.Diploid in
+  let lf = Distance.to_lowest_form d in
+  match lf with
+  | (0, 0, _, _), (0, 0, _, _) -> false
+  | _                          -> true
+
+let categorize_distance dp mz zplst d =
+  let open Nomenclature.Diploid in
+  let open ParPHMM_drivers.Output in
+  let number_of_alternatives_fst =
+    List.map zplst ~f:(fun { allele1; prob; _ } -> allele1)
+    |> List.dedup
+    |> List.length
+  in
+  let number_of_alternatives_snd =
+    List.map zplst ~f:(fun { allele2; prob; _ } -> allele2)
+    |> List.dedup
+    |> List.length
+  in
+  let lf = Distance.to_lowest_form d in
+  match lf with
+  | (0, 0, _, _), (0, 0, _, _)                              ->
+      let number_of_alternatives = List.length zplst in
+      let matched_2_res_probability =
+        let dz2 = reduce_two (diploid_of_zll mz) in
+        List.fold_left zplst ~init:0. ~f:(fun p zll ->
+            if reduce_two (diploid_of_zll zll) = dz2 then
+              p +. zll.prob
+            else
+              p)
+      in
+      BothRight
+        { number_of_alternatives
+        ; matched_2_res_probability
+        }
+  | (0, 0, _, _), (_c, _d, _, _) (* (_c <> 0 || _d <> 0) *) ->  (* Since in lowest form *)
+      let wrong_homozygosity = dp.lower = dp.upper && mz.allele1 <> mz.allele2 in
+      begin match d with
+      | Distance.Straight (d1, d2) ->
+          if (fst lf) = d1 then         (* Disagree on 2nd distance -> snd allele *)
+            OneRight
+              { number_of_alternatives = number_of_alternatives_snd
+              ; right_is_first = true
+              ; right = mz.allele1
+              ; wrong = mz.allele2
+              ; versus = Nomenclature.to_string dp.upper
+              ; wrong_homozygosity
+              }
+          else (* (fst lf) = d2 *)      (* Disagree on 1st distance -> fst allele *)
+            OneRight
+              { number_of_alternatives = number_of_alternatives_fst
+              ; right_is_first = false
+              ; right = mz.allele2
+              ; wrong = mz.allele1
+              ; versus = Nomenclature.to_string dp.lower
+              ; wrong_homozygosity
+              }
+      | Distance.Crossed (d1, d2) ->
+          if (fst lf) = d1 then
+            OneRight
+              { number_of_alternatives = number_of_alternatives_fst
+              ; right_is_first = false
+              ; right = mz.allele2
+              ; wrong = mz.allele1
+              ; versus = Nomenclature.to_string dp.lower
+              ; wrong_homozygosity
+              }
+          else  (* (fst lf) = d2 *)
+            OneRight
+              { number_of_alternatives = number_of_alternatives_snd
+              ; right_is_first = true
+              ; right = mz.allele1
+              ; wrong = mz.allele2
+              ; versus = Nomenclature.to_string dp.upper
+              ; wrong_homozygosity
+              }
       end
+  | _                                                       ->
+      let versus1, versus2 =
+        match d with
+        | Distance.Straight _ -> Nomenclature.to_string dp.lower, Nomenclature.to_string dp.upper
+        | Distance.Crossed  _ -> Nomenclature.to_string dp.upper, Nomenclature.to_string dp.lower
+      in
+      let wrong_homozygosity = dp.lower = dp.upper && mz.allele1 <> mz.allele2 in
+      Different
+        { number_of_alternatives = List.length zplst
+        ; most_likely_probability = mz.prob
+        ; right1  = mz.allele1
+        ; right2  = mz.allele2
+        ; versus1
+        ; versus2
+        ; wrong_homozygosity
+        }
 
-let lookup_results ~gene r =
-  StringMap.bindings r
-  |> List.map ~f:(fun (sample, record) ->
-      sample, lookup_result ~gene record) ;;
+type read_info =
+  | P of ParPHMM_drivers.Alleles_and_positions.t ParPHMM_drivers.Multiple_loci.paired
+  | S of ParPHMM_drivers.Alleles_and_positions.t ParPHMM_drivers.Multiple_loci.single_or_incremental
+  [@@deriving show]
 
- `First of gz
+let read_position =
+  let open ParPHMM in
+  let open ParPHMM_drivers in
+  let open ParPHMM_drivers in
+  let of_aalp_pr = function
+    | Filtered _    -> invalid_argf "read was filtered ?!?"
+    | Completed alp -> (List.hd_exn alp).position
+  in
+  let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
+  let mlo fp =
+    Orientation.most_likely_between ~take_regular fp
+    |> map_completed ~f:snd
+  in
+  function
+  | S (Multiple_loci.SingleRead or_) ->
+      true, of_aalp_pr (mlo or_)
+  | S (Multiple_loci.PairedDependent pd) ->
+      false, of_aalp_pr pd.Multiple_loci.second
+  | P (Multiple_loci.FirstFiltered ff) ->
+      true, of_aalp_pr (Multiple_loci.(mlo ff.ff_second))
+  | P (Multiple_loci.FirstOrientedSecond fos) ->
+      false, of_aalp_pr (fos.Multiple_loci.second)
 
-type sample_summary =
-  { perfect   : int * (string list)
-  ; one_among : int * (string list)
-  ; one_right : int * (string list)
-  ; found     : int * (string list)
-  ; not_hmz   : int * (string list)
-  ; not_hmzne : int * (string list)
-  ; single    : int * (string list)
-  ; mixed     : int * (string list)
-  ; didn't    : int * (string list)
-  ; first     : int * (string list)
+type per_locus_per_sample =
+  { claimed_homozygous  : bool
+  ; actually_homozygous : bool
+  ; category            : distance_category_vs_two_depth_spec
+  ; reads1              : (string * string * read_info) list
+  ; reads2              : (string * string * read_info) list
+  ; reads1_pct          : float
+  ; reads2_pct          : float
   }
+  [@@deriving show]
 
-let to_ss l =
-  let p = List.filter_map l ~f:(function | (s, (_, `PerfectFirst)) -> Some s | _ -> None) in
-  let o = List.filter_map l ~f:(function | (s, (_, `OneAmong _)) -> Some s | _ -> None) in
-  let or_ = List.filter_map l ~f:(function | (s, (_, `OneRight _)) -> Some s | _ -> None) in
-  let f = List.filter_map l ~f:(function | (s, (_, `Found _)) -> Some s | _ -> None) in
-  let n = List.filter_map l ~f:(function | (s, (_, `NotHomozygous _)) -> Some s | _ -> None) in
-  let nne = List.filter_map l ~f:(function | (s, (_, `NotHomozygousNotEvenBest _)) -> Some s | _ -> None) in
-  let s = List.filter_map l ~f:(function | (s, (_, `Single _)) -> Some s | _ -> None) in
-  let m = List.filter_map l ~f:(function | (s, (_, `Mixed _)) -> Some s | _ -> None) in
-  let d = List.filter_map l ~f:(function | (s, (_, `Didn'tFindIt)) -> Some s | _ -> None) in
-  let fi = List.filter_map l ~f:(function | (s, (_, `First _)) -> Some s | _ -> None) in
-  { perfect   = List.length p, p
-  ; one_among = List.length o, o
-  ; one_right = List.length or_, or_
-  ; found     = List.length f, f
-  ; not_hmz   = List.length n, n
-  ; not_hmzne = List.length nne, nne
-  ; single    = List.length s, s
-  ; mixed     = List.length m, m
-  ; didn't    = List.length d, d
-  ; first     = List.length fi, fi
-  }
-
-let reduce_prs prs =
-  Option.value_exn (List.reduce prs ~f:reduce_per_read)
-    ~msg:"Couldn't reduce PR's"
-
-let split_reads per_reads =
-  List.fold_left per_reads ~init:([],[],[]) ~f:(fun (ac,bc,cc) (rn, prlst) ->
-    let rr = reduce_prs prlst in
-    match rr with
-    | (A, p) -> (rn,p) :: ac, bc, cc
-    | (B, p) -> ac, (rn,p) :: bc, cc
-    | (C, p) -> ac, bc, (rn,p) :: cc
-    | (DRB1, _) -> invalid_arg "Doesn't support DRB1")
-
-let inrads a lst =
-  List.exists lst ~f:(fun r -> r.allele = a)
-
-let has_allele a = function
-  | SingleRead (Filtered _, _) -> false
-  | SingleRead (Res {rads; _}, _) -> inrads a rads
-  | FirstOrientedSecond {r1; r2; _} -> inrads a r1 || inrads a r2
-  | FirstFiltered _ -> false
-
-let coverage lst =
-  List.fold_left lst ~init:[] ~f:(fun acc (read, pr) ->
-    match pr with
-    | FirstFiltered msg ->
-        eprintf "Odd first filtered: %s %s" read msg; acc
-    | SingleRead (Filtered m, _) ->
-        eprintf "Odd SingleRead Filtered: %s %s" read m; acc
-    | SingleRead (Res {rads; _}, _)      ->
-        (List.hd_exn rads).position :: acc
-    | FirstOrientedSecond { r1; r2; _} ->
-        (List.hd_exn r1).position ::
-        (List.hd_exn r2).position :: acc)
+let aggregate_read_positions ?(readsize=100) =
+  List.fold_left ~init:[] ~f:(fun acc (_, read_info) ->
+      let single, end_ = read_position read_info in
+      if single then
+        (end_ - readsize, end_) :: acc
+      else
+        (end_ - 2 * readsize, end_) :: acc)
 
 
-(*
-(* Since prohlatype can report the same likelihood for multiple alleles,
-   we need to group them. We'll assign all of the values in a group the
-   best, ie the index of the lowest allele in the same group.  *)
-type result_group =
-  { alleles     : nr list
-  ; pos         : int
-  ; likelihood  : float
-  }
+(* Fail if they don't have the same keys *)
+let merge_assoc l1 l2 ~f =
+  let cmp_by_fst (f1, _) (f2, _) = compare f1 f2 in
+  let l1 = List.sort ~cmp:cmp_by_fst l1 in
+  let l2 = List.sort ~cmp:cmp_by_fst l2 in
+  List.map2 l1 l2 ~f:(fun (l1, k1) (l2, k2) ->
+      if l1 <> l2 then invalid_arg "mismatched keys!" else l1, (f k1 k2))
 
-let hla_likelihoods lst =
-  List.map lst ~f:(fun (gene, llhd) ->
-    let likelihoods =
-      List.map llhd ~f:(fun (allele, l) -> (List.hd_exn l |> float_of_string, allele))  (* parse likelihood value. *)
-      |> Util.group_by_assoc                                                      (* group by the same likelihoods *)
-      |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
-      |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
-          (pos + List.length alleles, { alleles; pos; likelihood } :: acc))
-      |> snd                                                                               (* discard index count. *)
-      |> List.rev                                                                (* reverse to make lookup easier. *)
+let zll_to_string {ParPHMM_drivers.Output.allele1; allele2; prob; _} =
+  sprintf "%s\t%s\t%0.5f" allele1 allele2 prob
+
+let zlls_to_string =
+  string_of_list ~sep:"\n\t" ~f:zll_to_string
+
+let by_loci_empty_assoc = Nomenclature.[ A, []; B, []; C, [] ]
+
+let reads_by_loci po =
+  let open ParPHMM_drivers.Multiple_loci in
+  let init = by_loci_empty_assoc in
+  List.fold_left po.ParPHMM_drivers.Output.per_reads ~init
+    ~f:(fun acc {ParPHMM_drivers.Output.name; d} ->
+          match d.most_likely with
+          | None  -> invalid_argf "Odd %s has no most likely!" name
+          | Some (l, allele) ->
+              begin match d.aaps with
+              | MPaired mpr_lst ->
+                begin match List.Assoc.get l mpr_lst with
+                | None  -> invalid_argf "What? %s is missing loci: %s" name (Nomenclature.show_locus l)
+                | Some r ->
+                  let lacc, rest = remove_and_assoc l acc in
+                  (l, ((allele, name, P r) :: lacc)) :: rest
+                end
+              | Single_or_incremental soi_lst ->
+                begin match List.Assoc.get l soi_lst with
+                | None   -> invalid_argf "What? %s is missing loci: %s" name (Nomenclature.show_locus l)
+                | Some r ->
+                  let lacc, rest = remove_and_assoc l acc in
+                  (l, ((allele, name, S r) :: lacc)) :: rest
+                end
+              end)
+
+let assign_reads mdz reads =
+  let open ParPHMM_drivers.Output in
+  let z1 = Nomenclature.parse mdz.allele1 |> unwrap_ok |> snd in
+  let z2 = Nomenclature.parse mdz.allele2 |> unwrap_ok |> snd in
+  List.fold_left reads ~init:([],[]) ~f:(fun (r1, r2) r ->
+      let allele, _name, _ri = r in
+      let az = Nomenclature.parse allele |> unwrap_ok |> snd in
+      let d1 = Nomenclature.distance az z1 in
+      let d2 = Nomenclature.distance az z2 in
+      let cd = Nomenclature.compare_distance d1 d2 in
+      if cd < 0 then
+        (r :: r1, r2)
+      else if cd > 0 then
+        (r1, r :: r2)
+     else begin
+        printf "allele: %s has same distance to %s and %s"
+          allele mdz.allele1 mdz.allele2 ;
+        (r1,r2)
+      end)
+
+let categorize_wrap ?(output=false) {ca; po} =
+  let open ParPHMM_drivers.Output in
+  let open Nomenclature.Diploid in
+  let zps =
+    List.map po.per_loci
+      ~f:(fun { locus; zygosity; _} -> locus, zygosity)
+  in
+  let classical = List.filter ca ~f:(fun (l, _) -> l <> Nomenclature.DRB1) in
+  let reads_by_l = reads_by_loci po in
+  let total_number_of_reafs =
+    List.fold_left reads_by_l ~init:0 ~f:(fun s (_l, lst) -> s + List.length lst)
+    |> float_of_int
+  in
+  let mgd = merge_assoc classical zps ~f:(fun x y -> (x,y)) in
+  let mgd2 = merge_assoc mgd reads_by_l ~f:(fun (x,y) z -> (x,y,z)) in
+  List.map mgd2 ~f:(fun (l, (dp, zplst, reads)) ->
+    let mdz, mdd = most_likely_minimum_diploid_distance dp zplst in
+    let fulld = distance dp (diploid_of_zll mdz) in
+    let c = categorize_distance dp mdz zplst fulld in
+    let reads1, reads2 = assign_reads mdz reads in
+    let actually_homozygous =
+      if mdz.allele1 = mdz.allele2 then begin
+        printf "found a homozygous pair with p %f" mdz.prob;
+        mdz.prob > 0.95
+      end else
+        false
     in
-    gene, likelihoods)
+    let plps =
+      { claimed_homozygous  = dp.lower = dp.upper
+      ; actually_homozygous
+      ; category            = c
+      ; reads1
+      ; reads2
+      ; reads1_pct = (List.length reads1) /. total_number_of_reafs
+      ; reads2_pct = (List.length reads2) /. total_number_of_reafs
+      }
+    in
+    if output then begin
+    printf "%s\n\t%s\n\t%s\n\n\t\t%s\n\t\t%s\n\t\t%s\n\t\t%s\n"
+      (Nomenclature.show_locus l)
+      (to_string dp)
+      (zlls_to_string zplst)
+      (zll_to_string mdz)
+      (Distance.to_string mdd)
+      (Distance.to_string fulld)
+      (show_distance_category_vs_two_depth_spec c)
+    end;
+    l, plps)
 
-let summarize r ~gene ~metric ~f ~init =
-  Smap.fold r ~init ~f:(fun ~key ~data acc ->
-    match List.filter data.correct_alleles ~f:(fun (g,_) -> g = gene) with
-    | []  -> eprintf "Didn't find gene %s in %s" gene key;
-             acc
-    | gls ->
-        begin match List.Assoc.get gene data.allele_likelihoods with
-        | None      -> eprintf "Didn't find likelihoods for gene %s in %s\n" gene key;
-                       acc
-        | Some llhd -> f acc key (List.map gls ~f:(fun (_gene, nr) -> metric nr llhd))
-        end)
+let to_categories ?(output=false) r =
+  StringMap.mapi r ~f:(fun key data ->
+    if output then printf "%s\n" key;
+    categorize_wrap ~output data)
 
-let alleles_match nr1 nr2 =
-  match (fst nr1) with                     (* Match on just the name, ignore suffix *)
-  | Nomenclature.Two (r1, r2) ->
-      begin match (fst nr2) with                               (* Also, ignore suffix. *)
-        | Nomenclature.One _ -> invalid_argf "What! %s only 1 in Prohlatype output!"
-                                        (Nomenclature.resolution_and_suffix_opt_to_string nr2)
-        | Nomenclature.Two (s1, s2)
-        | Nomenclature.Three (s1, s2, _)
-        | Nomenclature.Four (s1, s2, _, _) -> r1 = s1 && r2 = s2
-      end
-  | fnr ->
-      invalid_argf "Unsupported resolution: %s "
-        (Nomenclature.resolution_to_string fnr)
+let aggregate_by_locus r =
+  let init = by_loci_empty_assoc in
+  StringMap.fold r ~init ~f:(fun ~key ~data acc ->
+    merge_assoc data acc ~f:(fun a l -> a :: l))
 
-let lookup_position ~wrong nr group_list =
-  List.find group_list ~f:(fun rg ->
-    List.exists rg.alleles ~f:(alleles_match nr))
-  |> Option.value_map ~default:wrong ~f:(fun rg -> rg.pos)
+let record_map_to_aggregate_lsts ?(output=true) r =
+  to_categories ~output r
+  |> aggregate_by_locus
 
-let best_positions r ~gene =
-  summarize r ~gene ~metric:(lookup_position ~wrong:10000)
-    ~init:[]
-    ~f:(fun l k il -> (k, (List.sort ~cmp:compare il)) :: l)
-
-let best ~gene r k =
-  let cr = best_positions r ~gene in
-  let d = List.length cr in
-  let n = List.length (List.filter cr ~f:(fun (_, l) -> List.hd_exn l < k)) in
-  (n, d, (float n) /. (float d))
-
-let join_runs r1 r2 =
-  let flatten_to_alleles lst =
-    List.fold_left lst ~init:[] ~f:(fun acc (rg : result_group) ->
-      acc @ List.map rg.alleles ~f:(fun nr -> nr, rg.likelihood))
-      |> List.sort ~cmp:compare   (* sort by allele *)
-  in
-  let regroup acc =
-    Util.group_by_assoc acc                                                     (* group by the same likelihoods *)
-    |> List.sort ~cmp:(fun (l1,_a1) (l2, _a2) -> compare l2 l1)                               (* sort descending *)
-    |> List.fold_left ~init:(0, []) ~f:(fun (pos, acc) (likelihood, alleles) ->
-      (pos + List.length alleles, { alleles; pos; likelihood } :: acc))
-    |> snd                                                                               (* discard index count. *)
-    |> List.rev                                                                (* reverse to make lookup easier. *)
-  in
-  Smap.merge r1 r2 ~f:(fun k v1 v2 ->
-    match v1, v2 with
-    | None, None  -> assert false
-    | None, _     -> printf "%s missing first record\n" k; v2
-    | _,    None  -> printf "%s missing second record\n" k; v1
-    | Some a1, Some a2 ->
-        assert (a1.correct_alleles = a2.correct_alleles);
-        let l =
-          List.map2 (List.sort ~cmp:compare a1.allele_likelihoods)
-                    (List.sort ~cmp:compare a2.allele_likelihoods) (* align genes *)
-            ~f:(fun (g1, g1list) (g2, g2list) ->
-                  assert (g1 = g2);
-                  let al1 = flatten_to_alleles g1list in
-                  let al2 = flatten_to_alleles g2list in
-                  let al =
-                    List.map2 al1 al2 ~f:(fun (a1, l1) (a2, l2) ->
-                      assert (a1 = a2);
-                      (l1 +. l2), a1)
-                    |> regroup
-                  in
-                  g1, al)
-        in
-        Some {a1 with allele_likelihoods = l})
-
-(* Running time analysis *)
-let get_times fname =
-  let ic = open_in fname in
-  let rec loop acc =
-    try
-      loop (input_line ic :: acc)
-    with End_of_file ->
-      List.take acc 3
-  in
-  let last_three = loop [] in
-  close_in ic;
-  last_three
-
-let load_times ~dir ~fname_to_key =
-  Sys.readdir dir
-  |> Array.fold_left ~init:[] ~f:(fun acc file ->
-      let k = fname_to_key file in
-      let t = get_times (Filename.concat dir file) in
-      (k, t) :: acc)
-
-let user_times =
-  List.map ~f:(fun (sample_name, lst) ->
-    sample_name,  Scanf.sscanf (List.nth_exn lst 1) "user\t%dm%fs" (fun m s -> (float m *. 60. +. s))) ;;
-
-(*** Parsing mapped files *)
-let key_to_gene = function
-  | "AF_A_gen_true" -> "A"
-  | "AF_B_gen_true" -> "B"
-  | "AF_C_gen_true" -> "C"
-  | s               -> invalid_argf "unrecognized gene: %s" s
-
-type map_res =
-  { alleles   : (string * float) list
-  ; positions : (int * float) list
+type per_locus =
+  { br                    : int
+  ; or_                   : int
+  ; di                    : int
+  ; incorrect_homozygous  : int
+  (* Sum of the matched 2-digit resolution P *)
+  ; br_match_2d           : float
+  ; br_r1                 : float
+  ; br_r2                 : float
+  ; br_ratio              : float
+  ; or_right              : float
+  ; or_wrong              : float
+  ; or_ratio              : float
+  ; dr_r1                 : float
+  ; dr_r2                 : float
   }
 
-let split_on_semicolon s =
-  String.split ~on:(`Character ';') s
+let init_per_locus =
+  { br                    = 0
+  ; or_                   = 0
+  ; di                    = 0
+  ; incorrect_homozygous  = 0
+  ; br_match_2d           = 0.
+  ; br_r1                 = 0.
+  ; br_r2                 = 0.
+  ; br_ratio              = 0.
+  ; or_right              = 0.
+  ; or_wrong              = 0.
+  ; or_ratio              = 0.
+  ; dr_r1                 = 0.
+  ; dr_r2                 = 0.
+  }
 
-let split_on_colon s =
-  String.split ~on:(`Character ':') s
-
-let parse_allele_and_likelihood s =
-  split_on_colon s
-  |> List.rev
-  |> function
-      | lklhd :: reverse_me_for_allele ->
-          (List.rev reverse_me_for_allele |> String.concat ~sep:":"),
-          (float_of_string lklhd)
-      | _   ->
-          invalid_argf "cant parse alleles: %s" s
-
-let parse_positions s =
-  Scanf.sscanf s "%d:%f" (fun p l -> p, l)
-
-let parse_res lst =
-  match lst with
-  | al :: pl :: tl ->
-      { alleles = split_on_semicolon al |> List.map ~f:parse_allele_and_likelihood
-      ; positions = split_on_semicolon pl |> List.map ~f:parse_positions
-      } , tl
-  | _ -> invalid_arg "Not enough elements"
-
-let rec parse_gene lst =
-  match lst with
-  | "C" :: tl ->
-      let map, tl = parse_res tl in
-      (`C map), tl
-  | "R" :: tl ->
-      let map, tl = parse_res tl in
-      (`R map), tl
-  | "F" :: msg :: tl ->
-      (`F msg), tl
-  | s :: _ ->
-      invalid_argf "unrecongized output: %s" s
-  | []      ->
-      invalid_arg "empty"
-
-
-let parse_map_line_result l =
-  try
-    let split = String.split ~on:(`Character tab_character) l in
-    match split with
-    | "" :: gene_s :: rest ->
-        let gene = key_to_gene gene_s in
-        let r1, rest = parse_gene rest in
-        let r2, rest = parse_gene rest in
-        if rest = [] then
-          Ok (gene, (r1, r2))
-        else
-          error "extra stuff"
-    | _ -> error "unrecognized map line: %s" l
-  with Invalid_argument e -> error "%s" e
-
-let load_maps fname =
-  let ic = open_in fname in
-  let rec until_reads () =
-    let s = input_line ic in
-    if String.compare_substring ("Reads", 0, 5) (s, 0, 5) = 0 then
-      grab_reads []
-    else
-      until_reads ()
-  and grab_reads acc =
-    try
-      let read_line = input_line ic in
-      let line1 = input_line ic in
-      let line2 = input_line ic in
-      let line3 = input_line ic in
-      match
-        parse_map_line_result line1 >>= fun l1 ->
-          parse_map_line_result line2 >>= fun l2 ->
-            parse_map_line_result line3 >>= fun l3 -> Ok [l1; l2; l3]
-      with
-      | Ok l -> grab_reads ((read_line, l) :: acc)
-      | Error e ->
-          eprintf "for read %s: %s" read_line e;
-          acc
-    with End_of_file ->
-      List.rev acc
+let aggregate_plps l =
+  let ifch b = if b then 1 else 0 in
+  let fs =
+    List.fold_left l ~init:init_per_locus ~f:(fun ipl plps ->
+        let l1 = float (List.length plps.reads1) in
+        let l2 = float (List.length plps.reads2) in
+        match plps.category with
+        | BothRight b ->
+          { ipl with
+              br = ipl.br + 1
+              ; incorrect_homozygous =
+                  ipl.incorrect_homozygous + ifch (plps.claimed_homozygous && (not plps.actually_homozygous))
+              ; br_match_2d = ipl.br_match_2d +. b.matched_2_res_probability
+              ; br_r1 = ipl.br_r1 +. l1
+              ; br_r2 = ipl.br_r2 +. l2
+              ; br_ratio = ipl.br_ratio +. (l1 /. l2)
+          }
+        | OneRight o  ->
+          { ipl with
+              or_ = ipl.or_ + 1
+              ; incorrect_homozygous =
+                  ipl.incorrect_homozygous + ifch (plps.claimed_homozygous && (not plps.actually_homozygous))
+              ; or_right = ipl.or_right +. (if o.right_is_first then l1 else l2)
+              ; or_wrong = ipl.or_wrong +. (if o.right_is_first then l2 else l1)
+              ; or_ratio = ipl.or_ratio +. (if o.right_is_first then (l1/.l2) else (l2/.l1))
+          }
+        | Different _ ->
+          { ipl with
+              di = ipl.di + 1
+              ; incorrect_homozygous =
+                  ipl.incorrect_homozygous + ifch (plps.claimed_homozygous && (not plps.actually_homozygous))
+              ; dr_r1 = ipl.dr_r1 +. l1
+              ; dr_r2 = ipl.dr_r2 +. l2
+          })
   in
-  until_reads ()
+  { fs with
+      br_match_2d = fs.br_match_2d /. (float fs.br)
+      ; br_r1 = fs.br_r1 /. (float fs.br)
+      ; br_r2 = fs.br_r2 /. (float fs.br)
+      ; br_ratio = fs.br_ratio /. (float fs.br)
 
-let tcl (o, _) =
-  match o with
-  | `C mp -> List.hd_exn mp.alleles |> snd
-  | `R mp -> List.hd_exn mp.alleles |> snd
-  | `F _  -> neg_infinity
+      ; or_right = fs.or_right /. (float fs.or_)
+      ; or_wrong = fs.or_wrong /. (float fs.or_)
+      ; or_ratio = fs.or_ratio /. (float fs.or_)
 
-let get_gene gene glst =
-  List.Assoc.get gene glst
-  |> Option.value_exn ~msg:(sprintf "missing: %s" gene)
-
-let mbest (_, l) =
-  let la = get_gene "A" l in
-  let lb = get_gene "B" l in
-  let lc = get_gene "C" l in
-  let ta = tcl la in
-  let tb = tcl lb in
-  let tc = tcl lc in
-  if ta > tb then begin
-    if ta > tc then
-      `A la
-    else
-      `C lc
-  end else begin
-    if tb > tc then
-      `B lb
-    else
-      `C lc
-  end
-
-let mjust a m =
-  List.filter_map m ~f:(fun q ->
-    match a, mbest q with
-    | `A, `A (`R mp, _) -> Some (fst q, mp, true)
-    | `A, `A (`C mp, _) -> Some (fst q, mp, false)
-    | `A, `A (`F _, _)  -> invalid_arg "mapped to filter!"
-    | `A,  _            -> None
-
-    | `B, `B (`R mp, _) -> Some (fst q, mp, true)
-    | `B, `B (`C mp, _) -> Some (fst q, mp, false)
-    | `B, `B (`F _, _)  -> invalid_arg "mapped to filter!"
-    | `B,  _            -> None
-
-    | `C, `C (`R mp, _) -> Some (fst q, mp, true)
-    | `C, `C (`C mp, _) -> Some (fst q, mp, false)
-    | `C, `C (`F _, _)  -> invalid_arg "mapped to filter!"
-    | `C,  _            -> None)
-
-let msorted l =
-  List.sort ~cmp:(fun (_, mp1, _) (_, mp2, _) ->
-      compare (List.hd_exn mp2.alleles |> snd) (List.hd_exn mp1.alleles |> snd)) l
-      *)
+      ; dr_r1 = fs.dr_r1 /. (float fs.di)
+      ; dr_r2 = fs.dr_r2 /. (float fs.di)
+  }

@@ -34,7 +34,8 @@ module Past_threshold = struct
     if b then `Start else `Don't
 
   let new_ prev_threshold proc =
-    Lp.max prev_threshold (proc.maximum_match ())
+    let mm = proc.maximum_positions_median_match () in
+    Lp.max prev_threshold mm
 
   let new_value prev_threshold proc = function
     | Filtered _  -> prev_threshold
@@ -65,7 +66,7 @@ module Orientation = struct
     { regular     : 'a pass_result
     ; complement  : 'a pass_result
     }
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let map ~f t =
     { regular    = f t.regular
@@ -149,7 +150,7 @@ module Alleles_and_positions = struct
 
   type datum = per_allele_datum
   and t = datum list
-    [@@deriving yojson]
+  [@@deriving show,yojson]
 
   let to_string {allele; llhd; position} =
     sprintf "%s,%d,%s" allele position (Lp.to_string ~precision:5 llhd)
@@ -229,7 +230,7 @@ module Zygosity_array = struct
     | Spec of int
     | NoSpec
 
-  let default_non_zero = 0.0001
+  let default_non_zero = 0.000001
 
   (* log likelihood, probability, index 1st, index 2nd *)
   let best size likelihood_arr t =
@@ -477,21 +478,25 @@ module Output = struct
         ~f:MSA.Alteration.to_string a
     in
     let fprint_per_allele_log_likelihood { allele; a_llhd; alters } =
-      fprintf oc "%16s\t%s\t%s\n"
+      fprintf oc "%-16s\t%s\t%s\n"
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
-      fprintf oc "%16s\t%16s\t%s\t%0.6f\n"
+      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\n"
         allele1 allele2 (Lp.to_string ~precision:20 z_llhd) prob
     in
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
-        (fun () -> fprintf oc "Zygosity %s:\n" (show_locus locus))
+        (fun () ->
+           fprintf oc "Zygosity %s:\nAllele 1\tAllele 2\tlog likelihood\tProb\n"
+             (show_locus locus))
         zygosity;
       array_iter_on_non_empty
         fprint_per_allele_log_likelihood
-        (fun () -> fprintf oc "Likelihood %s:\n" (show_locus locus))
+        (fun () ->
+           fprintf oc "Likelihood %s:\nAllele\tlog likelihood\tImputation Description\n"
+             (show_locus locus))
         per_allele);
     list_iter_on_non_empty
       (fun { name; d} -> fprintf oc "%s%s\n" name (d_to_string d))
@@ -616,7 +621,10 @@ module type Worker = sig
                   -> Biocaml_unix.Fastq.item
                   -> Biocaml_unix.Fastq.item
                   -> read_result
-  val merge     : state -> read_result -> unit
+  val merge     : out_channel
+                -> state
+                -> read_result
+                -> unit
   val finalize  : state -> final_state
   val output    : final_state -> out_channel -> unit
 
@@ -648,9 +656,9 @@ module Forward (* : Worker *) = struct
     }
 
   let forward oc allele_depth past_threshold proc read read_errors =
-    time oc (sprintf "forward of allele_depth: %d; past_threshold: %s; read: %s"
-            allele_depth (Past_threshold.to_string past_threshold)
-              (String.sub_exn read ~index:0 ~length:10))
+    time oc (sprintf "forward of %s, allele_depth: %d; past_threshold: %s; read: %s"
+      proc.ParPHMM.name allele_depth (Past_threshold.to_string past_threshold)
+        (String.sub_exn read ~index:0 ~length:10))
     (fun () ->
       Orientation.check past_threshold (proc_to_stat allele_depth)
         proc read read_errors)
@@ -768,7 +776,7 @@ module Forward (* : Worker *) = struct
     let d = Sp.map just_aap_or stat_or_sp in
     state.per_reads <- { Output.name; d } :: state.per_reads
 
-  let merge state rr =
+  let merge oc state rr =
     let take_regular = take_regular_by_likelihood in
     let pr s = Orientation.most_likely_between s ~take_regular in
     cons_per_reads state rr.Output.name rr.Output.d;
@@ -776,7 +784,7 @@ module Forward (* : Worker *) = struct
     | Sp.Single stat_or  ->
         begin match pr stat_or with
         | Filtered m        ->
-            printf "Both orientations filtered %s: %s\n" rr.Output.name m
+            fprintf oc "Both orientations filtered %s: %s\n" rr.Output.name m
         | Completed (_c, s) ->
             Likelihoods_and_zygosity.add_ll_and_lz
               state.per_allele_lhood state.zygosity s.likelihood
@@ -784,11 +792,11 @@ module Forward (* : Worker *) = struct
     | Sp.Paired (s1, s2) ->
         begin match pr s1 with
         | Filtered m        ->
-            printf "Both orientations of first read filtered %s: %s\n" rr.Output.name m
+            fprintf oc "Both orientations of first read filtered %s: %s\n" rr.Output.name m
         | Completed (_, sf1) ->
             begin match pr s2 with
             | Filtered m    ->
-                printf "Both orientations of second read filtered %s: %s\n" rr.Output.name m
+                fprintf oc "Both orientations of second read filtered %s: %s\n" rr.Output.name m
             | Completed (_, sf2) ->
                 let cml = Pm.merge sf1.likelihood sf2.likelihood Lp.( * ) in
                 Likelihoods_and_zygosity.add_ll_and_lz
@@ -905,7 +913,7 @@ module Viterbi :
     Fastq_items.paired oc fq1 fq2 ~k:(fun name read1 read_errors1 read2 read_errors2 ->
       { name; res = vfuncs.paired ~read1 ~read_errors1 ~read2 ~read_errors2})
 
-  let merge state pr =
+  let merge _oc state pr =
     state.results <- pr :: state.results
 
   let finalize s = s
@@ -928,7 +936,6 @@ type multiple_conf =
 
   ; insert_p                : float option
   (* Override the default insert emission probability. *)
-
 
   ; band                    : ParPHMM.band_config option
   (* Perform banded passes. *)
@@ -994,10 +1001,12 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
       ; first_read_best_log_gap *)
     }
 
-module Multiple_loci :
+(* Conforms to this signature but I'm not imposing it to expose all of the
+   yojson input/output logic. *)
+module Multiple_loci (* :
   Worker with type input = ParPHMM.t list
           and type conf = multiple_conf
-  = struct
+  *) = struct
 
   type conf = multiple_conf
   type input = ParPHMM.t list
@@ -1023,7 +1032,7 @@ module Multiple_loci :
     | SingleRead of 'single_result Orientation.t
     (* We'll test both regular and complement options. *)
     | PairedDependent of 'single_result paired_dependent
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let orientation_char_of_bool reverse_complement =
     if reverse_complement then 'C' else 'R'
@@ -1055,7 +1064,9 @@ module Multiple_loci :
     | PairedDependent p1, PairedDependent p2  ->
         begin
           match p1.second, p2.second with
-          | Completed ss1, Completed ss2 -> Lp.(l p2.first + l ss2 < l p1.first + l ss1)
+          | Completed ss1, Completed ss2 -> let s2 = Lp.(l p2.first * l ss2) in
+                                            let s1 = Lp.(l p1.first * l ss1) in
+                                            Lp.(s2 < s1)
           | Filtered _,    _             -> false
           | _,             Filtered _    -> true
         end
@@ -1109,7 +1120,7 @@ module Multiple_loci :
   and 'single_result paired =
     | FirstFiltered of 'single_result first_filtered
     | FirstOrientedSecond of 'single_result first_oriented_second
-    [@@deriving yojson]
+    [@@deriving show,yojson]
 
   let pr_to_string ?(sep='\t') sr_to_string pr =
     let ots = Orientation.to_string ~sep sr_to_string in
@@ -1252,7 +1263,9 @@ module Multiple_loci :
     | FirstOrientedSecond f1, FirstOrientedSecond f2 ->
         begin
           match f1.second, f2.second with
-          | Completed ss1, Completed ss2 -> Lp.(l f2.first + l ss2 < l f1.first + l ss1)
+          | Completed ss1, Completed ss2 -> let s1 = Lp.(l f1.first * l ss1) in
+                                            let s2 = Lp.(l f2.first * l ss2) in
+                                            Lp.(s2 < s1)
           | Filtered _,    _             -> false
           | _,             Filtered _    -> true
         end
@@ -1437,7 +1450,7 @@ module Multiple_loci :
     in
     Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l
 
-  let merge state pr =
+  let merge _oc state pr =
     let assign_to_best best_locus best_stat =
       List.iter state.per_loci ~f:(fun pl ->
         if best_locus = pl.pl_locus then
@@ -1581,10 +1594,10 @@ module Sequential (W : Worker) :
       | `Setup rp ->
           let read_length = String.length fqi.Biocaml_unix.Fastq.sequence in
           let s = init oc rp conf read_length in
-          W.merge s (W.single oc s fqi);
+          W.merge oc s (W.single oc s fqi);
           `Set s
       | `Set s ->
-          W.merge s (W.single oc s fqi);
+          W.merge oc s (W.single oc s fqi);
           `Set s
 
   let paired oc conf =
@@ -1593,10 +1606,10 @@ module Sequential (W : Worker) :
       | `Setup rp ->
           let read_length = String.length fq1.Biocaml_unix.Fastq.sequence in
           let s = init oc rp conf read_length in
-          W.merge s (W.paired oc s fq1 fq2);
+          W.merge oc s (W.paired oc s fq1 fq2);
           `Set s
       | `Set s ->
-          W.merge s (W.paired oc s fq1 fq2);
+          W.merge oc s (W.paired oc s fq1 fq2);
           `Set s
 
   let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads file init =
@@ -1604,10 +1617,10 @@ module Sequential (W : Worker) :
     try
       Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
       |> function
-          | `Setup _ -> eprintf "Didn't find any reads."
+          | `Setup _ -> fprintf log_oc "Didn't find any reads."
           | `Set  s  -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
   let across_paired ~log_oc ~data_oc ~finish_singles conf ?number_of_reads ~specific_reads
     file1 file2 init =
@@ -1629,10 +1642,10 @@ module Sequential (W : Worker) :
           | `StoppedByFilter o
           | `DesiredReads o ->
               match o with
-              | `Setup _ -> eprintf "Didn't find any reads."
+              | `Setup _ -> fprintf log_oc "Didn't find any reads."
               | `Set s   -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
 end (* Sequential *)
 
@@ -1650,23 +1663,23 @@ module Parallel (W : Worker) = struct
   let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file state =
     try
       let map fqi = W.single log_oc state fqi in
-      let mux rr = W.merge state rr in
+      let mux rr = W.merge log_oc state rr in
       Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
       W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
   let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
     let map = function
       | Sp.Single fqi      -> W.single log_oc state fqi
       | Sp.Paired (f1, f2) -> W.paired log_oc state f1 f2
     in
-    let mux rr = W.merge state rr in
+    let mux rr = W.merge log_oc state rr in
     try
       Fastq.fold_paired_parany ?number_of_reads ~specific_reads
         ~nprocs ~map ~mux file1 file2;
       W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
 end (* Parallel *)
