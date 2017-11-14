@@ -71,6 +71,11 @@ val fold_values : (_, 'a) t
                 -> f:('b -> 'a -> 'b)
                 -> 'b
 
+val fold_set_sizes_and_values : (_, 'a) t
+                              -> init:'b
+                              -> f:('b -> int -> 'a -> 'b)
+                              -> 'b
+
 (** Fold over the indices [0,size) and values. *)
 val fold_indices_and_values : (_, 'a) t
                             -> init:'b

@@ -34,7 +34,7 @@ module Past_threshold = struct
     if b then `Start else `Don't
 
   let new_ prev_threshold proc =
-    let mm = proc.maximum_match () in
+    let mm = proc.maximum_positions_median_match () in
     Lp.max prev_threshold mm
 
   let new_value prev_threshold proc = function

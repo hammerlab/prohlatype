@@ -311,30 +311,30 @@ module Sp = struct
 
 end
 
+let insert_sorted ~greater a i l =
+  let rec loop lst = match lst with
+    | []         -> [a, i]
+    | (u,j) :: t -> if greater a u then
+                      (a, i) :: lst
+                    else
+                      (u, j) :: loop t
+  in
+  loop l
+
 (* Maintain a sorted association list of the top n items. *)
-let topn p k a i lst =
+let topn ~greater k a i lst =
   let rec loop added n lst =
     if n >= k then
       []
     else
       match lst with
       | []         -> if added then [] else [a,i]
-      | (u,j) :: t -> if p a u && not added then
+      | (u,j) :: t -> if greater a u && not added then
                         (a,i) :: loop true (n + 1) lst
                       else
                         (u,j) :: loop added (n + 1)  t
   in
   loop false 0 lst
-
-let insert_sorted p a i l =
-  let rec loop lst = match lst with
-    | []         -> [a, i]
-    | (u,j) :: t -> if p a u then
-                      (a, i) :: lst
-                    else
-                      (u, j) :: loop t
-  in
-  loop l
 
 let register_oc fname =
   let oc = open_out fname in
