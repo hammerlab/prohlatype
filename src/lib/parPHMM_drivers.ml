@@ -621,7 +621,10 @@ module type Worker = sig
                   -> Biocaml_unix.Fastq.item
                   -> Biocaml_unix.Fastq.item
                   -> read_result
-  val merge     : state -> read_result -> unit
+  val merge     : out_channel
+                -> state
+                -> read_result
+                -> unit
   val finalize  : state -> final_state
   val output    : final_state -> out_channel -> unit
 
@@ -773,7 +776,7 @@ module Forward (* : Worker *) = struct
     let d = Sp.map just_aap_or stat_or_sp in
     state.per_reads <- { Output.name; d } :: state.per_reads
 
-  let merge state rr =
+  let merge oc state rr =
     let take_regular = take_regular_by_likelihood in
     let pr s = Orientation.most_likely_between s ~take_regular in
     cons_per_reads state rr.Output.name rr.Output.d;
@@ -781,7 +784,7 @@ module Forward (* : Worker *) = struct
     | Sp.Single stat_or  ->
         begin match pr stat_or with
         | Filtered m        ->
-            printf "Both orientations filtered %s: %s\n" rr.Output.name m
+            fprintf oc "Both orientations filtered %s: %s\n" rr.Output.name m
         | Completed (_c, s) ->
             Likelihoods_and_zygosity.add_ll_and_lz
               state.per_allele_lhood state.zygosity s.likelihood
@@ -789,11 +792,11 @@ module Forward (* : Worker *) = struct
     | Sp.Paired (s1, s2) ->
         begin match pr s1 with
         | Filtered m        ->
-            printf "Both orientations of first read filtered %s: %s\n" rr.Output.name m
+            fprintf oc "Both orientations of first read filtered %s: %s\n" rr.Output.name m
         | Completed (_, sf1) ->
             begin match pr s2 with
             | Filtered m    ->
-                printf "Both orientations of second read filtered %s: %s\n" rr.Output.name m
+                fprintf oc "Both orientations of second read filtered %s: %s\n" rr.Output.name m
             | Completed (_, sf2) ->
                 let cml = Pm.merge sf1.likelihood sf2.likelihood Lp.( * ) in
                 Likelihoods_and_zygosity.add_ll_and_lz
@@ -910,7 +913,7 @@ module Viterbi :
     Fastq_items.paired oc fq1 fq2 ~k:(fun name read1 read_errors1 read2 read_errors2 ->
       { name; res = vfuncs.paired ~read1 ~read_errors1 ~read2 ~read_errors2})
 
-  let merge state pr =
+  let merge _oc state pr =
     state.results <- pr :: state.results
 
   let finalize s = s
@@ -1447,7 +1450,7 @@ module Multiple_loci (* :
     in
     Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l
 
-  let merge state pr =
+  let merge _oc state pr =
     let assign_to_best best_locus best_stat =
       List.iter state.per_loci ~f:(fun pl ->
         if best_locus = pl.pl_locus then
@@ -1591,10 +1594,10 @@ module Sequential (W : Worker) :
       | `Setup rp ->
           let read_length = String.length fqi.Biocaml_unix.Fastq.sequence in
           let s = init oc rp conf read_length in
-          W.merge s (W.single oc s fqi);
+          W.merge oc s (W.single oc s fqi);
           `Set s
       | `Set s ->
-          W.merge s (W.single oc s fqi);
+          W.merge oc s (W.single oc s fqi);
           `Set s
 
   let paired oc conf =
@@ -1603,10 +1606,10 @@ module Sequential (W : Worker) :
       | `Setup rp ->
           let read_length = String.length fq1.Biocaml_unix.Fastq.sequence in
           let s = init oc rp conf read_length in
-          W.merge s (W.paired oc s fq1 fq2);
+          W.merge oc s (W.paired oc s fq1 fq2);
           `Set s
       | `Set s ->
-          W.merge s (W.paired oc s fq1 fq2);
+          W.merge oc s (W.paired oc s fq1 fq2);
           `Set s
 
   let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads file init =
@@ -1614,10 +1617,10 @@ module Sequential (W : Worker) :
     try
       Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
       |> function
-          | `Setup _ -> eprintf "Didn't find any reads."
+          | `Setup _ -> fprintf log_oc "Didn't find any reads."
           | `Set  s  -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
   let across_paired ~log_oc ~data_oc ~finish_singles conf ?number_of_reads ~specific_reads
     file1 file2 init =
@@ -1639,10 +1642,10 @@ module Sequential (W : Worker) :
           | `StoppedByFilter o
           | `DesiredReads o ->
               match o with
-              | `Setup _ -> eprintf "Didn't find any reads."
+              | `Setup _ -> fprintf log_oc "Didn't find any reads."
               | `Set s   -> W.output (W.finalize s) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
 end (* Sequential *)
 
@@ -1660,23 +1663,23 @@ module Parallel (W : Worker) = struct
   let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file state =
     try
       let map fqi = W.single log_oc state fqi in
-      let mux rr = W.merge state rr in
+      let mux rr = W.merge log_oc state rr in
       Fastq.fold_parany ?number_of_reads ~specific_reads ~nprocs ~map ~mux file;
       W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
   let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
     let map = function
       | Sp.Single fqi      -> W.single log_oc state fqi
       | Sp.Paired (f1, f2) -> W.paired log_oc state f1 f2
     in
-    let mux rr = W.merge state rr in
+    let mux rr = W.merge log_oc state rr in
     try
       Fastq.fold_paired_parany ?number_of_reads ~specific_reads
         ~nprocs ~map ~mux file1 file2;
       W.output (W.finalize state) data_oc
     with Fastq_items.Read_error_parsing e ->
-      eprintf "%s" e
+      fprintf log_oc "%s" e
 
 end (* Parallel *)
