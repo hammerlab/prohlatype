@@ -861,7 +861,6 @@ let merge t1 t2 f =
   match t1, t2 with
   | (Asc l1), (Asc l2) -> Asc (start l1 l2)
 
-
 let merge3 ~eq t1 t2 t3 f =
   let rec start l1 l2 l3 =
     match l1, l2, l3 with
