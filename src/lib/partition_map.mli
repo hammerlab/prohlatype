@@ -16,6 +16,8 @@ type ('o, +'a) t
 
 (* Empty constructors. *)
 val empty_d : (descending, 'a) t
+(* empty_a should only be used as a place holder (ex. initializing an array)
+ * and not for computation. TODO: refactor this. *)
 val empty_a : (ascending, 'a) t
 
 (* Initializers. These take a value and either assume an entry (the 'first' one
