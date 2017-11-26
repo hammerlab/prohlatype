@@ -488,7 +488,14 @@ let aggregate_plps l =
       ; dr_r2 = fs.dr_r2 /. (float fs.di)
   }
 
-let compare_two_plps_maps pm1 pm2 =
+let just_top_level_categories_match r1 r2 =
+  match r1.category, r2.category with
+ | BothRight _, BothRight _ -> true
+ | OneRight _ , OneRight _  -> true
+ | Different _, Different _ -> true
+ | _          , _           -> false
+
+let compare_two_plps_maps ?(strict=false) pm1 pm2 =
   StringMap.merge pm1 pm2 ~f:(fun k p1 p2 ->
       match p1, p2 with
       | None,    None     -> assert false
@@ -497,11 +504,10 @@ let compare_two_plps_maps pm1 pm2 =
       | Some p1, Some p2  ->
           merge_assoc p1 p2 ~f:(fun r1 r2 -> (r1, r2))
           |> List.filter ~f:(fun (_l, (r1, r2)) ->
-              match r1.category, r2.category with
-              | BothRight _, BothRight _ -> false
-              | OneRight _ , OneRight _  -> false
-              | Different _, Different _ -> false
-              | _          , _           -> true)
+              if strict then
+                r1.category <> r2.category
+              else
+                not (just_top_level_categories_match r1 r2))
           |> function
               | [] -> None
               | l  -> Some l)
