@@ -221,6 +221,7 @@ module type Ring = sig
   val compare : t -> t -> int
 
   val close_enough : t -> t -> bool
+  val close_enough_cmp : t -> t -> int
 
   (* Special constructs necessary for the probabilistic logic. *)
   (* Convert constant probabilities. *)
@@ -263,6 +264,14 @@ module MultiplicativeProbability = struct
 
   let close_enough x y =
     close_enough x y
+
+  let close_enough_cmp x y =
+    if close_enough x y then
+      0
+    else if x < y then
+      -1
+    else
+      1
 
   let constant x = x
 
@@ -323,6 +332,14 @@ module LogProbability : Ring = struct
 
   let close_enough x y =
     close_enough x y
+
+  let close_enough_cmp x y =
+    if close_enough x y then
+      0
+    else if x < y then
+      -1
+    else
+      1
 
   let constant = log10
 
@@ -626,6 +643,13 @@ module Forward_calcations_over_cells (R : Ring) = struct
     R.close_enough c1.match_ c2.match_
     && R.close_enough c1.insert c2.insert
     && R.close_enough c1.delete c2.delete
+
+  let cells_close_enough_cmp c1 c2 =
+    let mc = R.close_enough_cmp c1.match_ c2.match_ in
+    if mc <> 0 then mc else
+      let ic = R.close_enough_cmp c1.insert c2.insert in
+      if ic <> 0 then ic else
+        R.close_enough_cmp c1.delete c2.delete
 
   let max_cell_by_match c1 c2 =
     if R.(c1.match_ < c2.match_) then c2 else c1
