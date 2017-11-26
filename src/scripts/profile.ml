@@ -376,8 +376,8 @@ let categorize_wrap ?(output=false) {ca; po} =
       ; category            = c
       ; reads1
       ; reads2
-      ; reads1_pct = (List.length reads1) /. total_number_of_reafs
-      ; reads2_pct = (List.length reads2) /. total_number_of_reafs
+      ; reads1_pct = (float (List.length reads1)) /. total_number_of_reafs
+      ; reads2_pct = (float (List.length reads2)) /. total_number_of_reafs
       }
     in
     if output then begin
@@ -487,3 +487,21 @@ let aggregate_plps l =
       ; dr_r1 = fs.dr_r1 /. (float fs.di)
       ; dr_r2 = fs.dr_r2 /. (float fs.di)
   }
+
+let compare_two_plps_maps pm1 pm2 =
+  StringMap.merge pm1 pm2 ~f:(fun k p1 p2 ->
+      match p1, p2 with
+      | None,    None     -> assert false
+      | Some _,  None     -> invalid_argf "Different key %s in first" k
+      | None  ,  Some _   -> invalid_argf "Different key %s in second" k
+      | Some p1, Some p2  ->
+          merge_assoc p1 p2 ~f:(fun r1 r2 -> (r1, r2))
+          |> List.filter ~f:(fun (_l, (r1, r2)) ->
+              match r1.category, r2.category with
+              | BothRight _, BothRight _ -> false
+              | OneRight _ , OneRight _  -> false
+              | Different _, Different _ -> false
+              | _          , _           -> true)
+          |> function
+              | [] -> None
+              | l  -> Some l)
