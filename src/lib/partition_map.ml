@@ -869,7 +869,7 @@ let map_with_just_last_check ~f = function
     loop s (f v) t
 
 (* The reason for all this logic. *)
-let rec start2 f l1 l2 = match l1, l2 with
+let rec start2 eq f l1 l2 = match l1, l2 with
   | [],     []      -> []
   | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
   |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
@@ -878,9 +878,10 @@ let rec start2 f l1 l2 = match l1, l2 with
       let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
       let nt1 = insert_if_not_empty r1 v1 t1 in
       let nt2 = insert_if_not_empty r2 v2 t2 in
-      loop2 f intersect (f v1 v2) nt1 nt2
-and loop2 f ps pv l1 l2 = match l1, l2 with
-  | [],     []      -> [ps, pv] (*acc *)
+      let acc = [intersect, (f v1 v2)] in
+      loop2 eq f acc nt1 nt2
+and loop2 eq f acc l1 l2 = match l1, l2 with
+  | [],     []      -> acc
   | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
   |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
@@ -889,35 +890,19 @@ and loop2 f ps pv l1 l2 = match l1, l2 with
       let nt1 = insert_if_not_empty r1 v1 t1 in
       let nt2 = insert_if_not_empty r2 v2 t2 in
       let nv = f v1 v2 in
-      (* It is a bit surprising but in our use case: ~3k ref, 100 bp reads:
-          1. Using a smarter {eq} ala merge4, or
-          2. NOT performing this simple equality check
-            (ie. comparing 3 floats is too much) and
-          3. Making this function tail-rec and using merge_or_add_to_end to
-            merge {eq}ual values or add them at the end:
-          Do NOT make the total running time faster; none of the above either
-          reduce the branching sufficiently to merit the extra work. This kind
-          of make sense since you wouldn't expect this at the edge of the
-          PHMM forward-matrix, where [merge] is called. But still a bit
-          disappointing that we can't have uniformity in these methods; or
-          phrased another way that this logic isn't exposed in more
-          informative types. *)
-      if nv = pv then begin
-        let mgd = Set.merge_separate ps intersect in
-        loop2 f mgd pv nt1 nt2
-      end else
-        (ps, pv) :: loop2 f intersect nv nt1 nt2
+      let nacc = merge_or_add_to_end eq intersect nv acc in
+      loop2 eq f nacc nt1 nt2
 (* TODO: There is a bug here where I'm not checking for matching ends.
   * I should functorize or somehow parameterize the construction of these
   * such that I don't worry about this. *)
-and merge t1 t2 f =
+and merge ~eq t1 t2 f =
   match t1, t2 with
   | Asc E          , _
   | _              , Asc E           -> invalid_argf "Can't merge empty"
   | Asc (U (e, v1)), Asc (U (_e,v2)) -> Asc (U (e, f v1 v2))
   | Asc (U (e, v1)), Asc (S l2)      -> Asc (S (map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)))
   | Asc (S l1),      Asc (U (e, v2)) -> Asc (S (map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)))
-  | Asc (S l1),      Asc (S l2)      -> Asc (S (start2 f l1 l2))
+  | Asc (S l1),      Asc (S l2)      -> Asc (S (start2 eq f l1 l2))
 
 let rec start3 eq f l1 l2 l3 =
   match l1, l2, l3 with
@@ -962,9 +947,9 @@ and merge3 ~eq t1 t2 t3 f =
   | Asc (U (_, v1)), Asc (S l2),      Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3)))
   | Asc (S l1),      Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3)))
 
-  | Asc (U (_, v1)), Asc (S l2),      Asc (S l3)      -> Asc (S (start2 (fun v2 v3 -> f v1 v2 v3) l2 l3))
-  | Asc (S l1),      Asc (U (_, v2)), Asc (S l3)      -> Asc (S (start2 (fun v1 v3 -> f v1 v2 v3) l1 l3))
-  | Asc (S l1),      Asc (S l2),      Asc (U (_, v3)) -> Asc (S (start2 (fun v1 v2 -> f v1 v2 v3) l1 l2))
+  | Asc (U (_, v1)), Asc (S l2),      Asc (S l3)      -> Asc (S (start2 eq (fun v2 v3 -> f v1 v2 v3) l2 l3))
+  | Asc (S l1),      Asc (U (_, v2)), Asc (S l3)      -> Asc (S (start2 eq (fun v1 v3 -> f v1 v2 v3) l1 l3))
+  | Asc (S l1),      Asc (S l2),      Asc (U (_, v3)) -> Asc (S (start2 eq (fun v1 v2 -> f v1 v2 v3) l1 l2))
 
   | Asc (S l1),      Asc (S l2),      Asc (S l3)      -> Asc (S (start3 eq f l1 l2 l3))
 
@@ -1026,12 +1011,12 @@ and merge4 ~eq t1 t2 t3 t4 f =
   | Asc (U (_,v1)), Asc (U (_,v2)), Asc (U (_,v3)), Asc (S l4)      -> Asc (S (map_with_full_check eq l4 ~f:(fun v4 -> f v1 v2 v3 v4)))
 
   (* 2 S's, 2 U's *)
-  | Asc (S l1),     Asc (S l2),     Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (start2 (fun v1 v2 -> f v1 v2 v3 v4) l1 l2))
-  | Asc (S l1),     Asc (U (_,v2)), Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 (fun v1 v3 -> f v1 v2 v3 v4) l1 l3))
-  | Asc (S l1),     Asc (U (_,v2)), Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 (fun v1 v4 -> f v1 v2 v3 v4) l1 l4))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 (fun v2 v3 -> f v1 v2 v3 v4) l2 l3))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 (fun v2 v4 -> f v1 v2 v3 v4) l2 l4))
-  | Asc (U (_,v1)), Asc (U (_,v2)), Asc (S l3),     Asc (S l4)      -> Asc (S (start2 (fun v3 v4 -> f v1 v2 v3 v4) l3 l4))
+  | Asc (S l1),     Asc (S l2),     Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (start2 eq (fun v1 v2 -> f v1 v2 v3 v4) l1 l2))
+  | Asc (S l1),     Asc (U (_,v2)), Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 eq (fun v1 v3 -> f v1 v2 v3 v4) l1 l3))
+  | Asc (S l1),     Asc (U (_,v2)), Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 eq (fun v1 v4 -> f v1 v2 v3 v4) l1 l4))
+  | Asc (U (_,v1)), Asc (S l2),     Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 eq (fun v2 v3 -> f v1 v2 v3 v4) l2 l3))
+  | Asc (U (_,v1)), Asc (S l2),     Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 eq (fun v2 v4 -> f v1 v2 v3 v4) l2 l4))
+  | Asc (U (_,v1)), Asc (U (_,v2)), Asc (S l3),     Asc (S l4)      -> Asc (S (start2 eq (fun v3 v4 -> f v1 v2 v3 v4) l3 l4))
 
   (* 3 S's, 1 U's *)
   | Asc (S l1),     Asc (S l2),     Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start3 eq (fun v1 v2 v3 -> f v1 v2 v3 v4) l1 l2 l3))

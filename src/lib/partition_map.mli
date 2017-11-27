@@ -41,10 +41,11 @@ val get : (ascending, 'a) t -> int -> 'a
 
 (* Merge partition maps. Technically these are "map"'s but they are purposefully
   named merge since they're only implemented for {ascending} partition maps. *)
-val merge :(ascending, 'a) t
-          -> (ascending, 'b) t
-          -> ('a -> 'b -> 'c)
-          -> (ascending, 'c) t
+val merge : eq:('c -> 'c -> bool)
+            -> (ascending, 'a) t
+            -> (ascending, 'b) t
+            -> ('a -> 'b -> 'c)
+            -> (ascending, 'c) t
 
 val merge3 : eq:('d -> 'd -> bool)
             -> (ascending, 'a) t

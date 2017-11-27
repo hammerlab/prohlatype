@@ -1603,14 +1603,14 @@ module ForwardMultipleGen (R : Ring) = struct
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
       let m2 =
         match base_p with
-        | None    -> Pm.merge ems prev_pm r.start       (* Not weighing alleles *)
+        | None    -> Pm.merge ~eq  ems prev_pm r.start       (* Not weighing alleles *)
         | Some l  -> Pm.merge3 ~eq l ems prev_pm (fun base_p emission prev_c ->
                         r.start ~base_p emission prev_c)
       in
       m2
     in
     let fst_col ws obsp emissions ~i ~k =
-      Pm.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
+      Pm.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
     in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
@@ -1633,7 +1633,8 @@ module ForwardMultipleGen (R : Ring) = struct
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles R.zero in
-      W.fold_over_final ~range ws ~init ~f:(fun e1 e2 -> Pm.merge e1 e2 R.(+))
+      let eq = R.close_enough in
+      W.fold_over_final ~range ws ~init ~f:(fun e1 e2 -> Pm.merge ~eq e1 e2 R.(+))
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -2286,7 +2287,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
 let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
   let init = pm_init_all ~number_alleles (Lp.zero, -1) in
   foldi_over_final ~init ~f:(fun hep_pm k em_pm ->
-    Pm.merge hep_pm em_pm (fun (be, bk) e ->
+    Pm.merge ~eq:(fun (e1, k1) (e2, k2) -> k1 = k2 && Lp.close_enough e1 e2)
+      hep_pm em_pm (fun (be, bk) e ->
       if debug then
         printf "at %d e %s\n" k (Lp.to_string e);
       if Lp.is_gap e then
@@ -2448,7 +2450,8 @@ module Splitting_state = struct
     ss.scaling <- []
 
   let add_emission ss em mm =
-    ss.emission_pm <- Pm.merge ss.emission_pm em (Lp.( * ));
+    let eq = Lp.close_enough in
+    ss.emission_pm <- Pm.merge ~eq ss.emission_pm em (Lp.( * ));
     ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
