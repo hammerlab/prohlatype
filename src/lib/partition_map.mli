@@ -29,7 +29,9 @@ val init_all_a : size:int -> 'a -> (ascending, 'a) t
 val to_string : (_, 'a) t -> ('a -> string) -> string
 
 (* Conversions. *)
-val ascending : (descending, 'a) t -> (ascending, 'a) t
+val ascending : ('a -> 'a -> bool)
+              -> (descending, 'a) t
+              -> (ascending, 'a) t
 
 (* Observe a value for the next element. *)
 val add : 'a -> (descending, 'a) t -> (descending, 'a) t
@@ -86,7 +88,10 @@ val fold_indices_and_values : (_, 'a) t
                             -> 'b
 
 (* Map the values, the internal storage doesn't change. *)
-val map : ('o, 'a) t -> f:('a -> 'b) -> ('o, 'b) t
+val map : ('o, 'a) t
+        -> ('b -> 'b -> bool)
+        -> f:('a -> 'b)
+        -> ('o, 'b) t
 
 (* Iterate over the entries and values. *)
 val iter_set : ('o, 'a) t -> f:(int -> 'a -> unit) -> unit

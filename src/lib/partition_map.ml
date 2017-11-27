@@ -738,18 +738,41 @@ let assoc_remove_and_get el list =
 
 (* Conversion *)
 
-let ascending_t l =
+(* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
+   any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
+   values are equal add to the end of l. *)
+let merge_or_add_to_end eq s v l =
+  let rec loop = function
+    | []     -> [s, v]
+    | h :: t ->
+        let s0, v0 = h in
+        if eq v v0 then
+          (Set.merge_separate s0 s, v0) :: t
+        else
+          h :: loop t
+  in
+  loop l
+
+let map_with_full_check eq l ~f =
+  List.fold_left l ~init:[] ~f:(fun acc (s, v) ->
+      merge_or_add_to_end eq s (f v) acc)
+
+(* let ascending_t l =
   List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
     match assoc_remove_and_get v acc with
     | None           -> (v, Set.of_interval i) :: acc
     | Some (s, nacc) -> (v, i :: s) :: nacc)      (* Set abstraction is leaky atm, this reverses. *)
   |> List.map ~f:(fun (v, s) -> Set.first_pos s, s, v)
   |> List.sort ~cmp:(fun (p1, _, _) (p2, _, _) -> compare p1 p2)
-  |> List.map ~f:(fun (_, s, v) -> (s,v))
+  |> List.map ~f:(fun (_, s, v) -> (s,v)) *)
 
-let ascending = function
+let ascending_t eq l =
+  List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
+    merge_or_add_to_end eq (Set.of_interval i) v acc)
+
+let ascending eq = function
   | Desc l ->
-    let a = ascending_t l in                             (* assert (ascending_invariant l); *)
+    let a = ascending_t eq l in                             (* assert (ascending_invariant l); *)
     match a with
     | []      -> invalid_arg "Empty descending!"
     | [s,v]   -> begin match Set.universal s with
@@ -834,25 +857,6 @@ let insert_if_not_empty s v l =
 
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
-
-(* [merge_or_add_to_end eq s v l] rebuild the elements of [l] such that if
-   any of the values (snd) [eq v] then merge the sets [s] and (fst). If no
-   values are equal add to the end of l. *)
-let merge_or_add_to_end eq s v l =
-  let rec loop = function
-    | []     -> [s, v]
-    | h :: t ->
-        let s0, v0 = h in
-        if eq v v0 then
-          (Set.merge_separate s0 s, v0) :: t
-        else
-          h :: loop t
-  in
-  loop l
-
-let map_with_full_check eq l ~f =
-  List.fold_left l ~init:[] ~f:(fun acc (s, v) ->
-      merge_or_add_to_end eq s (f v) acc)
 
 let map_with_just_last_check ~f = function
   | []  -> []
@@ -1038,7 +1042,7 @@ let fold_set_sizes_and_values : type o a. (o, a) t -> init:'b -> f:('b -> int ->
   fun l ~init ~f ->
     let ascf = List.fold_left ~init ~f:(fun acc (l, v) -> f acc (Set.size l) v) in
     match l with
-    | Desc ld         -> ascf (ascending_t ld)              (* TODO: Probably could be faster. *)
+    | Desc ld         -> ascf (ascending_t (fun x y -> x = y) ld)     (* TODO: Probably could be faster. *)
     | Asc E           -> invalid_arg "Can't fold_set_sizes_and_values on empty!"
     | Asc (U (e, v))  -> f init (e + 1) v
     | Asc (S la)      -> ascf la
@@ -1055,12 +1059,12 @@ let fold_indices_and_values :
                           Set.fold s ~init ~f:(fun acc i -> f acc i v))
 
 
-let map : type o a. (o, a) t -> f:(a -> 'b) -> (o, 'b) t =
-  fun t ~f -> match t with
+let map : type o a. (o, a) t -> ('b -> 'b -> bool) -> f:(a -> 'b) -> (o, 'b) t =
+  fun t eq ~f -> match t with
     | Desc ld         -> Desc (List.map_snd ld ~f)
     | Asc E           -> invalid_argf "Can't map empty!"
     | Asc (U (e, v))  -> Asc (U (e, f v))
-    | Asc (S la)      -> Asc (S (List.map_snd la ~f))
+    | Asc (S la)      -> Asc (S (map_with_full_check eq la ~f))
 
 let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
   fun t ~f -> match t with

@@ -7,7 +7,7 @@ type t =
   | C
   | G
   | T
-  [@@deriving show]
+  [@@deriving eq,show]
 
 let of_char = function
   | 'A' -> A

@@ -20,7 +20,7 @@ module Base = struct
     | C
     | G
     | T
-    [@@deriving show]
+    [@@deriving eq,show]
 
   let of_char = function
     | 'A' -> A
@@ -1550,7 +1550,7 @@ module ForwardMultipleGen (R : Ring) = struct
 
   let maximum_positions_median_match ?range ws r =
     max_pm_of_ws_row ?range ws r
-    |> Pm.map ~f:(fun c -> c.match_)
+    |> fun p -> Pm.map p R.close_enough ~f:(fun c -> c.match_)
     |> median_of_pm
 
   (* offset and emission probabilties
@@ -1594,7 +1594,8 @@ module ForwardMultipleGen (R : Ring) = struct
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
     let to_em_set obsp emissions =
-      Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
+      Pm.map emissions R.close_enough
+        ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
     let zero_cell_pm = pm_init_all ~number_alleles Fc.zero_cell in
     let eq = Fc.cells_close_enough in
@@ -1629,7 +1630,7 @@ module ForwardMultipleGen (R : Ring) = struct
       end;
       r
     in
-    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_ in
+    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles R.zero in
@@ -2057,7 +2058,13 @@ let construct input =
       let state_a = init_state base_arr in
       List.iter alt_elems ~f:(fun a ->
         add_alternate_allele pmap a.allele a.seq base_arr state_a);
-      let emissions_a = Array.map Pm.ascending state_a in
+      let eq x y =
+        match x, y with
+        | None,   None      -> true
+        | None, _ | _, None -> false
+        | Some x, Some y    -> Base.equal x y
+      in
+      let emissions_a = Array.map (Pm.ascending eq) state_a in
       let alleles =
         (reference, []) :: List.map alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
@@ -2460,7 +2467,7 @@ module Splitting_state = struct
   let finish ss =
     let pr = List.fold_left ss.scaling ~init:Lp.one
         ~f:Lp.( * ) in
-    ss.emission_pm <- Pm.map ss.emission_pm
+    ss.emission_pm <- Pm.map ss.emission_pm Lp.close_enough
       ~f:(fun e -> Lp.(e / pr))
 
 end (* Splitting_state *)
