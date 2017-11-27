@@ -195,7 +195,9 @@ let pos_to_string pm =
 let dx = ref 1.e-6
 
 let close_enough x y =
-  abs_float (x -. y) < !dx
+  let d = x -. y in
+  (* embed nan guard *)
+  d <> d || (abs_float d) < !dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
