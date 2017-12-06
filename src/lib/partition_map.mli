@@ -7,7 +7,7 @@
   {merge} of 2 (or more {merge4}) such partition maps.
 *)
 
-(* We construct partition map's in {descending} order than then convert them
+(* We construct partition map's in {descending} order then convert them
    into the {ascending} order for merging. *)
 type ascending
 type descending
