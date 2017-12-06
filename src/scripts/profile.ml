@@ -496,14 +496,14 @@ let just_top_level_categories_match r1 r2 =
  | _          , _           -> false
 
 let compare_two_plps_maps ?(strict=false) pm1 pm2 =
-  StringMap.merge pm1 pm2 ~f:(fun k p1 p2 ->
-      match p1, p2 with
+  StringMap.merge pm1 pm2 ~f:(fun k rec1 rec2 ->
+      match rec1, rec2 with
       | None,    None     -> assert false
       | Some _,  None     -> invalid_argf "Different key %s in first" k
       | None  ,  Some _   -> invalid_argf "Different key %s in second" k
       | Some p1, Some p2  ->
           merge_assoc p1 p2 ~f:(fun r1 r2 -> (r1, r2))
-          |> List.filter ~f:(fun (_l, (r1, r2)) ->
+          |> List.filter ~f:(fun (locus, (r1, r2)) ->
               if strict then
                 r1.category <> r2.category
               else
@@ -511,3 +511,37 @@ let compare_two_plps_maps ?(strict=false) pm1 pm2 =
           |> function
               | [] -> None
               | l  -> Some l)
+
+let zygosity_of_plps_lst msg locus lst =
+  List.find_map lst ~f:(fun p ->
+    if p.ParPHMM_drivers.Output.locus = locus then
+      Some p.ParPHMM_drivers.Output.zygosity
+    else
+      None)
+  |> Option.value_exn ~msg
+
+let compare_two_r_maps ?(strict=false) r1 r2 =
+  let pm1 = to_categories ~output:false r1 in
+  let pm2 = to_categories ~output:false r2 in
+  let cm = compare_two_plps_maps ~strict pm1 pm2 in
+  StringMap.mapi cm ~f:(fun k lst ->
+      let rec1 = StringMap.find k r1 in
+      let rec2 = StringMap.find k r2 in
+      List.map lst ~f:(fun (locus, _) ->
+          let open ParPHMM_drivers.Output in
+          let zyg1 = zygosity_of_plps_lst (sprintf "Missing zyg1 for %s" k) locus rec1.po.per_loci in
+          let zyg2 = zygosity_of_plps_lst (sprintf "Missing zyg2 for %s" k) locus rec2.po.per_loci in
+          locus, (zyg1, zyg2)))
+
+
+let get_pl key l m =
+  let {po; _} = StringMap.find key m in
+  List.find_map po.ParPHMM_drivers.Output.per_loci ~f:(fun o ->
+      if o.ParPHMM_drivers.Output.locus = l then
+        Some o
+      else
+        None)
+
+let get_z key l m =
+  Option.map (get_pl key l m)
+    ~f:(fun { ParPHMM_drivers.Output.zygosity; _} -> zygosity)
