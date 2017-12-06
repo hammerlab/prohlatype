@@ -396,9 +396,13 @@ module Set = struct
     List.exists l ~f:(Interval.inside i)
 
   let universal = function
-    | []  -> None
-    | [i] -> Some (Interval.end_ i)
-    | _   -> None
+    | [i] -> true
+    | _   -> false
+
+  let compare s1 s2 =
+    match s1, s2 with
+    | i1 :: _ , i2 :: _ -> compare (Interval.start i1) (Interval.start i2)
+    | _                 -> assert false
 
   (* Should I make the sets a real pair? *)
   let first_pos = function
@@ -652,7 +656,7 @@ type descending (*= Descending*)
 
 type +'a asc =
   | E                       (* empty, merging against this will fail! *)
-  | U of int * 'a           (* universal, hold size - 1 = end_ *)
+  | U of Set.t * 'a           (* universal, hold size - 1 = end_ *)
   | S of (Set.t * 'a) list
 
 type +'a desc = (Interval.t * 'a) list
@@ -689,10 +693,8 @@ let init_first_d v =
   Desc [i, v]
 
 let init_all_a ~size v =
-  Asc (U (size - 1, v))
-  (*
   let i = Interval.make 0 (size - 1) in
-  Asc [Set.of_interval i, v] *)
+  Asc (U (Set.of_interval i, v))
 
 (* Properties *)
 let asc_to_string la to_s =
@@ -706,7 +708,7 @@ let desc_to_string ld to_s =
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with
     | Asc E         -> "Empty!"
-    | Asc (U (n,v)) -> sprintf "[0,%d]:%s" n (to_s v)
+    | Asc (U (s,v)) -> sprintf "%s:%s" (Set.to_string s) (to_s v)
     | Asc (S l)     -> asc_to_string l to_s
     | Desc ld       -> desc_to_string ld to_s
 
@@ -718,7 +720,7 @@ let size_d = function
 
 let size : type o a. (o, a) t -> int = function
   | Asc E          -> 0
-  | Asc (U (n, _)) -> n + 1
+  | Asc (U (s, _)) -> Set.size s
   | Asc (S l)      -> size_a l
   | Desc l         -> size_d l
 
@@ -769,21 +771,25 @@ let map_with_full_check eq l ~f =
 let ascending_t eq l =
   List.fold_left l ~init:[] ~f:(fun acc (i, v) ->
     merge_or_add_to_end eq (Set.of_interval i) v acc)
+  |> List.sort ~cmp:(fun (s1, _) (s2, _) -> Set.compare s1 s2)
+
+let asc_sets_to_str s =
+  asc_to_string s (fun _ -> "")
 
 let ascending eq = function
   | Desc l ->
     let a = ascending_t eq l in                             (* assert (ascending_invariant l); *)
     match a with
     | []      -> invalid_arg "Empty descending!"
-    | [s,v]   -> begin match Set.universal s with
-                 | None -> invalid_argf "Single set but not universal? %s" (Set.to_string s)
-                 | Some e -> Asc (U (e, v))
-                 end
+    | [s,v]   -> if Set.universal s then
+                   Asc (U (s, v))
+                 else
+                  invalid_argf "Single set but not universal? %s" (Set.to_string s)
     | lst     -> Asc (S lst)
 
 let descending = function
   | Asc E          -> invalid_arg "Can't convert empty to descending"
-  | Asc (U (e, v)) -> Desc [ (0, e), v]
+  | Asc (U (s, v)) -> Desc [List.hd_exn s, v]
   | Asc (S l)      ->
       List.map l ~f:(fun (s, v) -> List.map s ~f:(fun i -> i, v))
       |> List.concat
@@ -814,7 +820,7 @@ let get t i = match t with
 
 let set t i v = match t with
   | Asc E          -> invalid_arg "Can't set from empty"
-  | Asc (U (e, _)) -> Asc (U (e, v))
+  | Asc (U (s, _)) -> Asc (U (s, v))
   | Asc (S l)      ->
     let open Interval in
     let ii = make i i in
@@ -854,9 +860,6 @@ let insert_if_not_empty s v l =
     l
   else
     insert s v l
-
-let asc_sets_to_str s =
-  asc_to_string s (fun _ -> "")
 
 let map_with_just_last_check ~f = function
   | []  -> []
@@ -903,9 +906,9 @@ and merge ~eq t1 t2 f =
   match t1, t2 with
   | Asc E          , _
   | _              , Asc E           -> invalid_argf "Can't merge empty"
-  | Asc (U (e, v1)), Asc (U (_e,v2)) -> Asc (U (e, f v1 v2))
-  | Asc (U (e, v1)), Asc (S l2)      -> Asc (S (map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)))
-  | Asc (S l1),      Asc (U (e, v2)) -> Asc (S (map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)))
+  | Asc (U (s, v1)), Asc (U (_s,v2)) -> Asc (U (s, f v1 v2))
+  | Asc (U (_, v1)), Asc (S l2)      -> Asc (S (map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)))
+  | Asc (S l1),      Asc (U (_, v2)) -> Asc (S (map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)))
   | Asc (S l1),      Asc (S l2)      -> Asc (S (start2 eq f l1 l2))
 
 let rec start3 eq f l1 l2 l3 =
@@ -945,9 +948,9 @@ and merge3 ~eq t1 t2 t3 f =
   | _              , Asc E          , _
   | _              , _              , Asc E           -> invalid_argf "Can't merge3 empty"
 
-  | Asc (U (e, v1)), Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (U (e, f v1 v2 v3))
+  | Asc (U (s, v1)), Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (U (s, f v1 v2 v3))
 
-  | Asc (U (e, v1)), Asc (U (_, v2)), Asc (S l3)      -> Asc (S (map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3)))
+  | Asc (U (_, v1)), Asc (U (_, v2)), Asc (S l3)      -> Asc (S (map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3)))
   | Asc (U (_, v1)), Asc (S l2),      Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3)))
   | Asc (S l1),      Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3)))
 
@@ -1006,7 +1009,7 @@ and merge4 ~eq t1 t2 t3 t4 f =
   | _,              _,              _,              Asc E           -> invalid_argf "Can't merge empty4"
 
   (* 0 S's, 4 U's *)
-  | Asc (U (e,v1)), Asc (U (_,v2)), Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (U (e, f v1 v2 v3 v4))
+  | Asc (U (s,v1)), Asc (U (_,v2)), Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (U (s, f v1 v2 v3 v4))
 
   (* 1 S's, 3 U's *)
   | Asc (S l1),     Asc (U (_,v2)), Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3 v4)))
@@ -1044,7 +1047,7 @@ let fold_set_sizes_and_values : type o a. (o, a) t -> init:'b -> f:('b -> int ->
     match l with
     | Desc ld         -> ascf (ascending_t (fun x y -> x = y) ld)     (* TODO: Probably could be faster. *)
     | Asc E           -> invalid_arg "Can't fold_set_sizes_and_values on empty!"
-    | Asc (U (e, v))  -> f init (e + 1) v
+    | Asc (U (s, v))  -> Set.fold s ~init ~f:(fun acc l -> f acc l v)
     | Asc (S la)      -> ascf la
 
 let fold_indices_and_values :
@@ -1053,8 +1056,7 @@ let fold_indices_and_values :
     | Desc ld -> List.fold_left ld ~init ~f:(fun init (l, v) ->
                     Interval.fold l ~init ~f:(fun acc i -> f acc i v))
     | Asc E          -> invalid_arg "Can't fold_indices_and_values on empty!"
-    | Asc (U (e, v)) -> Set.fold (Set.of_interval (Interval.make 0 e))
-                          ~init ~f:(fun acc i -> f acc i v)
+    | Asc (U (s, v)) -> Set.fold s ~init ~f:(fun acc i -> f acc i v)
     | Asc (S la)     -> List.fold_left la ~init ~f:(fun init (s, v) ->
                           Set.fold s ~init ~f:(fun acc i -> f acc i v))
 
@@ -1063,7 +1065,7 @@ let map : type o a. (o, a) t -> ('b -> 'b -> bool) -> f:(a -> 'b) -> (o, 'b) t =
   fun t eq ~f -> match t with
     | Desc ld         -> Desc (List.map_snd ld ~f)
     | Asc E           -> invalid_argf "Can't map empty!"
-    | Asc (U (e, v))  -> Asc (U (e, f v))
+    | Asc (U (s, v))  -> Asc (U (s, f v))
     | Asc (S la)      -> Asc (S (map_with_full_check eq la ~f))
 
 let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
@@ -1072,13 +1074,13 @@ let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
         List.iter ld ~f:(fun (s, v) ->
           Interval.iter s ~f:(fun i -> f i v))
     | Asc E   -> invalid_argf "Can't iter_set empty"
-    | Asc (U (e, v))  -> Set.iter (Set.of_interval (Interval.make 0 e)) ~f:(fun i -> f i v)
+    | Asc (U (s, v))  -> Set.iter s ~f:(fun i -> f i v)
     | Asc (S la)      -> List.iter la ~f:(fun (l, v) ->
                           List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
 
 let to_array = function
   | Asc E           -> invalid_argf "Can't to_array empty"
-  | Asc (U (e, v))  -> Array.make (e + 1) v
+  | Asc (U (s, v))  -> Array.make (Set.size s) v
   | Asc (S la)      ->
     match la with
     | []  -> [||]
