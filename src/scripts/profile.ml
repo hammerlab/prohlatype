@@ -545,3 +545,49 @@ let get_pl key l m =
 let get_z key l m =
   Option.map (get_pl key l m)
     ~f:(fun { ParPHMM_drivers.Output.zygosity; _} -> zygosity)
+
+type times =
+  { real  : float
+  ; user  : float
+  ; sys   : float
+  }
+
+let scan_line line =
+ Scanf.sscanf line "%s@\t%fm%fs" (fun t m s -> t, m, s)
+
+let load_times file =
+  let ic = open_in file in
+  try
+    let l1 = input_line ic in
+    assert (l1 = "");
+    let r, rm, rs = scan_line (input_line ic) in
+    let u, um, us = scan_line (input_line ic) in
+    let s, sm, ss = scan_line (input_line ic) in
+    assert (r = "real" && u = "user" && s = "sys");
+    close_in ic;
+    { real  = rm *. 60. +. rs
+    ; user  = um *. 60. +. us
+    ; sys   = sm *. 60. +. ss
+    }
+  with e ->
+    close_in ic;
+    raise e
+
+let load_times dir =
+  Sys.readdir dir
+  |> Array.to_list
+  |> List.filter ~f:(fun s ->
+      match String.split ~on:(`Character '_') s with
+      | [_; "1"] -> true
+      | _        -> false)
+  |> List.fold_left ~init:StringMap.empty ~f:(fun jmap file ->
+      let times = load_times (Filename.concat dir file) in
+      StringMap.add file times jmap)
+
+let compare_times tm1 tm2 =
+  StringMap.merge tm1 tm2 ~f:(fun k t1 t2 ->
+      match t1, t2 with
+      | None,    None     -> assert false
+      | Some _,  None     -> invalid_argf "Different key %s in first" k
+      | None  ,  Some _   -> invalid_argf "Different key %s in second" k
+      | Some p1, Some p2  -> Some (p1, p2))
