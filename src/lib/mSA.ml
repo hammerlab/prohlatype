@@ -541,7 +541,12 @@ module Parser = struct
       | locus_s :: lau :: [] ->
           begin match Nomenclature.parse_locus locus_s with
           | Ok l    -> (l, lau)
-          | Error e -> invalid_argf "%s" e
+          | Error e ->
+              (* DRB_nuc hack! *)
+              if locus_s = "DRB" && lau = "nuc" then
+                (Nomenclature.DRB1, "nuc")
+              else
+                invalid_argf "%s" e
           end
       | _ -> invalid_argf "Filename: %s doesn't match the \"locus_[prot|nuc|gene].txt format."
               f
@@ -676,6 +681,10 @@ module Boundaries = struct
     List.rev_map (fold ~boundary ~start ~end_ ~gap ~seq ~init:[]
                     (first_boundary_before_start lst))
       ~f:(fun (b, l) -> (b, List.rev l))
+
+  let ungrouped lst =
+    List.map lst ~f:(fun (b, l) -> to_boundary b :: l)
+    |> List.concat
 
 end (* Boundaries *)
 
