@@ -86,7 +86,7 @@ let mismatches s1 s2 =
   in
   loop 0 x
 
-let search ?m ?n c z a1 a2 =
+let search ?m ?n predicate extreme_value a1 a2 =
   let m = Option.value m ~default:(Array.length a1) in
   let n = Option.value n ~default:(Array.length a2) in
   let rec loop i j mm p =
@@ -99,12 +99,12 @@ let search ?m ?n c z a1 a2 =
       let al2, s2 = a2.(j) in
       (*printf "comparing %s vs %s\n%!" al1 al2;*)
       let msms = mismatches s1 s2 in
-      if c msms mm then
+      if predicate msms mm then
         loop i (j + 1) msms (al1, al2)
       else
         loop i (j + 1) mm p
   in
-  loop 0 0 z ("","")
+  loop 0 0 extreme_value ("","")
 
 let minimum = search (fun x y -> x < y) max_int
 let maximum = search (fun x y -> x > y) min_int
