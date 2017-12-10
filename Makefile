@@ -79,6 +79,9 @@ allele_distances:
 homologous:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts homologous.native
 
+expanded_similarity_search:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package parmap -I src/lib/ -I src/scripts expanded_similarity_search.native
+
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native
 
