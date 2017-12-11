@@ -82,6 +82,10 @@ homologous:
 expanded_similarity_search:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package parmap -I src/lib/ -I src/scripts expanded_similarity_search.native
 
+json_to_tsv:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts json_to_tsv.native
+
+
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native
 
