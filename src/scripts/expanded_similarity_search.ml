@@ -184,6 +184,12 @@ end (* Naive *)
 let general_class_1_search_loci =
   Nomenclature.[ A ; B ; C ; E ; F ; G ; H ; J ; K ; L ; Y ]
 
+let with_classII_search_loci =
+  general_class_1_search_loci @ 
+    Nomenclature.[ DMA ; DMB ; DOA ; DOB ; DPA1 ; DPA2 ; DPB1 ; DPB2 ; DQA1
+                 ; DQB1 ; DRA ; DRB1 ]
+
+
 (* Note that Mas.Parser starts the exon counting at 1. *)
 let exons_to_check =
   [ 2; 3]
@@ -394,5 +400,6 @@ let () =
     in
     printf "for exon %d\n" exon;
     printf "allele1\tallele2\tmax distance\tallele1_alt\tmin distance\tallele2_alt\tmin distance\n";
-    grand_search_par (just_that_exon exon general_class_1_search_loci)
+    (*grand_search_par (just_that_exon exon general_class_1_search_loci)*)
+    grand_search_par (just_that_exon exon with_classII_search_loci)
   end
