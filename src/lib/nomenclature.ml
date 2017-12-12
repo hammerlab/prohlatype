@@ -435,5 +435,5 @@ let locus_group_to_loci = function
   | ClassI      -> [ A; B; C ]
   | FullClassI  -> [ A ; B ; C
                    ; E ; F ; G ; H ; J ; K
-                   ; L ; P ; T ; V ; W ; Y
+                   ; L ; P ; T ; V ; W ; (* TODO: Y *)
                    ]
