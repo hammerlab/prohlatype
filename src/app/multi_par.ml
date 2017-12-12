@@ -24,9 +24,9 @@ module Parallel = Pd.Parallel(Pd.Multiple_loci)
 
 let type_
   (* Allele information source *)
-    class1_gen_dir
-    class1_nuc_dir
-    class1_mgd_dir
+    class1
+    full_class1
+    gen_nuc_mgd
     alignment_files
     merge_files
     distance
@@ -68,7 +68,7 @@ let type_
             Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
-    Common_options.class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+    Common_options.class_selectors class1 full_class1 gen_nuc_mgd
       alignment_files merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
@@ -170,9 +170,9 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
-            $ class1gen_arg
-            $ class1nuc_arg
-            $ class1mgd_arg
+            $ class1_directory_arg
+            $ full_class1_directory_arg
+            $ gen_nuc_merged_flag
             $ alignments_arg $ merges_arg $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag

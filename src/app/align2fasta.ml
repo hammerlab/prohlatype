@@ -53,9 +53,9 @@ let convert
   (* output option *)
   width
   (* input *)
-  class1_gen_dir
-  class1_nuc_dir
-  class1_mgd_dir
+  class1
+  full_class1
+  gen_nuc_mgd
   alignment_file merge_file
   (* optional distance to trigger imputation, merging *)
   distance
@@ -69,7 +69,7 @@ let convert
   in
   let opt_to_lst = Option.value_map ~default:[] ~f:(fun s -> [s]) in
   let alignment_files, merge_files =
-    class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+    class_selectors class1 full_class1 gen_nuc_mgd
       (opt_to_lst alignment_file)
       (opt_to_lst merge_file)
   in
@@ -168,9 +168,9 @@ let () =
           $ output_fname_arg
           $ width_arg
           (* Allele information source *)
-          $ class1gen_arg
-          $ class1nuc_arg
-          $ class1mgd_arg
+          $ class1_directory_arg
+          $ full_class1_directory_arg
+          $ gen_nuc_merged_flag
           $ alignment_arg
           $ merge_arg
           $ optional_distance_flag
