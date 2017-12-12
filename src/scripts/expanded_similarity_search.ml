@@ -262,7 +262,7 @@ let spec_xon exon seqs =
         in
         begin match xo with
         | None    -> printf "dropping %s because it is missing exon: %d\n" allele exon; None 
-        | Some "" -> printf "dropping %s because the exon sequence is empty." allele; None
+        | Some "" -> printf "dropping %s because the exon sequence is empty.\n" allele; None
         | Some s  -> Some (allele, s)
         end
     | _                 ->
@@ -364,10 +364,11 @@ let grand_search seq_lst =
   List.iteri all_distances ~f:(fun i (alleles, ad, arr) ->
     let others = List.filteri all_distances ~f:(fun j _ -> i <> j) in
     List.iter others ~f:(fun (_, bd, brr) ->
-      let d, a_a, b_a = minimum_of arr brr in
-      let a_alt, mda = max_dist a_a ad in
-      let b_alt, mdb = max_dist b_a bd in
-      printf "%s\t%s\t%d\t%s\t%d\t%s\t%d\n" a_a b_a d a_alt mda b_alt mdb))
+      let min_d, a_a, b_a = minimum_of arr brr in
+      let a_alt, max_dist_from_a = max_dist a_a ad in
+      let b_alt, max_dist_from_b = max_dist b_a bd in
+      printf "%s\t%s\t%d\t%s\t%d\t%s\t%d\n"
+        a_a b_a min_d a_alt max_dist_from_a b_alt max_dist_from_b))
 
 let grand_search_par seq_lst =
   let all_distances =
@@ -383,10 +384,11 @@ let grand_search_par seq_lst =
       (fun i (alleles, ad, arr) ->
         let others = List.filteri all_distances ~f:(fun j _ -> i <> j) in
         List.map others ~f:(fun (_, bd, brr) ->
-          let d, a_a, b_a = minimum_of arr brr in
-          let a_alt, mda = max_dist a_a ad in
-          let b_alt, mdb = max_dist b_a bd in
-          sprintf "%s\t%s\t%d\t%s\t%d\t%s\t%d\n" a_a b_a d a_alt mda b_alt mdb))
+          let min_d, a_a, b_a = minimum_of arr brr in
+          let a_alt, max_dist_from_a = max_dist a_a ad in
+          let b_alt, max_dist_from_b = max_dist b_a bd in
+          sprintf "%s\t%s\t%d\t%s\t%d\t%s\t%d\n"
+            a_a b_a min_d a_alt max_dist_from_a b_alt max_dist_from_b))
       (Parmap.L all_distances)
   in
   List.iter print_me ~f:(List.iter ~f:(print_line stdout))
@@ -399,7 +401,7 @@ let () =
       with _ -> 2
     in
     printf "for exon %d\n" exon;
-    printf "allele1\tallele2\tmax distance\tallele1_alt\tmin distance\tallele2_alt\tmin distance\n";
+    printf "allele1\tallele2\tmin distance\tallele1_alt\tmax distance\tallele2_alt\tmax distance\n";
     (*grand_search_par (just_that_exon exon general_class_1_search_loci)*)
     grand_search_par (just_that_exon exon with_classII_search_loci)
   end
