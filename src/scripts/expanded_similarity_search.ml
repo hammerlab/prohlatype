@@ -56,16 +56,19 @@ let p_gen_mp =
 
 let mp_to_seq mp =
   let open MSA in
+  let open Parser in
   let no_sequences = List.filter ~f:(fun a -> not (is_sequence a)) in
   let als =
-    List.map mp.Parser.alt_elems ~f:(fun { Parser.allele; seq; _} ->
-      ( allele
-      , allele_sequences ~reference:mp.Parser.ref_elems ~allele:seq))
+    List.map mp.alt_elems ~f:(fun { allele; seq; _} ->
+      let seqs = allele_sequences ~reference:mp.ref_elems ~allele:seq in
+      let rels = Segments.distances ~reference:mp.ref_elems ~allele:seq in
+      ( allele, List.map2 seqs rels ~f:(fun s r -> (s, r))))
   in
   let rp =
-    ( mp.Parser.reference
-    , allele_sequences ~reference:mp.Parser.ref_elems
-        ~allele:(no_sequences mp.Parser.ref_elems))
+    let allele = no_sequences mp.ref_elems in
+    let s = allele_sequences ~reference:mp.ref_elems ~allele in
+    let r = Segments.distances ~reference:mp.ref_elems ~allele in
+    ( mp.reference, List.map2 s r ~f:(fun s r -> (s, r)))
   in
   List.sort ~cmp:compare (rp :: als)
 
@@ -94,7 +97,7 @@ let mp_and_seqs =
 let print_exon_sequences mp_and_seq =
   let open MSA in
   let open Parser in
-  List.iter mp_and_seq ~f:(fun (mp, seqs) ->
+  List.iter mp_and_seq ~f:(fun (mp, seqs, distances) ->
     let ref_lst = assoc mp.reference seqs in
     printf "%s\n" mp.reference;
     List.iter ref_lst ~f:(fun (bm, seqs) ->
@@ -185,7 +188,7 @@ let general_class_1_search_loci =
   Nomenclature.[ A ; B ; C ; E ; F ; G ; H ; J ; K ; L ; Y ]
 
 let with_classII_search_loci =
-  general_class_1_search_loci @ 
+  general_class_1_search_loci @
     Nomenclature.[ DMA ; DMB ; DOA ; DOB ; DPA1 ; DPA2 ; DPB1 ; DPB2 ; DQA1
                  ; DQB1 ; DRA ; DRB1 ]
 
@@ -200,7 +203,7 @@ module Levenshtein = struct
     min a (min b c)
 
   let staged s =
-    let l1 = String.length s in 
+    let l1 = String.length s in
     let n1 = l1 + 1 in
     let arr =
       Array.init 2 ~f:(fun _i ->
@@ -220,13 +223,13 @@ module Levenshtein = struct
         end else if j >= l1 then begin
           arr.(i mod 2).(0) <- (i + 1);
           loop v (i + 1) 0
-        end else 
+        end else
           let c_i = String.get_exn t ~index:(i) in
           let c_j = String.get_exn s ~index:(j) in
           let cp = if c_j = c_i then 0 else 1 in
           let ip1 = i + 1 in
           let jp1 = j + 1 in
-          let u = min3 
+          let u = min3
                     (arr.(i mod 2).(j) + cp)
                     (arr.(i mod 2).(jp1) + 1)
                     (arr.(ip1 mod 2).(j) + 1)
@@ -257,11 +260,17 @@ let spec_xon exon seqs =
     match Nomenclature.parse allele with
     | Ok (_, (_, None)) ->  (* Doesn't have a qualifier *)
         let xo =
-          List.find_map exon_list ~f:(fun (bm, s) ->
-            if bm.Boundaries.label = e then Some s else None)
+          List.find_map exon_list ~f:(fun ((bm, s), r) ->
+            if bm.Boundaries.label = e then begin
+              match r.Segments.relationship with
+              | Segments.Full _    -> Some s
+              | Segments.Missing
+              | Segments.Partial _ -> None
+            end else
+              None)
         in
         begin match xo with
-        | None    -> printf "dropping %s because it is missing exon: %d\n" allele exon; None 
+        | None    -> printf "dropping %s because it is missing or partial exon: %d\n" allele exon; None
         | Some "" -> printf "dropping %s because the exon sequence is empty.\n" allele; None
         | Some s  -> Some (allele, s)
         end
@@ -276,7 +285,7 @@ let just_that_exon exon loci =
       let _, seqs = List.find_exn mp_and_seqs ~f:(fun (mp, _) -> mp.Parser.locus = locus) in
       spec_xon exon seqs)
 
- 
+
 (*
 let search_1 ?n c z s1 a2 =
   let n = Option.value n ~default:(Array.length a2) in
@@ -304,7 +313,7 @@ let max_of allele xarr =
   in
   (* let () = printf "%s: %s\n%!" allele s *)
   maximum1 s xarr
-  
+
 let disp1 s (d, a) =
   printf "for %s -- %s: %d\n%!" s a d
 
