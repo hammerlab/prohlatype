@@ -76,8 +76,21 @@ let convert
   to_allele_inputs ~alignment_files ~merge_files ?distance ~selectors >>= function
     |  []    -> Error "No input sent"
     | h :: t ->
-      let ofiledefault = Alleles.Input.to_short_fname_prefix h in
-      let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
+      let prefix =
+        match ofile with
+        | Some v  -> v
+        | None    ->
+            let ofiledefault = Alleles.Input.to_short_fname_prefix h in
+            (* Warn if t isn't empty, ie there is more than one input. *)
+            if t <> [] then begin
+              eprintf "There is more than one input gene input and no output \
+                       file. Writing to file %s.fasta"
+                ofiledefault;
+              ofiledefault
+            end else
+              ofiledefault
+      in
+      let out = sprintf "%s.fasta" prefix in
       list_fold_ok (h :: t) ~init:[] ~f:(fun acc i ->
           Alleles.Input.construct i >>= fun mp -> Ok (mp :: acc))
         >>= fun mplst -> Ok (against_mps ?width out (List.rev mplst))
