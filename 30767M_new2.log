@@ -1,6 +1,0 @@
-Setting up ParPHMM transitions with 100 read_length, total running time in seconds: 0.008492
-Allocating forward pass workspace, total running time in seconds: 0.005159
-forward of Locus A splitting 4 (prealigned), allele_depth: 5; past_threshold: Start; read: GGGCCGGAGT, total running time in seconds: 4.446502
-forward of Locus B splitting 4 (prealigned), allele_depth: 5; past_threshold: Set -94.6777069286; read: GGGCCGGAGT, total running time in seconds: 8.601159
-forward of Locus C splitting 4 (prealigned), allele_depth: 5; past_threshold: Set -58.7258706485; read: GGGCCGGAGT, total running time in seconds: 4.789741
-updating on double read HWI-ST1027:161:C13UJACXX:6:1101:19669:30767, total running time in seconds: 29.692770
