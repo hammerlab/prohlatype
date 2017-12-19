@@ -90,9 +90,14 @@ let merge_arg, merges_arg =
         let g = path ^ "_gen.txt" in
         if not (List.mem ~set:Alter_MSA.supported_loci l) then
           `Error ("gene not supported: " ^ s)
-        else if not (Sys.file_exists n) then
-          `Error ("Nuclear alignment file doesn't exist: " ^ n)
-        else if not (Sys.file_exists g) then
+        else if not (Sys.file_exists n) then begin
+          if Filename.basename path = "P" then begin
+            eprintf "As of 2017-12-15 P_nuc.txt doesn't exist. We'll use just \
+              the genetic file.\n";
+            `Ok path
+          end else
+            `Error ("Nuclear alignment file doesn't exist: " ^ n)
+        end else if not (Sys.file_exists g) then
           `Error ("Genetic alignment file doesn't exist: " ^ n)
         else
           `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
