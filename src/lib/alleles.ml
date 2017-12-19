@@ -596,19 +596,28 @@ module Input = struct
                      fun l -> l
       | Some set  -> List.filter ~f:(fun a -> not (List.mem a.MSA.Parser.allele ~set))
 
-    (* As of IMGT 3.30 HLA-P doesn't have a P_nuc.txt (all of the data is form gDNA).
-     * Asking for a merge shouldn't fail because the file doesn't exist.*)
-    let handle_p path selectors dl =
+    let select_and_impute selectors dl mp =
+      Alter_MSA.Impute.do_it dl (Selectors.apply_to_mp selectors mp)
+
+    (* As of IMGT 3.30 HLA-P doesn't have a P_nuc.txt (all of the data is form
+     * gDNA).  * Asking for a merge shouldn't fail because the file doesn't
+     * exist.
+     * Furthermore HLA-E has an inconsistency between the Exon sequences. We'll
+     * use just gen.
+     * *)
+    let handle_special path selectors dl =
       let open MSA.Parser in
-      from_file path
-      |> Selectors.apply_to_mp selectors
-      |> Alter_MSA.Impute.do_it dl
+      select_and_impute selectors dl (from_file path)
 
     let do_it ?(drop_known_splice_variants=true) prefix selectors dl =
       let open MSA.Parser in
-      if Filename.basename prefix = "P" then
-        handle_p (prefix ^ "_gen.txt") selectors dl
-      else
+      if Filename.basename prefix = "P" then begin
+        eprintf "HLA-P doesn't have a nuc, ignoring request.\n";
+        handle_special (prefix ^ "_gen.txt") selectors dl
+      end else if Filename.basename prefix = "E" then begin
+        eprintf "HLA-E has an inconsistency between gen and nuc, ignoring request.\n";
+        handle_special (prefix ^ "_gen.txt") selectors dl
+      end else
         let gen_mp = from_file (prefix ^ "_gen.txt") in
         let nuc_mp = from_file (prefix ^ "_nuc.txt") in
         if gen_mp.reference <> nuc_mp.reference then
