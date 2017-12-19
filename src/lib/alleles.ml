@@ -573,37 +573,78 @@ module Input = struct
       To try creating the graph without them set ~drop_known_splice_variants to
       false *)
     let splice_variants =
-      [ "A", [ "A*01:11N" ; "A*29:01:01:02N" ; "A*26:01:01:03N" ; "A*03:01:01:02N" ]
-      ; "B", [ "B*15:01:01:02N"; "B*44:02:01:02S"; "B*07:44N" ]
-      ; "C", [ "C*04:09N" ]
+      let open Nomenclature in
+      [ A, [ "A*01:11N" ; "A*29:01:01:02N" ; "A*26:01:01:03N" ; "A*03:01:01:02N" ]
+      ; B, [ "B*15:01:01:02N"; "B*44:02:01:02S"; "B*07:44N" ]
+      ; C, [ "C*04:09N" ]
+      ; E, []
+      ; F, []
+      ; G, []
+      ; H, []
+      ; J, []
+      ; K, []
+      ; L, []
+      ; T, []
+      ; V, []
+      ; W, []
       ]
 
     let splice_variant_filter p =
       match List.Assoc.get p splice_variants with
-      | None      -> eprintf "Splice variant filter not implemented for %s\n" p;
+      | None      -> eprintf "Warning: splice variant filter not implemented for %s\n"
+                      (Nomenclature.show_locus p);
                      fun l -> l
       | Some set  -> List.filter ~f:(fun a -> not (List.mem a.MSA.Parser.allele ~set))
 
+    let select_and_impute selectors dl mp =
+      Alter_MSA.Impute.do_it dl (Selectors.apply_to_mp selectors mp)
+
+    (* As of IMGT 3.30 HLA-P doesn't have a P_nuc.txt (all of the data is form
+     * gDNA).  * Asking for a merge shouldn't fail because the file doesn't
+     * exist.
+     * Furthermore HLA-E has an inconsistency between the Exon sequences. We'll
+     * use just gen.
+     * *)
+    let handle_special path selectors dl =
+      let open MSA.Parser in
+      select_and_impute selectors dl (from_file path)
+
     let do_it ?(drop_known_splice_variants=true) prefix selectors dl =
       let open MSA.Parser in
-      let gen_mp = from_file (prefix ^ "_gen.txt") in
-      let nuc_mp = from_file (prefix ^ "_nuc.txt") in
-      if gen_mp.reference <> nuc_mp.reference then
-        error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
-      else if gen_mp.align_date <> nuc_mp.align_date then
-        error "Align dates don't match %s vs %s" gen_mp.align_date nuc_mp.align_date
-      else
-        let gen_mp, nuc_mp =
-          if drop_known_splice_variants then begin
-            let f = splice_variant_filter (Filename.basename prefix) in
-            { gen_mp with alt_elems = f gen_mp.alt_elems},
-            { nuc_mp with alt_elems = f nuc_mp.alt_elems}
-          end else
-            gen_mp, nuc_mp
-        in
-        let gen_mp = Selectors.apply_to_mp selectors gen_mp in
-        let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
-        Alter_MSA.Merge.do_it ~gen_mp ~nuc_mp dl
+      if Filename.basename prefix = "P" then begin
+        eprintf "HLA-P doesn't have a nuc, ignoring request.\n";
+        handle_special (prefix ^ "_gen.txt") selectors dl
+      end else if Filename.basename prefix = "E" then begin
+        eprintf "HLA-E has an inconsistency between gen and nuc, ignoring request.\n";
+        handle_special (prefix ^ "_gen.txt") selectors dl
+      end else
+        let gen_mp = from_file (prefix ^ "_gen.txt") in
+        let nuc_mp = from_file (prefix ^ "_nuc.txt") in
+        if gen_mp.reference <> nuc_mp.reference then
+          error "References don't match %s vs %s" gen_mp.reference nuc_mp.reference
+        else if gen_mp.align_date <> nuc_mp.align_date then
+          error "Align dates don't match %s vs %s" gen_mp.align_date nuc_mp.align_date
+        else
+          (* Check if it is even worthwhile to merge, do the gen and nuc mp's
+           * have the same alleles? If they do, just impute the gen. *)
+          let an { allele; _ } = allele in
+          let gen_ans = string_set_of_list (List.map gen_mp.alt_elems ~f:an) in
+          let nuc_ans = string_set_of_list (List.map nuc_mp.alt_elems ~f:an) in
+          if StringSet.equal gen_ans nuc_ans then
+            Selectors.apply_to_mp selectors gen_mp
+            |> Alter_MSA.Impute.do_it dl
+          else
+            let gen_mp, nuc_mp =
+              if drop_known_splice_variants then begin
+                let f = splice_variant_filter gen_mp.locus in
+                { gen_mp with alt_elems = f gen_mp.alt_elems},
+                { nuc_mp with alt_elems = f nuc_mp.alt_elems}
+              end else
+                gen_mp, nuc_mp
+            in
+            let gen_mp = Selectors.apply_to_mp selectors gen_mp in
+            let nuc_mp = Selectors.apply_to_mp selectors nuc_mp in
+            Alter_MSA.Merge.do_it ~gen_mp ~nuc_mp dl
 
   end (* MergeConstruction *)
 
