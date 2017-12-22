@@ -53,9 +53,9 @@ let convert
   (* output option *)
   width
   (* input *)
-  class1_gen_dir
-  class1_nuc_dir
-  class1_mgd_dir
+  class1
+  full_class1
+  gen_nuc_mgd
   alignment_file merge_file
   (* optional distance to trigger imputation, merging *)
   distance
@@ -69,15 +69,28 @@ let convert
   in
   let opt_to_lst = Option.value_map ~default:[] ~f:(fun s -> [s]) in
   let alignment_files, merge_files =
-    class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
+    class_selectors class1 full_class1 gen_nuc_mgd
       (opt_to_lst alignment_file)
       (opt_to_lst merge_file)
   in
   to_allele_inputs ~alignment_files ~merge_files ?distance ~selectors >>= function
     |  []    -> Error "No input sent"
     | h :: t ->
-      let ofiledefault = Alleles.Input.to_short_fname_prefix h in
-      let out = sprintf "%s.fasta" (Option.value ofile ~default:ofiledefault) in
+      let prefix =
+        match ofile with
+        | Some v  -> v
+        | None    ->
+            let ofiledefault = Alleles.Input.to_short_fname_prefix h in
+            (* Warn if t isn't empty, ie there is more than one input. *)
+            if t <> [] then begin
+              eprintf "There is more than one input gene input and no output \
+                       file. Writing to file %s.fasta"
+                ofiledefault;
+              ofiledefault
+            end else
+              ofiledefault
+      in
+      let out = sprintf "%s.fasta" prefix in
       list_fold_ok (h :: t) ~init:[] ~f:(fun acc i ->
           Alleles.Input.construct i >>= fun mp -> Ok (mp :: acc))
         >>= fun mplst -> Ok (against_mps ?width out (List.rev mplst))
@@ -168,9 +181,9 @@ let () =
           $ output_fname_arg
           $ width_arg
           (* Allele information source *)
-          $ class1gen_arg
-          $ class1nuc_arg
-          $ class1mgd_arg
+          $ class1_directory_arg
+          $ full_class1_directory_arg
+          $ gen_nuc_merged_flag
           $ alignment_arg
           $ merge_arg
           $ optional_distance_flag

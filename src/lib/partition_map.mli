@@ -7,7 +7,7 @@
   {merge} of 2 (or more {merge4}) such partition maps.
 *)
 
-(* We construct partition map's in {descending} order than then convert them
+(* We construct partition map's in {descending} order then convert them
    into the {ascending} order for merging. *)
 type ascending
 type descending
@@ -16,6 +16,8 @@ type ('o, +'a) t
 
 (* Empty constructors. *)
 val empty_d : (descending, 'a) t
+(* empty_a should only be used as a place holder (ex. initializing an array)
+ * and not for computation. TODO: refactor this. *)
 val empty_a : (ascending, 'a) t
 
 (* Initializers. These take a value and either assume an entry (the 'first' one
@@ -27,7 +29,9 @@ val init_all_a : size:int -> 'a -> (ascending, 'a) t
 val to_string : (_, 'a) t -> ('a -> string) -> string
 
 (* Conversions. *)
-val ascending : (descending, 'a) t -> (ascending, 'a) t
+val ascending : ('a -> 'a -> bool)
+              -> (descending, 'a) t
+              -> (ascending, 'a) t
 
 (* Observe a value for the next element. *)
 val add : 'a -> (descending, 'a) t -> (descending, 'a) t
@@ -39,10 +43,11 @@ val get : (ascending, 'a) t -> int -> 'a
 
 (* Merge partition maps. Technically these are "map"'s but they are purposefully
   named merge since they're only implemented for {ascending} partition maps. *)
-val merge :(ascending, 'a) t
-          -> (ascending, 'b) t
-          -> ('a -> 'b -> 'c)
-          -> (ascending, 'c) t
+val merge : eq:('c -> 'c -> bool)
+            -> (ascending, 'a) t
+            -> (ascending, 'b) t
+            -> ('a -> 'b -> 'c)
+            -> (ascending, 'c) t
 
 val merge3 : eq:('d -> 'd -> bool)
             -> (ascending, 'a) t
@@ -83,7 +88,10 @@ val fold_indices_and_values : (_, 'a) t
                             -> 'b
 
 (* Map the values, the internal storage doesn't change. *)
-val map : ('o, 'a) t -> f:('a -> 'b) -> ('o, 'b) t
+val map : ('o, 'a) t
+        -> ('b -> 'b -> bool)
+        -> f:('a -> 'b)
+        -> ('o, 'b) t
 
 (* Iterate over the entries and values. *)
 val iter_set : ('o, 'a) t -> f:(int -> 'a -> unit) -> unit

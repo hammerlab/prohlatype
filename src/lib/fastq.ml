@@ -120,6 +120,21 @@ let rec same cmp l1 l2 =
 
 let name_as_key a = a.Biocaml_unix.Fastq.name
 
+let fold_over_single_reads_list filt l ~init ~f =
+  let rec loop acc = function
+    | []     -> acc
+    | h :: t ->
+        (* Note that 'filt' discards reads that it is searching for;
+          * we should call this only for the unpaired reads! *)
+        let display, stop = filt h.Biocaml_unix.Fastq.name in
+        match display, stop with
+        | true,        true  -> f acc h
+        | false,       true  -> acc
+        | true,        false -> loop (f acc h) t
+        | false,       false -> loop acc t
+  in
+  loop init l
+
 let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
    ~f ~init ?ff ?fs file1 file2 =
   let open Biocaml_unix in
@@ -131,7 +146,7 @@ let fold_paired_both ?(to_key=name_as_key) ?number_of_reads ?(specific_reads=[])
   let open Deferred in
   let fold_if_f_not_none ff ~init l =
     Option.value_map ff ~default:init
-      ~f:(fun f -> List.fold l ~init ~f)
+      ~f:(fun f -> fold_over_single_reads_list filt l ~init ~f)
   in
   Reader.with_file file1 ~f:(fun rdr1 ->
     Reader.with_file file2 ~f:(fun rdr2 ->
@@ -249,25 +264,25 @@ let fold_paired_parany ?number_of_reads ?(specific_reads=[])
                   state_ref := `ReadOne (fr2, false, s1, s2);
                   read ()
               | `Eof,           `Ok (Ok b)      ->
-                  same_check_one fr2 false s1 (b :: s2) 
+                  same_check_one fr2 false s1 (b :: s2)
               | `Ok (Error ea), `Eof            ->
                   eprintf "%s\n" (Error.to_string_hum ea);
                   state_ref := `ReadOne (fr1, true,  s1, s2);
                   read ()
               | `Ok (Ok a),     `Eof            ->
-                  same_check_one fr1 true (a :: s1) s2 
+                  same_check_one fr1 true (a :: s1) s2
               | `Ok (Error ea), `Ok (Error eb)  ->
                   eprintf "%s\n" (Error.to_string_hum ea);
                   eprintf "%s\n" (Error.to_string_hum eb);
                   read ()
               | `Ok (Ok a),     `Ok (Error eb)  ->
                   eprintf "%s\n" (Error.to_string_hum eb);
-                  same_check_both (a :: s1) s2 
+                  same_check_both (a :: s1) s2
               | `Ok (Error ea), `Ok (Ok b)      ->
                   eprintf "%s\n" (Error.to_string_hum ea);
-                  same_check_both s1 (b :: s2) 
+                  same_check_both s1 (b :: s2)
               | `Ok (Ok a),     `Ok (Ok b)      ->
-                  same_check_both (a :: s1) (b :: s2) 
+                  same_check_both (a :: s1) (b :: s2)
               end
           | `ReadOne (fr, f, s1, s2) ->
               begin match Future_unix.Pipe.read fr with

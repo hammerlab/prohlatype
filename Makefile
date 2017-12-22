@@ -1,5 +1,5 @@
 PACKAGES=unix ppx_deriving.std ppx_deriving_yojson nonstd sosa ocamlgraph cmdliner biocaml.unix parany
-SETUP_PACKAGE_NAMES=ocamlfind.1.7.2 ocamlbuild.0.11.0 ppx_deriving ppx_deriving_yojson nonstd.0.0.3 sosa.0.3.0 ocamlgraph.1.8.8 cmdliner.1.0.2 biocaml.0.8.0 parany.3.0.0
+SETUP_PACKAGE_NAMES=ppx_deriving.4.2.1 ppx_deriving_yojson.3.1 nonstd.0.0.3 sosa.0.3.0 ocamlgraph.1.8.8 cmdliner.1.0.2 biocaml.0.8.0 parany.3.0.0
 TOOLS=mhc2gpdf par_type multi_par align2fasta allele_distances
 TESTS=test_parsing round_trip benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
@@ -14,8 +14,6 @@ build:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib prohlatype.cma prohlatype.cmxa
 
 setup:
-	opam pin add -k git ppx_deriving https://github.com/ocaml-ppx/ppx_deriving.git#4.1-maintenance && \
-	opam pin add -k git ppx_deriving_yojson https://github.com/rleonid/ppx_deriving_yojson.git\#gasche_405 && \
 	opam install -y $(SETUP_PACKAGE_NAMES)
 
 #cli:
@@ -78,6 +76,13 @@ allele_distances:
 
 homologous:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts homologous.native
+
+expanded_similarity_search:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package parmap -I src/lib/ -I src/scripts expanded_similarity_search.native
+
+json_to_tsv:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts json_to_tsv.native
+
 
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native

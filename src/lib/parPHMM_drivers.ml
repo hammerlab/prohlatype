@@ -776,6 +776,10 @@ module Forward (* : Worker *) = struct
     let d = Sp.map just_aap_or stat_or_sp in
     state.per_reads <- { Output.name; d } :: state.per_reads
 
+  let pm_merge_two_llhd s1 s2 =
+    Pm.merge ~eq:Lp.close_enough
+      s1.likelihood s2.likelihood Lp.( * )
+
   let merge oc state rr =
     let take_regular = take_regular_by_likelihood in
     let pr s = Orientation.most_likely_between s ~take_regular in
@@ -798,7 +802,7 @@ module Forward (* : Worker *) = struct
             | Filtered m    ->
                 fprintf oc "Both orientations of second read filtered %s: %s\n" rr.Output.name m
             | Completed (_, sf2) ->
-                let cml = Pm.merge sf1.likelihood sf2.likelihood Lp.( * ) in
+                let cml = pm_merge_two_llhd sf1 sf2 in
                 Likelihoods_and_zygosity.add_ll_and_lz
                   state.per_allele_lhood state.zygosity cml
             end
@@ -1446,7 +1450,7 @@ module Multiple_loci (* :
       | Sp.Paired (s1, s2) ->
           (* Since a paired read is a physical thing there should only
              be 1 likelihood for each allele.*)
-          Pm.merge s1.Forward.likelihood s2.Forward.likelihood Lp.( * )
+          Forward.pm_merge_two_llhd s1 s2
     in
     Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l
 
@@ -1470,8 +1474,7 @@ module Multiple_loci (* :
         ; likelihood =
             match best_stat with
             | Sp.Single s        -> s.Forward.likelihood
-            | Sp.Paired (s1, s2) -> Pm.merge s1.Forward.likelihood
-                                    s2.Forward.likelihood Lp.( * )
+            | Sp.Paired (s1, s2) -> Forward.pm_merge_two_llhd s1 s2
         })
     in
     cons_per_reads state { pr with Output.d = { ml; aaps}}

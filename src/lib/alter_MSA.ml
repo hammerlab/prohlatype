@@ -4,7 +4,10 @@ open Util
 open MSA
 
 (* The set of loci for which I've tested these algorithms.  *)
-let supported_loci = [ Nomenclature.A; Nomenclature.B; Nomenclature.C]
+let supported_loci =
+  Nomenclature.[ A; B; C
+               ; E ; F ; G ; HFE ; H ; J ; K ; L ; MICA ; MICB ; P ; TAP1 ; TAP2 ; T ; V ; W ; Y 
+               ]
 
 (* Filter out the string sequence elements. *)
 let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
@@ -508,8 +511,8 @@ end (* Merge *) = struct
         if gx <> nx then
           error "Genetic Exon %d doesn't line up with Nuclear exon %d" gx nx
         else if gss <> nss then
-          error "Genetic sequence disagrees with Nucleic at Exon %d: %s" gx
-            (manual_comp_display ~width:160 ~labels:("Genetic", "Nuclear")
+          error "Genetic sequence disagrees with Nucleic at Exon %d:\n %s" gx
+            (manual_comp_display ~width:160 ~labels:("Genetic ", "Nuclear ")
               gss nss)
         else
           let nuclear = new_region nseq new_boundary_pos nb in
@@ -824,7 +827,7 @@ end (* Merge *) = struct
     | Start s :: Boundary b :: _ when b.pos = s ->
         Ok l
     | lst ->
-        error "First instructions don't have Boundary Start, but: %s"
+        error "First instructions does not have Boundary Start, but: %s"
           (al_seq_to_string lst)
 
   let exec_instructions l =

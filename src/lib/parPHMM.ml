@@ -20,7 +20,7 @@ module Base = struct
     | C
     | G
     | T
-    [@@deriving show]
+    [@@deriving eq,show]
 
   let of_char = function
     | 'A' -> A
@@ -195,7 +195,9 @@ let pos_to_string pm =
 let dx = ref 1.e-6
 
 let close_enough x y =
-  abs_float (x -. y) < !dx
+  let d = x -. y in
+  (* embed nan guard *)
+  d <> d || (abs_float d) < !dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
@@ -221,6 +223,7 @@ module type Ring = sig
   val compare : t -> t -> int
 
   val close_enough : t -> t -> bool
+  val close_enough_cmp : t -> t -> int
 
   (* Special constructs necessary for the probabilistic logic. *)
   (* Convert constant probabilities. *)
@@ -263,6 +266,14 @@ module MultiplicativeProbability = struct
 
   let close_enough x y =
     close_enough x y
+
+  let close_enough_cmp x y =
+    if close_enough x y then
+      0
+    else if x < y then
+      -1
+    else
+      1
 
   let constant x = x
 
@@ -323,6 +334,14 @@ module LogProbability : Ring = struct
 
   let close_enough x y =
     close_enough x y
+
+  let close_enough_cmp x y =
+    if close_enough x y then
+      0
+    else if x < y then
+      -1
+    else
+      1
 
   let constant = log10
 
@@ -626,6 +645,13 @@ module Forward_calcations_over_cells (R : Ring) = struct
     R.close_enough c1.match_ c2.match_
     && R.close_enough c1.insert c2.insert
     && R.close_enough c1.delete c2.delete
+
+  let cells_close_enough_cmp c1 c2 =
+    let mc = R.close_enough_cmp c1.match_ c2.match_ in
+    if mc <> 0 then mc else
+      let ic = R.close_enough_cmp c1.insert c2.insert in
+      if ic <> 0 then ic else
+        R.close_enough_cmp c1.delete c2.delete
 
   let max_cell_by_match c1 c2 =
     if R.(c1.match_ < c2.match_) then c2 else c1
@@ -1526,7 +1552,7 @@ module ForwardMultipleGen (R : Ring) = struct
 
   let maximum_positions_median_match ?range ws r =
     max_pm_of_ws_row ?range ws r
-    |> Pm.map ~f:(fun c -> c.match_)
+    |> fun p -> Pm.map p R.close_enough ~f:(fun c -> c.match_)
     |> median_of_pm
 
   (* offset and emission probabilties
@@ -1570,7 +1596,8 @@ module ForwardMultipleGen (R : Ring) = struct
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
     let to_em_set obsp emissions =
-      Pm.map emissions ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
+      Pm.map emissions R.close_enough
+        ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
     let zero_cell_pm = pm_init_all ~number_alleles Fc.zero_cell in
     let eq = Fc.cells_close_enough in
@@ -1579,14 +1606,14 @@ module ForwardMultipleGen (R : Ring) = struct
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
       let m2 =
         match base_p with
-        | None    -> Pm.merge ems prev_pm r.start       (* Not weighing alleles *)
+        | None    -> Pm.merge ~eq  ems prev_pm r.start       (* Not weighing alleles *)
         | Some l  -> Pm.merge3 ~eq l ems prev_pm (fun base_p emission prev_c ->
                         r.start ~base_p emission prev_c)
       in
       m2
     in
     let fst_col ws obsp emissions ~i ~k =
-      Pm.merge (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
+      Pm.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
     in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
@@ -1605,11 +1632,12 @@ module ForwardMultipleGen (R : Ring) = struct
       end;
       r
     in
-    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) ~f:r.end_ in
+    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles R.zero in
-      W.fold_over_final ~range ws ~init ~f:(fun e1 e2 -> Pm.merge e1 e2 R.(+))
+      let eq = R.close_enough in
+      W.fold_over_final ~range ws ~init ~f:(fun e1 e2 -> Pm.merge ~eq e1 e2 R.(+))
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -2032,7 +2060,13 @@ let construct input =
       let state_a = init_state base_arr in
       List.iter alt_elems ~f:(fun a ->
         add_alternate_allele pmap a.allele a.seq base_arr state_a);
-      let emissions_a = Array.map Pm.ascending state_a in
+      let eq x y =
+        match x, y with
+        | None,   None      -> true
+        | None, _ | _, None -> false
+        | Some x, Some y    -> Base.equal x y
+      in
+      let emissions_a = Array.map (Pm.ascending eq) state_a in
       let alleles =
         (reference, []) :: List.map alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
@@ -2262,7 +2296,8 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
 let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
   let init = pm_init_all ~number_alleles (Lp.zero, -1) in
   foldi_over_final ~init ~f:(fun hep_pm k em_pm ->
-    Pm.merge hep_pm em_pm (fun (be, bk) e ->
+    Pm.merge ~eq:(fun (e1, k1) (e2, k2) -> k1 = k2 && Lp.close_enough e1 e2)
+      hep_pm em_pm (fun (be, bk) e ->
       if debug then
         printf "at %d e %s\n" k (Lp.to_string e);
       if Lp.is_gap e then
@@ -2424,7 +2459,8 @@ module Splitting_state = struct
     ss.scaling <- []
 
   let add_emission ss em mm =
-    ss.emission_pm <- Pm.merge ss.emission_pm em (Lp.( * ));
+    let eq = Lp.close_enough in
+    ss.emission_pm <- Pm.merge ~eq ss.emission_pm em (Lp.( * ));
     ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
@@ -2433,7 +2469,7 @@ module Splitting_state = struct
   let finish ss =
     let pr = List.fold_left ss.scaling ~init:Lp.one
         ~f:Lp.( * ) in
-    ss.emission_pm <- Pm.map ss.emission_pm
+    ss.emission_pm <- Pm.map ss.emission_pm Lp.close_enough
       ~f:(fun e -> Lp.(e / pr))
 
 end (* Splitting_state *)

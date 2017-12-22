@@ -4,7 +4,6 @@ set -e
 # TODO: pin this to a specific version!
 git clone https://github.com/ANHIG/IMGTHLA.git
 
-
 eval `opam config env`
 export OPAMYES="true"
 

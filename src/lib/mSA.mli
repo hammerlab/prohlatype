@@ -217,6 +217,10 @@ module Boundaries : sig
       : string alignment_sequence
       -> (marker * string alignment_sequence) list
 
+  val ungrouped
+      : (marker * string alignment_sequence) list
+      -> string alignment_sequence
+
 end (* Boundaries *)
 
 (* Compute per Boundary sequence information. *)

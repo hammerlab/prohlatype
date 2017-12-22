@@ -69,14 +69,16 @@ let non_negative_int =
     (non_negative_int_parser, int_fprinter)
 
 (*** Graph source arguments. ***)
+let alignment_file_argument = "alignment"
+
 let alignment_arg =
   let docv = "FILE" in
   let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
               file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
-  Arg.(value & opt (some file) None & info ~doc ~docv ["alignment"])
+  Arg.(value & opt (some file) None & info ~doc ~docv [alignment_file_argument])
 
-let merge_argument = "merge"
+let merge_file_argument = "merge"
 
 let merge_arg, merges_arg =
   let parser_ path =
@@ -88,9 +90,14 @@ let merge_arg, merges_arg =
         let g = path ^ "_gen.txt" in
         if not (List.mem ~set:Alter_MSA.supported_loci l) then
           `Error ("gene not supported: " ^ s)
-        else if not (Sys.file_exists n) then
-          `Error ("Nuclear alignment file doesn't exist: " ^ n)
-        else if not (Sys.file_exists g) then
+        else if not (Sys.file_exists n) then begin
+          if Filename.basename path = "P" then begin
+            eprintf "As of 2017-12-15 P_nuc.txt doesn't exist. We'll use just \
+              the genetic file.\n";
+            `Ok path
+          end else
+            `Error ("Nuclear alignment file doesn't exist: " ^ n)
+        end else if not (Sys.file_exists g) then
           `Error ("Genetic alignment file doesn't exist: " ^ n)
         else
           `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
@@ -110,8 +117,8 @@ let merge_arg, merges_arg =
             ones in the nuc file."
       (loci_s ~sep:", ")
   in
-  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; merge_argument])
-  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; merge_argument])
+  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; merge_file_argument])
+  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; merge_file_argument])
 
 (*** Allele selector arguments. ***)
 let regex_command_line_args = ["allele-regex"]
@@ -671,40 +678,93 @@ let setup_oc output format_ =
       register_oc (sprintf "%s.log" f)
       , register_oc (sprintf "%s.%s" f suffix)
 
-let class1gen_arg =
-  let docv  = "DIRECTORY" in
-  let doc   = "Short-cut argument that expands the given dir to look for \
-                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                alignment files or merge arguments." in
-  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-gen"])
 
-let class1nuc_arg =
-  let docv  = "DIRECTORY" in
-  let doc   = "Short-cut argument that expands the given dir to look for \
-                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                alignment files or merge arguments." in
-  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-nuc"])
+let genetic_argument = "genetic"
+let nuclear_argument = "nuclear"
+let merged_argument = "merged"
 
-let class1mgd_arg =
+let class1_directory_argument = "class1"
+let full_class1_directory_argument = "full-class1"
+
+let gen_nuc_merged_flag =
+  let gen_doc =
+    sprintf "For use with \"%s\" (or \"%s\") to select the genetic files, \
+             ex. A_gen.txt. This is the default choice."
+      class1_directory_argument full_class1_directory_argument
+  in
+  let nuc_doc =
+    sprintf "For use with \"%s\" (or \"%s\") to select the nuclear files, \
+             ex. A_nuc.txt."
+      class1_directory_argument full_class1_directory_argument
+  in
+  let mgd_doc =
+    sprintf
+      "Merge the genetic (ex. A_gen.txt) with nuclear files (A_nuc.txt),
+      when specifying a directory with \"%s\" or \"%s\".
+      Be careful to not confuse this with the \"%s\" that specifies a specific
+      gene to include in the analyis"
+      class1_directory_argument full_class1_directory_argument
+      merge_file_argument
+  in
+  Arg.(value & vflag `Genetic
+         [ `Genetic, info ~doc:gen_doc [genetic_argument]
+         ; `Nuclear, info ~doc:nuc_doc [nuclear_argument]
+         ; `Merged,  info ~doc:mgd_doc [merged_argument]
+         ])
+
+let anded lst =
+  let n = List.length lst in
+  let before, after = List.split_n lst (n - 1) in
+  let b = String.concat ~sep:", " before in
+  let a = List.hd_exn after in
+  sprintf "%s and %s" b a
+
+let class1_directory_arg
+  , full_class1_directory_arg =
+  let open Nomenclature in
   let docv  = "DIRECTORY" in
-  let doc   = "Short-cut argument that expands the given dir to look for \
-                A_gen.txt, B_gen.txt and C_gen.txt. This overrides any \
-                alignment files or merge arguments." in
-  Arg.(value & opt (some dir) None & info ~doc ~docv ["class1-mgd"])
+  let doc l b =
+    sprintf "Short-cut argument that expands the given directory to look for \
+             %s files (as specified by the \"%s\", \"%s\" or \"%s\" arguments).
+             This is in addition to any other alignment (\"%s\") files or \
+             merge (\"%s\") arguments. %s"
+    (anded (List.map ~f:show_locus (locus_group_to_loci l)))
+    genetic_argument nuclear_argument merged_argument
+    alignment_file_argument
+    merge_file_argument
+    b
+  in
+  let full_extra =
+    sprintf "This argument takes priority over \"%s\"."
+      class1_directory_argument
+  in
+  Arg.( value & opt (some dir) None
+              & info ~doc:(doc ClassI "") ~docv
+                  [class1_directory_argument]
+      , value & opt (some dir) None
+              & info ~doc:(doc FullClassI full_extra) ~docv
+                  [full_class1_directory_argument])
+
+
+let to_files gen_nuc_mgd d lg =
+  let suffix =
+    match gen_nuc_mgd with
+    | `Genetic  -> "_gen.txt"
+    | `Nuclear  -> "_nuc.txt"
+    | `Merged   -> ""
+  in
+  Nomenclature.locus_group_to_loci lg
+  |> List.map ~f:(fun l -> d // (Nomenclature.show_locus l ^ suffix))
 
 (* These are convenience selectors that choose more than one locus at a time. *)
-let class_selectors class1_gen_dir class1_nuc_dir class1_mgd_dir
-  alignment_files merge_files =
-  match class1_gen_dir, class1_nuc_dir, class1_mgd_dir with
-  | Some d, _,      _       ->
-      (d // "A_gen.txt") :: (d // "B_gen.txt") :: (d // "C_gen.txt") :: alignment_files
-      , merge_files
-  | None,   Some d, _       ->
-      (d // "A_nuc.txt") :: (d // "B_nuc.txt") :: (d // "C_nuc.txt") :: alignment_files
-      , merge_files
-  | None,   None,   Some d  ->
-      alignment_files
-      , (d // "A") :: (d // "B") :: (d // "C") :: merge_files
-  | None,   None,   None    ->
-      alignment_files
-      , merge_files
+let class_selectors class1 full_class1 gen_nuc_mgd alignment_files merge_files =
+  let files =
+    match full_class1, class1 with
+    | Some d,          _      -> to_files gen_nuc_mgd d Nomenclature.FullClassI
+    | _     ,          Some d -> to_files gen_nuc_mgd d Nomenclature.ClassI
+    | None,            None   -> []
+  in
+  if gen_nuc_mgd = `Merged then
+    alignment_files, files @ merge_files
+  else
+    files @ alignment_files, merge_files
