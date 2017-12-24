@@ -83,6 +83,8 @@ expanded_similarity_search:
 mpjson2tsv:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app mpjson2tsv.native
 
+versus:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts versus.native
 
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native
