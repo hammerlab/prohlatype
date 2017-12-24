@@ -194,10 +194,19 @@ let pos_to_string pm =
 (*let dx = 2.22044e-16 *)
 let dx = ref 1.e-6
 
+let is_nan x = x <> x
+
 let close_enough x y =
-  let d = x -. y in
-  (* embed nan guard *)
-  d <> d || (abs_float d) < !dx
+  if is_nan x then
+    if is_nan y then
+      true
+    else
+      false
+  else if is_nan y then
+    false
+  else
+    let d = x -. y in
+    (abs_float d) < !dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
@@ -245,7 +254,7 @@ module MultiplicativeProbability = struct
   let one   = 1.
 
   let gap   = nan
-  let is_gap x = x <> x
+  let is_gap = is_nan
 
   let ( + ) = ( +. )
   let ( * ) = ( *. )
@@ -302,7 +311,7 @@ module LogProbability : Ring = struct
   let one   = 0.  (* log10 1. *)
 
   let gap   = nan
-  let is_gap x = x <> x
+  let is_gap = is_nan
 
   let exp10 x = 10. ** x
 
