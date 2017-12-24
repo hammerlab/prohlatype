@@ -1634,10 +1634,18 @@ module ForwardMultipleGen (R : Ring) = struct
           r.middle emission_p ~insert_c ~delete_c ~match_c)
       in
       if !debug_ref then begin
-        printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d, r: %d \n%s\n%!"
-          i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
-            (Pm.length deletes) (Pm.length r)
-            (Pm.to_string r (cell_to_string R.to_string))
+        printf "at i: %d k: %d: o:%c,%f e: %s, ems: %s, m: %d, i: %d, d: %d, r: %d \n%s\n%!"
+          i k (fst obsp) (snd obsp)
+              (Pm.to_string emissions
+                  (function
+                    | None -> "gap"
+                    | Some b -> sprintf "%c" (Base.to_char b)))
+              (Pm.to_string ems (R.to_string ~precision:10))
+              (Pm.length matches)
+              (Pm.length inserts)
+              (Pm.length deletes)
+              (Pm.length r)
+              (Pm.to_string r (cell_to_string R.to_string))
       end;
       r
     in
