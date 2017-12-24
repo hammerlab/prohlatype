@@ -44,15 +44,6 @@ let to_correct_map data =
                     (string_of_list ~sep:" " ~f:Nomenclature.to_string allele_lst);
                    None))
 
-let f_of_yojson =
-  ParPHMM_drivers.(Output.of_yojson Multiple_loci.final_read_info_of_yojson)
-
-let of_json_file f =
-  Yojson.Safe.stream_from_file f
-  |> Stream.next (* only one element per file. *)
-  |> f_of_yojson
-  |> unwrap_ok
-
 type record =
   { ca : (Nomenclature.locus * Nomenclature.Diploid.tt) list
   ; po : ParPHMM_drivers.Multiple_loci.final_read_info ParPHMM_drivers.Output.t
@@ -68,7 +59,7 @@ let load_data ~dir ~fname_to_key =
       if !verbose_ref then printf "At %s\n%!" file;
       if Filename.check_suffix file ".json" then
         let k = fname_to_key file in
-        let po = of_json_file (Filename.concat dir file) in
+        let po = Post_analysis.of_json_file (Filename.concat dir file) in
         try
           let ca = StringMap.find k correct in
           StringMap.add k {ca; po} jmap
@@ -247,53 +238,16 @@ let categorize_distance dp mz zplst d =
         ; wrong_homozygosity
         }
 
-type read_info =
-  | P of ParPHMM_drivers.Alleles_and_positions.t ParPHMM_drivers.Multiple_loci.paired
-  | S of ParPHMM_drivers.Alleles_and_positions.t ParPHMM_drivers.Multiple_loci.single_or_incremental
-  [@@deriving show]
-
-let read_position =
-  let open ParPHMM in
-  let open ParPHMM_drivers in
-  let open ParPHMM_drivers in
-  let of_aalp_pr = function
-    | Filtered _    -> invalid_argf "read was filtered ?!?"
-    | Completed alp -> (List.hd_exn alp).position
-  in
-  let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
-  let mlo fp =
-    Orientation.most_likely_between ~take_regular fp
-    |> map_completed ~f:snd
-  in
-  function
-  | S (Multiple_loci.SingleRead or_) ->
-      true, of_aalp_pr (mlo or_)
-  | S (Multiple_loci.PairedDependent pd) ->
-      false, of_aalp_pr pd.Multiple_loci.second
-  | P (Multiple_loci.FirstFiltered ff) ->
-      true, of_aalp_pr (Multiple_loci.(mlo ff.ff_second))
-  | P (Multiple_loci.FirstOrientedSecond fos) ->
-      false, of_aalp_pr (fos.Multiple_loci.second)
-
 type per_locus_per_sample =
   { claimed_homozygous  : bool
   ; actually_homozygous : bool
   ; category            : distance_category_vs_two_depth_spec
-  ; reads1              : (string * string * read_info) list
-  ; reads2              : (string * string * read_info) list
+  ; reads1              : (string * string * Post_analysis.read_info) list
+  ; reads2              : (string * string * Post_analysis.read_info) list
   ; reads1_pct          : float
   ; reads2_pct          : float
   }
   [@@deriving show]
-
-let aggregate_read_positions ?(readsize=100) =
-  List.fold_left ~init:[] ~f:(fun acc (_, read_info) ->
-      let single, end_ = read_position read_info in
-      if single then
-        (end_ - readsize, end_) :: acc
-      else
-        (end_ - 2 * readsize, end_) :: acc)
-
 
 let merge_assoc l1 l2 ~f =
   let cmp_by_fst (f1, _) (f2, _) = compare f1 f2 in
@@ -326,34 +280,6 @@ let zll_to_string {ParPHMM_drivers.Output.allele1; allele2; prob; _} =
 let zlls_to_string =
   string_of_list ~sep:"\n\t" ~f:zll_to_string
 
-let reads_by_loci po =
-  let open ParPHMM_drivers.Multiple_loci in
-  List.fold_left po.ParPHMM_drivers.Output.per_reads ~init:[]
-    ~f:(fun acc {ParPHMM_drivers.Output.name; d} ->
-          match d.most_likely with
-          | None  -> invalid_argf "Odd %s has no most likely!" name
-          | Some (l, allele) ->
-              begin match d.aaps with
-              | MPaired mpr_lst ->
-                begin match List.Assoc.get l mpr_lst with
-                | None  -> invalid_argf "What? %s is missing loci: %s" name (locus_to_string l)
-                | Some r ->
-                    begin match remove_and_assoc l acc with
-                    | exception Not_found -> (l, [allele, name, P r]) :: acc
-                    | (lacc, rest)        -> (l, ((allele, name, P r) :: lacc)) :: rest
-                    end
-                end
-              | Single_or_incremental soi_lst ->
-                begin match List.Assoc.get l soi_lst with
-                | None   -> invalid_argf "What? %s is missing loci: %s" name (locus_to_string l)
-                | Some r ->
-                  begin match remove_and_assoc l acc with
-                  | exception Not_found -> (l, [allele, name, S r]) :: acc
-                  | (lacc, rest)        -> (l, ((allele, name, S r) :: lacc)) :: rest
-                  end
-                end
-              end)
-
 let assign_reads mdz reads =
   let open ParPHMM_drivers.Output in
   let z1 = Nomenclature.parse mdz.allele1 |> unwrap_ok |> snd in
@@ -382,7 +308,7 @@ let categorize_wrap ?(output=false) {ca; po} =
     List.map po.per_loci ~f:(fun { locus; zygosity; _} -> locus, zygosity)
   in
   (*let classical = List.filter ca ~f:(fun (l, _) -> l <> Nomenclature.DRB1) in *)
-  let reads_by_l = reads_by_loci po in
+  let reads_by_l = Post_analysis.reads_by_loci po in
   let total_number_of_reads =
     List.fold_left reads_by_l ~init:0 ~f:(fun s (_l, lst) -> s + List.length lst)
     |> float_of_int
