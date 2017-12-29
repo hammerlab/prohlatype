@@ -107,8 +107,8 @@ let () =
     ~specific_reads
     ~init:()
     ~f:(fun () r1 r2 -> Pd.Fastq_items.paired_untimed r1 r2 ~k:paired) 
-    ~fs:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "1"))
-    ~ff:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "2"))
+    ~ff:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "1"))
+    ~fs:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "2"))
     file1
     file2
   |> ignore
