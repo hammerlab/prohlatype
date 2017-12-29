@@ -1,7 +1,7 @@
 
 open Util
 
-let j4 =
+let j =
   Post_analysis.of_json_file
     "FILL ME/res/2017_12_12_full_class1/004.json" ;;
 let j4_bl =
@@ -12,10 +12,10 @@ let j4_bl_A1, j4_bl_A2 =
   List.partition ~f:(fun (a, _, _) -> a = "A*24:53") j4_bl_A  ;;
 
 let specific_reads =
-  List.map j4_bl_A1 ~f:(fun (_, rn, _) -> rn) ;;
+  List.map j_bl_A1 ~f:(fun (_, rn, _) -> rn)
 
 let smap =
-  List.map j4_bl_A1 ~f:(fun (_, rn, r) -> rn, r) 
+  List.map j_bl_A1 ~f:(fun (_, rn, r) -> rn, r)
   |> string_map_of_assoc
 
   
@@ -42,7 +42,7 @@ let read_length = 125
 
 let fpt1 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
-    read_length a1 pt 
+    read_length a1 pt
 
 let fpt2 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
@@ -62,16 +62,16 @@ let paired readname rs1 re1 rs2 re2 =
       let l21 = callhd fpt2 rs1 re1 first_o in
       let l22 = callhd fpt2 rs2 re2 (not first_o) in
       printf "%s\tp 1\t%c\t%s\t%d\t%s\t%d\n%!"
-        readname (char_of_two_ls l11.ParPHMM.llhd l21.ParPHMM.llhd) 
+        readname (char_of_two_ls l11.ParPHMM.llhd l21.ParPHMM.llhd)
           (ParPHMM.Lp.to_string l11.ParPHMM.llhd)
           l11.ParPHMM.position
-          (ParPHMM.Lp.to_string l21.ParPHMM.llhd) 
+          (ParPHMM.Lp.to_string l21.ParPHMM.llhd)
           l21.ParPHMM.position;
       printf "%s\tp 2\t%c\t%s\t%d\t%s\t%d\n%!"
-        readname (char_of_two_ls l12.ParPHMM.llhd l22.ParPHMM.llhd) 
+        readname (char_of_two_ls l12.ParPHMM.llhd l22.ParPHMM.llhd)
           (ParPHMM.Lp.to_string l12.ParPHMM.llhd)
           l12.ParPHMM.position
-          (ParPHMM.Lp.to_string l22.ParPHMM.llhd) 
+          (ParPHMM.Lp.to_string l22.ParPHMM.llhd)
           l22.ParPHMM.position
   | Pa.Soi _ ->
       eprintf "%s supposed to be paired!" readname
@@ -89,10 +89,10 @@ let single rp readname rs re =
         printf "%s\ts %s\t%c\t%s\t%d\t%s\t%d\n%!"
         readname
           rp
-          (char_of_two_ls l1.ParPHMM.llhd l2.ParPHMM.llhd) 
+          (char_of_two_ls l1.ParPHMM.llhd l2.ParPHMM.llhd)
           (ParPHMM.Lp.to_string l1.ParPHMM.llhd)
           l1.ParPHMM.position
-          (ParPHMM.Lp.to_string l2.ParPHMM.llhd) 
+          (ParPHMM.Lp.to_string l2.ParPHMM.llhd)
           l2.ParPHMM.position;
       end
   | Pa.Soi (Ml.PairedDependent _) ->
@@ -106,7 +106,7 @@ let () =
   Fastq.fold_paired_both
     ~specific_reads
     ~init:()
-    ~f:(fun () r1 r2 -> Pd.Fastq_items.paired_untimed r1 r2 ~k:paired) 
+    ~f:(fun () r1 r2 -> Pd.Fastq_items.paired_untimed r1 r2 ~k:paired)
     ~ff:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "1"))
     ~fs:(fun () r -> Pd.Fastq_items.single_utimed r ~k:(single "2"))
     file1
