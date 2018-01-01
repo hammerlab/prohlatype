@@ -194,10 +194,19 @@ let pos_to_string pm =
 (*let dx = 2.22044e-16 *)
 let dx = ref 1.e-6
 
+let is_nan x = x <> x
+
 let close_enough x y =
-  let d = x -. y in
-  (* embed nan guard *)
-  d <> d || (abs_float d) < !dx
+  if is_nan x then
+    if is_nan y then
+      true
+    else
+      false
+  else if is_nan y then
+    false
+  else
+    let d = x -. y in
+    (abs_float d) < !dx
 
 (* Probability Ring where we perform the forward pass calculation. *)
 module type Ring = sig
@@ -245,7 +254,7 @@ module MultiplicativeProbability = struct
   let one   = 1.
 
   let gap   = nan
-  let is_gap x = x <> x
+  let is_gap = is_nan
 
   let ( + ) = ( +. )
   let ( * ) = ( *. )
@@ -302,7 +311,7 @@ module LogProbability : Ring = struct
   let one   = 0.  (* log10 1. *)
 
   let gap   = nan
-  let is_gap x = x <> x
+  let is_gap = is_nan
 
   let exp10 x = 10. ** x
 
@@ -430,13 +439,13 @@ let float_cell_to_string = cell_to_string (sprintf "%0.3f")
 
 (* Note that we'll embed the missing/None/gap logic inside of 'a.
    They will all come from some Ring and we'll check via {is_gap}. *)
-type 'a cell_recurrences =
-  { start     : ?base_p:'a -> 'a -> 'a cell -> 'a cell
-  ; fst_col   : 'a -> 'a cell -> 'a cell
-  ; middle    : 'a -> match_c:('a cell)
-                 -> insert_c:('a cell)
-                 -> delete_c:('a cell)
-                 -> 'a cell
+type ('a, 'e) cell_recurrences =
+  { start     : ?base_p:'a -> 'e -> 'a cell -> 'a cell
+  ; fst_col   : 'e -> 'a cell -> 'a cell
+  ; middle    : 'e -> match_c:('a cell)
+                   -> insert_c:('a cell)
+                   -> delete_c:('a cell)
+                   -> 'a cell
   ; end_      : 'a cell -> 'a
   }
 
@@ -515,6 +524,17 @@ module Forward_calcations_over_cells (R : Ring) = struct
   let max3 m i d =
     R.max (R.max m i) d
 
+  let max2_by_fst a b =
+    let av, al = a in
+    let bv, bl = b in
+    if R.(bv <= av) then
+      a
+    else
+      b
+
+  let max3_by_fst m i d =
+    max2_by_fst (max2_by_fst m i) d
+
   let g ?(insert_p=Phmm.default_insert_probability) tm read_length =
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
@@ -551,23 +571,23 @@ module Forward_calcations_over_cells (R : Ring) = struct
 
     let insert_p = constant insert_p in
     let start_i = insert_p * t_s_i in
-    let start ?(base_p=R.one) emission_p prev_c =
-      if R.is_gap emission_p then
-        prev_c
-      else
-        { match_ = emission_p * t_s_m * base_p
-        ; insert = start_i * base_p
-        ; delete = zero (* * base_p *)
-        }
-    in
     let f = (* forward *)
+      let start ?(base_p=one) emission_p prev_c =
+        if is_gap emission_p then
+          prev_c
+        else
+          { match_ = emission_p * t_s_m * base_p
+          ; insert = start_i * base_p
+          ; delete = zero (* * base_p *)
+          }
+      in
       let fst_col emission_p insert_c =
-        if R.is_gap emission_p then
+        if is_gap emission_p then
           (* This is a weird case, for an allele there is a gap, in the first
              position. We'll 'fail' by propogating nan. *)
-          { match_ = R.gap
+          { match_ = gap
           ; insert = start_i
-          ; delete = R.gap
+          ; delete = gap
           }
         else
           { match_ = emission_p * ( t_m_m * zero
@@ -581,7 +601,7 @@ module Forward_calcations_over_cells (R : Ring) = struct
       in
       let middle emission_p ~match_c ~insert_c ~delete_c =
         let r =
-          if R.is_gap emission_p then
+          if is_gap emission_p then
             delete_c
           else
             { match_ = emission_p * ( t_m_m * match_c.match_
@@ -596,42 +616,64 @@ module Forward_calcations_over_cells (R : Ring) = struct
         r
       in
       let end_ cell = cell.match_ * t_m_s + cell.insert * t_i_s in
-      { start; fst_col; middle; end_ }
+      { start
+      ; fst_col
+      ; middle
+      ; end_
+      }
     in
+    let pfst v (t, l) = t * v, l in               (* Multiply first *)
     let v = (* viterbi *)
+      let start ?(base_p=(one,[])) emission_p prev_c =
+        if is_gap emission_p then
+          prev_c
+        else
+          { match_ = pfst emission_p (pfst t_s_m base_p)
+          ; insert = pfst start_i base_p
+          ; delete = zero (* * base_p *),         []
+          }
+      in
       let fst_col emission_p insert_c =
-        if R.is_gap emission_p then
+        if is_gap emission_p then
           (* This is a weird case, for an allele there is a gap, in the first
             position. We'll 'fail' by propogating nan. *)
-          { match_ = R.gap
-          ; insert = start_i
-          ; delete = R.gap
+          { match_ = gap,     []
+          ; insert = start_i, []
+          ; delete = gap,     []
           }
         else
           { match_ = emission_p * (max3 (t_m_m * zero)
                                         (t_i_m * zero)
                                         (t_d_m * zero))
-          ; insert = insert_p   * (R.max (t_m_i * insert_c.match_)
-                                         (t_i_i * insert_c.insert))
-          ; delete = (* one *  *) (R.max (t_m_d * zero)
-                                         (t_d_d * zero))
+                   , []
+          ; insert = pfst insert_p (max2_by_fst (pfst t_m_i insert_c.match_)
+                                                (pfst t_i_i insert_c.insert))
+          ; delete = (* one *  *) (max (t_m_d * zero)
+                                       (t_d_d * zero))
+                   , []
           }
       in
       let middle emission_p ~match_c ~insert_c ~delete_c =
-        if R.is_gap emission_p then
+        if is_gap emission_p then
           delete_c
         else
-          { match_ = emission_p * (max3 (t_m_m * match_c.match_)
-                                        (t_i_m * match_c.insert)
-                                        (t_d_m * match_c.delete))
-          ; insert = insert_p   * (R.max (t_m_i * insert_c.match_)
-                                          (t_i_i * insert_c.insert))
-          ; delete = (* one *)    (R.max (t_m_d * delete_c.match_)
-                                          (t_d_d * delete_c.delete))
+          { match_ = pfst emission_p (max3_by_fst (pfst t_m_m match_c.match_)
+                                                  (pfst t_i_m match_c.insert)
+                                                  (pfst t_d_m match_c.delete))
+          ; insert = pfst insert_p   (max2_by_fst (pfst t_m_i insert_c.match_)
+                                                  (pfst t_i_i insert_c.insert))
+          ; delete = (* pfst one *)  (max2_by_fst (pfst t_m_d delete_c.match_)
+                                                  (pfst t_d_d delete_c.delete))
           }
       in
-      let end_ cell = R.max (cell.match_ * t_m_s) (cell.insert * t_i_s) in
-      { start; fst_col; middle; end_ }
+      let end_ cell = max2_by_fst (pfst t_m_s cell.match_)
+                                  (pfst t_i_s cell.insert)
+      in
+      { start
+      ; fst_col
+      ; middle
+      ; end_
+      }
     in
     f, v
 
@@ -1036,20 +1078,25 @@ module Path = struct
 end (* Path *)
 
 module SingleViterbiWorkspace (R : Ring) :
-  (Workspace_intf with type entry = R.t cell * Path.t list
+  (Workspace_intf with type entry = (R.t * Path.t list) cell
                    and type final_entry = R.t * Path.t list
-                   and type final_emission = R.t * Path.t list) = struct
+                   and type final_emission = R.t * Path.t list
+  ) = struct
 
   module Fc = Forward_calcations_over_cells(R)
 
-  type entry = R.t cell * Path.t list
+  type entry = (R.t * Path.t list) cell
   type final_entry = R.t * Path.t list
   type final_emission = R.t * Path.t list
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
-  let empty_entry = Fc.zero_cell, []
+  let empty_entry =
+    { match_ = R.zero, []
+    ; insert = R.zero, []
+    ; delete = R.zero, []
+    }
   let empty_final_entry = R.zero, []
   let empty_final_emission = R.zero, []
 
@@ -1391,72 +1438,73 @@ module ForwardSingleGen (R: Ring) = struct
 
   module V = SingleViterbiWorkspace(R)
 
+  let v_zero_cell =
+    { match_ = R.zero, []
+    ; insert = R.zero, []
+    ; delete = R.zero, []
+    }
+
+  let map_snd f (a, b) = (a, f b)
+
   (* Viterbi *)
   let viterbi_recurrences ?insert_p tm read_length =
     let open Path in
     let _, r = Fc.g ?insert_p tm read_length in
-    let cell_to_path i b r c =
-      if c.match_ >= c.insert then begin
-        if c.match_ >= c.delete then
-          M (b, r)
-        else
-          D (i, r)
-      end else (* c.match_ < c.insert *) begin
-        if c.insert >= c.delete then
-          I (i,b)
-        else
-          D (i, r)
-      end
+    let annotate_cell i b r c =
+      { match_  = map_snd (fun l -> M (b, r) :: l) c.match_
+      ; insert  = map_snd (fun l -> I (i, b) :: l) c.insert
+      ; delete  = map_snd (fun l -> D (i, r) :: l) c.delete
+      }
     in
     let start ?base_p ws obsp base ~k =
       let prev_c =
         if k = 0 then
-          Fc.zero_cell
+          v_zero_cell
         else
-          fst (V.get ws ~i:0 ~k:(k-1)) (* Ignore the path of the previous cell;
-                                          not an actual transitin. *)
+          V.get ws ~i:0 ~k:(k-1)
       in
-      let base_pe, prev_path =
+      let base_p =
         Option.value_map base_p
           ~default:(R.one, [ S k])
           ~f:(fun (bp, pp) -> (bp, S k :: pp))
       in
-      let nc = r.start ~base_p:base_pe (Fc.to_match_prob obsp base) prev_c in
-      nc, (cell_to_path 0 (fst obsp) base nc :: prev_path)
+      let nc = r.start ~base_p (Fc.to_match_prob obsp base) prev_c in
+      annotate_cell 0 (fst obsp) base nc
     in
     let fst_col ws obsp base ~i ~k =
-      let pc, pl = V.get ws ~i:(i-1) ~k in
+      let pc = V.get ws ~i:(i-1) ~k in
       let nc = r.fst_col (Fc.to_match_prob obsp base) pc in
-      nc, (cell_to_path i (fst obsp) base nc :: pl)
+      annotate_cell i (fst obsp) base nc
     in
     let middle ws obsp base ~i ~k =
       let emp = Fc.to_match_prob obsp base in
       let ks = k-1 in
-      let insert_c, ilst = V.get ws ~i:(i-1) ~k in
-      let match_c, mlst = V.get ws ~i:(i-1) ~k:ks in
-      let delete_c, dlst = V.get ws ~i ~k:ks in
+      let insert_c = V.get ws ~i:(i-1) ~k in
+      let match_c  = V.get ws ~i:(i-1) ~k:ks in
+      let delete_c = V.get ws ~i ~k:ks in
       let nc = r.middle emp ~insert_c ~delete_c ~match_c in
-      let pt = cell_to_path i (fst obsp) base nc in
-      if !debug_ref then
-        printf "at i: %d k: %d nc: %s pt: %s (%d,%d,%d)\n"
-          i k (cell_to_string R.to_string nc)
-            (Path.to_string pt)
-            (List.length mlst)
-            (List.length ilst)
-            (List.length dlst);
-      let pl =
-        match pt with         (* Don't track _all_ paths, choose one here *)
-        | M _ -> pt :: mlst
-        | I _ -> pt :: ilst
-        | D _ -> pt :: dlst
-        | S _
-        | E _ -> assert false
-      in
-      nc, pl
+      let pt = annotate_cell i (fst obsp) base nc in
+      if !debug_ref then begin
+        let fst_two_pths = function
+          | []          -> "         "
+          | h :: []     -> sprintf "%-9s" (Path.to_string h)
+          | h :: i :: _ -> sprintf "%s - %s" (Path.to_string h) (Path.to_string i)
+        in
+        printf "at i: %d k: %d obs: %c -%f, base: %c pt: %s\n"
+          i k
+          (fst obsp)
+          (snd obsp)
+          (Base.to_char base)
+          (cell_to_string (fun (p, l) ->
+              sprintf "%s - %s" (R.to_string p) (fst_two_pths l)) pt)
+      end;
+      pt
     in
     let end_ ws k =
-      let en, lst = V.get ws ~i:(read_length-1) ~k in
-      r.end_ en, (E k :: lst) (* The list contains best because we chose at middle. *)
+      (*let en, lst = V.get ws ~i:(read_length-1) ~k in
+      r.end_ en, (E k :: lst) (* The list contains best because we chose at middle. *) *)
+      let en, lst = r.end_ (V.get ws ~i:(read_length-1) ~k) in
+      en, (E k :: lst)
     in
     let final_e ~range ws =
       let open R in
@@ -1625,10 +1673,18 @@ module ForwardMultipleGen (R : Ring) = struct
           r.middle emission_p ~insert_c ~delete_c ~match_c)
       in
       if !debug_ref then begin
-        printf "at i: %d k: %d: e: %d, m: %d, i: %d, d: %d, r: %d \n%s\n%!"
-          i k (Pm.length ems) (Pm.length matches) (Pm.length inserts)
-            (Pm.length deletes) (Pm.length r)
-            (Pm.to_string r (cell_to_string R.to_string))
+        printf "at i: %d k: %d: o:%c,%f e: %s, ems: %s, m: %d, i: %d, d: %d, r: %d \n%s\n%!"
+          i k (fst obsp) (snd obsp)
+              (Pm.to_string emissions
+                  (function
+                    | None -> "gap"
+                    | Some b -> sprintf "%c" (Base.to_char b)))
+              (Pm.to_string ems (R.to_string ~precision:10))
+              (Pm.length matches)
+              (Pm.length inserts)
+              (Pm.length deletes)
+              (Pm.length r)
+              (Pm.to_string r (cell_to_string R.to_string))
       end;
       r
     in

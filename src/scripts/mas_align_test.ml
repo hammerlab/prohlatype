@@ -27,7 +27,6 @@ let test f =
   (r.reference, reference_sequence r)
   :: List.map r.alt_elems
       ~f:(fun alt ->
-          printf "testing %s\n" alt.allele;
           alt.allele, allele_sequence ~reference ~allele:alt.seq ())
 
 let load_fasta f =

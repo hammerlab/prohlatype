@@ -1,6 +1,6 @@
 PACKAGES=unix ppx_deriving.std ppx_deriving_yojson nonstd sosa ocamlgraph cmdliner biocaml.unix parany
 SETUP_PACKAGE_NAMES=ppx_deriving.4.2.1 ppx_deriving_yojson.3.1 nonstd.0.0.3 sosa.0.3.0 ocamlgraph.1.8.8 cmdliner.1.0.2 biocaml.0.8.0 parany.3.0.0
-TOOLS=mhc2gpdf par_type multi_par align2fasta allele_distances
+TOOLS=mhc2gpdf par_type multi_par align2fasta mpjson2tsv
 TESTS=test_parsing round_trip benchmark_k merged_sensible_test mas_align_test test_allele_distances biological_kmers
 
 
@@ -80,9 +80,14 @@ homologous:
 expanded_similarity_search:
 	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -package parmap -I src/lib/ -I src/scripts expanded_similarity_search.native
 
-json_to_tsv:
-	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts json_to_tsv.native
+mpjson2tsv:
+	ocamlbuild -use-ocamlfind $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/app mpjson2tsv.native
 
+versus:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts versus.native
+
+pare_fastq:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts pare_fastq.native
 
 time_phmm:
 	corebuild -package core_bench -I src/app time_phmm.native

@@ -585,8 +585,8 @@ let zygosity_report_size_arg =
   let doc =
     sprintf "Override the default number of allelic pairs reported as part of \
       the zygosity portion. By defaults only the pairs that have non-zero \
-      (> %f) probability will be reported. Set this value to zero to not \
-      report any values."
+      (> %f) probability will be reported. Set this value to zero to report \
+      all values."
       Zygosity_array.default_non_zero
   in
   Arg.(value & opt non_negative_zygosity

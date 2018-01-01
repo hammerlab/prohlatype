@@ -219,7 +219,7 @@ module Zygosity_array = struct
     ; l = Array.make s Lp.one
     }
 
-  let add t ~allele1 ~allele2 likelihood =
+  let mult t ~allele1 ~allele2 likelihood =
     let i = min allele1 allele2 in
     let j = max allele1 allele2 in
     let k = k_n t.n i j in
@@ -343,7 +343,7 @@ module Likelihoods_and_zygosity = struct
         if allele1 >= allele2 then
           ()
         else
-          Zygosity_array.add zygosity ~allele1 ~allele2 (max v1 v2)))
+          Zygosity_array.mult zygosity ~allele1 ~allele2 (max v1 v2)))
 
   (* State is labled because it is modified. *)
   let add_ll_and_lz state_llhd zygosity llhd =
@@ -521,26 +521,33 @@ module Fastq_items = struct
   let repf fmt =
     ksprintf (fun s -> raise (Read_error_parsing s)) fmt
 
-  let single oc fqi ~k =
+  let single_utimed fqi ~k =
     let open Core_kernel.Std in
     let open Biocaml_unix.Fastq in
-    time oc (sprintf "updating on single read %s" fqi.name) (fun () ->
-      match Fastq.phred_log_probs fqi.qualities with
-      | Result.Error e        -> repf "%s" (Error.to_string_hum e)
-      | Result.Ok read_errors -> k fqi.name fqi.sequence read_errors)
+    match Fastq.phred_log_probs fqi.qualities with
+    | Result.Error e        -> repf "%s" (Error.to_string_hum e)
+    | Result.Ok read_errors -> k fqi.name fqi.sequence read_errors
+
+  let single oc fqi ~k =
+    let open Biocaml_unix.Fastq in
+    time oc (sprintf "updating on single read %s" fqi.name)
+      (fun () -> single_utimed fqi ~k)
+
+  let paired_untimed fq1 fq2 ~k =
+    let open Core_kernel.Std in
+    let open Biocaml_unix.Fastq in
+    match Fastq.phred_log_probs fq1.qualities with
+    | Result.Error e    -> repf "%s" (Error.to_string_hum e)
+    | Result.Ok re1     ->
+      match Fastq.phred_log_probs fq2.qualities with
+      | Result.Error e  -> repf "%s" (Error.to_string_hum e)
+      | Result.Ok re2   -> k fq1.name fq1.sequence re1 fq2.sequence re2
 
   let paired oc fq1 fq2 ~k =
     let open Biocaml_unix.Fastq in
-    let open Core_kernel.Std in
     assert (fq1.name = fq2.name);
-    time oc (sprintf "updating on double read %s" fq1.name) (fun () ->
-      match Fastq.phred_log_probs fq1.Biocaml_unix.Fastq.qualities with
-      | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-      | Result.Ok re1 ->
-          match Fastq.phred_log_probs fq2.Biocaml_unix.Fastq.qualities with
-          | Result.Error e       -> repf "%s" (Error.to_string_hum e)
-          | Result.Ok re2 ->
-              k fq1.name fq1.sequence re1 fq2.sequence re2)
+    time oc (sprintf "updating on double read %s" fq1.name)
+      (fun () -> paired_untimed fq1 fq2 ~k)
 
 end (* Fastq_items *)
 
@@ -1027,7 +1034,7 @@ module Multiple_loci (* :
        Note that one could "naturally" combine the result of the first by
        passing the first's emission (via per_allele_hood) into the second
        read's forward pass (this is similar to thinking of the 2 reads as just
-       one long read), but that will dramatically slow down the pass (it will
+       one long read), but that will dramastically slow down the pass (it will
        start out already branched). It is better to keep the two likelihoods
        separate and then just multiply (log -> add) the results together. This
        is the desired outcome for paired reads as it is the most
