@@ -86,6 +86,9 @@ mpjson2tsv:
 versus:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts versus.native
 
+versus3:
+	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts versus3.native
+
 pare_fastq:
 	ocamlbuild -use-ocamlfind -package unix $(foreach package, $(PACKAGES),-package $(package)) -I src/lib/ -I src/scripts pare_fastq.native
 

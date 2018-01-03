@@ -3,13 +3,14 @@ open Util
 
 let j =
   Post_analysis.of_json_file
-    "FILL ME/res/2017_12_12_full_class1/004.json" ;;
+    "FILL ME/res/2017_12_12_full_class1/004.json"
+
 let j4_bl =
-  Post_analysis.reads_by_loci j4  ;;
+  Post_analysis.reads_by_loci j4
 let j4_bl_A =
-  List.Assoc.get Nomenclature.A j4_bl |> Option.value_exn ~msg:"" ;;
+  List.Assoc.get Nomenclature.A j4_bl |> Option.value_exn ~msg:""
 let j4_bl_A1, j4_bl_A2 =
-  List.partition ~f:(fun (a, _, _) -> a = "A*24:53") j4_bl_A  ;;
+  List.partition ~f:(fun (a, _, _) -> a = "A*24:53") j4_bl_A
 
 let specific_reads =
   List.map j_bl_A1 ~f:(fun (_, rn, _) -> rn)
@@ -18,7 +19,6 @@ let smap =
   List.map j_bl_A1 ~f:(fun (_, rn, r) -> rn, r)
   |> string_map_of_assoc
 
-  
 let a1 = "A*24:02:01:01"
 let a2 = "A*68:01:02:01"
 
