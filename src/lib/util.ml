@@ -340,3 +340,25 @@ let register_oc fname =
   let oc = open_out fname in
   at_exit (fun () -> close_out_noerr oc);
   oc
+
+let merge_assoc l1 l2 ~f =
+  let cmp_by_fst (f1, _) (f2, _) = compare f1 f2 in
+  let l1 = List.sort ~cmp:cmp_by_fst l1 in
+  let l2 = List.sort ~cmp:cmp_by_fst l2 in
+  let cons acc k = function
+    | None  -> acc
+    | Some v -> (k, v) :: acc
+  in
+  let rec loop l1 l2 acc =
+    match l1, l2 with
+    | [],             []              -> List.rev acc
+    | (k1, e1) :: t1, []              -> loop t1 [] (cons acc k1 (f k1 (`First e1)))
+    | [],             (k2, e2) :: t2  -> loop [] t2 (cons acc k2 (f k2 (`Second e2)))
+    | (k1, e1) :: t1, (k2, e2) :: t2  -> if k1 < k2 then
+                                           loop t1 l2 (cons acc k1 (f k1 (`First e1)))
+                                         else if k1 = k2 then
+                                           loop t1 t2 (cons acc k1 (f k1 (`Both (e1, e2))))
+                                         else (* k1 > k2 *)
+                                           loop l1 t2 (cons acc k2 (f k2 (`Second e2)))
+  in
+  loop l1 l2 []
