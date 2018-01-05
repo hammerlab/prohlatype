@@ -208,8 +208,8 @@ module Zygosity_array = struct
   type t =
     { n : int
     ; l : Lp.t array
-    ; f : int array   (* Number of reads where first allele was better or same. *)
-    ; s : int array   (* ...                   second ....                      *)
+    ; c : (float * float) array   (* Number of reads where first, second allele
+                                     was better. When the same, add a .5 to both.*)
     }
 
   let storage_size number_alleles =
@@ -219,8 +219,7 @@ module Zygosity_array = struct
     let s = storage_size number_alleles in
     { n = number_alleles
     ; l = Array.make s Lp.one
-    ; f = Array.make s 0
-    ; s = Array.make s 0
+    ; c = Array.init s ~f:(fun _ -> (0., 0.))
     }
 
   let update t ~allele1 ~allele2 ~v1 ~v2 =
@@ -233,8 +232,13 @@ module Zygosity_array = struct
     in
     let k = k_n t.n i j in
     t.l.(k) <- Lp.(t.l.(k) * likelihood);
-    if Lp.close_enough vi likelihood then t.f.(k) <- succ t.f.(k);
-    if Lp.close_enough vj likelihood then t.s.(k) <- succ t.s.(k)
+    let f, s = t.c.(k) in
+    if Lp.close_enough vi vj then
+      t.c.(k) <- f +. 0.5, s +. 0.5
+    else if Lp.close_enough vi likelihood then
+      t.c.(k) <- f +. 1.0, s
+    else
+      t.c.(k) <- f, s +. 1.0
 
   type best_size =
     | NonZero of float
@@ -334,11 +338,11 @@ module Zygosity_array = struct
       in
       let lookup_nor (i, j) =
         if i = j then
-          (i, j, num_reads, num_reads)
+          let h = (float num_reads) /. 2. in
+          (i, j, h, h)
         else
           let k = k_n t.n i j in
-          let irds = t.f.(k) in
-          let jrds = t.s.(k) in
+          let irds, jrds = t.c.(k) in
           (i, j, irds, jrds)
       in
       match nz with
@@ -400,8 +404,8 @@ module Output = struct
   and zygosity_log_likelihood =
     { allele1           : string
     ; allele2           : string
-    ; number_of_reads1  : int
-    ; number_of_reads2  : int
+    ; number_of_reads1  : float
+    ; number_of_reads2  : float
     ; z_llhd            : Lp.t
     ; prob              : float
     }
@@ -519,7 +523,7 @@ module Output = struct
     in
     let fprint_zygosity_log_likelihood
       { allele1; allele2; z_llhd; prob; number_of_reads1; number_of_reads2 } =
-      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%d\t%d\n"
+      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\n"
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
         number_of_reads1 number_of_reads2
     in
