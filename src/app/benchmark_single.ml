@@ -43,7 +43,7 @@ let () =
   let gen = true in
   let tests =
     gen_parPHMM_ts gen
-    |> List.map2 ~f:(fun reads_by_loci pt -> time_individual pt reads) reads
+    |> List.map2 ~f:(fun reads_by_loci pt -> time_individual pt reads_by_loci) reads
     |> List.concat
   in
   let open Core_bench.Std in
