@@ -222,7 +222,7 @@ module Zygosity_array = struct
     ; c = Array.init s ~f:(fun _ -> (0., 0.))
     }
 
-  let update t ~allele1 ~allele2 ~v1 ~v2 =
+  let update t ~allele1 ~allele2 ~v1 ~v2 single_read =
     let likelihood = Lp.max v1 v2 in
     let i, vi, j, vj =
       if allele1 < allele2 then
@@ -233,12 +233,13 @@ module Zygosity_array = struct
     let k = k_n t.n i j in
     t.l.(k) <- Lp.(t.l.(k) * likelihood);
     let f, s = t.c.(k) in
+    let o, h = if single_read then 1.0, 0.5 else 2.0, 1.0 in
     if Lp.close_enough vi vj then
-      t.c.(k) <- f +. 0.5, s +. 0.5
+      t.c.(k) <- f +. h, s +. h
     else if Lp.close_enough vi likelihood then
-      t.c.(k) <- f +. 1.0, s
+      t.c.(k) <- f +. o, s
     else
-      t.c.(k) <- f, s +. 1.0
+      t.c.(k) <- f, s +. o
 
   type best_size =
     | NonZero of float
@@ -370,7 +371,7 @@ module Likelihoods_and_zygosity = struct
     Pm.iter_set llhd ~f:(fun i v ->
       state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
-  let add_lz zygosity llhd =
+  let add_lz zygosity llhd single_read =
     Pm.iter_set llhd ~f:(fun allele1 v1 ->
       Pm.iter_set llhd ~f:(fun allele2 v2 ->
         (* The Zygosity array only stores the upper triangle of the full
@@ -379,12 +380,12 @@ module Likelihoods_and_zygosity = struct
         if allele1 >= allele2 then
           ()
         else
-          Zygosity_array.update zygosity ~allele1 ~allele2 ~v1 ~v2))
+          Zygosity_array.update zygosity ~allele1 ~allele2 ~v1 ~v2 single_read ))
 
   (* State is labled because it is modified. *)
-  let add_ll_and_lz state_llhd zygosity llhd =
+  let add_ll_and_lz state_llhd zygosity llhd single_read =
     add_ll state_llhd llhd;
-    add_lz zygosity llhd
+    add_lz zygosity llhd single_read
 
 end (* Likelihoods_and_zygosity *)
 
@@ -842,6 +843,7 @@ module Forward (* : Worker *) = struct
         | Completed (_c, s) ->
             Likelihoods_and_zygosity.add_ll_and_lz
               state.per_allele_lhood state.zygosity s.likelihood
+              true
         end
     | Sp.Paired (s1, s2) ->
         begin match pr s1 with
@@ -855,6 +857,7 @@ module Forward (* : Worker *) = struct
                 let cml = pm_merge_two_llhd sf1 sf2 in
                 Likelihoods_and_zygosity.add_ll_and_lz
                   state.per_allele_lhood state.zygosity cml
+                  false
             end
         end
 
@@ -1510,16 +1513,16 @@ module Multiple_loci (* :
     state.per_reads <- pr :: state.per_reads
 
   let assign_to_per_locus { likelihood; zygosity; _ } sp =
-    let l =
+    let l, single_read  =
       match sp with
       | Sp.Single stat     ->
-          stat.Forward.likelihood
+          stat.Forward.likelihood, true
       | Sp.Paired (s1, s2) ->
           (* Since a paired read is a physical thing there should only
              be 1 likelihood for each allele.*)
-          Forward.pm_merge_two_llhd s1 s2
+          Forward.pm_merge_two_llhd s1 s2, false
     in
-    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l
+    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l single_read
 
   let merge _oc state pr =
     let assign_to_best best_locus best_stat =
