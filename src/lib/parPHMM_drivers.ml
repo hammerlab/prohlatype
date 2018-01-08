@@ -208,6 +208,8 @@ module Zygosity_array = struct
   type t =
     { n : int
     ; l : Lp.t array
+    ; c : (float * float) array   (* Number of reads where first, second allele
+                                     was better. When the same, add a .5 to both.*)
     }
 
   let storage_size number_alleles =
@@ -217,13 +219,27 @@ module Zygosity_array = struct
     let s = storage_size number_alleles in
     { n = number_alleles
     ; l = Array.make s Lp.one
+    ; c = Array.init s ~f:(fun _ -> (0., 0.))
     }
 
-  let mult t ~allele1 ~allele2 likelihood =
-    let i = min allele1 allele2 in
-    let j = max allele1 allele2 in
+  let update t ~allele1 ~allele2 ~v1 ~v2 single_read =
+    let likelihood = Lp.max v1 v2 in
+    let i, vi, j, vj =
+      if allele1 < allele2 then
+        allele1, v1, allele2, v2
+      else
+        allele2, v2, allele1, v1
+    in
     let k = k_n t.n i j in
-    t.l.(k) <- Lp.(t.l.(k) * likelihood)
+    t.l.(k) <- Lp.(t.l.(k) * likelihood);
+    let f, s = t.c.(k) in
+    let o, h = if single_read then 1.0, 0.5 else 2.0, 1.0 in
+    if Lp.close_enough vi vj then
+      t.c.(k) <- f +. h, s +. h
+    else if Lp.close_enough vi likelihood then
+      t.c.(k) <- f +. o, s
+    else
+      t.c.(k) <- f, s +. o
 
   type best_size =
     | NonZero of float
@@ -232,8 +248,17 @@ module Zygosity_array = struct
 
   let default_non_zero = 0.000001
 
+  type best_datum =
+    { lp    : Lp.t
+    ; prob  : float
+    ; i     : int
+    ; j     : int
+    ; irds  : int
+    ; jrds  : int
+    }
+
   (* log likelihood, probability, index 1st, index 2nd *)
-  let best size likelihood_arr t =
+  let best size likelihood_arr num_reads t =
     let desired_size, nz =
       match size with
       | NonZero v -> storage_size t.n, Some v
@@ -258,9 +283,9 @@ module Zygosity_array = struct
           | []     -> List.rev acc @ [l, 1, [i,j]]
           | h :: t ->
               let hl, hn, hv = h in
-              if l > hl then
+              if Lp.(hl < l) then
                 loop (h :: acc) t
-              else if l = hl then
+              else if Lp.(close_enough l hl) then
                 List.rev acc @ ((hl, hn + 1, (i,j) :: hv) :: t)
               else (* l < hl *)
                 List.rev acc @ ((l, 1, [i,j]) :: lst)
@@ -272,12 +297,12 @@ module Zygosity_array = struct
       | _ :: [] -> current_size + 1, insert lst
       | h :: t  ->
         let hl, hn, hv = h in
-        if l > hl then begin
+        if Lp.(hl < l) then begin
            if current_size - hn < desired_size then
             current_size + 1, h :: insert t
           else
             current_size + 1 - hn, insert t
-        end else if l = hl then
+        end else if Lp.(close_enough l hl) then
           current_size + 1, ((hl, hn + 1, (i,j) :: hv) :: t)
         else (* l < hl *) begin
           if current_size >= desired_size then
@@ -312,16 +337,28 @@ module Zygosity_array = struct
         let heterozygous_sum = Array.fold_left ~init:0. ~f t.l in
         Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
       in
+      let lookup_nor (i, j) =
+        if i = j then
+          let h = (float num_reads) /. 2. in
+          (i, j, h, h)
+        else
+          let k = k_n t.n i j in
+          let irds, jrds = t.c.(k) in
+          (i, j, irds, jrds)
+      in
       match nz with
       | Some lb ->
         List.filter_map most_likely ~f:(fun (l, ij) ->
           let p = prob l /. ns in
           if p > lb then     (* This isn't necessarily the right notion of zero. *)
-            Some (l, p, ij)
+            let ijlst = List.map ij ~f:lookup_nor in
+            Some ( l, p, ijlst)
           else
             None)
       | None ->
-          List.map most_likely ~f:(fun (l, ij) -> (l, prob l /. ns, ij))
+          List.map most_likely ~f:(fun (lp, ij) ->
+            let ijlst = List.map ij ~f:lookup_nor in
+            ( lp, prob lp /. ns, ijlst))
 
 end (* Zygosity_array *)
 
@@ -334,7 +371,7 @@ module Likelihoods_and_zygosity = struct
     Pm.iter_set llhd ~f:(fun i v ->
       state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
-  let add_lz zygosity llhd =
+  let add_lz zygosity llhd single_read =
     Pm.iter_set llhd ~f:(fun allele1 v1 ->
       Pm.iter_set llhd ~f:(fun allele2 v2 ->
         (* The Zygosity array only stores the upper triangle of the full
@@ -343,12 +380,12 @@ module Likelihoods_and_zygosity = struct
         if allele1 >= allele2 then
           ()
         else
-          Zygosity_array.mult zygosity ~allele1 ~allele2 (max v1 v2)))
+          Zygosity_array.update zygosity ~allele1 ~allele2 ~v1 ~v2 single_read ))
 
   (* State is labled because it is modified. *)
-  let add_ll_and_lz state_llhd zygosity llhd =
+  let add_ll_and_lz state_llhd zygosity llhd single_read =
     add_ll state_llhd llhd;
-    add_lz zygosity llhd
+    add_lz zygosity llhd single_read
 
 end (* Likelihoods_and_zygosity *)
 
@@ -366,10 +403,12 @@ module Output = struct
     ; alters : MSA.Alteration.t list
     }
   and zygosity_log_likelihood =
-    { allele1 : string
-    ; allele2 : string
-    ; z_llhd  : Lp.t
-    ; prob    : float
+    { allele1           : string
+    ; allele2           : string
+    ; number_of_reads1  : float
+    ; number_of_reads2  : float
+    ; z_llhd            : Lp.t
+    ; prob              : float
     }
   and per_locus =
     { locus       : locus
@@ -429,11 +468,13 @@ module Output = struct
     Array.sort ~cmp:cmp_pall per_allele;
     let zygosity =
       List.map zbest ~f:(fun (l, p, ijlist) ->
-        List.map ijlist ~f:(fun (i, j) ->
+        List.map ijlist ~f:(fun (i, j, number_of_reads1, number_of_reads2) ->
             { allele1 = fst allele_arr.(i)
             ; allele2 = fst allele_arr.(j)
             ; z_llhd  = l
             ; prob    = p
+            ; number_of_reads1
+            ; number_of_reads2
             }))
         |> List.concat
     in
@@ -481,16 +522,19 @@ module Output = struct
       fprintf oc "%-16s\t%s\t%s\n"
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
-    let fprint_zygosity_log_likelihood { allele1; allele2; z_llhd; prob} =
-      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\n"
-        allele1 allele2 (Lp.to_string ~precision:20 z_llhd) prob
+    let fprint_zygosity_log_likelihood
+      { allele1; allele2; z_llhd; prob; number_of_reads1; number_of_reads2 } =
+      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\n"
+        allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
+        number_of_reads1 number_of_reads2
     in
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
         (fun () ->
-           fprintf oc "Zygosity %s:\nAllele 1\tAllele 2\tlog likelihood\tProb\n"
-             (show_locus locus))
+          fprintf oc "Zygosity %s:\n%-16s\t%-16s\tlog likelihood\tProb    \t# of reads1\t# of reads2\n"
+            (show_locus locus)
+            "Allele 1" "Allele 2")
         zygosity;
       array_iter_on_non_empty
         fprint_per_allele_log_likelihood
@@ -799,6 +843,7 @@ module Forward (* : Worker *) = struct
         | Completed (_c, s) ->
             Likelihoods_and_zygosity.add_ll_and_lz
               state.per_allele_lhood state.zygosity s.likelihood
+              true
         end
     | Sp.Paired (s1, s2) ->
         begin match pr s1 with
@@ -812,15 +857,17 @@ module Forward (* : Worker *) = struct
                 let cml = pm_merge_two_llhd sf1 sf2 in
                 Likelihoods_and_zygosity.add_ll_and_lz
                   state.per_allele_lhood state.zygosity cml
+                  false
             end
         end
 
   let finalize s = s
 
   let output state oc =
+    let number_of_reads = List.length state.per_reads in
     let ot =
       let zbest = Zygosity_array.best state.opt.depth.Output.num_zygosities
-                    state.per_allele_lhood state.zygosity in
+                    state.per_allele_lhood number_of_reads state.zygosity in
       let pl    = Output.create_pl state.locus state.allele_arr
                     state.per_allele_lhood zbest in
       Output.create [pl] state.per_reads
@@ -1176,7 +1223,7 @@ module Multiple_loci (* :
   (* We'll determine the locus, once we (merge, multiply by the likelihood)
      during the merge step. *)
   type middle_read_info =
-    { ml    : chosen_locus option                       (* most likely locus. *)
+    { ml    : chosen_locus                          (* most likely locus. *)
     ; aaps  : Alleles_and_positions.t pp
     }
 
@@ -1225,23 +1272,31 @@ module Multiple_loci (* :
      Compare 2 PairedDependent by both.
    *)
   let reduce_soi soi_lst =
-    List.reduce soi_lst ~f:(fun (l1, s1) (l2, s2) ->
-      if better_soi s1 s2 then
-        l1, s1
-      else
-        l2, s2)
-    |> Option.bind ~f:(fun (loci, soi) ->
+    let bsoi_opt =
+      List.reduce soi_lst ~f:(fun (l1, s1) (l2, s2) ->
+        if better_soi s1 s2 then
+          l1, s1
+        else
+          l2, s2)
+    in
+    match bsoi_opt with
+    | None  -> invalid_arg "Empty soi list!"
+    | Some (loci, soi) ->
+      let sp =
         match soi with
         | PairedDependent { first; second; _} ->
             begin match second with
-            | Filtered _  -> Some (loci, Sp.Single first)
-            | Completed s -> Some (loci, Sp.Paired (first, s))
+            | Filtered _  -> Sp.Single first
+            | Completed s -> Sp.Paired (first, s)
             end
         | SingleRead  or_ ->
             begin match most_likely_orientation or_ with
-            | Filtered _      -> None             (* After all that! *)
-            | Completed (_,s) -> Some (loci, Sp.Single s)
-            end)
+            | Filtered _      -> invalid_argf "Final single read filtered? %s"
+                                  (Nomenclature.show_locus loci)
+            | Completed (_,s) -> Sp.Single s
+            end
+      in
+      loci, sp
 
   let map_soi_to_aap lst =
     List.map lst ~f:(fun (loci, soi) ->
@@ -1285,23 +1340,31 @@ module Multiple_loci (* :
      FirstOrientedSecond scenario is best, we want to use the likelihood from
      BOTH reads in the inference. *)
   let reduce_mpr pr_lst =
-    List.reduce pr_lst ~f:(fun (l1, m1) (l2, m2) ->
-      if better_mpr m1 m2 then
-        l1, m1
-      else
-        l2, m2)
-    |> Option.bind ~f:(fun (loci, pr) ->
-        match pr with
-        | FirstFiltered { ff_second; _} ->
-            begin match most_likely_orientation ff_second with
-            | Filtered _       -> None
-            | Completed (_, s) -> Some (loci, Sp.Single s)
-            end
-        | FirstOrientedSecond {first; second; _} ->
-            begin match second with
-            | Filtered _  -> Some (loci, Sp.Single first)
-            | Completed s -> Some (loci, Sp.Paired (first, s))
-            end)
+    let bmpr_opt =
+      List.reduce pr_lst ~f:(fun (l1, m1) (l2, m2) ->
+        if better_mpr m1 m2 then
+          l1, m1
+        else
+          l2, m2)
+    in
+    match bmpr_opt with
+    | None            -> invalid_arg "Emmpty pr list!"
+    | Some (loci, pr) ->
+        let sp =
+          match pr with
+          | FirstFiltered { ff_second; _} ->
+              begin match most_likely_orientation ff_second with
+              | Filtered _       -> invalid_argf "Best paired filtered: %s"
+                                      (Nomenclature.show_locus loci)
+              | Completed (_, s) -> Sp.Single s
+              end
+          | FirstOrientedSecond {first; second; _} ->
+              begin match second with
+              | Filtered _  -> Sp.Single first
+              | Completed s -> Sp.Paired (first, s)
+              end
+        in
+        loci, sp
 
   let map_pr_to_aap lst =
     List.map_snd lst ~f:(function
@@ -1450,16 +1513,16 @@ module Multiple_loci (* :
     state.per_reads <- pr :: state.per_reads
 
   let assign_to_per_locus { likelihood; zygosity; _ } sp =
-    let l =
+    let l, single_read  =
       match sp with
       | Sp.Single stat     ->
-          stat.Forward.likelihood
+          stat.Forward.likelihood, true
       | Sp.Paired (s1, s2) ->
           (* Since a paired read is a physical thing there should only
              be 1 likelihood for each allele.*)
-          Forward.pm_merge_two_llhd s1 s2
+          Forward.pm_merge_two_llhd s1 s2, false
     in
-    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l
+    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l single_read
 
   let merge _oc state pr =
     let assign_to_best best_locus best_stat =
@@ -1467,29 +1530,34 @@ module Multiple_loci (* :
         if best_locus = pl.pl_locus then
           assign_to_per_locus pl best_stat)
     in
-    let best_opt, aaps =
+    let (locus, best_stat), aaps =
       match pr.Output.d with
-      | Single_or_incremental l -> reduce_soi l
-                                   , Single_or_incremental (map_soi_to_aap l)
-      | MPaired l               -> reduce_mpr l
-                                   , MPaired (map_pr_to_aap l)
+      | Single_or_incremental l ->
+          reduce_soi l, Single_or_incremental (map_soi_to_aap l)
+      | MPaired l               ->
+          reduce_mpr l, MPaired (map_pr_to_aap l)
     in
     let ml =
-      Option.map best_opt ~f:(fun (locus, best_stat) ->
-        assign_to_best locus best_stat;       (* modify state by side effect *)
-        { locus
-        ; likelihood =
-            match best_stat with
-            | Sp.Single s        -> s.Forward.likelihood
-            | Sp.Paired (s1, s2) -> Forward.pm_merge_two_llhd s1 s2
-        })
+      assign_to_best locus best_stat;       (* modify state by side effect *)
+      { locus
+      ; likelihood =
+          match best_stat with
+          | Sp.Single s        -> s.Forward.likelihood
+          | Sp.Paired (s1, s2) -> Forward.pm_merge_two_llhd s1 s2
+      }
     in
     cons_per_reads state { pr with Output.d = { ml; aaps}}
 
   let finalize { opt; per_reads; per_loci; _} =
     let pl_lst, best_zygosities_by_loci =
       List.map per_loci ~f:(fun { pl_locus; allele_arr; likelihood; zygosity } ->
-        let zb = Zygosity_array.best opt.depth.Output.num_zygosities likelihood zygosity in
+        let number_of_reads = List.fold_left per_reads ~init:0
+          ~f:(fun s { Output.d; _} -> if d.ml.locus = pl_locus then s + 1 else s)
+        in
+        let zb =
+          Zygosity_array.best opt.depth.Output.num_zygosities likelihood
+            number_of_reads zygosity
+        in
         let pl = Output.create_pl pl_locus allele_arr likelihood zb in
         pl, (pl_locus, zb))
       |> List.split
@@ -1507,7 +1575,7 @@ module Multiple_loci (* :
       let zlst = to_zlst locus in
       let lopt =
         List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
-          List.fold_left ijlist ~init:s ~f:(fun s (i, j) ->
+          List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
             let li = Pm.get likelihood i in
             let lj = Pm.get likelihood j in
             let l, ioj = if li >= lj then li, i else lj, j in
@@ -1521,7 +1589,7 @@ module Multiple_loci (* :
     in
     let f_per_reads = List.map per_reads ~f:(fun pr ->
       let { ml; aaps } = pr.Output.d in
-      let most_likely = Option.bind ml ~f:assign_loci in
+      let most_likely = assign_loci ml  in
       { pr with Output.d = { most_likely; aaps }})
     in
     { f_opt       = opt
