@@ -21,7 +21,7 @@ let time_individual ?(seed=12) parPHMM_t reads =
     ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
       read_length allele parPHMM_t)
   |> List.map ~f:(fun pta ->
-    Array.map reads ~f:(fun r ->
+    List.map reads ~f:(fun r ->
       let read = r.Biocaml_unix.Fastq.sequence in
       let read_errors = unwrap_ok (Fastq.phred_log_probs r.Biocaml_unix.Fastq.qualities) in
       let d =
@@ -36,16 +36,14 @@ let time_individual ?(seed=12) parPHMM_t reads =
         (Util.short_seq read) d
       in
       let f () = ignore (pta.ParPHMM.single ~read ~read_errors false) in
-      name, f)
-    |> Array.to_list)
+      name, f))
   |> List.concat
 
 let () =
   let gen = true in
-  let reads = setup_samples ~n:number_of_samples () in
   let tests =
     gen_parPHMM_ts gen
-    |> List.map ~f:(fun pt -> time_individual pt reads)
+    |> List.map2 ~f:(fun reads_by_loci pt -> time_individual pt reads_by_loci) reads
     |> List.concat
   in
   let open Core_bench.Std in
