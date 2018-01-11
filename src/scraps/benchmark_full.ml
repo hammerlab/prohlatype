@@ -1,7 +1,7 @@
 (* Benchmark and compare performance of running a single allele PHMM against
    the parameterized PHMM. *)
 
-open Util
+open Prohlatype
 open Benchmark_common
 
 let time_aggregate ?(seed=11) parPHMM_t reads =
@@ -18,7 +18,7 @@ let time_aggregate ?(seed=11) parPHMM_t reads =
     in
     let name = sprintf "Testing %s %s %s"
       (Nomenclature.show_locus parPHMM_t.ParPHMM.locus)
-      (Util.short_seq read) d
+      (short_seq read) d
     in
     let f () = ignore (pta.ParPHMM.single ~read ~read_errors false) in
     name, f)

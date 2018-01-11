@@ -1,7 +1,6 @@
 (* How good is the alignment? *)
 
-open Util
-(*open Common *)
+open Prohlatype
 
 let repo = "prohlatype"
 let app_name = "explore_alignment"
@@ -139,7 +138,7 @@ let mismatch_histogram verbose k file fastq_file number_of_reads width all =
 
 let () =
   let open Cmdliner in
-  let open Common_options in
+  let open Cmdline_options in
   let width_arg =
     let docv = "Histogram width" in
     let doc = "Specify the width of the reported mismatch histogram. Defaults to 10." in

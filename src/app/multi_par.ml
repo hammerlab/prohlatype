@@ -1,5 +1,5 @@
 (* Typing via a Parametric PHMM. *)
-open Util
+open Prohlatype
 
 let app_name = "multi_par"
 
@@ -8,7 +8,7 @@ let to_read_size_dependent
   ~alignment_files ~merge_files ~distance
   (* Cache management *)
   ~skip_disk_cache =
-  Common_options.to_allele_inputs ~alignment_files ~merge_files ~distance
+  Cmdline_options.to_allele_inputs ~alignment_files ~merge_files ~distance
     ~selectors:[] (* Selectors NOT supported, on purpose! *)
     >>= fun inputs ->
       Ok (fun read_size ->
@@ -59,7 +59,7 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
-  let log_oc, data_oc = Common_options.setup_oc output output_format in
+  let log_oc, data_oc = Cmdline_options.setup_oc output output_format in
   let band =
     let open Option in
       band_warmup_arg >>= fun warmup ->
@@ -68,7 +68,7 @@ let type_
             Some { ParPHMM.warmup; number; radius }
   in
   let alignment_files, merge_files =
-    Common_options.class_selectors class1 full_class1 gen_nuc_mgd
+    Cmdline_options.class_selectors class1 full_class1 gen_nuc_mgd
       alignment_files merge_files
   in
   let past_threshold_filter = not do_not_past_threshold_filter in
@@ -79,7 +79,7 @@ let type_
     ; output_format
     ; depth =
         { Pd.Output.num_likelihoods = likelihood_report_size
-        ; num_zygosities            = Common_options.to_num_zygosities
+        ; num_zygosities            = Cmdline_options.to_num_zygosities
                                         ~zygosity_non_zero_value
                                         ~zygosity_report_size
         ; num_per_read              = per_reads_report_size
@@ -136,7 +136,7 @@ let type_
 
 let () =
   let open Cmdliner in
-  let open Common_options in
+  let open Cmdline_options in
   let alignments_arg =
     let docv = "FILE" in
     let doc  = "File to lookup IMGT allele alignments. The alleles found in this \

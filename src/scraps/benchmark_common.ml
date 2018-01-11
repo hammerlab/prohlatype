@@ -1,4 +1,4 @@
-open Util
+open Prohlatype
 
 let (//) = Filename.concat
 let imgthla_dir =

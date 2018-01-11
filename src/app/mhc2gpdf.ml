@@ -1,5 +1,5 @@
 
-open Util
+open Prohlatype
 
 let to_filename_and_graph_args
   (* Allele information source *)
@@ -13,10 +13,10 @@ let to_filename_and_graph_args
   (* Graph modifiers. *)
     ~join_same_sequence =
     let selectors =
-      Common_options.aggregate_selectors ~regex_list ~specific_list ~without_list
+      Cmdline_options.aggregate_selectors ~regex_list ~specific_list ~without_list
         ?number_alleles ~do_not_ignore_suffixed_alleles
     in
-    Common_options.to_allele_input ?alignment_file ?merge_file ?distance ~selectors
+    Cmdline_options.to_allele_input ?alignment_file ?merge_file ?distance ~selectors
       >>= fun input ->
             let arg = { Ref_graph.join_same_sequence } in
             let graph_arg = Cache.graph_args ~arg ~input in
@@ -70,7 +70,7 @@ let app_name = "mhc2gpdf"
 
 let () =
   let open Cmdliner in
-  let open Common_options in
+  let open Cmdline_options in
   let output_fname_arg =
     let docv = "FILE" in
     let doc  = "Output file name, defaults to a file \"(input file)_(number of \

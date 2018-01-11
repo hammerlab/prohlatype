@@ -1,0 +1,13 @@
+(jbuild_version 1)
+
+; TODO, Why isn't threads automatically resolved by jbuilder
+(executables
+  ((names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
+   (public_names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
+   (libraries (threads prohlatype cmdline_options))))
+
+; TODO: Globs don't seem to work in my current version of jbuilder.
+(alias
+  ((name apps)
+   (deps (align2fasta.exe mhc2gpdf.exe mpjson2tsv.exe multi_par.exe par_type.exe))
+   ))

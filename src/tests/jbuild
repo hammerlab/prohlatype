@@ -1,0 +1,25 @@
+(jbuild_version 1)
+
+(executables
+  ((names (
+    biological_kmers
+    mas_align_test
+    merged_sensible_test
+    round_trip
+    test_allele_distances
+    test_parsing
+    ))
+   (libraries (prohlatype threads cmdliner))
+   (preprocess (pps (bisect_ppx -conditional)))
+   ))
+
+(alias
+  ((name tests)
+   (deps (
+    biological_kmers.exe
+    mas_align_test.exe
+    merged_sensible_test.exe
+    round_trip.exe
+    test_allele_distances.exe
+    test_parsing.exe
+   ))))

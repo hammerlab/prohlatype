@@ -2,7 +2,7 @@
 open Prohlatype
 open Cmdline_options
 
-let app_name = "mpjson2tsv"
+let app_name = "mpjson2coverage"
 
 let f_of_yojson =
   ParPHMM_drivers.(Output.of_yojson Multiple_loci.final_read_info_of_yojson)

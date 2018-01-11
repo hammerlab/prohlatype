@@ -1,7 +1,7 @@
 (* Common arguments shared between programs. *)
 
 module Ns = String
-open Util
+open Prohlatype
 open Cmdliner
 
 let (//) = Filename.concat

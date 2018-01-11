@@ -1,0 +1,12 @@
+(jbuild_version 1)
+
+(library (
+  (name prohlatype)
+  (public_name prohlatype)
+  (synopsis "Probablistic HLA typing.")
+  (libraries (
+      biocaml.unix ocamlgraph nonstd parany sosa threads 
+      ppx_deriving_yojson.runtime yojson))
+  (preprocess (pps (ppx_deriving.std ppx_deriving_yojson)))
+  ))
+  

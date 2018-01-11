@@ -13,7 +13,7 @@ Solutions:
 *)
 
 
-open Util
+open Prohlatype
 open Common
 
 let kmer_table_from_fasta ~k file =
