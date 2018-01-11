@@ -1,4 +1,4 @@
-
+(* Old and deprecated of better levenshtein search string. *)
 open Util
 
 let (//) = Filename.concat
