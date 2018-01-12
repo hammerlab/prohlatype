@@ -7,12 +7,12 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 eval `opam config env`
 export OPAMYES="true"
 
-make setup
+opam install --deps-only prohlatype.opam
 
 # for test coverage
 opam install bisect_ppx ocveralls
 
-make 
+make
 make apps
 
 export IMGTHLA_DIR="IMGTHLA"
