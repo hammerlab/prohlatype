@@ -9,7 +9,7 @@ license: "Apache2"
 #available: [ ocaml-version >= "4.03" ]
 
 build: [
-#  [ "jbuilder" "subst"] {pinned}
+  [ "jbuilder" "subst"] {pinned}
   [ "jbuilder" "build" "-p" name "-j" jobs ]
 ]
 

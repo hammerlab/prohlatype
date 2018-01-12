@@ -46,7 +46,6 @@ let () =
         )
   in
   let convert =
-    let version = "0.0.0" in
     let doc =
       "Transform multi_par's or par_type's json output to a Tab Separated File.\
        \

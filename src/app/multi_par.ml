@@ -154,7 +154,6 @@ let () =
           ["max-mismatches"])
   in
   let type_ =
-    let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =

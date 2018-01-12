@@ -8,6 +8,8 @@ let (//) = Filename.concat
 
 let repo = "prohlatype"
 
+let version = "%%VERSION%%"
+
 (*** Basic command line parsers and printers. ***)
 let positive_int_parser w s =
   try

@@ -151,7 +151,6 @@ let () =
     Arg.(value & flag & info ~doc ~docv ["all"])
   in
   let mismatch_histogram_ =
-    let version = "0.0.0" in
     let doc = "Report alignment of reads in a fastaq against HLA string graphs." in
     let bug =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"

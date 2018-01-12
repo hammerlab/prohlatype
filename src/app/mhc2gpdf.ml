@@ -125,7 +125,6 @@ let () =
     Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
   let construct =
-    let version = "0.0.0" in
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
     let bug =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"

@@ -111,11 +111,10 @@ let () =
           & info ~doc ~docv ["output-width"])
   in
   let convert =
-    let version = "0.0.0" in
     let doc = "Transform IMGT/HLA's alignments to fasta." in
     let bugs =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
-              repo
+        repo
     in
     let description =
       [ `P (sprintf
