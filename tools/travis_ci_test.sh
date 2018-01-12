@@ -74,11 +74,11 @@ case "$TEST" in
     ;;
   impute)
     echo imputing A
-    time _build/src/apps/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf
+    time _build/default/src/app/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf
     echo imputing B
-    time _build/src/apps/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/B_gen.txt --no-pdf
+    time _build/default/src/app/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/B_gen.txt --no-pdf
     echo imputing C
-    time _build/src/apps/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
+    time _build/default/src/app/mhc2gpdf.exe --alignment $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
     ;;
   *)
     ;;
