@@ -14,7 +14,7 @@ build:
 	jbuilder build
 
 setup:
-	opam install --deps-only
+	opam install --deps-only ./prohlatype.opam
 
 clean:
 	jbuilder clean
