@@ -7,7 +7,7 @@ git clone https://github.com/ANHIG/IMGTHLA.git
 eval `opam config env`
 export OPAMYES="true"
 
-opam install --deps-only prohlatype.opam
+opam install ppx_deriving.4.2.1 ppx_deriving_yojson.3.1 nonstd.0.0.3 sosa.0.3.0 ocamlgraph.1.8.8 cmdliner.1.0.2 biocaml.0.8.0 parany.3.0.0
 
 # for test coverage
 opam install bisect_ppx ocveralls
