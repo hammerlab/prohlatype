@@ -1,5 +1,5 @@
 (** Compute distances between MHC alleles. *)
-open Util
+open Prohlatype
 
 let app_name = "allele_distances"
 
@@ -41,9 +41,8 @@ let allele_distances alignment merge distance_logic =
 
 let () =
   let open Cmdliner in
-  let open Common_options in
+  let open Cmdline_options in
   let allele_distances =
-    let version = "0.0.0" in
     let doc = "Compute distances between HLA alleles." in
     let bug =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"

@@ -3,7 +3,7 @@
  * ( we have more alleles vs constraining this search somehow).
  *)
 
-open Util
+open Prohlatype
 
 let loci_to_check =
   let open Nomenclature in

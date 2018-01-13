@@ -11,9 +11,8 @@ ex:
   defaults to using all alignment files in IMGTHLA directory
 *)
 
-open Util
+open Prohlatype
 open Common
-module String = Sosa.Native_string
 
 let to_suffix = function
   | `gen  -> "gen.txt"

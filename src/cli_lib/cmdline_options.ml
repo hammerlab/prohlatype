@@ -1,12 +1,14 @@
 (* Common arguments shared between programs. *)
 
 module Ns = String
-open Util
+open Prohlatype
 open Cmdliner
 
 let (//) = Filename.concat
 
 let repo = "prohlatype"
+
+let version = "%%VERSION%%"
 
 (*** Basic command line parsers and printers. ***)
 let positive_int_parser w s =

@@ -1,5 +1,5 @@
 
-open Util
+open Prohlatype
 
 let j =
   Post_analysis.of_json_file
@@ -62,16 +62,18 @@ let smap =
   List.map j_bl_C ~f:(fun (_, rn, r) -> rn, r)
   |> string_map_of_assoc
 
+module Lp = ParPHMM.LogProbability
 
 let describe lst =
   let sorted =
     (* descending. *)
-    List.sort lst ~cmp:(fun (l1, _) (l2, _) -> compare l2 l1)
+    List.sort lst ~cmp:(fun (l1, _) (l2, _) ->
+          Lp.compare l2 l1)
   in
   let paired =
       List.map2 (List.take sorted 2) (List.drop sorted 1)
         ~f:(fun (l1, a1) (l2, _) ->
-              if ParPHMM.close_enough l1 l2 then
+              if Lp.close_enough l1 l2 then
                 sprintf "%s=" a1
               else
                 sprintf "%s>=" a1)
@@ -81,7 +83,7 @@ let describe lst =
       (String.concat ~sep:"" paired)
       (snd (List.hd_exn (List.rev sorted)))
   in
-  let values = string_of_list ~sep:";" ~f:(fun (l, _) -> sprintf "%0.8f" l) sorted in
+  let values = string_of_list ~sep:";" ~f:(fun (l, _) -> Lp.to_string l) sorted in
   str, values
 
 let do_it rn p rs re rc =

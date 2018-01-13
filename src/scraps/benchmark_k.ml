@@ -1,8 +1,8 @@
 (* Figure out the distribution of matches in K-mer tables
    constructed on our graphs. *)
 
+open Prohlatype
 open Common
-open Util
 
 let () =
   let kmers_to_test = [ 5;6;7;8;9;10;11;12] in

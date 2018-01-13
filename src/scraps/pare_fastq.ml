@@ -1,5 +1,8 @@
-
-open Util
+(* Framework to extract reads from FASTQ's based upon typed results.
+ *
+ * This program is suprisingly slow, need to figure out why.
+ * *)
+open Prohlatype
 
 let j =
   Post_analysis.of_json_file

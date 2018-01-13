@@ -156,6 +156,9 @@ type t =
   ; offset        : int
   }
 
+let number_of_alleles t = 
+  t.aindex.Alleles.size
+
 (** Some accessors that are necessary for output (and construction) but placed
     here for convenience. *)
 

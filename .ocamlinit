@@ -7,12 +7,10 @@
 #require "parany"
 #require "ppx_deriving_yojson.runtime"
 
-#directory "_build/src/lib"
+#directory "_build/default/src/lib"
 #load_rec "prohlatype.cma"
 
-open Nonstd
-module String = Sosa.Native_string
-open Util
+open Prohlatype
 
 let nn elst ilst = List.map ~f:(List.nth elst) ilst ;;
 

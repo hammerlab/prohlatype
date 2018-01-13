@@ -1,5 +1,4 @@
 
-module String = Sosa.Native_string
 open Util
 
 let char_to_int = function

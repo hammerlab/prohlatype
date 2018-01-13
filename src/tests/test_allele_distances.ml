@@ -1,5 +1,5 @@
 
-open Util
+open Prohlatype
 open Common
 
 let () =

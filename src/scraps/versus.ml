@@ -1,16 +1,16 @@
 
-open Util
+open Prohlatype
 
 let j =
   Post_analysis.of_json_file
     "FILL ME/res/2017_12_12_full_class1/004.json"
 
-let j4_bl =
-  Post_analysis.reads_by_loci j4
-let j4_bl_A =
-  List.Assoc.get Nomenclature.A j4_bl |> Option.value_exn ~msg:""
-let j4_bl_A1, j4_bl_A2 =
-  List.partition ~f:(fun (a, _, _) -> a = "A*24:53") j4_bl_A
+let j_bl =
+  Post_analysis.reads_by_loci j
+let j_bl_A =
+  List.Assoc.get Nomenclature.A j_bl |> Option.value_exn ~msg:""
+let j_bl_A1, j_bl_A2 =
+  List.partition ~f:(fun (a, _, _) -> a = "A*24:53") j_bl_A
 
 let specific_reads =
   List.map j_bl_A1 ~f:(fun (_, rn, _) -> rn)

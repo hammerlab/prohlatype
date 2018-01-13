@@ -1,6 +1,6 @@
 (* Tests that the merging produces sensible results. *)
 open Common
-open Util
+open Prohlatype
 
 let to_input prefix distance =
   let open Alleles.Input in function

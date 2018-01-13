@@ -1,6 +1,6 @@
 (* Compare graph construction, from the alignment files, versus the sequence
    data represented in the IMGTHLA fasta files for the alleles. *)
-open Util
+open Prohlatype
 open Common
 
 let (//) = Filename.concat

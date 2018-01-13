@@ -1,5 +1,5 @@
 (* Typing via a Parametric PHMM. *)
-open Util
+open Prohlatype
 
 let app_name = "par_type"
 
@@ -15,7 +15,7 @@ let to_read_size_dependent
   (* Cache logic. *)
     ~skip_disk_cache
     =
-    let open Common_options in
+    let open Cmdline_options in
     let selectors =
       aggregate_selectors ~regex_list ~specific_list
         ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
@@ -113,7 +113,7 @@ let type_
     =
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
-  let log_oc, data_oc = Common_options.setup_oc output output_format in
+  let log_oc, data_oc = Cmdline_options.setup_oc output output_format in
   to_read_size_dependent
     ?alignment_file ?merge_file ~distance
     ~regex_list ~specific_list ~without_list ?number_alleles
@@ -139,7 +139,7 @@ let type_
           ; output_format
           ; depth =
             { ParPHMM_drivers.Output.num_likelihoods = likelihood_report_size
-            ; num_zygosities         = Common_options.to_num_zygosities
+            ; num_zygosities         = Cmdline_options.to_num_zygosities
                                         ~zygosity_non_zero_value
                                         ~zygosity_report_size
             ; num_per_read           = per_reads_report_size
@@ -169,7 +169,7 @@ let type_
 
 let () =
   let open Cmdliner in
-  let open Common_options in
+  let open Cmdline_options in
   let not_check_rc_flag =
     let doc = "Do not check the reverse complement." in
     Arg.(value & flag & info ~doc ["not-check-rc"])
@@ -208,7 +208,6 @@ let () =
     value & vflag `Forward modes
   in
   let type_ =
-    let version = "0.0.0" in
     let doc = "Use a Parametric Profile Hidden Markov Model of HLA allele to \
                type fastq samples." in
     let bug =

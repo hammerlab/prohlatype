@@ -1,4 +1,6 @@
-
+(* Count the number of variations within boundaries (ex. Exon 1, Intron 1 ...)
+ * this way we can describe which segments have the most amount of
+ * variability. *)
 
 module SeqSet = Set.Make (
   struct

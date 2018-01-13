@@ -8,7 +8,7 @@
     DRB_nuc:  DRB4*01:03:01:02N
 
 *)
-open Util
+open Prohlatype
 open Common
 open MSA
 open MSA.Parser

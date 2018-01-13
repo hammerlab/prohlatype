@@ -1,6 +1,6 @@
 
-open Util
-open Common_options
+open Prohlatype
+open Cmdline_options
 
 let app_name = "align2fasta"
 
@@ -111,14 +111,12 @@ let () =
           & info ~doc ~docv ["output-width"])
   in
   let convert =
-    let version = "0.0.0" in
     let doc = "Transform IMGT/HLA's alignments to fasta." in
     let bugs =
       sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
-              repo
+        repo
     in
     let description =
-      let open Common_options in
       [ `P (sprintf
            "%s is a program that transforms IMGT/HLA's per locus alignment \
             files to FASTA files. The alignments are the text files found in \
