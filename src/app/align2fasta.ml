@@ -123,7 +123,7 @@ let () =
             the alignments folder and start with
             \"HLA-A Genomic Sequence Alignments\"." app_name)
 
-      ; `P "The IMGT-HLA database already distributes FASTA files for the \
+      ; `P "The IMGT/HLA database already distributes FASTA files for the \
             MHC genes in their database, so why create a tool to recreate \
             them? One minor reason is that, rarely, the alignment information \
             may be inconsistent with the FASTA files. Because downstream tools \
