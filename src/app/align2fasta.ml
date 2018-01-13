@@ -112,10 +112,6 @@ let () =
   in
   let convert =
     let doc = "Transform IMGT/HLA's alignments to fasta." in
-    let bugs =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
-        repo
-    in
     let description =
       [ `P (sprintf
            "%s is a program that transforms IMGT/HLA's per locus alignment \
@@ -172,7 +168,7 @@ let () =
       ; `S s_bugs
       ; `P bugs
       ; `S s_authors
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
+      ; `P author
       ]
     in
     Term.(const convert

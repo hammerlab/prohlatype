@@ -126,16 +126,63 @@ let () =
   in
   let construct =
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
-    let bug =
-      sprintf "Browse and report new issues at <https://github.com/hammerlab/%s"
-        repo
+    let description =
+      [ `P (sprintf
+            "%s is a program that transforms IMGT/HLA's per locus alignment \
+            files in to graphs in PDF form. The alignments form a natural \
+            graph where each base is a node and edges are the alleles that \
+            describe valid transitions among the bases."
+             app_name)
+      ; `P "The IMGT/HLA database provides alignment files that depict a
+            gene's alleles organized such that for each position in the \
+            genome, all of the alleles are displayed vertically. While this \
+            is informative it proves to be difficult to quickly grasp the \
+            underlying organization because of the sheer number of alleles.
+            This tool provides a mechanism to transform these files into a \
+            graph, such that morphisms are more readily understood."
+      ; `P "For each genome position in the alignment file we create a node \
+            for all observed bases at that position. Between the nodes we add \
+            an edge if there exists an allele where the two nodes are
+            contiguous. The edge is labeled with a compressed string \
+            describing all the alleles with this property. \
+            Having an edge for each allele would result in too too many edges."
+      ; `P "After the transformation the program writes a file in the Graphviz \
+            dot format and then calls the dot program to create a pdf. This \
+            step will fail if dot is not installed on your system."
+      ; `P "Finally, various command line options allow the user to pare down, \
+            and construct the set of alleles that are included. This way, one \
+            could have graphs that detail differences between two alleles \
+            (ex. A*01:01:01:01 vs A*02:01:01:01) or two branches of the \
+            allele \"tree\" (ex. A*01 vs A*03)."
+      ]
+    in
+    let examples =
+      [ `P "To create a graph of all the gDNA derived data of HLA-A:"
+      ; `Pre (sprintf "%s --alignment path-to-IMGTHLA/alignments/A_gen.txt"
+                app_name)
+      ; `P "To create a graph based on a leading set of digits use a regex.\
+            Don't forget to escape the '*':"
+      ; `Pre (sprintf "%s --alignment path-to-IMGTHLA/alignments/A_gen.txt \
+                        --allele-regex \"A\\\\*01:01:*\""
+                app_name)
+      ; `P "To create a graph of two specific alleles, first use a regex \
+            to \"clear\" the set of alleles:"
+      ; `Pre (sprintf "%s --alignment athIMGTHLA/alignments/A_gen.txt \
+                        --allele-regex \"Z\" \n         --spec-allele \
+                       \"A*01:01:01:01\" --spec-allele \"A*02:649\""
+                app_name)
+      ]
     in
     let man =
-      [ `S "AUTHORS"
-      ; `P "Leonid Rozenberg <leonidr@gmail.com>"
-      ; `Noblank
-      ; `S "BUGS"
-      ; `P bug
+      let open Manpage in
+      [ `S s_description
+      ; `Blocks description
+      ; `S s_examples
+      ; `Blocks examples
+      ; `S s_bugs
+      ; `P bugs
+      ; `S s_authors
+      ; `P author
       ]
     in
     Term.(const construct

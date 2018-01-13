@@ -7,6 +7,11 @@ open Cmdliner
 let (//) = Filename.concat
 
 let repo = "prohlatype"
+let bugs =
+  sprintf "Browse and report new issues at <https://github.com/hammerlab/%s>"
+        repo
+
+let author = "Leonid Rozenberg <leonidr@gmail.com>"
 
 let version = "%%VERSION%%"
 
