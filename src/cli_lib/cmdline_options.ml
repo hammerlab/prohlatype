@@ -80,7 +80,7 @@ let alignment_file_argument = "alignment"
 
 let alignment_arg =
   let docv = "FILE" in
-  let doc  = "File to lookup IMGT allele alignments. The alleles found in this \
+  let doc  = "File to lookup IMGT gene alignments. The alleles found in this \
               file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
   Arg.(value & opt (some file) None & info ~doc ~docv [alignment_file_argument])
@@ -110,62 +110,79 @@ let merge_arg, merges_arg =
           `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
   in
   let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
-  let loci_s ~sep =
-    List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci
-    |> String.concat ~sep
+  let loci_s ~sep ~anded =
+    let ss = List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci in
+    if anded then
+      let before, after = List.split_n ss (List.length ss - 1) in
+      sprintf "%s and %s" (String.concat ~sep before) (List.hd_exn after)
+    else
+      String.concat ~sep ss
   in
-  let docv = sprintf "[%s]" (loci_s ~sep:"|") in
-  let doc  =
-    sprintf "Construct a merged (gDNA and cDNA) graph of the specified \
-            prefix path. Currently only supports %s genes. The argument must \
-            be a path to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
-            Combines with the file arguments to determine the set of loci to \
-            type at the same time. The set of alleles is defined by the \
-            ones in the nuc file."
-      (loci_s ~sep:", ")
+  let docv = sprintf "[%s]" (loci_s ~sep:"|" ~anded:false) in
+  let doc ~what = sprintf
+    "Construct a merged (gDNA and cDNA) %s from the specified prefix path. \
+     Currently, the logic only supports %s. The argument must be a path \
+     to files with $(docv)_nuc.txt and $(docv)_gen.txt. \
+     Overrides the --%s file argument. \
+     The set of alleles is defined by the ones in the nuc file and \
+     allele-selectors are ignored."
+    what
+    (loci_s ~sep:", " ~anded:true)
+    alignment_file_argument
   in
-  Arg.(value & opt (some convrtr) None & info ~doc ~docv ["m"; merge_file_argument])
-  , Arg.(value & opt_all convrtr [] & info ~doc ~docv ["m"; merge_file_argument])
+  begin fun ~what ->
+    Arg.(value
+        & opt (some convrtr) None
+        & info ~doc:(doc ~what) ~docv [merge_file_argument])
+  end
+  , begin fun ~what ->
+  Arg.(value
+        & opt_all convrtr []
+        & info ~doc:(doc ~what) ~docv [merge_file_argument])
+  end
 
 (*** Allele selector arguments. ***)
-let regex_command_line_args = ["allele-regex"]
-let allele_command_line_args = ["spec-allele"]
-let without_command_line_args = ["without-allele"]
-let num_command_line_args = ["n"; "num-alt"]
-let do_not_ignore_suffixed_alleles_flags = ["do-not-ignore-suffixed-alleles"]
+let regex_command_line_arg = "allele-regex"
+let allele_command_line_arg = "specific-allele"
+let number_command_line_arg = "number-of-alleles"
+let do_not_ignore_suffixed_alleles_flag = "do-not-ignore-suffixed-alleles"
 
-let args_to_string lst =
-  List.map lst ~f:(fun s -> (if String.length s = 1 then "-" else "--") ^ s)
-  |> String.concat ~sep:", "
+let allele_selector_paragraph reason = sprintf
+  "Various command line options allow the user to pare down, \
+  and construct the set of alleles that are included, via \
+  \"allele-selectors\". This way, %s between two alleles (ex. A*01:01:01:01 \
+  vs A*02:01:01:01) or two branches of the allele tree (ex. A*01 vs A*03). \
+  Initially, the set of alleles consists of all the ones found in the \
+  alignment file except for those with a suffix (see --%s). Afterwards if we \
+  find one allele-selector, the set is reset to empty and alleles are added \
+  by applying each allele selectors."
+  reason
+  do_not_ignore_suffixed_alleles_flag
 
 let regex_arg =
   let docv = "REGEX" in
-  let doc  = "Specify alleles to add to the graph via a regex. This option is \
-              similar to allele, but lets the user specify a wider range \
-              (specifically those alleles matching a POSIX regex) of alleles \
-              to include. The '*' used in HLA allele names must be properly \
-              escaped from the command line: ex. -ar \"A*02:03\". This \
-              \"allele selector\" has the highest precedence, and is applied \
-              to all of the alleles from the working set"
+  let doc  = sprintf
+    "An allele-selector to specify alleles to add to the allele-set via a \
+     regex. This option is similar to --%s, but lets the user specify a wider \
+     range (specifically those alleles matching a POSIX regex) of alleles to \
+     include.  The '*' used in HLA allele names must be properly escaped from \
+     the command line: ex. --%s \"A\\\\*02:03\". \ One can repeat this \
+     argument to specify different groups of alleles. "
+    allele_command_line_arg
+    regex_command_line_arg
   in
   let open Arg in
   let parser_ = parser_of_kind_of_string ~kind:docv
     (fun s -> Some (Alleles.Selectors.Regex s))
   in
   value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
-        & info ~doc ~docv regex_command_line_args
+  & info ~doc ~docv [regex_command_line_arg]
 
-let allele_arg =
+let specific_arg =
   let docv = "STRING" in
-  let doc  =
-    sprintf "Specify specfic alleles to add to the graph. \
-             This \"allele selector\" is applied after regex (%s) \
-             but before the without (%s). \
-             Use this option to construct a graph with specific alleles (ex. \
-             A*01:02). One can repeat this argument to specify multiple \
-             alleles."
-      (args_to_string regex_command_line_args)
-      (args_to_string without_command_line_args)
+  let doc  = sprintf
+    "Specify specific alleles to add to the allele-set. \
+     One can repeat this argument to specify multiple alleles."
   in
   let open Arg in
   let parser_ =
@@ -173,72 +190,31 @@ let allele_arg =
       (fun s -> Some (Alleles.Selectors.Specific s))
   in
   value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
-        & info ~doc ~docv allele_command_line_args
+        & info ~doc ~docv [allele_command_line_arg]
 
-let without_arg =
-  let docv = "STRING" in
-  let doc  =
-    sprintf "Alleles to remove from the working set. \
-             This \"allele selector\" is applied before the exclude (%s)
-             selector but after specific (%s) one.
-             Use this option to construct a graph without alleles (ex. \
-             A*01:02). One can repeat this argument to specify multiple \
-             alleles to exclude."
-      (args_to_string allele_command_line_args)
-      (args_to_string num_command_line_args)
-  in
-  let open Arg in
-  let parser_ =
-    parser_of_kind_of_string ~kind:docv
-      (fun s -> Some (Alleles.Selectors.Without s))
-  in
-  value & opt_all (conv ~docv (parser_, Alleles.Selectors.pp)) []
-        & info ~doc ~docv without_command_line_args
-
-let num_alt_arg =
+let number_alleles_arg =
   let docv = "POSITIVE INTEGER" in
-  let doc  =
-    sprintf "Number of alternate alleles to add to the graph. \
-             If not specified, all of the alternate alleles in the alignment \
-             file are added. This \"allele selector\" is applied last to the
-             working set of alleles derived from the alignment file \
-             (ex. A_gen, DRB_nuc) or merge request (ex. B) after the without
-             argument (%s)"
-             (args_to_string without_command_line_args)
-
-  in
+  let doc  = "Number of alleles to add to the allele-set." in
   let open Arg in
   let parser_ = (positive_int_parser (fun d -> Alleles.Selectors.Number d)) in
   let nconv = conv ~docv (parser_, Alleles.Selectors.pp) in
-  (value & opt (some nconv) None & info ~doc ~docv num_command_line_args)
+  (value & opt (some nconv) None & info ~doc ~docv [number_command_line_arg])
 
 let do_not_ignore_suffixed_alleles_flag =
-  let doc = "IMGT publishes alleles with suffixes ('N', 'L', 'S', 'C', 'A' or \
-            'Q') to indicate special conditions such as null alleles ('N') or \
-            questionable expression ('Q'). Often times, these alleles can \
-            complicate prohlatype as reads sometimes align suprisingly well \
-            to them (ex. HLA-A*11:50Q) as opposed to the true \
-            allele. For the purposes of having a clearer typing algorithm we \
-            exclude all such alleles from IMGT by default. For rare cases or \
-            diagnostic purposes one can pass this flag to bring them back \
-            into the analysis."
+  let doc =
+    "IMGT publishes alleles with suffixes ('N', 'L', 'S', 'C', 'A' or 'Q') to \
+     indicate special conditions such as null alleles ('N') or questionable \
+     expression ('Q'). Often times, these alleles can complicate prohlatype as \
+     reads sometimes align surprisingly well to them (ex. HLA-A*11:50Q) as \
+     opposed to the true allele. We want to assign these a small prior \
+     probability, smaller than the other alleles. For the purposes of having a \
+     clearer typing algorithm we exclude all such alleles from the starting \
+     allele-set by default. For rare cases or diagnostic purposes one can pass \
+     this flag to bring them back into the starting allele set."
   in
-  Arg.(value & flag & info ~doc do_not_ignore_suffixed_alleles_flags)
+  Arg.(value & flag & info ~doc [do_not_ignore_suffixed_alleles_flag])
 
 (*** Other args. ***)
-(*
-let remove_reference_flag =
-  let doc  = "Remove the reference allele from the graph. The reference \
-              allele is the one that is listed first in the alignments file. \
-              Graphs are currently constructed based upon their \"diff\" to \
-              the reference as represented in the alignments file. Therefore, \
-              the original reference sequence must be a part of the graph \
-              during construction. Specifying this flag will remove it from \
-              the graph after the other alleles are added."
-  in
-  Arg.(value & flag & info ~doc ["no-reference"])
-  *)
-
 let no_cache_flag =
   let doc =
     sprintf "Do not use a disk cache (in %s sub directory of the current \
@@ -257,14 +233,20 @@ let do_not_join_same_sequence_paths_flag =
 let option_to_list o =
   Option.value_map o ~default:[] ~f:(fun s -> [s])
 
-let aggregate_selectors ?number_alleles
-  ~regex_list ~specific_list ~without_list ~do_not_ignore_suffixed_alleles =
-    regex_list
-    @ specific_list
-    @ without_list
-    @ (option_to_list number_alleles)
-    @ (if do_not_ignore_suffixed_alleles then
-        [Alleles.Selectors.DoNotIgnoreSuffixed] else [])
+let aggregate_selectors
+    ~number_alleles
+    ~regex_list
+    ~specific_list
+    ~do_not_ignore_suffixed_alleles =
+    let acc =
+      regex_list
+      @ specific_list
+      @ (option_to_list number_alleles)
+    in
+    if do_not_ignore_suffixed_alleles then
+        Alleles.Selectors.DoNotIgnoreSuffixed :: acc
+    else
+      acc
 
 let to_allele_input ?alignment_file ?merge_file ?distance ~selectors =
   let open Alleles.Input in
@@ -666,7 +648,7 @@ let not_prealigned_flag =
 let output_arg =
   let docv = "FILENAME PREFIX" in
   let doc = "Change output from stdout to files that are prefixed with the \
-    specified argument. A log file will be generated with the the \".log\" \
+    specified argument. A log file will be generated with the \".log\" \
     suffix. Data output will be written to a file with either the \".tsv\" \
     or \".json\" suffix."
   in
@@ -695,12 +677,12 @@ let full_class1_directory_argument = "full-class1"
 
 let gen_nuc_merged_flag =
   let gen_doc =
-    sprintf "For use with \"%s\" (or \"%s\") to select the genetic files, \
+    sprintf "For use with \"%s\" or \"%s\" to select the genetic files, \
              ex. A_gen.txt. This is the default choice."
       class1_directory_argument full_class1_directory_argument
   in
   let nuc_doc =
-    sprintf "For use with \"%s\" (or \"%s\") to select the nuclear files, \
+    sprintf "For use with \"%s\" or \"%s\" to select the nuclear files, \
              ex. A_nuc.txt."
       class1_directory_argument full_class1_directory_argument
   in
@@ -709,7 +691,7 @@ let gen_nuc_merged_flag =
       "Merge the genetic (ex. A_gen.txt) with nuclear files (A_nuc.txt),
       when specifying a directory with \"%s\" or \"%s\".
       Be careful to not confuse this with the \"%s\" that specifies a specific
-      gene to include in the analyis"
+      gene to include in the analysis"
       class1_directory_argument full_class1_directory_argument
       merge_file_argument
   in

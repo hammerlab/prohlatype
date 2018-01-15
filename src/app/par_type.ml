@@ -9,16 +9,15 @@ let to_read_size_dependent
   (* Allele selectors *)
     ~regex_list
     ~specific_list
-    ~without_list
-    ?number_alleles
+    ~number_alleles
     ~do_not_ignore_suffixed_alleles
   (* Cache logic. *)
     ~skip_disk_cache
     =
     let open Cmdline_options in
     let selectors =
-      aggregate_selectors ~regex_list ~specific_list
-        ~without_list ?number_alleles ~do_not_ignore_suffixed_alleles
+      aggregate_selectors ~regex_list ~specific_list ~number_alleles
+        ~do_not_ignore_suffixed_alleles
     in
     to_allele_input ?alignment_file ?merge_file ~distance ~selectors
       >>= fun input ->
@@ -78,7 +77,7 @@ let type_
   (* Allele information source *)
     alignment_file merge_file distance
   (* Allele selectors *)
-    regex_list specific_list without_list number_alleles
+    regex_list specific_list number_alleles
     do_not_ignore_suffixed_alleles
     allele
   (* Process *)
@@ -116,7 +115,7 @@ let type_
   let log_oc, data_oc = Cmdline_options.setup_oc output output_format in
   to_read_size_dependent
     ?alignment_file ?merge_file ~distance
-    ~regex_list ~specific_list ~without_list ?number_alleles
+    ~regex_list ~specific_list ~number_alleles
     ~do_not_ignore_suffixed_alleles
     ~skip_disk_cache
   |> function
@@ -223,9 +222,11 @@ let () =
     in
     Term.(const type_
             (* Allele information source *)
-            $ alignment_arg $ merge_arg $ defaulting_distance_flag
+            $ alignment_arg 
+            $ (merge_arg ~what:"Parametric PHMM")
+            $ defaulting_distance_flag
             (* Allele selectors *)
-            $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+            $ regex_arg $ specific_arg $ number_alleles_arg
             $ do_not_ignore_suffixed_alleles_flag
             $ spec_allele_arg
             (* What to do ? *)

@@ -60,12 +60,12 @@ let convert
   (* optional distance to trigger imputation, merging *)
   distance
   (* selectors *)
-  regex_list specific_list without_list number_alleles
+  regex_list specific_list number_alleles
   do_not_ignore_suffixed_alleles
   =
   let selectors =
-    aggregate_selectors ~regex_list ~specific_list ~without_list
-      ?number_alleles ~do_not_ignore_suffixed_alleles
+    aggregate_selectors ~regex_list ~specific_list ~number_alleles
+      ~do_not_ignore_suffixed_alleles
   in
   let opt_to_lst = Option.value_map ~default:[] ~f:(fun s -> [s]) in
   let alignment_files, merge_files =
@@ -117,7 +117,8 @@ let () =
            "%s is a program that transforms IMGT/HLA's per locus alignment \
             files to FASTA files. The alignments are the text files found in \
             the alignments folder and start with
-            \"HLA-A Genomic Sequence Alignments\"." app_name)
+            \"HLA-* Genomic Sequence Alignments\" header."
+           app_name)
 
       ; `P "The IMGT/HLA database already distributes FASTA files for the \
             MHC genes in their database, so why create a tool to recreate \
@@ -130,7 +131,7 @@ let () =
            "The raison d'être for this tool is to invoke powerful processing \
             algorithms in this project to impute the missing parts of alleles \
             in a given gene. At the time of the creation of this project we \
-            have incomplete sequence information for all of the (sometimes \
+            have incomplete sequence information for many of the (sometimes \
             thousands) alleles. To alleviate the sparseness one may specify \
             distance arguments (%s, %s, or %s) that will invoke imputation \
             logic for the missing segments. One may also ask for merged loci \
@@ -140,6 +141,8 @@ let () =
               trie_argument
               weighted_per_segment_argument
               reference_distance_argument)
+
+      ; `P (allele_selector_paragraph "one can compare sequences")
       ]
     in
     let examples =
@@ -179,16 +182,17 @@ let () =
           $ full_class1_directory_arg
           $ gen_nuc_merged_flag
           $ alignment_arg
-          $ merge_arg
+          $ (merge_arg ~what:"set of sequences")
           $ optional_distance_flag
           (* Allele selectors *)
-          $ regex_arg $ allele_arg $ without_arg $ num_alt_arg
+          $ regex_arg $ specific_arg $ number_alleles_arg
           $ do_not_ignore_suffixed_alleles_flag
 
         , info app_name ~version ~doc ~man)
   in
   match Term.eval convert with
   | `Ok (Ok ())      -> exit 0
-  | `Ok (Error e)    -> failwith e
+  | `Ok (Error e)    -> eprintf "%s\n" e;
+                        exit 1
   | `Error _         -> failwith "error"
   | `Version | `Help -> exit 0

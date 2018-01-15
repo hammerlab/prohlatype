@@ -7,14 +7,13 @@ let to_filename_and_graph_args
   (* Allele selectors *)
     ~regex_list
     ~specific_list
-    ~without_list
-    ?number_alleles
+    ~number_alleles
     ~do_not_ignore_suffixed_alleles
   (* Graph modifiers. *)
     ~join_same_sequence =
     let selectors =
-      Cmdline_options.aggregate_selectors ~regex_list ~specific_list ~without_list
-        ?number_alleles ~do_not_ignore_suffixed_alleles
+      Cmdline_options.aggregate_selectors ~regex_list ~specific_list
+        ~number_alleles ~do_not_ignore_suffixed_alleles
     in
     Cmdline_options.to_allele_input ?alignment_file ?merge_file ?distance ~selectors
       >>= fun input ->
@@ -30,7 +29,7 @@ let construct
   (* output *)
   ofile
   (* allele selection. *)
-  regex_list specific_list without_list number_alleles
+  regex_list specific_list number_alleles
   do_not_ignore_suffixed_alleles
   (* Construction args *)
   not_join_same_seq
@@ -44,7 +43,7 @@ let construct
   let fname_cargs_result =
     to_filename_and_graph_args
       ?alignment_file ?merge_file ?distance
-      ~specific_list ~regex_list ~without_list ?number_alleles
+      ~specific_list ~regex_list ~number_alleles
       ~do_not_ignore_suffixed_alleles
       ~join_same_sequence
   in
@@ -73,15 +72,15 @@ let () =
   let open Cmdline_options in
   let output_fname_arg =
     let docv = "FILE" in
-    let doc  = "Output file name, defaults to a file \"(input file)_(number of \
-                non reference alleles).[pdf|dot]\" ."
+    let doc  = "Output file name, defaults to a file starting with the chosen
+                input file and the allele selectors used."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
   in
   let not_short_flag =
     let doc = "Whether to turn off short labels on sequence nodes.\n\
                By default sequences longer than 10 are compressed to the first \
-               4, ellipsis and then last 3 (ex ACGT...TGA). Providing this \
+               4, an ellipsis and then last 3 (eg. ACGT...TGA). Providing this \
                flag will create nodes with the full sequence."
     in
     Arg.(value & flag & info ~doc ["not-short"])
@@ -113,7 +112,7 @@ let () =
                & info ~doc ~docv ["max-edge-char-length"])
   in
   let do_not_compress_edges_flag =
-    let doc = "Do not run encode the alleles along the edges." in
+    let doc = "Do not run encode the allele names along the edges." in
     Arg.(value & flag & info ~doc ["do-not-compress-edges"])
   in
   let do_not_compress_start_flag =
@@ -129,31 +128,32 @@ let () =
     let description =
       [ `P (sprintf
             "%s is a program that transforms IMGT/HLA's per locus alignment \
-            files in to graphs in PDF form. The alignments form a natural \
-            graph where each base is a node and edges are the alleles that \
+            files into graphs in PDF form. The alignments naturallly form \
+            a graph where each base is a node and edges are the alleles that \
             describe valid transitions among the bases."
              app_name)
-      ; `P "The IMGT/HLA database provides alignment files that depict a
+
+      ; `P "The IMGT/HLA database provides alignment files that depict a \
             gene's alleles organized such that for each position in the \
             genome, all of the alleles are displayed vertically. While this \
             is informative it proves to be difficult to quickly grasp the \
-            underlying organization because of the sheer number of alleles.
-            This tool provides a mechanism to transform these files into a \
-            graph, such that morphisms are more readily understood."
+            underlying organization because of the sheer number of alleles. \
+            This tool provides a mechanism to transform those files into a \
+            graph, such that allele variations are more readily understood."
+
       ; `P "For each genome position in the alignment file we create a node \
-            for all observed bases at that position. Between the nodes we add \
-            an edge if there exists an allele where the two nodes are
-            contiguous. The edge is labeled with a compressed string \
-            describing all the alleles with this property. \
-            Having an edge for each allele would result in too too many edges."
-      ; `P "After the transformation the program writes a file in the Graphviz \
+            for all observed bases. Between the nodes we add an edge if there \
+            exists an allele where the two nodes (bases) are contiguous. The \
+            edge is labeled with a compressed string describing all the \
+            alleles with this property. Having an edge for each allele would \
+            result in too many edges."
+
+      ; `P "After the transformation, the program writes a file in the Graphviz \
             dot format and then calls the dot program to create a pdf. This \
-            step will fail if dot is not installed on your system."
-      ; `P "Finally, various command line options allow the user to pare down, \
-            and construct the set of alleles that are included. This way, one \
-            could have graphs that detail differences between two alleles \
-            (ex. A*01:01:01:01 vs A*02:01:01:01) or two branches of the \
-            allele \"tree\" (ex. A*01 vs A*03)."
+            step will fail if dot is not installed and accessible."
+
+      ; `P (allele_selector_paragraph
+              "one could have graphs that detail differences")
       ]
     in
     let examples =
@@ -165,10 +165,9 @@ let () =
       ; `Pre (sprintf "%s --alignment path-to-IMGTHLA/alignments/A_gen.txt \
                         --allele-regex \"A\\\\*01:01:*\""
                 app_name)
-      ; `P "To create a graph of two specific alleles, first use a regex \
-            to \"clear\" the set of alleles:"
+      ; `P "To create a graph of two specific alleles:"
       ; `Pre (sprintf "%s --alignment athIMGTHLA/alignments/A_gen.txt \
-                        --allele-regex \"Z\" \n         --spec-allele \
+                        \n         --spec-allele \
                        \"A*01:01:01:01\" --spec-allele \"A*02:649\""
                 app_name)
       ]
@@ -187,14 +186,15 @@ let () =
     in
     Term.(const construct
             (* input files *)
-            $ alignment_arg $ merge_arg $ optional_distance_flag
+            $ alignment_arg
+            $ (merge_arg ~what:"graph")
+            $ optional_distance_flag
             (* output file *)
             $ output_fname_arg
             (* allele selection. *)
             $ regex_arg
-            $ allele_arg
-            $ without_arg
-            $ num_alt_arg
+            $ specific_arg
+            $ number_alleles_arg
             $ do_not_ignore_suffixed_alleles_flag
             (* construction args. *)
             $ do_not_join_same_sequence_paths_flag

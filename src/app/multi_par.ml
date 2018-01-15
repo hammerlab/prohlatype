@@ -172,7 +172,9 @@ let () =
             $ class1_directory_arg
             $ full_class1_directory_arg
             $ gen_nuc_merged_flag
-            $ alignments_arg $ merges_arg $ defaulting_distance_flag
+            $ alignments_arg
+            $ (merges_arg ~what:"Parametric PHMM")
+            $ defaulting_distance_flag
             (* What to do ? *)
             $ no_cache_flag
             (* What are we typing *)
