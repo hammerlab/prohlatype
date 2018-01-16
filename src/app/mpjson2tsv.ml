@@ -11,7 +11,7 @@ let of_json_file f =
   Yojson.Safe.stream_from_file f
   |> Stream.next (* only one element per file. *)
   |> f_of_yojson
-  |> unwrap_ok
+  |> unwrap
 
 let convert output_opt json_file =
   let open ParPHMM_drivers in

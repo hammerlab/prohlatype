@@ -78,40 +78,52 @@ let non_negative_int =
 (*** Graph source arguments. ***)
 let alignment_file_argument = "alignment"
 
+let some_empty_string = Some ""
+(* Either a well formed path to an alignment file or a well formed path prefix
+ * to valid cDNA (eg. A_nuc.txt) and gDNA (eg. A_gen.txt) is necessary for
+ * typing, graphing, making sequences ... etc.
+ *
+ *)
+
 let alignment_arg =
   let docv = "FILE" in
   let doc  = "File to lookup IMGT gene alignments. The alleles found in this \
               file will initially define the set of alleles to be used. Use an \
               allele selector to modify this set." in
-  Arg.(value & opt (some file) None & info ~doc ~docv [alignment_file_argument])
+  Arg.(value
+      & opt (some file) None
+      & info ~doc ~docv [alignment_file_argument])
 
 let merge_file_argument = "merge"
 
+let merge_parser_ path =
+  let s = Filename.basename path in
+  match Nomenclature.parse_locus s with
+  | Error e -> `Error e
+  | Ok l ->
+      let n = path ^ "_nuc.txt" in
+      let g = path ^ "_gen.txt" in
+      if not (Alter_MSA.supported_loci l) then
+        `Error ("gene not supported: " ^ s)
+      else if not (Sys.file_exists n) then begin
+        if Filename.basename path = "P" then begin
+          eprintf "As of 2017-12-15 P_nuc.txt doesn't exist. We'll use just \
+            the genetic file.\n";
+          `Ok path
+        end else
+          `Error ("Nuclear alignment file doesn't exist: " ^ n)
+      end else if not (Sys.file_exists g) then
+        `Error ("Genetic alignment file doesn't exist: " ^ n)
+      else
+        `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
+
+let merge_convrtr =
+  merge_parser_
+  , (fun frmt -> Format.fprintf frmt "%s")
+
 let merge_arg, merges_arg =
-  let parser_ path =
-    let s = Filename.basename path in
-    match Nomenclature.parse_locus s with
-    | Error e -> `Error e
-    | Ok l ->
-        let n = path ^ "_nuc.txt" in
-        let g = path ^ "_gen.txt" in
-        if not (List.mem ~set:Alter_MSA.supported_loci l) then
-          `Error ("gene not supported: " ^ s)
-        else if not (Sys.file_exists n) then begin
-          if Filename.basename path = "P" then begin
-            eprintf "As of 2017-12-15 P_nuc.txt doesn't exist. We'll use just \
-              the genetic file.\n";
-            `Ok path
-          end else
-            `Error ("Nuclear alignment file doesn't exist: " ^ n)
-        end else if not (Sys.file_exists g) then
-          `Error ("Genetic alignment file doesn't exist: " ^ n)
-        else
-          `Ok path  (* Return path, and do appending later, the prefix is more useful. *)
-  in
-  let convrtr = parser_, (fun frmt -> Format.fprintf frmt "%s") in
   let loci_s ~sep ~anded =
-    let ss = List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci in
+    let ss = List.map ~f:Nomenclature.show_locus Alter_MSA.supported_loci_lst in
     if anded then
       let before, after = List.split_n ss (List.length ss - 1) in
       sprintf "%s and %s" (String.concat ~sep before) (List.hd_exn after)
@@ -132,14 +144,33 @@ let merge_arg, merges_arg =
   in
   begin fun ~what ->
     Arg.(value
-        & opt (some convrtr) None
+        & opt (some merge_convrtr) None
         & info ~doc:(doc ~what) ~docv [merge_file_argument])
   end
   , begin fun ~what ->
   Arg.(value
-        & opt_all convrtr []
+        & opt_all merge_convrtr []
         & info ~doc:(doc ~what) ~docv [merge_file_argument])
   end
+
+let error_msg fmt =
+  ksprintf (fun s -> Error (`Msg s)) fmt
+
+let recognized_locus path =
+  let base = Filename.basename path in
+  let wext =
+    try Filename.chop_extension base
+    with (Invalid_argument _) -> base
+  in
+  match String.split ~on:(`Character '_') wext with
+  | [pl]
+  | [pl; "gen"]
+  | [pl; "nuc"] ->
+    begin match Nomenclature.parse_locus pl with
+    | Ok o    -> Ok o
+    | Error e -> error_msg "%s" e
+    end
+  | _           -> error_msg "Unrecognized file or prefix: %s" path
 
 (*** Allele selector arguments. ***)
 let regex_command_line_arg = "allele-regex"
@@ -150,8 +181,8 @@ let do_not_ignore_suffixed_alleles_flag = "do-not-ignore-suffixed-alleles"
 let allele_selector_paragraph reason = sprintf
   "Various command line options allow the user to pare down, \
   and construct the set of alleles that are included, via \
-  \"allele-selectors\". This way, %s between two alleles (ex. A*01:01:01:01 \
-  vs A*02:01:01:01) or two branches of the allele tree (ex. A*01 vs A*03). \
+  \"allele-selectors\". This way, %s between two alleles (eg. A*01:01:01:01 \
+  vs A*02:01:01:01) or two branches of the allele tree (eg. A*01 vs A*03). \
   Initially, the set of alleles consists of all the ones found in the \
   alignment file except for those with a suffix (see --%s). Afterwards if we \
   find one allele-selector, the set is reset to empty and alleles are added \
@@ -166,7 +197,7 @@ let regex_arg =
      regex. This option is similar to --%s, but lets the user specify a wider \
      range (specifically those alleles matching a POSIX regex) of alleles to \
      include.  The '*' used in HLA allele names must be properly escaped from \
-     the command line: ex. --%s \"A\\\\*02:03\". \ One can repeat this \
+     the command line: i.e. --%s \"A\\\\*02:03\". \ One can repeat this \
      argument to specify different groups of alleles. "
     allele_command_line_arg
     regex_command_line_arg
@@ -194,7 +225,9 @@ let specific_arg =
 
 let number_alleles_arg =
   let docv = "POSITIVE INTEGER" in
-  let doc  = "Number of alleles to add to the allele-set." in
+  let doc  = "Number of alleles to add to the allele-set. \
+              This allele-selectors can be to resize the number of alleles \
+              considered from a given gene." in
   let open Arg in
   let parser_ = (positive_int_parser (fun d -> Alleles.Selectors.Number d)) in
   let nconv = conv ~docv (parser_, Alleles.Selectors.pp) in
@@ -205,7 +238,7 @@ let do_not_ignore_suffixed_alleles_flag =
     "IMGT publishes alleles with suffixes ('N', 'L', 'S', 'C', 'A' or 'Q') to \
      indicate special conditions such as null alleles ('N') or questionable \
      expression ('Q'). Often times, these alleles can complicate prohlatype as \
-     reads sometimes align surprisingly well to them (ex. HLA-A*11:50Q) as \
+     reads sometimes align surprisingly well to them (eg. HLA-A*11:50Q) as \
      opposed to the true allele. We want to assign these a small prior \
      probability, smaller than the other alleles. For the purposes of having a \
      clearer typing algorithm we exclude all such alleles from the starting \
@@ -215,12 +248,13 @@ let do_not_ignore_suffixed_alleles_flag =
   Arg.(value & flag & info ~doc [do_not_ignore_suffixed_alleles_flag])
 
 (*** Other args. ***)
-let no_cache_flag =
+let no_cache_flag item =
   let doc =
-    sprintf "Do not use a disk cache (in %s sub directory of the current \
-             directory) to search for previously (and then save) constructed \
-             graphs."
-      Cache.dir
+    sprintf "Do not use a disk cache (in %s subdirectory of the current \
+             directory) to search for previously constructed %s. \
+             This flag will also turn off the default behavior of saving \
+             this %s there."
+      Cache.dir item item
   in
   Arg.(value & flag & info ~doc ["no-cache"])
 
@@ -286,11 +320,16 @@ let fastq_file_arg =
   let docv = "FASTQ-FILE" in
   let doc = "Fastq formatted DNA reads file. Only one file per sample. \
              List paired end reads as 2 sequential files." in
-  Arg.(non_empty & pos_all file [] & info ~doc ~docv [])
+  Arg.(non_empty
+      & pos_right ~rev:true 1 file []
+      & info ~doc ~docv [])
 
 let num_reads_arg =
   let docv = "POSITIVE INTEGER" in
-  let doc = "Number of reads to take from the front of the FASTA file" in
+  let doc =
+    "Number of reads to use from the front of the FASTA file. \
+    This option is intended to stop execution after a given number of samples."
+  in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv ["reads"])
 
 let trie_argument = "trie"
@@ -335,7 +374,7 @@ let print_top_flag =
 
 let specific_read_args =
   let docv = "STRING" in
-  let doc  = "Read name string (to be found in fastq) to type. Add multiple \
+  let doc  = "Read name string (to be found in FASTQ) to type. Add multiple \
               to create a custom set of reads." in
   Arg.(value
       & opt_all string []
@@ -401,7 +440,9 @@ let insert_probability_arg =
 let max_number_mismatches_arg =
   let docv = "POSITIVE INTEGER" in
   let doc = "Setup a filter on the reads to cancel evaluation once we've \
-              seen this many mismatches." in
+             seen this many mismatches.
+             This will restrict which alleles are used for inference, \
+             but in aggregate take less time." in
   Arg.(value & opt (some positive_int) None & info ~doc ~docv
         ["max-mismatches"])
 
@@ -498,36 +539,31 @@ let band_radius_arg =
 
 let forward_pass_accuracy_arg =
   let docv = "POSITIVE DOUBLE" in
-  let doc  =
-    sprintf "Tweak the accuracy (and consequently speed) of the forward pass \
-      (larger -> less accurate but faster). The default value is %f. The \
-      implementation uses 63 bit floats which is more than sufficient for \
-      this calculation."
-      !ParPHMM.dx
+  let doc  = sprintf
+    "Tweak the accuracy (and consequently speed) of the forward pass \
+    (larger -> less accurate but faster). The default value is %f, \
+    which is sufficient for most Phred error profiles.
+    The implementation uses 63 bit floats which is more than sufficient for \
+    this calculation."
+    !ParPHMM.dx
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["numerical-accuracy"])
 
 let do_not_past_threshold_filter_flag =
-  let doc = "Do not use previously calculated likelihoods (ex. from other loci \
-             or considering the reverse complement alignment) as a threshold \
-             filter to short-circuit evaluations."
+  let doc = "Do not use previously calculated likelihoods (from other loci \
+             or the reverse complement alignment) as a threshold filter to \
+             short-circuit evaluations."
   in
   Arg.(value & flag & info ~doc ["do-not-past-threshold-filter"])
-
-let likelihood_first_flag =
-  let doc = "When printing the final per-allele likelihoods, print ordered \
-              by likelihood first. This will print all of the alleles, in a \
-              compressed format following the likelihood."
-  in
-  Arg.(value & flag & info ~doc ["likelihood-first"; "llhdfst"])
 
 let do_not_finish_singles_flag =
   let doc = "Paired FASTQ files that may be created by downstream analysis may \
              not guarantee that all of the reads are paired. When in paired \
              mode (2 FASTQ files are passed), by default we'll continue \
-             evaluating the unpaired reads as if they were eingle. By passing \
-             this flag we'll skip them entirely and use only the paired reads."
+             evaluating the unpaired reads as if they were single. By passing \
+             this flag the program will skip them entirely and use only the \
+             paired reads."
   in
   Arg.(value & flag & info ~doc ["do-not-finish-singles"])
 
@@ -565,18 +601,18 @@ let non_negative_zygosity =
         match zas with
         | NoSpec    -> Format.fprintf frmt "%d" 0
         | Spec d    -> Format.fprintf frmt "%d" d
-        | NonZero v -> Format.fprintf frmt "%f" v)
+        | NonZero v -> Format.fprintf frmt "P > %f" v)
 
 let zygosity_report_size_argument = "zygosity-report-size"
 let zygosity_report_size_arg =
   let open ParPHMM_drivers in
   let docv = "POSITIVE INTEGER" in
-  let doc =
-    sprintf "Override the default number of allelic pairs reported as part of \
-      the zygosity portion. By defaults only the pairs that have non-zero \
-      (> %f) probability will be reported. Set this value to zero to report \
-      all values."
-      Zygosity_array.default_non_zero
+  let doc = sprintf
+    "Override the default number of allelic pairs reported as part of \
+    the zygosity portion. By defaults only the pairs that have non-zero \
+    (> %f) probability will be reported. Set this value to zero to report \
+    all (could be > 10e6) values."
+    Zygosity_array.default_non_zero
   in
   Arg.(value & opt non_negative_zygosity
                       Zygosity_array.(NonZero default_non_zero)
@@ -585,11 +621,11 @@ let zygosity_report_size_arg =
 let zygosity_non_zero_value_arg =
   let open ParPHMM_drivers in
   let docv = "POSITIVE FLOAT" in
-  let doc =
-    sprintf "Override the default lowerbound of non-zero zygosities. The \
-      default (%0.5f) probability might be too high for some scenarios, such \
-      as if there are too few reads. This argument overrides %s."
-      Zygosity_array.default_non_zero zygosity_report_size_argument
+  let doc = sprintf
+    "Override the default lowerbound of non-zero zygosities. The \
+    default (%f) probability might be too high for some scenarios, such \
+    as if there are too few reads. This argument overrides --%s."
+    Zygosity_array.default_non_zero zygosity_report_size_argument
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["zygosity-non-zero"])
@@ -601,24 +637,25 @@ let to_num_zygosities ~zygosity_non_zero_value ~zygosity_report_size =
 
 let per_reads_report_size_arg =
   let docv = "POSITIVE INTEGER" in
-  let doc =
-    sprintf "Override the number of (per)-read information to report. By \
-      default all of the per-read information is reported."
+  let doc = sprintf
+    "Override the number of (per)-read information to report. By \
+    default all of the per-read information is reported."
   in
   Arg.(value & opt (some non_negative_int) None
              & info ~doc ~docv ["per-read-report-size"])
 
-let number_processes_arg =
+let number_of_processors_arg =
   let docv = "POSITIVE INTEGER" in
-  let doc =
-    sprintf "Parallelize read processing across this number of processesors. \
-             By default the application is not parallelized as the user would \
-             most likely achieve greater efficiency by natively parallelizing \
-             across samples as opposed to parallelizing across reads. \
-             Furthermore the user MUST specify %S as well in this mode."
-      read_size_override_argument
+  let doc = sprintf
+    "Parallelize read processing across this number of processesors. \
+     By default the application is not parallelized as the user would \
+     most likely achieve greater efficiency by naively parallelizing \
+     across samples as opposed to parallelizing across reads. \
+     Furthermore the user MUST specify --%s in this mode."
+    read_size_override_argument
   in
-  Arg.(value & opt (some positive_int) None & info ~doc ~docv ["number-processors"])
+  Arg.(value & opt (some positive_int) None
+             & info ~doc ~docv ["number-of-processors"])
 
 let split_arg =
   let docv = "POSITIVE INTEGER" in
@@ -626,8 +663,8 @@ let split_arg =
     sprintf "Split the processing of a read into this many smaller forward \
       passes, that are then aggregated. This should decrease the run time cost \
       of a full pass as the match probabilities, across alleles, are less \
-      distributed. This value $(b, must) divide the read\ size evenly. \
-      Becareful about splitting too much (setting this value too high) as \
+      distributed. This value $(b,must) divide the read\ size evenly. \
+      Be careful about splitting too much (setting this value too high) as \
       longer reads align more accurately than shorter reads (specifically, \
       10bp is too short while 25bp rarely gets filtered). If the resulting \
       output results in too many filtered reads, consider using a smaller \
@@ -647,10 +684,11 @@ let not_prealigned_flag =
 
 let output_arg =
   let docv = "FILENAME PREFIX" in
-  let doc = "Change output from stdout to files that are prefixed with the \
+  let doc = sprintf
+    "Change output from stdout to files that are prefixed with the \
     specified argument. A log file will be generated with the \".log\" \
     suffix. Data output will be written to a file with either the \".tsv\" \
-    or \".json\" suffix."
+    or \".json\" suffix (see --json)."
   in
   Arg.(value & opt (some string) None
              & info ~doc ~docv ["o"; "output"])
@@ -677,22 +715,18 @@ let full_class1_directory_argument = "full-class1"
 
 let gen_nuc_merged_flag =
   let gen_doc =
-    sprintf "For use with \"%s\" or \"%s\" to select the genetic files, \
-             ex. A_gen.txt. This is the default choice."
-      class1_directory_argument full_class1_directory_argument
+    "When a directory is specified, select the genetic files, eg. A_gen.txt. \
+     This is the default choice."
   in
   let nuc_doc =
-    sprintf "For use with \"%s\" or \"%s\" to select the nuclear files, \
-             ex. A_nuc.txt."
-      class1_directory_argument full_class1_directory_argument
+    "When a directory is specified select the nuclear files, eg. A_nuc.txt."
   in
   let mgd_doc =
     sprintf
-      "Merge the genetic (ex. A_gen.txt) with nuclear files (A_nuc.txt),
-      when specifying a directory with \"%s\" or \"%s\".
-      Be careful to not confuse this with the \"%s\" that specifies a specific
-      gene to include in the analysis"
-      class1_directory_argument full_class1_directory_argument
+      "When a directory is specified merge the genetic (eg. A_gen.txt) with \
+       nuclear files (A_nuc.txt). \
+       Be careful to not confuse this with the --%s argument that specifies a \
+       gene to include in the analysis."
       merge_file_argument
   in
   Arg.(value & vflag `Genetic
@@ -757,3 +791,153 @@ let class_selectors class1 full_class1 gen_nuc_mgd alignment_files merge_files =
     alignment_files, files @ merge_files
   else
     files @ alignment_files, merge_files
+
+let class1_loci_str =
+  let open Nomenclature in
+  anded (List.map ~f:show_locus (locus_group_to_loci ClassI))
+
+let full_class1_loci_str =
+  let open Nomenclature in
+  anded (List.map ~f:show_locus (locus_group_to_loci FullClassI))
+
+let only_class1_flag = "only-common-class1"
+
+let only_class1_directory_flag =
+  let open Nomenclature in
+  let doc = sprintf
+    "Consider only the common class I HLA loci (%s) in the passed directory."
+      class1_loci_str
+  in
+  Arg.(value & flag & info ~doc [only_class1_flag])
+
+(* fpd - file, prefix or directory *)
+let fpd_parser is_file_k path =
+  if Sys.file_exists path then begin
+    is_file_k path
+  end else
+    recognized_locus path >>= function
+      | Nomenclature.P  ->
+        let g = path ^ "_gen.txt" in
+        if Sys.file_exists g then begin
+          eprintf "As of 2017-12-15 P_nuc.txt doesn't exist. We'll use just \
+            the genetic file.\n";
+          Ok (`Prefix path)
+        end else
+          error_msg "Genetic alignment file doesn't exist: %s" g
+      | l               ->
+        if not (Alter_MSA.supported_loci l) then
+          error_msg "Merging of gene %s not supported."
+            (Nomenclature.show_locus l)
+        else
+          let n = path ^ "_nuc.txt" in
+          let g = path ^ "_gen.txt" in
+          if not (Sys.file_exists n) then begin
+            error_msg "Nuclear alignment file doesn't exist: %s" n
+          end else if not (Sys.file_exists g) then
+            error_msg "Genetic alignment file doesn't exist: %s" g
+          else
+            Ok (`Prefix path)
+
+
+let fp_printer frmt s = match s with
+  | `File s      -> Format.fprintf frmt "File: %s" s
+  | `Prefix s    -> Format.fprintf frmt "Prefix: %s" s
+
+let fp_constructor =
+  let is_locus path =
+    recognized_locus path >>= fun l -> Ok (`File path)
+  in
+  Arg.conv ~docv:"File, prefix or directory"
+    (fpd_parser is_locus, fp_printer)
+
+let file_prefix_doc ~action ~dir_str = sprintf
+  "Determine what IMGT/HLA alignment data source to %s. \
+  If a file is specifed (eg. path-to-IMGT/alignments/A_gen.txt) then \
+  only the alleles in that file are used. \
+  %s
+  If a path to a $(b,file prefix) is specified \
+  (eg. path-to-IMGT/alignments/A) then a \"A_gen.txt\" and \"A_nuc.txt\" \
+  file must also exist in the same directory and the sequence \
+  information of the alleles in those files are merged. \
+  See the imputation and distance (eg. --%s) logic for further \
+  information."
+  action
+  dir_str
+  weighted_per_segment_argument
+
+let file_or_prefix_arg ~action =
+  let docv = "FILE|PATH-to-PREFIX" in
+  let doc = file_prefix_doc ~action ~dir_str:"" in
+  Arg.(required
+      & pos 0 (some fp_constructor) None
+      & info ~doc ~docv [])
+
+let file_or_prefix_to_allele_input ?distance ~selectors =
+  let open Alleles.Input in function
+  | `File path   -> alignment ?distance ~selectors path
+  | `Prefix p    -> merge ?distance ~selectors p
+
+let fpd_printer frmt s = match s with
+  | `File s      -> Format.fprintf frmt "File: %s" s
+  | `Prefix s    -> Format.fprintf frmt "Prefix: %s" s
+  | `Directory s -> Format.fprintf frmt "Directory: %s" s
+
+let fpd_constructor =
+  let check_dir path =
+    if Sys.is_directory path then
+      Ok (`Directory path)
+    else
+      recognized_locus path >>= fun l -> Ok (`File path)
+  in
+  Arg.conv ~docv:"File, prefix or directory"
+    (fpd_parser check_dir, fpd_printer)
+
+let file_prefix_or_directory_arg action =
+  let docv = "FILE|DIRECTORY|PATH-to-PREFIX" in
+  let doc =
+    let dir_str = sprintf
+      "If a directory is specified (eg. path-to-IMGT/alignments/) then by \
+      default files from %s loci are added (see --%s). \
+      Flags, such as --%s, --%s and --%s determine which files from the loci \
+      are selected or merged."
+      full_class1_loci_str
+      only_class1_flag
+      genetic_argument
+      nuclear_argument
+      merged_argument
+    in
+    file_prefix_doc ~action ~dir_str
+  in
+  Arg.(required
+      & pos 0 (some fpd_constructor) None
+      & info ~doc ~docv [])
+
+let file_prefix_or_directory_to_allele_input_list ?distance ~selectors
+  only_class1 gen_nuc_mgd =
+  let open Alleles.Input in function
+  | `File path   -> [ alignment ?distance ~selectors path]
+  | `Prefix p    -> [ merge ?distance ~selectors p]
+  | `Directory d ->
+      let cls =
+        if only_class1 then
+          Nomenclature.ClassI
+        else
+          Nomenclature.FullClassI
+      in
+      let files = to_files gen_nuc_mgd d cls in
+      begin match gen_nuc_mgd with
+      | `Merged   -> List.map files ~f:(merge ?distance ~selectors)
+      | `Genetic
+      | `Nuclear  -> List.map files ~f:(alignment ?distance ~selectors)
+      end
+
+let errored error_code fmt =
+  ksprintf (fun s -> eprintf "%s" s; error_code) fmt
+
+let at_most_two_fastqs ~single ~paired = function
+  | []        -> errored Term.exit_status_cli_error "No FASTQ files specified"
+  | [f1]      -> single f1; Term.exit_status_success
+  | [f1; f2]  -> paired f1 f2; Term.exit_status_success
+  | lst       -> errored Term.exit_status_cli_error
+                    "Too many FASTQ files specified: %d"
+                    (List.length lst)

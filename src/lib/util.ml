@@ -44,39 +44,41 @@ let failwithf fmt =
 
 let id x = x
 
-let result_bind ~f oe =
-  match oe with
-  | Error e -> Error e
-  | Ok o -> f o
+module Result = struct
 
-let (>>=) oe f = result_bind ~f oe
+  let bind ~f oe =
+    match oe with
+    | Error e -> Error e
+    | Ok o -> f o
 
-let result_map ~f oe =
-  match oe with
-  | Error e -> Error e
-  | Ok o    -> Ok (f o)
+  let (>>=) oe f = bind ~f oe
 
-let (>>|) oe ~f = result_map ~f oe
+  let map ~f oe =
+    match oe with
+    | Error e -> Error e
+    | Ok o    -> Ok (f o)
 
-let error_map ~f oe =
-  match oe with
-  | Error e -> Error (f e)
-  | Ok o    -> Ok o
+  let (>>|) oe f = map ~f oe
 
-let error_bind ~f oe =
-  match oe with
-  | Error e -> f e
-  | Ok o    -> Ok o
+  let error_map ~f oe =
+    match oe with
+    | Error e -> Error (f e)
+    | Ok o    -> Ok o
 
-let error fmt = ksprintf (fun s -> Error s) fmt
+  let error_bind ~f oe =
+    match oe with
+    | Error e -> f e
+    | Ok o    -> Ok o
 
-let unwrap_ok = function
-  | Ok o    -> o
-  | Error _ -> invalid_arg "Not Ok in unwrap_ok."
+  let error fmt = ksprintf (fun s -> Error s) fmt
 
-let unwrap_error = function
-  | Ok _    -> invalid_argf "Not Error in unwrap_error."
-  | Error e -> e
+  let unwrap = function
+    | Ok o    -> o
+    | Error _ -> invalid_arg "Not Ok in unwrap_ok."
+
+end
+
+include Result
 
 let print_line ?width oc s =
   match width with

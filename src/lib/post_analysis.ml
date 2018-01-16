@@ -10,7 +10,7 @@ let of_json_file f =
   Yojson.Safe.stream_from_file f
   |> Stream.next (* only one element per file. *)
   |> f_of_yojson
-  |> unwrap_ok
+  |> unwrap
 
 type read_info =
   | Pr of Alleles_and_positions.t Multiple_loci.paired

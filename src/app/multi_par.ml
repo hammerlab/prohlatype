@@ -110,9 +110,9 @@ let type_
             begin match fastq_file_lst with
             | []              -> invalid_argf "Cmdliner lied!"
             | [fastq]         -> Sequential.across_fastq ~log_oc ~data_oc conf
-                                    ?number_of_reads ~specific_reads fastq init
+                                    ?number_of_reads ~specific_reads init fastq
             | [read1; read2]  -> Sequential.across_paired ~log_oc ~data_oc ~finish_singles conf
-                                    ?number_of_reads ~specific_reads read1 read2 init
+                                    ?number_of_reads ~specific_reads init read1 read2
             | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                                   (List.length lst)
             end
@@ -125,10 +125,10 @@ let type_
             | []              -> invalid_argf "Cmdliner lied!"
             | [fastq]         -> Parallel.across_fastq ~log_oc ~data_oc conf
                                     ?number_of_reads ~specific_reads ~nprocs
-                                    fastq state
+                                    state fastq
             | [read1; read2]  -> Parallel.across_paired ~log_oc ~data_oc conf
                                     ?number_of_reads ~specific_reads ~nprocs
-                                    read1 read2 state
+                                    state read1 read2
             | lst             -> invalid_argf "More than 2, %d fastq files specified!"
                                   (List.length lst)
             end
@@ -176,7 +176,7 @@ let () =
             $ (merges_arg ~what:"Parametric PHMM")
             $ defaulting_distance_flag
             (* What to do ? *)
-            $ no_cache_flag
+            $ (no_cache_flag "PHMM")
             (* What are we typing *)
             $ fastq_file_arg $ num_reads_arg $ specific_read_args
             $ do_not_finish_singles_flag
@@ -200,7 +200,7 @@ let () =
             $ split_arg
             $ not_prealigned_flag
             $ forward_pass_accuracy_arg
-            $ number_processes_arg
+            $ number_of_processors_arg
          , info app_name ~version ~doc ~man)
   in
   match Term.eval type_ with

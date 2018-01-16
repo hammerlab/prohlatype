@@ -1,6 +1,7 @@
 
 open Prohlatype
 open Cmdline_options
+open Cmdliner
 
 let app_name = "align2fasta"
 
@@ -47,35 +48,38 @@ let single_mp ?width oc mp =
 let against_mps ?width out mplst =
   with_oc out (fun oc -> List.iter ~f:(single_mp ?width oc) mplst)
 
+let invalid_alignment_file_error = 4
+let invalid_alignment_file_error_exit_info =
+  Term.exit_info ~doc:"alignment file error" invalid_alignment_file_error
+
 let convert
   (* output destination. *)
   ofile
   (* output option *)
   width
-  (* input *)
-  class1
-  full_class1
-  gen_nuc_mgd
-  alignment_file merge_file
   (* optional distance to trigger imputation, merging *)
   distance
   (* selectors *)
   regex_list specific_list number_alleles
   do_not_ignore_suffixed_alleles
+  (* input *)
+  only_class1
+  gen_nuc_mgd
+  file_prefix_or_directory
   =
   let selectors =
     aggregate_selectors ~regex_list ~specific_list ~number_alleles
       ~do_not_ignore_suffixed_alleles
   in
-  let opt_to_lst = Option.value_map ~default:[] ~f:(fun s -> [s]) in
-  let alignment_files, merge_files =
-    class_selectors class1 full_class1 gen_nuc_mgd
-      (opt_to_lst alignment_file)
-      (opt_to_lst merge_file)
+  let ailst =
+    file_prefix_or_directory_to_allele_input_list
+      ?distance ~selectors
+      only_class1 gen_nuc_mgd
+      file_prefix_or_directory
   in
-  to_allele_inputs ~alignment_files ~merge_files ?distance ~selectors >>= function
-    |  []    -> Error "No input sent"
-    | h :: t ->
+  match ailst with
+  | []      -> errored Term.exit_status_cli_error "No input sent"
+  | h :: t  ->
       let prefix =
         match ofile with
         | Some v  -> v
@@ -91,15 +95,20 @@ let convert
               ofiledefault
       in
       let out = sprintf "%s.fasta" prefix in
-      list_fold_ok (h :: t) ~init:[] ~f:(fun acc i ->
-          Alleles.Input.construct i >>= fun mp -> Ok (mp :: acc))
-        >>= fun mplst -> Ok (against_mps ?width out (List.rev mplst))
+      let mps =
+        list_fold_ok (h :: t) ~init:[] ~f:(fun acc i ->
+            Alleles.Input.construct i >>= fun mp -> Ok (mp :: acc))
+      in
+      match mps with
+      | Error m  -> errored invalid_alignment_file_error "%s" m
+      | Ok mplst -> against_mps ?width out (List.rev mplst);
+                    Term.exit_status_success
 
 let () =
   let open Cmdliner in
   let output_fname_arg =
     let docv = "FILE" in
-    let doc  = "Output file name, defaults to \"(input file)_.fasta\"."
+    let doc  = "Output file name, defaults to \"(input file basename).fasta\"."
     in
     Arg.(value & opt (some string) None & info ~doc ~docv ["o"; "output"])
   in
@@ -113,12 +122,10 @@ let () =
   let convert =
     let doc = "Transform IMGT/HLA's alignments to fasta." in
     let description =
-      [ `P (sprintf
-           "%s is a program that transforms IMGT/HLA's per locus alignment \
+      [ `P  "$(tname) program transforms IMGT/HLA's per locus alignment \
             files to FASTA files. The alignments are the text files found in \
             the alignments folder and start with
             \"HLA-* Genomic Sequence Alignments\" header."
-           app_name)
 
       ; `P "The IMGT/HLA database already distributes FASTA files for the \
             MHC genes in their database, so why create a tool to recreate \
@@ -148,18 +155,25 @@ let () =
     let examples =
       [ `P "To create a fasta for HLA-A from genetic DNA sequenced alleles \
             where the missing data (typically at the ends) has been imputed \
-            by looking borrowing from the allele closest in the nomenclature \
-            trie:"
+            by borrowing from the allele closest in the nomenclature \
+            trie and write to a specific file:"
       ; `Pre (sprintf
-          "\t%s --alignment path-to-IMGTHLA/alignments/A_gen.txt --trie -o hla_a_trie_imputed"
-           app_name)
-      ; `P "To create a fasta for all class I genes (A,B,C) that $(b,merges) \
-            their gDNA (ex. C_gen.txt) and the cDNA (ex. C_nuc.txt) derived \
-            alleles using a weighted by segment (exon's) distance similarity \
-            to fill in missing intron/UTR segments:"
+          "%s path-to-IMGTHLA/alignments/A_gen.txt --%s -o hla_a_trie_imputed"
+           app_name trie_argument)
+
+      ; `P "To create a fasta for HLA-C merging gDNA (C_gen.txt) and \
+            cDNA (C_nuc.txt) derivied sequences \
+            and using the reference sequence \
+            to fill in missing segments:"
       ; `Pre (sprintf
-          "\t%s --class1-mgd path-to-IMGTHLA/alignments --weighted-segment -o hla_class_I_ws_imputed_mgd"
-          app_name)
+          "%s --%s -o output path-to-IMGTHLA/alignments/C"
+          app_name reference_distance_argument)
+
+      ; `P "To cast the widest possible net; all class I, merge the gDNA and \
+            cDNA and impute missing segments."
+      ; `Pre (sprintf
+          "%s --%s -o output path-to-IMGTHLA/alignments"
+          app_name merged_argument)
       ]
     in
     let man =
@@ -178,21 +192,17 @@ let () =
           $ output_fname_arg
           $ width_arg
           (* Allele information source *)
-          $ class1_directory_arg
-          $ full_class1_directory_arg
-          $ gen_nuc_merged_flag
-          $ alignment_arg
-          $ (merge_arg ~what:"set of sequences")
           $ optional_distance_flag
           (* Allele selectors *)
           $ regex_arg $ specific_arg $ number_alleles_arg
           $ do_not_ignore_suffixed_alleles_flag
-
-        , info app_name ~version ~doc ~man)
+          $ only_class1_directory_flag
+          $ gen_nuc_merged_flag
+          $ (file_prefix_or_directory_arg "process")
+        , info app_name
+            ~version
+            ~doc
+            ~man
+            ~exits:(invalid_alignment_file_error_exit_info :: default_exits))
   in
-  match Term.eval convert with
-  | `Ok (Ok ())      -> exit 0
-  | `Ok (Error e)    -> eprintf "%s\n" e;
-                        exit 1
-  | `Error _         -> failwith "error"
-  | `Version | `Help -> exit 0
+  Term.(exit_status (eval convert))

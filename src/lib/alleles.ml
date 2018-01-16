@@ -562,17 +562,17 @@ module Input = struct
 
   let to_string = function
     | AlignmentFile { path; selectors; distance } ->
-        sprintf "AF_%s_%s_%s"
+        sprintf "%s_%s_%s"
           (Filename.chop_extension (Filename.basename path))
           (Selectors.string_of_list selectors)
           (match distance with
-           | None -> "false"
+           | None -> "not-imputed"
            | Some dl -> Distances.show_logic dl)
     | MergeFromPrefix { prefix_path; selectors; drop_sv; distance } ->
-        sprintf "MGD_%s_%s_%b_%s"
+        sprintf "Merged_%s_%s_%s_%s"
           (Filename.basename prefix_path)
           (Selectors.string_of_list selectors)
-          drop_sv
+          (if drop_sv then "dropped-slice-variants" else "kept-slice-variants")
           (Distances.show_logic distance)
 
   module MergeConstruction = struct

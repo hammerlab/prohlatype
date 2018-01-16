@@ -4,10 +4,14 @@ open Util
 open MSA
 
 (* The set of loci for which I've tested these algorithms.  *)
-let supported_loci =
+let supported_loci_lst =
   Nomenclature.[ A; B; C
                ; E ; F ; G ; HFE ; H ; J ; K ; L ; MICA ; MICB ; P ; TAP1 ; TAP2 ; T ; V ; W ; Y 
                ]
+
+
+let supported_loci l =
+    List.mem ~set:supported_loci_lst l
 
 (* Filter out the string sequence elements. *)
 let no_sequences = List.filter ~f:(fun a -> not (is_sequence a))
