@@ -215,31 +215,31 @@ let () =
             The --%s argument can change the number of elements that \
             are reported for each read."
               zygosity_report_size_argument
-              map_depth_argument)
+              per_reads_report_size_argument)
 
-      ; `P (allele_selector_paragraph "one could PHMMs")
+      ; `P (allele_selector_paragraph "one could construct PHMMs for")
       ]
     in
     let examples =
       [ `P "Type samples based on merged HLA-A:"
-      ; `Pre (sprintf "%s path-to-IMGTHLA/alignments/A samples.fastq" app_name)
+      ; `Pre (sprintf "%s path-to-IMGTHLA/alignments/A sample.fastq" app_name)
 
       ;  `P "Type samples based on cDNA HLA-A and paired reads:"
       ; `Pre (sprintf
-          "%s path-to-IMGTHLA/alignments/A_nuc samples_1.fastq samples_2.fastq"
+          "%s path-to-IMGTHLA/alignments/A_nuc sample_1.fastq sample_2.fastq"
           app_name)
 
       ; `P "Compute the likelihood of one read versus one allele:"
       ; `Pre (sprintf
           "%s --%s A*30:106 --sr name-of-read \
-           path-to-IMGTHLA/alignments/A_gen.txt samples.fastq"
+           path-to-IMGTHLA/alignments/A_gen.txt sample.fastq"
           app_name
           specific_allele_argument)
 
       ; `P "See the viterbi path that read took:"
       ; `Pre (sprintf
           "%s --%s A*30:106 --sr name-of-read --%s \
-           path-to-IMGTHLA/alignments/A_gen.txt samples.fastq"
+           path-to-IMGTHLA/alignments/A_gen.txt sample.fastq"
           app_name
           specific_allele_argument
           viterbi_flag_str)
@@ -281,7 +281,7 @@ let () =
             (*$ band_warmup_arg
             $ number_bands_arg
             $ band_radius_arg *)
-            $ allele_depth_arg
+            $ allele_depth_info_arg
             $ likelihood_report_size_arg
             $ zygosity_report_size_arg
             $ zygosity_non_zero_value_arg

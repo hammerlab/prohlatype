@@ -457,14 +457,20 @@ module Selectors = struct
     (* When ppx_deriving >4.1 hits:
     [@@ deriving eq, ord, show { with_path = false }] *)
 
-  let fname_suitable = function
-    | '*' | ':' | '\\' -> false
-    | _ -> true
+  let filenameable s =
+    String.to_character_list s
+    |> List.map ~f:(function
+      | '*'  -> "s"
+      | ':'  -> "c"        (* This is a weird MAC-Finder behavior.*)
+      | '/'  -> "fs"
+      | '\\' -> "bs"       (* Will we ever have windows users? *)
+      | c    -> sprintf "%c" c)
+    |> String.concat ~sep:""
 
   (* A bit more concise than show and easier for filenames.*)
   let to_string = function
-    | Regex r             -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
-    | Specific s          -> sprintf "S%s" (String.filter ~f:fname_suitable s)
+    | Regex r             -> sprintf "R%s" (filenameable r)
+    | Specific s          -> sprintf "S%s" (filenameable s)
     | Number n            -> sprintf "N%d" n
     | DoNotIgnoreSuffixed -> "DNIS"
 

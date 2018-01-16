@@ -169,7 +169,7 @@ let () =
             step will fail if dot is not installed and accessible."
 
       ; `P (allele_selector_paragraph
-              "one could have graphs that detail differences")
+              "one could have graphs that detail differences between")
 
       ; `P (sprintf
             "Finally there is a plethora of options to control the display of \
@@ -192,9 +192,11 @@ let () =
                 app_name)
 
       ; `P "To create a graph of two specific alleles:"
-      ; `Pre (sprintf "%s --spec-allele \"A*01:01:01:01\" --spec-allele \
+      ; `Pre (sprintf "%s --%s \"A*01:01:01:01\" --%s \
                        \"A*02:649\" path-to-IMGTHLA/alignments/A_gen.txt "
-                app_name)
+                app_name
+                allele_command_line_arg
+                allele_command_line_arg)
       ; `P "To create a graph of $(b,merged) HLA-A gene:"
       ; `Pre (sprintf "%s path-to-IMGTHLA/alignments/A " app_name)
       ]

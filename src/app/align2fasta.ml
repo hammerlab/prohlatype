@@ -60,7 +60,9 @@ let convert
   (* optional distance to trigger imputation, merging *)
   distance
   (* selectors *)
-  regex_list specific_list number_alleles
+  regex_list
+  specific_list
+  number_alleles
   do_not_ignore_suffixed_alleles
   (* input *)
   only_class1
@@ -74,8 +76,8 @@ let convert
   let ailst =
     file_prefix_or_directory_to_allele_input_list
       ?distance ~selectors
-      only_class1 gen_nuc_mgd
       file_prefix_or_directory
+      only_class1 gen_nuc_mgd
   in
   match ailst with
   | []      -> errored Term.exit_status_cli_error "No input sent"
@@ -149,7 +151,7 @@ let () =
               weighted_per_segment_argument
               reference_distance_argument)
 
-      ; `P (allele_selector_paragraph "one can compare sequences")
+      ; `P (allele_selector_paragraph "one can compare sequences between")
       ]
     in
     let examples =
@@ -194,8 +196,11 @@ let () =
           (* Allele information source *)
           $ optional_distance_flag
           (* Allele selectors *)
-          $ regex_arg $ specific_arg $ number_alleles_arg
+          $ regex_arg
+          $ specific_arg
+          $ number_alleles_arg
           $ do_not_ignore_suffixed_alleles_flag
+          (* Input *)
           $ only_class1_directory_flag
           $ gen_nuc_merged_flag
           $ (file_prefix_or_directory_arg "process")
