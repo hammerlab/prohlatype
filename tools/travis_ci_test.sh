@@ -21,6 +21,9 @@ echo current dir:
 ls
 
 case "$TEST" in
+  scraps)
+    make scraps
+    ;;
   parsing)
     make covered_tests
     echo testing parsing
