@@ -159,7 +159,7 @@ let to_parPHMM_t gen s =
         (to_merge_prefix "A")
   in
   ParPHMM.construct input
-  |> unwrap_ok
+  |> unwrap
 
 let gen_parPHMM_ts gen =
   List.map loci_to_test ~f:(to_parPHMM_t gen)
