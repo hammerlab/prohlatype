@@ -4,6 +4,8 @@
 Probabilistic HLA Typing
 ------------------------
 
+Paper: [Prohlatype: A Probabilistic Framework for HLA Typing](https://doi.org/10.1101/244962)
+
 This project provides a set of tools to calculate the full posterior
 distribution of HLA types given read data.
 
