@@ -382,7 +382,8 @@ module Parser = struct
     |> List.map ~f:snd
 
   type result =
-    { align_date  : string
+    { release     : string
+    ; align_date  : string
     ; locus       : Nomenclature.locus
     ; reference   : string
     ; ref_elems   : string alignment_element list
@@ -396,15 +397,19 @@ module Parser = struct
 
   let report = ref false
 
-  let find_align_date ic =
+  let find_header_lines ic =
+    let colon_split = String.split ~on:(`Character ':') in
     try
-      let rec loop () =
-        let line = input_line ic in
-        match String.split ~on:(`String ":") line with
-        | ["Sequences Aligned"; ad ] -> Some ad
-        | _ -> loop ()
+      let rec find_release () =
+        match colon_split (input_line ic) with
+        | [ "IPD-IMGT/HLA Release"; release ] -> find_start release
+        | _ -> find_release ()
+      and find_start release =
+        match colon_split (input_line ic) with
+        | ["Sequences Aligned"; ad ] -> Some (release, ad)
+        | _ -> find_start release
       in
-      loop ()
+      find_release ()
     with End_of_file ->
       None
 
@@ -493,11 +498,11 @@ module Parser = struct
             end
         | Data _ -> loop_header state
     in
-    match find_align_date ic with
+    match find_header_lines ic with
     | None ->
         close_in ic;
         invalid_argf "Couldn't extract sequence align date."
-    | Some align_date ->
+    | Some (release, align_date) ->
         let reversed = loop_header Header in
         let boundary_swap =
           match boundary_schema with
@@ -527,7 +532,8 @@ module Parser = struct
                 } :: acc)
             reversed.alt_htbl
         in
-        { align_date
+        { release
+        ; align_date
         ; locus
         ; reference = reversed.ref
         ; ref_elems

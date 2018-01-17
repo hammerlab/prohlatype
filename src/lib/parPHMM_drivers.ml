@@ -396,7 +396,11 @@ module Output = struct
 
   open ParPHMM
 
-  type locus = Nomenclature.locus
+  type header =
+    { prohlatype_version  : string
+    ; commandline         : string
+    }
+  and locus = Nomenclature.locus
   and per_allele_log_likelihood =
     { allele : string
     ; a_llhd : Lp.t
@@ -411,16 +415,18 @@ module Output = struct
     ; prob              : float
     }
   and per_locus =
-    { locus       : locus
-    ; zygosity    : zygosity_log_likelihood list
-    ; per_allele  : per_allele_log_likelihood array
+    { imgt_release  : string
+    ; locus         : locus
+    ; zygosity      : zygosity_log_likelihood list
+    ; per_allele    : per_allele_log_likelihood array
     }
   and 'p per_read =
     { name : string
     ; d    : 'p
     }
   and 'p t =
-    { per_loci  : per_locus list
+    { header    : header
+    ; per_loci  : per_locus list
     ; per_reads : 'p per_read list
     }
   [@@deriving yojson]
@@ -460,7 +466,7 @@ module Output = struct
         (parse_to_resolution_exn pl1.allele)
         (parse_to_resolution_exn pl2.allele))
 
-  let create_pl locus allele_arr allele_llhd_arr zbest =
+  let create_pl imgt_release locus allele_arr allele_llhd_arr zbest =
     let per_allele =
       Array.mapi allele_arr ~f:(fun i (allele, alters) ->
         { allele; a_llhd = allele_llhd_arr.(i); alters })
@@ -478,13 +484,14 @@ module Output = struct
             }))
         |> List.concat
     in
-    { locus
+    { imgt_release
+    ; locus
     ; per_allele
     ; zygosity
     }
 
-  let create per_loci per_reads =
-    { per_loci; per_reads }
+  let create header per_loci per_reads =
+    { header; per_loci; per_reads }
 
   let shrink d t =
     let shrink_list l =
@@ -494,13 +501,15 @@ module Output = struct
       Option.value_map ~default:a ~f:(fun l ->
           Array.sub a ~pos:0 ~len:(min l (Array.length a)))
     in
-    let shrink_pl { locus; per_allele; zygosity } =
-      { locus
+    let shrink_pl { imgt_release; locus; per_allele; zygosity } =
+      { imgt_release
+      ; locus
       ; per_allele = shrink_array per_allele d.num_likelihoods
       ; zygosity = zygosity (* Shrunk on construction. *)
       }
     in
-    { per_loci = List.map t.per_loci ~f:shrink_pl
+    { header    = t.header
+    ; per_loci  = List.map t.per_loci ~f:shrink_pl
     ; per_reads = shrink_list t.per_reads d.num_per_read
     }
 
@@ -602,7 +611,12 @@ type output_opt =
   }
 
 type single_conf =
-  { prealigned_transition_model : bool
+  { commandline           : string
+  (** How the program was invoked.
+   * We'll save it here explicitly because we want to preserve it in the final
+   * output for reproducibility.*)
+
+  ; prealigned_transition_model : bool
   (** Use a transition model (transition probability between hidden states of
       the Markov model that represent Start, End, Match, Insert and Delete),
       that assumes the entire read will fit completely inside the reference
@@ -638,8 +652,9 @@ type single_conf =
 let single_conf ?allele ?insert_p ?band ?max_number_mismatches ?split
   ~prealigned_transition_model
   ~past_threshold_filter ~check_rc
-  ~output_opt () =
-    { prealigned_transition_model
+  ~output_opt commandline =
+    { commandline
+    ; prealigned_transition_model
     ; allele
     ; insert_p
     ; band
@@ -733,7 +748,9 @@ module Forward (* : Worker *) = struct
   type opt = output_opt
 
   type state =
-    { locus             : Nomenclature.locus
+    { commandline       : string
+    ; imgt_release      : string
+    ; locus             : Nomenclature.locus
     ; per_allele_lhood  : Lp.t array
     ; zygosity          : Zygosity_array.t
     ; mutable per_reads : aapt Output.per_read list
@@ -785,7 +802,9 @@ module Forward (* : Worker *) = struct
     in
     let initial_pt = Past_threshold.init past_threshold_filter in
     (* Curry away arguments and discard final threshold; can't use it. *)
-    { locus            = parPHMM_t.locus
+    { commandline      = conf.commandline
+    ; imgt_release     = parPHMM_t.release
+    ; locus            = parPHMM_t.locus
     ; per_allele_lhood = proc.init_global_state ()
     ; zygosity         = Zygosity_array.init (Array.length allele_arr)
     ; per_reads        = []
@@ -866,11 +885,14 @@ module Forward (* : Worker *) = struct
   let output state oc =
     let number_of_reads = List.length state.per_reads in
     let ot =
-      let zbest = Zygosity_array.best state.opt.depth.Output.num_zygosities
-                    state.per_allele_lhood number_of_reads state.zygosity in
-      let pl    = Output.create_pl state.locus state.allele_arr
-                    state.per_allele_lhood zbest in
-      Output.create [pl] state.per_reads
+      let zbest   = Zygosity_array.best state.opt.depth.Output.num_zygosities
+                      state.per_allele_lhood number_of_reads state.zygosity in
+      let pl      = Output.create_pl state.imgt_release state.locus state.allele_arr
+                      state.per_allele_lhood zbest in
+      let header  =
+        { Output.prohlatype_version = "%%VERSION%%"
+        ; Output.commandline        = state.commandline } in
+      Output.create header [pl] state.per_reads
     in
     let of_ =
       match state.opt.output_format with
@@ -986,7 +1008,10 @@ end (* Viterbi *)
 (* Combine results from multiple loci. *)
 
 type multiple_conf =
-  { prealigned_transition_model : bool
+  { commandline                 : string
+  (* How the program was invoked. *)
+
+  ; prealigned_transition_model : bool
   (** Use a transition model (transition probability between hidden states of
       the Markov model that represent Start, End, Match, Insert and Delete),
       that assumes the entire read will fit completely inside the reference
@@ -1047,8 +1072,9 @@ let multiple_conf ?insert_p ?band ?max_number_mismatches ?split
   ~output_opt
   (*~incremental_pairs *)
   (*?first_read_best_log_gap *)
-  () =
-    { prealigned_transition_model
+  commandline =
+    { commandline
+    ; prealigned_transition_model
     ; insert_p
     ; band
     ; max_number_mismatches
@@ -1246,13 +1272,15 @@ module Multiple_loci (* :
 
   (* Easily convert to Output.per_locus *)
   type per_locus =
-    { pl_locus    : Nomenclature.locus
-    ; allele_arr  : (string * MSA.Alteration.t list) array
-    ; likelihood  : Lp.t array
-    ; zygosity    : Zygosity_array.t
+    { imgt_release  : string
+    ; pl_locus      : Nomenclature.locus
+    ; allele_arr    : (string * MSA.Alteration.t list) array
+    ; likelihood    : Lp.t array
+    ; zygosity      : Zygosity_array.t
     }
   type state =
-    { per_loci          : per_locus list
+    { commandline       : string
+    ; per_loci          : per_locus list
     ; mutable per_reads : middle_read_info Output.per_read list
     ; single_read       : bytes -> float array -> Forward.stat pp
     ; ordinary_paired   : string -> bytes -> float array
@@ -1262,9 +1290,10 @@ module Multiple_loci (* :
     }
 
   type final_state =
-    { f_opt       : Forward.opt
-    ; f_pl_lst    : Output.per_locus list
-    ; f_per_reads : final_read_info Output.per_read list
+    { f_commandline : string
+    ; f_opt         : Forward.opt
+    ; f_pl_lst      : Output.per_locus list
+    ; f_per_reads   : final_read_info Output.per_read list
     }
 
   (* A PairedDependent with completed second should be chosen over any SingleRead's.
@@ -1408,7 +1437,8 @@ module Multiple_loci (* :
             ?split ~prealigned_transition_model read_length parPHMM_t
         in
         let n = Array.length allele_arr in
-        parPHMM_t.ParPHMM.locus, proc, allele_arr, n)
+        let iml = parPHMM_t.ParPHMM.release,parPHMM_t.ParPHMM.locus in
+        iml, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
     let forward = Forward.forward oc output_opt.allele_depth in
@@ -1417,7 +1447,7 @@ module Multiple_loci (* :
     in
     let single_read read read_errors =
       List.fold_left paa ~init:(initial_pt, [])
-            ~f:(fun (pt, acc) (locus, p, _, _) ->
+            ~f:(fun (pt, acc) ((_, locus), p, _, _) ->
                   let r, npt = forward pt p read read_errors in
                   npt, (locus, SingleRead r) :: acc)
       |> snd                                 (* Discard final threshold *)
@@ -1427,7 +1457,7 @@ module Multiple_loci (* :
     let ordinary_paired name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
-          ~f:(fun (pt1, pt2, acc) (locus, p, _, _) ->
+          ~f:(fun (pt1, pt2, acc) ((_, locus), p, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
                 match most_likely_orientation result1 with
                 | Filtered  m ->
@@ -1444,7 +1474,7 @@ module Multiple_loci (* :
       let incremental_paired name rd1 re1 rd2 re2 =
       let best, rest, _fpt1 =
         List.fold_left paa ~init:([], [], initial_pt)
-          ~f:(fun (best, acc, pt) (locus, p, _, _) ->
+          ~f:(fun (best, acc, pt) ((_, locus), p, _, _) ->
                 let result1, npt = forward pt p rd1 re1 in
                 match most_likely_orientation result1 with
                 | Filtered m ->
@@ -1484,9 +1514,11 @@ module Multiple_loci (* :
           in
           Single_or_incremental (seconds @ (List.rev rest))
     in *)
-    { per_loci =
-      List.map paa ~f:(fun (pl_locus, p, allele_arr, number_alleles) ->
-        { pl_locus
+    { commandline = conf.commandline
+    ; per_loci =
+      List.map paa ~f:(fun ((release, pl_locus), p, allele_arr, number_alleles) ->
+        { imgt_release = release
+        ; pl_locus
         ; allele_arr
         ; likelihood = p.init_global_state ()
         ; zygosity   = Zygosity_array.init number_alleles
@@ -1548,9 +1580,9 @@ module Multiple_loci (* :
     in
     cons_per_reads state { pr with Output.d = { ml; aaps}}
 
-  let finalize { opt; per_reads; per_loci; _} =
+  let finalize { commandline; opt; per_reads; per_loci; _} =
     let pl_lst, best_zygosities_by_loci =
-      List.map per_loci ~f:(fun { pl_locus; allele_arr; likelihood; zygosity } ->
+      List.map per_loci ~f:(fun { imgt_release; pl_locus; allele_arr; likelihood; zygosity } ->
         let number_of_reads = List.fold_left per_reads ~init:0
           ~f:(fun s { Output.d; _} -> if d.ml.locus = pl_locus then s + 1 else s)
         in
@@ -1558,7 +1590,7 @@ module Multiple_loci (* :
           Zygosity_array.best opt.depth.Output.num_zygosities likelihood
             number_of_reads zygosity
         in
-        let pl = Output.create_pl pl_locus allele_arr likelihood zb in
+        let pl = Output.create_pl imgt_release pl_locus allele_arr likelihood zb in
         pl, (pl_locus, zb))
       |> List.split
     in
@@ -1592,13 +1624,18 @@ module Multiple_loci (* :
       let most_likely = assign_loci ml  in
       { pr with Output.d = { most_likely; aaps }})
     in
-    { f_opt       = opt
-    ; f_pl_lst    = pl_lst
+    { f_commandline = commandline
+    ; f_opt         = opt
+    ; f_pl_lst      = pl_lst
     ; f_per_reads
     }
 
-  let output { f_opt; f_pl_lst; f_per_reads } oc =
-    let ot = Output.create f_pl_lst f_per_reads in
+  let output { f_commandline; f_opt; f_pl_lst; f_per_reads } oc =
+    let header  =
+      { Output.prohlatype_version = "%%VERSION%%"
+      ; Output.commandline        = f_commandline }
+    in
+    let ot = Output.create header f_pl_lst f_per_reads in
     let of_ =
       match f_opt.output_format with
       | `TabSeparated ->

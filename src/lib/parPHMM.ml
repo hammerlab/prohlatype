@@ -2099,6 +2099,7 @@ module ForwardMLogSpace = ForwardMultipleGen (Lp)
 
 type t =
   { locus           : Nomenclature.locus
+  ; release         : string
   ; align_date      : string
   ; alleles         : (string * MSA.Alteration.t list) array        (* Canonical order. *)
   ; number_alleles  : int
@@ -2111,10 +2112,9 @@ let construct input =
   else begin
     let open MSA.Parser in
     Alleles.Input.construct input >>= fun mp ->
-      let { locus; reference; ref_elems; alt_elems; align_date} = mp in
-      let base_arr, pmap = initialize_base_array_and_position_map ref_elems in
+      let base_arr, pmap = initialize_base_array_and_position_map mp.ref_elems in
       let state_a = init_state base_arr in
-      List.iter alt_elems ~f:(fun a ->
+      List.iter mp.alt_elems ~f:(fun a ->
         add_alternate_allele pmap a.allele a.seq base_arr state_a);
       let eq x y =
         match x, y with
@@ -2124,11 +2124,17 @@ let construct input =
       in
       let emissions_a = Array.map (Pm.ascending eq) state_a in
       let alleles =
-        (reference, []) :: List.map alt_elems ~f:(fun a -> a.allele, a.alters)
+        (mp.reference, []) :: List.map mp.alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
       in
       let number_alleles = Array.length alleles in
-      Ok { locus; align_date; alleles; number_alleles; emissions_a }
+      Ok { release    = mp.release
+         ; align_date = mp.align_date
+         ; locus      = mp.locus
+         ; alleles
+         ; number_alleles
+         ; emissions_a
+         }
   end
 
 let save_pphmm t =

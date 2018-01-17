@@ -93,12 +93,12 @@ let recent_check to_input to_date arg dateable =
   in
   if Sys.file_exists file then begin
     let ic = open_in file in
-    match MSA.Parser.find_align_date ic with
+    match MSA.Parser.find_header_lines ic with
     | None    ->
         eprintf "Did not find a Sequence alignment date for %s, will use current.\n" file;
         close_in ic;
         true
-    | Some ad ->
+    | Some (_, ad) ->
         close_in ic;
         let recent = (ad = to_date dateable) in
         if recent then recent else begin

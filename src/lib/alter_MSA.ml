@@ -1054,7 +1054,8 @@ end (* Merge *) = struct
           if !debug then printf "finished same_alts\n";
           diff_alts dl instr nuc_mp same ref_g ref_n >>= fun diff_alt_elems ->
             let nalt_elems = same_alt_elems @ diff_alt_elems in
-            Ok ({ align_date = gen_mp.align_date
+            Ok ({ release    = gen_mp.release
+                ; align_date = gen_mp.align_date
                 ; locus      = gen_mp.locus
                 ; reference  = gen_mp.reference
                 ; ref_elems  = new_ref_elems

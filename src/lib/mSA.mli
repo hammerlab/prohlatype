@@ -118,16 +118,17 @@ end (* Alteration *)
 
 module Parser : sig
 
-  (** [find_align_date] parses an in channel of an alignment file up to the
-      alignment date, or returns None if it is not found. *)
-  val find_align_date : in_channel -> string option
+  (** [find_header_lines] parses an in channel of an alignment file up to the
+   *  release info and alignment date, or returns None if they are not found.
+   *)
+  val find_header_lines : in_channel -> (string * string) option
 
   (* Alternate allele information *)
   type alt =
     { allele : string
     (** The name: ex. "B*15:148" *)
-    
-    ; seq : string alignment_sequence 
+
+    ; seq : string alignment_sequence
     (** The sequence elements. *)
 
     ; alters : Alteration.t list
@@ -137,7 +138,10 @@ module Parser : sig
   val sort_alts_by_nomenclature : alt list -> alt list
 
   type result =
-    { align_date  : string
+    { release     : string
+    (** What IMGT/HLA database release version this file was parsed from. *)
+
+    ; align_date  : string
     (** When the sequences were aligned by IMGT. *)
 
     ; locus       : Nomenclature.locus
