@@ -74,7 +74,7 @@ module Result = struct
 
   let unwrap = function
     | Ok o    -> o
-    | Error _ -> invalid_arg "Not Ok in unwrap_ok."
+    | Error _ -> invalid_arg "Not Ok in unwrap."
 
 end
 
