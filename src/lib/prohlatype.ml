@@ -13,9 +13,6 @@ module Nomenclature = Nomenclature
 
 module Fixed_width = Fixed_width
 module Ref_graph = Ref_graph
-module Kmer_to_int = Kmer_to_int
-module Kmer_table = Kmer_table
-module Index = Index
 
 module Partition_map = Partition_map
 module Phmm = Phmm

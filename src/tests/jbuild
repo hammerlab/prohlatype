@@ -2,7 +2,6 @@
 
 (executables
   ((names (
-    biological_kmers
     mas_align_test
     merged_sensible_test
     round_trip
@@ -16,7 +15,6 @@
 (alias
   ((name tests)
    (deps (
-    biological_kmers.exe
     mas_align_test.exe
     merged_sensible_test.exe
     round_trip.exe

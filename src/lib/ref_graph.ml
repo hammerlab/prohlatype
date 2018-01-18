@@ -863,10 +863,18 @@ module JoinSameSequencePaths = struct
     in
     let arr = [| 0; 0; 0; 0; 0 |] in
     let clear_arr () = for i = 0 to 4 do arr.(i) <- 0 done in
+    let k_char_to_int = function
+      | 'A' -> 0
+      | 'C' -> 1
+      | 'G' -> 2
+      | 'T' -> 3
+      | 'N' -> 4
+      |  c  -> eprintf "surprising base character %c, assuming N" c; 4
+    in
     let fill_arr index =
       List.iter lst ~f:(fun (_p, s) ->
         let c = String.get_exn s ~index in
-        let j = if c = 'N' then 4 else Kmer_to_int.char_to_int c in
+        let j = k_char_to_int c in
         arr.(j) <- arr.(j) + 1)
     in
     let rec diff_loop index =

@@ -125,26 +125,6 @@ let graph =
   disk_memoize ~dir ~up_to_date graph_args_to_string
     (invalid_arg_on_error "construct graph" graph_no_cache)
 
-type index_args =
-  { k          : int
-  ; graph_args : graph_args
-  }
-
-let index_args_to_string {k; graph_args} =
-  sprintf "%d_%s" k (graph_args_to_string graph_args)
-
-let index_cache_dir = Filename.concat dir "indices"
-
-let graph_and_two_index_no_cache {k; graph_args} =
-  graph_no_cache graph_args >>= fun gr ->
-    let id = Index.create ~k gr in
-    Ok (gr, id)
-
-let graph_and_two_index =
-  let dir = Filename.concat (Sys.getcwd ()) index_cache_dir in
-  disk_memoize ~dir index_args_to_string
-    (invalid_arg_on_error "construct graph and index" graph_and_two_index_no_cache)
-
 type par_phmm_args =
   { pinput    : Alleles.Input.t
   ; read_size : int

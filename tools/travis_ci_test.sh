@@ -69,14 +69,6 @@ case "$TEST" in
     time _build/default/src/tests/test_allele_distances.exe A_gen > A_sim.csv
     export BISECT="true"
     ;;
-  biologicalKmers)
-    make covered_tests
-    echo testing that biological Kmers are found
-    cp src/tests/biological_kmer_tests.sh .
-    cp _build/default/src/tests/biological_kmers.exe .
-    time ./biological_kmer_tests.sh
-    export BISECT="true"
-    ;;
   impute)
     echo imputing A
     time _build/default/src/app/mhc2gpdf.exe $IMGTHLA_DIR/alignments/A_gen.txt --no-pdf

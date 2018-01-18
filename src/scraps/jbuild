@@ -2,7 +2,6 @@
 
 (executables
   ((names (allele_distances
-          benchmark_k
           benchmark_single benchmark_full
           expanded_similarity_search
           pare_fastq 
@@ -14,7 +13,6 @@
 (alias
   ((name scraps)
    (deps (allele_distances.exe
-          benchmark_k.exe
           benchmark_single.exe benchmark_full.exe
           expanded_similarity_search.exe
           pare_fastq.exe 

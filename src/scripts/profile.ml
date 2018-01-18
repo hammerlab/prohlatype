@@ -1,9 +1,5 @@
 
-(*
-#require "csv";
-*)
-
-open Util
+open Prohlatype
 
 let string_to_locus s =
   match Nomenclature.parse_locus s with
@@ -260,11 +256,11 @@ let zlls_to_string =
 
 let assign_reads mdz reads =
   let open ParPHMM_drivers.Output in
-  let z1 = Nomenclature.parse mdz.allele1 |> unwrap_ok |> snd in
-  let z2 = Nomenclature.parse mdz.allele2 |> unwrap_ok |> snd in
+  let z1 = Nomenclature.parse mdz.allele1 |> unwrap |> snd in
+  let z2 = Nomenclature.parse mdz.allele2 |> unwrap |> snd in
   List.fold_left reads ~init:([],[]) ~f:(fun (r1, r2) r ->
       let allele, _name, _ri = r in
-      let az = Nomenclature.parse allele |> unwrap_ok |> snd in
+      let az = Nomenclature.parse allele |> unwrap |> snd in
       let d1 = Nomenclature.distance az z1 in
       let d2 = Nomenclature.distance az z2 in
       let cd = Nomenclature.compare_distance d1 d2 in
