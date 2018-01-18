@@ -63,6 +63,7 @@ let type_
     not_prealigned
     forward_accuracy_opt
     =
+  let commandline = String.concat ~sep:" " (Array.to_list Sys.argv) in
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
   let log_oc, data_oc = setup_oc output output_format in
@@ -85,7 +86,7 @@ let type_
     Pd.multiple_conf ~insert_p ?max_number_mismatches ?split
       ~prealigned_transition_model ~past_threshold_filter
       ~output_opt
-      ()
+      commandline
   in
   let need_read_size =
     to_read_size_dependent ~distance ~skip_disk_cache

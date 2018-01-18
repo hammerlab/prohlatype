@@ -102,6 +102,7 @@ let type_
     forward_accuracy_opt
     number_processes_opt
     =
+  let commandline = String.concat ~sep:" " (Array.to_list Sys.argv) in
   Option.value_map forward_accuracy_opt ~default:()
     ~f:(fun fa -> ParPHMM.dx := fa);
   let log_oc, data_oc = setup_oc output output_format in
@@ -133,7 +134,7 @@ let type_
   let conf =
     ParPHMM_drivers.single_conf ?allele ~insert_p ?split
       ?max_number_mismatches ~prealigned_transition_model
-      ~past_threshold_filter ~check_rc ~output_opt ()
+      ~past_threshold_filter ~check_rc ~output_opt commandline
   in
   if viterbi then
     Wev.f ~log_oc ~data_oc read_length_override need_read_length conf
