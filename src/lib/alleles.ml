@@ -447,59 +447,80 @@ end (* MakeMap *)
 (* Different logic of how we choose which alleles to include in the analysis. *)
 module Selectors = struct
 
-  (* Defined in this order to so that to apply multiple selections, we can sort
-     the list and apply Regex's first to generate possibilities and then use
-     reducing selectors like Without and Number afterwards. *)
   (* TODO: The selector steps need to come before imputation! *)
   type t =
     | Regex of string
     | Specific of string
-    | Without of string
     | Number of int
     | DoNotIgnoreSuffixed
     [@@ deriving eq, ord, show ]
     (* When ppx_deriving >4.1 hits:
     [@@ deriving eq, ord, show { with_path = false }] *)
 
-  let fname_suitable = function
-    | '*' | ':' | '\\' -> false
-    | _ -> true
+  let filenameable s =
+    String.to_character_list s
+    |> List.map ~f:(function
+      | '*'  -> "s"
+      | ':'  -> "c"        (* This is a weird MAC-Finder behavior.*)
+      | '/'  -> "fs"
+      | '\\' -> "bs"       (* Will we ever have windows users? *)
+      | c    -> sprintf "%c" c)
+    |> String.concat ~sep:""
 
   (* A bit more concise than show and easier for filenames.*)
   let to_string = function
-    | Regex r             -> sprintf "R%s" (Digest.string r |> Digest.to_hex)
-    | Specific s          -> sprintf "S%s" (String.filter ~f:fname_suitable s)
-    | Without e           -> sprintf "W%s" e
+    | Regex r             -> sprintf "R%s" (filenameable r)
+    | Specific s          -> sprintf "S%s" (filenameable s)
     | Number n            -> sprintf "N%d" n
     | DoNotIgnoreSuffixed -> "DNIS"
 
   let string_of_list =
     string_of_list ~sep:"_" ~f:to_string
 
+  let is_do_not_ignored_suffixed = function
+    | DoNotIgnoreSuffixed -> true
+    | Regex _
+    | Specific _
+    | Number _            -> false
+
+  let matching_regex r alts =
+    let p = Re_posix.compile_pat r in
+    List.filter alts ~f:(fun a -> Re.execp p a.MSA.Parser.allele)
+
+  let specific_allele s alts =
+    List.filter alts ~f:(fun a -> a.MSA.Parser.allele = s)
+
+  let remove_suffixed alts =
+    List.fold_left alts ~init:[] ~f:(fun acc a ->
+      match Nomenclature.trim_suffix a.MSA.Parser.allele with
+      | Ok (_a, None)         -> a :: acc
+      | Ok (_a, Some _suffix) -> acc                  (* Ignore suffixed! *)
+      | Error m               -> failwith m)
+
   let apply_to_alt_elems ?(sort_to_nomenclature_order=true) lst =
-    let open MSA.Parser in
-    let sorted = List.sort ~cmp:compare lst in
     fun alts ->
-      let nalts =
-        if List.mem DoNotIgnoreSuffixed ~set:sorted then
-          alts
-        else
-          List.fold_left alts ~init:[] ~f:(fun acc a ->
-            match Nomenclature.trim_suffix a.allele with
-            | Ok (_a, None)         -> a :: acc
-            | Ok (_a, Some _suffix) -> acc                  (* Ignore suffixed! *)
-            | Error m               -> failwith m)
-          (*|> List.rev *)
+      let suffixed, filters =
+        List.partition lst ~f:is_do_not_ignored_suffixed
       in
-      List.fold_left sorted ~init:nalts ~f:(fun acc -> function
-        | Regex r             -> let p = Re_posix.compile_pat r in
-                                 List.filter acc ~f:(fun a -> Re.execp p a.allele)
-        | Specific s          -> (List.filter nalts ~f:(fun a -> a.allele = s)) @ acc
-        | Without e           -> List.filter acc ~f:(fun a -> a.allele <> e)
-        | Number n            -> List.take acc n
-        | DoNotIgnoreSuffixed -> acc        (* No-op at this point *))
+      let nalts =
+        match suffixed with
+        | DoNotIgnoreSuffixed :: _ -> alts
+        | _                        -> remove_suffixed alts
+      in
+      match filters with
+      | []    -> nalts
+      | apply ->
+        List.fold_left apply ~init:[] ~f:(fun acc t ->
+            match t with
+            | Regex r    -> (matching_regex r nalts) @ acc
+            | Specific s -> (specific_allele s nalts) @ acc
+            | Number n   -> List.take nalts n @ acc
+            | DoNotIgnoreSuffixed -> assert false        (* filtered! *))
       |> fun l ->
-          if sort_to_nomenclature_order then sort_alts_by_nomenclature l else l
+          if sort_to_nomenclature_order then
+            MSA.Parser.sort_alts_by_nomenclature l
+          else
+            l
 
   let apply_to_mp lst mp =
     let open MSA.Parser in
@@ -547,17 +568,17 @@ module Input = struct
 
   let to_string = function
     | AlignmentFile { path; selectors; distance } ->
-        sprintf "AF_%s_%s_%s"
+        sprintf "%s_%s_%s"
           (Filename.chop_extension (Filename.basename path))
           (Selectors.string_of_list selectors)
           (match distance with
-           | None -> "false"
+           | None -> "not-imputed"
            | Some dl -> Distances.show_logic dl)
     | MergeFromPrefix { prefix_path; selectors; drop_sv; distance } ->
-        sprintf "MGD_%s_%s_%b_%s"
+        sprintf "Merged_%s_%s_%s_%s"
           (Filename.basename prefix_path)
           (Selectors.string_of_list selectors)
-          drop_sv
+          (if drop_sv then "dropped-slice-variants" else "kept-slice-variants")
           (Distances.show_logic distance)
 
   module MergeConstruction = struct

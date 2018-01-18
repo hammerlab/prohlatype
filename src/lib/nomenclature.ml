@@ -207,7 +207,7 @@ let parse : string -> (locus * t, string) result =
     | _       -> error "Found too many '*' separators in %s" s
 
 let parse_to_resolution_exn s =
-  parse s |> unwrap_ok |> snd
+  parse s |> unwrap |> snd
 
 let resolution_to_string ?locus =
   let ls = Option.value_map ~default:"" ~f:(fun l -> show_locus l ^ "*") locus in

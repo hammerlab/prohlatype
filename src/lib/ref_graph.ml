@@ -217,7 +217,12 @@ let create_compressed_starts t =
            in some kind of consistent order. *)
 
 
-let output_dot ?(human_edges=true) ?(compress_edges=true) ?(compress_start=true)
+(**
+ * @args human_edges : use heuristics to shorten the name.
+ *)
+let output_dot
+    ?(human_edges=true)
+    ?(compress_edges=true) ?(compress_start=true)
   ?(insert_newlines=true) ?short ?max_length fname t =
   let module AS = (val t.aset : Alleles.Set) in
   let { g; _} = if compress_start then create_compressed_starts t else t in
@@ -1060,7 +1065,10 @@ type construction_arg =
 let default_construction_arg = { join_same_sequence = true }
 
 let construction_arg_to_string { join_same_sequence } =
-  string_of_bool join_same_sequence
+  if join_same_sequence then
+    "same-sequence-joined"
+  else
+    "redundant-sequences"
 
 let debug = ref false
 

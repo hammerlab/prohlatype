@@ -1630,8 +1630,8 @@ module type Execution = sig
                    -> conf
                    -> ?number_of_reads:int
                    -> specific_reads:string list
-                   -> string
                    -> [ `Setup of int -> input | `Set of state ]
+                   -> string
                    -> unit
 
   val across_paired : log_oc:out_channel
@@ -1640,9 +1640,9 @@ module type Execution = sig
                     -> conf
                     -> ?number_of_reads:int
                     -> specific_reads:string list
-                    -> string
-                    -> string
                     -> [ `Setup of int -> input | `Set of state ]
+                    -> string
+                    -> string
                     -> unit
 
 end (* Execution *)
@@ -1690,7 +1690,7 @@ module Sequential (W : Worker) :
           W.merge oc s (W.paired oc s fq1 fq2);
           `Set s
 
-  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads file init =
+  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads init file =
     let f = single log_oc conf in
     try
       Fastq.fold ?number_of_reads ~specific_reads file ~init ~f
@@ -1701,7 +1701,7 @@ module Sequential (W : Worker) :
       fprintf log_oc "%s" e
 
   let across_paired ~log_oc ~data_oc ~finish_singles conf ?number_of_reads ~specific_reads
-    file1 file2 init =
+    init file1 file2 =
     let f = paired log_oc conf in
     try
       begin
@@ -1738,7 +1738,8 @@ module Parallel (W : Worker) = struct
     time oc "Allocating forward pass workspace"
       (fun () -> W.init oc conf ~read_length pt)
 
-  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file state =
+  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs
+      state file =
     try
       let map fqi = W.single log_oc state fqi in
       let mux rr = W.merge log_oc state rr in
@@ -1747,7 +1748,8 @@ module Parallel (W : Worker) = struct
     with Fastq_items.Read_error_parsing e ->
       fprintf log_oc "%s" e
 
-  let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs file1 file2 state =
+  let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs
+      state file1 file2 =
     let map = function
       | Sp.Single fqi      -> W.single log_oc state fqi
       | Sp.Paired (f1, f2) -> W.paired log_oc state f1 f2
