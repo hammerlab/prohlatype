@@ -2,7 +2,8 @@
 
 default: build
 
-all: build tests
+all: 
+	jbuilder build @scraps @tests
 
 build:
 	jbuilder build
