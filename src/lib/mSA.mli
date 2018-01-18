@@ -157,9 +157,6 @@ module Parser : sig
     (** Sequence elements of alternative alleles.*)
     }
 
-  (* Report invariant parsing violations to stdout. *)
-  val report : bool ref
-
   (** Does the source contain alignment for a gDNA (UTR's, Exons & Introns)
       or from cDNA (just Exons)? *)
   type boundary_schema =
