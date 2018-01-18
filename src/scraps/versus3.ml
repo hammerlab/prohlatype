@@ -9,7 +9,7 @@ let j_bl =
   Post_analysis.reads_by_loci j
 
 let j_bl_C =
-  List.Assoc.get Nomenclature.C j_bl |> Option.value_exn ~msg:""
+  assoc_exn Nomenclature.C j_bl
 
 let a1 = "C*05:111"
 let a2 = "C*05:01:01:02"

@@ -11,7 +11,7 @@ let j =
 let j_bl =
   Post_analysis.reads_by_loci j
 let j_bl_A =
-  List.Assoc.get Nomenclature.A j_bl |> Option.value_exn ~msg:""
+  assoc_exn Nomenclature.A j_bl
 let j_bl_A1, j_bl_A2 =
   List.partition ~f:(fun (a, _, _) -> a = "A*26:08") j_bl_A
 

@@ -4,14 +4,14 @@
  * *)
 
 let j =
-  Post_analysis.of_json_file 
+  Post_analysis.of_json_file
     "FILL ME/205673_1.json"
 
 let j_bl = Post_analysis.reads_by_loci j
 
-let j_bl_A = List.Assoc.get Nomenclature.A j_bl |> Option.value_exn ~msg:""
-let j_bl_B = List.Assoc.get Nomenclature.B j_bl |> Option.value_exn ~msg:""
-let j_bl_C = List.Assoc.get Nomenclature.C j_bl |> Option.value_exn ~msg:""
+let j_bl_A = assoc_exn Nomenclature.A j_bl
+let j_bl_B = assoc_exn Nomenclature.B j_bl
+let j_bl_C = assoc_exn Nomenclature.C j_bl
 
 let select_reads l =
   let open Post_analysis in
