@@ -69,10 +69,12 @@ type resolution =
   | Three of int * int * int
   | Four of int * int * int * int
 
+let colon_split = String.split ~on:(`Character ':')
+
 let parse_resolution s =
   trim_suffix s >>=
     fun (without_suffix, suffix_opt) ->
-      String.split ~on:(`Character ':') without_suffix
+      colon_split without_suffix
       |> parse_positive_ints  >>= function
           | []            -> Error (sprintf "Empty allele name: %s" without_suffix)
           | [ a ]         -> Ok (One a, suffix_opt)
@@ -227,7 +229,7 @@ let reduce_two (r, _) = match r with
   | Three (a, b, _)
   | Four (a, b, _, _) -> Two (a, b)
 
-let two_matches_full nr1 nr2 =
+let two_matches_full_exn nr1 nr2 =
   match (fst nr1) with                     (* Match on just the name, ignore suffix *)
   | Two (r1, r2) ->
       begin
@@ -372,12 +374,12 @@ module Diploid = struct
     }
 
   let lower_res_matches t1 t2 =
-    two_matches_full t1.lower t1.upper &&
-    two_matches_full t2.lower t2.upper
+    two_matches_full_exn t1.lower t1.upper &&
+    two_matches_full_exn t2.lower t2.upper
 
   let one_lower_res_matches l t =
-    two_matches_full l t.lower ||
-    two_matches_full l t.upper
+    two_matches_full_exn l t.lower ||
+    two_matches_full_exn l t.upper
 
   let to_string ?(sep='\t') {lower; upper} =
     sprintf "%s%c%s"

@@ -25,7 +25,6 @@ let to_alleles { to_allele; _ } = Array.to_list to_allele
 
 module CompressNames = struct
 
-  let split_colon = String.split ~on:(`Character ':')
   let rejoin_colon = String.concat ~sep:":"
 
   module CompressIntSequencess = struct
@@ -59,18 +58,23 @@ module CompressNames = struct
     with Failure _ -> None     (* for the ":5N" cases *)
 
   let to_comparable a =
-    let l = split_colon a in
+    let l = Nomenclature.colon_split a in
     let n = List.length l in
     match List.split_n l (n - 1) with
     | [], _       -> `Special a         (* n = 0 *)
-    | _,  []      -> invalid_argf "odd length %d" n
+    | _,  []      -> eprintf "Odd allele length %d. Unexpected List.split_n \
+                              behavior." n;
+                     `Special a
     | d,  l :: [] ->
         begin
           match parse_last l with
           | None    -> `Special a
           | Some li -> `Template (d, li)
         end
-    | _,  l :: _  -> invalid_argf "Split at the end! %d" n
+    | _,  l :: _  -> eprintf "Asked to split at penultimate! %d. \
+                              Unexpected List.split_n behavior." n;
+                     `Special a
+
 
   let rec split_all =
     let comp = function
@@ -288,7 +292,7 @@ module MakeSet (I: Index) : Set = struct
     |> (fun l -> if compress then CompressNames.f l else l)
     |> String.concat ~sep:";"
     |> function
-        | ""  -> invalid_argf "Complement of everything!"
+        | ""  -> "Nothing"
         | s   -> match prefix with
                  | None    -> s
                  | Some cp -> cp ^ s
