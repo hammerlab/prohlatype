@@ -105,16 +105,17 @@ let type_
         ~paired:(Sequential.across_paired ~log_oc ~data_oc ~finish_singles conf
                   ?number_of_reads ~specific_reads init)
   | Some nprocs ->
-      let r =
-        Option.value_exn read_size_override
-          ~msg:"Must specify read size override in parallel mode"
-      in
-      let state = Parallel.init log_oc need_read_size conf r in
-      at_most_two_fastqs fastq_file_lst
-        ~single:(Parallel.across_fastq ~log_oc ~data_oc conf
-                  ?number_of_reads ~specific_reads ~nprocs state)
-        ~paired:(Parallel.across_paired ~log_oc ~data_oc conf
-                  ?number_of_reads ~specific_reads ~nprocs state)
+      begin match read_size_override with
+      | None -> errored Term.exit_status_cli_error
+                  "Must specify read size override in parallel mode."
+      | Some r ->
+          let state = Parallel.init log_oc need_read_size conf r in
+          at_most_two_fastqs fastq_file_lst
+            ~single:(Parallel.across_fastq ~log_oc ~data_oc conf
+                      ?number_of_reads ~specific_reads ~nprocs state)
+            ~paired:(Parallel.across_paired ~log_oc ~data_oc conf
+                      ?number_of_reads ~specific_reads ~nprocs state)
+      end
 
 let () =
   let type_ =
