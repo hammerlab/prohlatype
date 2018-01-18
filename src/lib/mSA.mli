@@ -118,6 +118,10 @@ end (* Alteration *)
 
 module Parser : sig
 
+  exception Error of string
+  (* Exception that is raised if the parser fails because the format does
+   * not match expectation, since there is no specification. *)
+
   (** [find_header_lines] parses an in channel of an alignment file up to the
    *  release info and alignment date, or returns None if they are not found.
    *)

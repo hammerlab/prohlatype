@@ -161,6 +161,11 @@ end (* Alteration. *)
   regard to this global-alignment position. *)
 module Parser = struct
 
+  exception Error of string
+
+  let perrorf fmt =
+    ksprintf (fun s -> raise (Error s)) fmt
+
   type boundary_schema =
     | GDNA
     | CDNA
@@ -174,10 +179,11 @@ module Parser = struct
       | GDNA -> next_boundary_label_gdna prev
       | CDNA -> next_boundary_label_cdna prev
     in
-    match opt with
-    | Some bl -> bl
-    | None -> invalid_argf "Asked for next boundary label of %s; flawed logic!"
-                (boundary_label_to_string prev)
+    let msg =
+      sprintf "Asked for next boundary label of %s; flawed logic!"
+        (boundary_label_to_string prev)
+    in
+    Option.value_exn opt ~msg
 
   type 'e parse_struct =
     { allele_n        : string
@@ -262,7 +268,7 @@ module Parser = struct
      but not for alternate alleles *)
   let insert_same ~fail_on_same ps =
     if fail_on_same then
-      invalid_argf "Encountered unexpected '-' same char for : %s" (where ps)
+      perrorf "Encountered unexpected '-' same char for : %s" (where ps)
     else
       next ps SequenceCharacter ~f:(fun _position sequence -> sequence)
 
@@ -270,9 +276,9 @@ module Parser = struct
     next ps SequenceCharacter ~f:(fun position l -> match l with
       | Sequence {start; s} :: t when start + (List.length s) = position
                         -> Sequence { start; s = c :: s} :: t
-      | []              -> invalid_argf "Adding char %c %d %s at Empty state!"
+      | []              -> perrorf "Adding char %c %d %s at Empty state!"
                               c position ps.allele_n
-      | End _ :: _      -> invalid_argf "Adding char %c %d %s after End!"
+      | End _ :: _      -> perrorf "Adding char %c %d %s after End!"
                               c position ps.allele_n
       | Start _ :: _
       | Boundary _ :: _
@@ -293,7 +299,7 @@ module Parser = struct
       | '.' :: t              -> loop (insert_gap ps) t
       | '-' :: t              -> loop (insert_same ~fail_on_same ps) t
       | c :: t when is_nuc c  -> loop (insert_nuc c ps) t
-      | x :: _                -> invalid_argf "Unrecognized char '%c' in %s"
+      | x :: _                -> perrorf "Unrecognized char '%c' in %s"
                                    x (where ps)
     in
     loop ps (String.to_character_list s)
@@ -357,13 +363,13 @@ module Parser = struct
     String.split line ~on:(`Character ' ')
     |> List.filter ~f:((<>) String.empty)
     |> function
-        | s :: _ when String.get s 0 = Some '|' -> Dash
-        | "AA" :: "codon" :: _  -> Dash   (* not modeling this at the moment. *)
-        | "gDNA" :: pos :: _    -> Position (true, int_of_string pos)
-        | "cDNA" :: pos :: _    -> Position (true, int_of_string pos)
-        | "Prot" :: pos :: _    -> Position (false, int_of_string pos)
-        | []                    -> invalid_arg "Empty data line!"
-        | s :: lst              -> SeqData (s, lst)
+        | s :: _ when String.get s 0 = Some '|' -> Some Dash
+        | "AA" :: "codon" :: _  -> Some Dash   (* not modeling this at the moment. *)
+        | "gDNA" :: pos :: _    -> Some (Position (true, int_of_string pos))
+        | "cDNA" :: pos :: _    -> Some (Position (true, int_of_string pos))
+        | "Prot" :: pos :: _    -> Some (Position (false, int_of_string pos))
+        | []                    -> None
+        | s :: lst              -> Some (SeqData (s, lst))
 
   type parse_state =
     | Header
@@ -456,15 +462,17 @@ module Parser = struct
         match state with
         | Header when String.is_empty line -> loop Empty acc
         | Header                           -> loop Header acc
-        | Empty  when String.is_empty line -> loop Empty acc
-        | Empty                            -> if String.is_prefix line ~prefix:"Please" then
-                                                acc
-                                              else
-                                                let d = parse_data line in
-                                                loop (Data d) (update acc d)
-        | Data _ when String.is_empty line -> loop Empty acc
-        | Data _ ->                           let d = parse_data line in
-                                              loop (Data d) (update acc d)
+        | Empty ->
+            begin match parse_data line with
+            | None   -> loop Empty acc
+            | Some (SeqData ("Please", _)) -> acc   (* Fin *)
+            | Some d -> loop (Data d) (update acc d)
+            end
+        | Data  _ ->
+            begin match parse_data line with
+            | None   -> loop Empty acc
+            | Some d -> loop (Data d) (update acc d)
+            end
     in
     let rec loop_header state =
       match input_line ic |> String.strip ~on:`Both with
@@ -476,16 +484,15 @@ module Parser = struct
         | Empty  when String.is_empty line -> loop_header Empty
         | Empty                            ->
             begin
-              let d = parse_data line in
-              match d with
-              | Position _ -> loop_header (Data d)
-              | _          -> invalid_arg "First data not position."
+              match parse_data line with
+              | Some ((Position _) as d)  -> loop_header (Data d)
+              | _                         -> perrorf "First data not position."
             end
         | Data _ when String.is_empty line -> loop_header state
         | Data (Position (dna, p)) ->
             begin
               match parse_data line with
-              | SeqData (allele, _) as d ->
+              | Some (SeqData (allele, _) as d) ->
                   let res = init_parse_result boundary_schema allele dna p in
                   loop (Data d) (update res d)
               | _                        ->
@@ -496,7 +503,7 @@ module Parser = struct
     match find_header_lines ic with
     | None ->
         close_in ic;
-        invalid_argf "Couldn't extract sequence align date."
+        perrorf "Couldn't extract sequence align date."
     | Some (release, align_date) ->
         let reversed = loop_header Header in
         let boundary_swap =
@@ -547,9 +554,9 @@ module Parser = struct
               if locus_s = "DRB" && lau = "nuc" then
                 (Nomenclature.DRB1, "nuc")
               else
-                invalid_argf "%s" e
+                perrorf "%s" e
           end
-      | _ -> invalid_argf "Filename: %s doesn't match the \"locus_[prot|nuc|gene].txt format."
+      | _ -> perrorf "Filename: %s doesn't match the \"locus_[prot|nuc|gene].txt format."
               f
     in
     let boundary_schema =
@@ -561,7 +568,7 @@ module Parser = struct
           | "nuc"  -> CDNA
           | "gen"  -> GDNA
           | _           ->
-              invalid_argf "Unrecognized alignment file name: %s, unable to infer \
+              perrorf "Unrecognized alignment file name: %s, unable to infer \
                             Boundary scheme." f
     in
     let ic = open_in f in
