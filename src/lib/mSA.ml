@@ -390,11 +390,6 @@ module Parser = struct
     ; alt_elems   : alt list
     }
 
-  let lookup_allele r find_me =
-    match List.find r.alt_elems ~f:(fun a -> a.allele = find_me) with
-    | Some a -> a
-    | None   -> invalid_argf "Didn't find %s" find_me
-
   let report = ref false
 
   let find_header_lines ic =

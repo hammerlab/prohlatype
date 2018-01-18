@@ -160,8 +160,6 @@ module Parser : sig
   (* Report invariant parsing violations to stdout. *)
   val report : bool ref
 
-  val lookup_allele : result -> string -> alt
-
   (** Does the source contain alignment for a gDNA (UTR's, Exons & Introns)
       or from cDNA (just Exons)? *)
   type boundary_schema =
