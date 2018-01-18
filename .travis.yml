@@ -6,6 +6,8 @@ matrix:
   fast_finish: true
   include:
     - os: linux
+      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=scraps
+    - os: linux
       env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=parsing
     - os: linux
       env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mas

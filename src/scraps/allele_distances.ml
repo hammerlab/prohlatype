@@ -1,47 +1,49 @@
 (** Compute distances between MHC alleles. *)
 open Prohlatype
+open Cmdline_options
+open Cmdliner
 
 let app_name = "allele_distances"
 
-let to_distance_targets_and_candidates ?alignment ?merge () =
+let to_distance_targets_and_candidates file_or_prefix =
   let open MSA.Parser in
-  match merge, alignment with
-  | (Some prefix), _  ->
-      let gen = from_file (prefix ^ "_gen.txt") in
-      let nuc = from_file (prefix ^ "_nuc.txt") in
+  match file_or_prefix with
+  | `Prefix p  ->
+      let gen = from_file (p ^ "_gen.txt") in
+      let nuc = from_file (p ^ "_nuc.txt") in
       let gen_alleles = List.map ~f:(fun a -> a.allele) gen.alt_elems in
-      Ok (Alter_MSA.Merge.to_distance_arguments nuc gen_alleles)
-  | None, (Some af)   ->
-      let mp = from_file af in
+      Alter_MSA.Merge.to_distance_arguments nuc gen_alleles
+  | `File path ->
+      let mp = from_file path in
       let targets =
-        mp.alt_elems 
+        mp.alt_elems
         |> List.map ~f:(fun alt -> (alt.allele, alt.seq))
-        |> string_map_of_assoc 
+        |> string_map_of_assoc
       in
-      Ok { Distances.reference = mp.reference
-         ; Distances.reference_sequence = mp.ref_elems
-         ; targets
-         ; candidates = targets           (* compute distances to all alleles *)
-         }
-  | None, None        ->
-      Error "Either a file or merge argument must be specified"
+      { Distances.reference = mp.reference
+      ; Distances.reference_sequence = mp.ref_elems
+      ; targets
+      ; candidates = targets           (* compute distances to all alleles *)
+      }
 
-let allele_distances alignment merge distance_logic =
-  to_distance_targets_and_candidates ?alignment ?merge () >>=
-    begin fun args ->
-      Distances.compute args distance_logic >>= fun dmap ->
-        printf "allele, closests alleles \n";
-        Ok (StringMap.iter dmap ~f:(fun ~key ~data ->
-            let allst = List.map data ~f:(fun (s,d) -> sprintf "%s,%f" s d) in
-            printf "%s,%s\n" key (String.concat ~sep:"," allst)))
-  end
-  |> function
-      | Error e -> eprintf "%s" e; 1
-      | Ok ()   -> 0
+let distance_calculation_error = 2
+let distance_calculation_error_exit_info =
+  Term.exit_info ~doc:"distance calculation error"
+    distance_calculation_error
+
+let allele_distances file_or_prefix distance_logic =
+  let args = to_distance_targets_and_candidates file_or_prefix in
+  let dmap_res = Distances.compute args distance_logic in
+  match dmap_res with
+  | Error m -> errored distance_calculation_error "%s" m
+  | Ok dmap ->
+    printf "allele, closests alleles \n";
+    StringMap.iter dmap ~f:(fun ~key ~data ->
+      let allst = List.map data ~f:(fun (s,d) -> sprintf "%s,%f" s d) in
+      printf "%s,%s\n" key (String.concat ~sep:"," allst));
+    Term.exit_status_success
 
 let () =
-  let open Cmdliner in
-  let open Cmdline_options in
   let allele_distances =
     let doc = "Compute distances between HLA alleles." in
     let bug =
@@ -58,12 +60,10 @@ let () =
     in
     Term.(const allele_distances
             (* Allele set construction args *)
-            $ alignment_arg $ merge_arg
+            $ (file_or_prefix_arg ~action:"use")
             (* How to measure distances. *)
             $ defaulting_distance_flag
-        , info app_name ~version ~doc ~man)
+        , info app_name ~version ~doc ~man
+              ~exits:(distance_calculation_error_exit_info :: default_exits))
   in
-  match Term.eval allele_distances with
-  | `Ok n            -> exit n
-  | `Error _         -> failwith "cmdliner error"
-  | `Version | `Help -> exit 0
+  Term.(exit_status (eval allele_distances))

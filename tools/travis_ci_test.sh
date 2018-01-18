@@ -21,6 +21,11 @@ echo current dir:
 ls
 
 case "$TEST" in
+  scraps)
+    # TODO: Figure out a way to keep this in sync with jbuilder
+    opam install parmap oml core_bench
+    make scraps
+    ;;
   parsing)
     make covered_tests
     echo testing parsing

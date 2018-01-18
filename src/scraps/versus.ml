@@ -36,7 +36,7 @@ let char_of_two_ls l1 l2 =
   else if l1 < l2 then 'L'
   else (* l1 > l2 *)   'G'
 
-let pt = ParPHMM.construct ai |> unwrap_ok
+let pt = ParPHMM.construct ai |> unwrap
 let prealigned_transition_model = true
 let read_length = 125
 
