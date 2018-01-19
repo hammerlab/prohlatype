@@ -136,12 +136,13 @@ module Parser : sig
     (** The sequence elements. *)
 
     ; alters : Alteration.t list
-    (* Alterations; a result with have these empty. See Alter_MSA. *)
+    (* Alterations; a [sequence_alignment] first parsed from a file will have
+     * these empty. See Alter_MSA. *)
     }
 
   val sort_alts_by_nomenclature : alt list -> alt list
 
-  type result =
+  type sequence_alignment =
     { release     : string
     (** What IMGT/HLA database release version this file was parsed from. *)
 
@@ -171,7 +172,7 @@ module Parser : sig
   val from_in_channel : boundary_schema
                       -> Nomenclature.locus
                       -> in_channel
-                      -> result
+                      -> sequence_alignment
 
   (** Parse an alignment file.
 
@@ -179,14 +180,14 @@ module Parser : sig
              suffix (ie. 'gen' -> GDNA,  'nuc', 'prot' -> CNDA *)
   val from_file : ?boundary_schema:boundary_schema
                 -> string
-                -> result
+                -> sequence_alignment
 
   (** The number of positions between (all) [Start]'s and [End]'s. *)
   val sequence_length : 'a alignment_sequence -> int
 
   val in_order_invariant
     : string alignment_sequence
-    -> (unit, string alignment_element * string alignment_element) Pervasives.result
+    -> (unit, string alignment_element * string alignment_element) result
 
 end (* Parser *)
 
@@ -218,7 +219,7 @@ module Boundaries : sig
 
   val grouped
       : string alignment_sequence
-      -> (marker * string alignment_sequence) list
+      -> ((marker * string alignment_sequence) list, string) result
 
   val ungrouped
       : (marker * string alignment_sequence) list
@@ -229,7 +230,7 @@ end (* Boundaries *)
 (* Compute per Boundary sequence information. *)
 val allele_sequences : reference:string alignment_sequence
                      -> allele:string alignment_sequence
-                     -> (Boundaries.marker * string) list
+                     -> ((Boundaries.marker * string) list, string) result
 
 (** [allele_sequence boundary_character reference allele ()] will convert the
     reference and allele alignment elements into a string representing the
@@ -238,13 +239,13 @@ val allele_sequences : reference:string alignment_sequence
     @param boundary_char if specified will be inserted into the resulting
     sequence.*)
 val allele_sequence : ?boundary_char:char -> reference:string alignment_sequence ->
-    allele:string alignment_sequence -> unit -> string
+    allele:string alignment_sequence -> unit -> (string, string) result
 
 val reference_sequence_from_ref_alignment_elements : ?boundary_char:char ->
   string alignment_sequence -> string
 
 (** Will return the sequence of the reference. *)
-val reference_sequence : ?boundary_char:char -> Parser.result -> string
+val reference_sequence : ?boundary_char:char -> Parser.sequence_alignment -> string
 
 (* Segments are parts of a DNA sequence that have relevant biological
    interpretation, specifically: UTR, intron and exons. We want to measure
@@ -264,11 +265,11 @@ module Segments : sig
 
   val distances : reference:string alignment_sequence
                 -> allele:string alignment_sequence
-                -> relationship t list
+                -> (relationship t list, string) result
 
   val distances_between : reference:string alignment_sequence
                         -> allele1:string alignment_sequence
                         -> allele2:string alignment_sequence
-                        -> (relationship * relationship) t list
+                        -> ((relationship * relationship) t list, string) result
 
 end (* Segments *)

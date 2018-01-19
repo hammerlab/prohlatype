@@ -121,8 +121,8 @@ module Impute : sig
              , string) result
 
   val do_it : Distances.logic
-            -> Parser.result
-            -> (Parser.result, string) result
+            -> Parser.sequence_alignment
+            -> (Parser.sequence_alignment, string) result
 
 end (* Impute *) = struct
 
@@ -369,8 +369,8 @@ module Merge : sig
   type instructions
 
   val align_mp_into_instructions
-      : gen_mp:Parser.result
-      -> nuc_mp:Parser.result
+      : gen_mp:Parser.sequence_alignment
+      -> nuc_mp:Parser.sequence_alignment
       -> (instructions, string) result
 
   val map_instr_to_alignments
@@ -391,15 +391,15 @@ module Merge : sig
       -> ((string alignment_sequence * Alteration.per_segment list), string) result
 
   val to_distance_arguments
-      : Parser.result
+      : Parser.sequence_alignment
       -> string list
       -> Distances.arg
 
   val do_it
-      : gen_mp:Parser.result
-      -> nuc_mp:Parser.result
+      : gen_mp:Parser.sequence_alignment
+      -> nuc_mp:Parser.sequence_alignment
       -> Distances.logic
-      -> (Parser.result, string) result
+      -> (Parser.sequence_alignment, string) result
 
 end (* Merge *) = struct
 
@@ -505,65 +505,67 @@ end (* Merge *) = struct
     let open Boundaries in
     (* Convert the reference alignment_sequence's to Boundary delimited strings,
        this way we can make sure that the sequences are the same. *)
-    let gblst = grouped (all_boundaries_before_start_or_end gen) in
-    let nblst = grouped (all_boundaries_before_start_or_end nuc) in
-    let rec need_exon new_boundary_pos acc gl nl = match gl, nl with
-      | ({ label = Exon gx} as gb, gseq) :: gtl
-      , ({ label = Exon nx} as nb, nseq) :: ntl ->
-        let gss = ref_seq gseq in
-        let nss = ref_seq nseq in
-        if gx <> nx then
-          error "Genetic Exon %d doesn't line up with Nuclear exon %d" gx nx
-        else if gss <> nss then
-          error "Genetic sequence disagrees with Nucleic at Exon %d:\n %s" gx
-            (manual_comp_display ~width:160 ~labels:("Genetic ", "Nuclear ")
-              gss nss)
-        else
-          let nuclear = new_region nseq new_boundary_pos nb in
-          (* When constructing other sequences's we're going to take the nuclear
-            (from cDNA) sequence of the bigger allele (to represent the true
-            "genetic" region. This is a pretty bad mis-use of names that needs
-            to be fixed with better naming. But for now it is important to
-            remember that we want the nuclear offset. *)
-          let genetic = new_region ~offset:nuclear.offset gseq new_boundary_pos gb in
-          let instr =
-            MergeFromNuclear { genetic; nuclear; pss = [] }
-          in
-          need_intron (new_boundary_pos + nb.length) (instr :: acc)
-            gtl ntl
-      | (gb, _) :: _, (nb, _) :: _ ->
-          error "Genetic boundary %s doesn't line up with Nuclear boundary %s"
-            (marker_to_string gb) (marker_to_string nb)
-      | [], _   -> error "Genetic segments ended before nuclear."
-      |  _, []  -> error "Nuclear segments ended before genetic."
-    and need_intron new_boundary_pos acc gl nl = match gl, nl with
-      | ({ label = Intron gx} as gb, gseq) :: gtl
-      , ({ label = Exon nx}, _) :: _ ->
-        if gx + 1 <> nx then
-          error "Genetic Intron %d doesn't line up with Nuclear exon %d" gx nx
-        else
-          let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
-          need_exon (new_boundary_pos + gb.length) (instr :: acc) gtl nl
-      | ({ label = UTR3 } as gb, gseq) :: [], [] ->
-          let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
-          Ok (List.rev (instr :: acc))                                (* Fin. *)
+    grouped (all_boundaries_before_start_or_end gen) >>= begin fun gblst ->
+      grouped (all_boundaries_before_start_or_end nuc) >>= begin fun nblst ->
+        let rec need_exon new_boundary_pos acc gl nl = match gl, nl with
+          | ({ label = Exon gx} as gb, gseq) :: gtl
+          , ({ label = Exon nx} as nb, nseq) :: ntl ->
+            let gss = ref_seq gseq in
+            let nss = ref_seq nseq in
+            if gx <> nx then
+              error "Genetic Exon %d doesn't line up with Nuclear exon %d" gx nx
+            else if gss <> nss then
+              error "Genetic sequence disagrees with Nucleic at Exon %d:\n %s" gx
+                (manual_comp_display ~width:160 ~labels:("Genetic ", "Nuclear ")
+                  gss nss)
+            else
+              let nuclear = new_region nseq new_boundary_pos nb in
+              (* When constructing other sequences's we're going to take the nuclear
+                (from cDNA) sequence of the bigger allele (to represent the true
+                "genetic" region. This is a pretty bad mis-use of names that needs
+                to be fixed with better naming. But for now it is important to
+                remember that we want the nuclear offset. *)
+              let genetic = new_region ~offset:nuclear.offset gseq new_boundary_pos gb in
+              let instr =
+                MergeFromNuclear { genetic; nuclear; pss = [] }
+              in
+              need_intron (new_boundary_pos + nb.length) (instr :: acc)
+                gtl ntl
+          | (gb, _) :: _, (nb, _) :: _ ->
+              error "Genetic boundary %s doesn't line up with Nuclear boundary %s"
+                (marker_to_string gb) (marker_to_string nb)
+          | [], _   -> error "Genetic segments ended before nuclear."
+          |  _, []  -> error "Nuclear segments ended before genetic."
+        and need_intron new_boundary_pos acc gl nl = match gl, nl with
+          | ({ label = Intron gx} as gb, gseq) :: gtl
+          , ({ label = Exon nx}, _) :: _ ->
+            if gx + 1 <> nx then
+              error "Genetic Intron %d doesn't line up with Nuclear exon %d" gx nx
+            else
+              let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
+              need_exon (new_boundary_pos + gb.length) (instr :: acc) gtl nl
+          | ({ label = UTR3 } as gb, gseq) :: [], [] ->
+              let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
+              Ok (List.rev (instr :: acc))                                (* Fin. *)
 
-      | (gb, _) :: _, (nb, _) :: _ ->
-          error "Genetic boundary %s doesn't line up with Nuclear boundary %s"
-            (marker_to_string gb) (marker_to_string nb)
-      | [], _   -> error "Genetic segments ended before nuclear."
-      |  _, []  -> error "Nuclear segments ended before genetic."
-    in
-    match gblst, nblst with
-    | ({ label = UTR5 } as gb1, gseq) :: gtl
-    , ({ label = Exon 1}, _) :: _ ->
-        need_exon (gb1.length + gb1.position)
-          [ FillFromGenetic (new_region gseq gb1.position gb1)] gtl nblst
-    | (gb1, _) :: _
-    , (nb1, _) :: _ -> error "First genetic marker isn't UTR5: %s or First nucleic marker %s isn't Exon 1"
-                        (marker_to_string gb1) (marker_to_string nb1)
-    | [], _         -> error "Empty genetic alignment_sequence"
-    | _, []         -> error "Empty nuclear alignment_sequence"
+          | (gb, _) :: _, (nb, _) :: _ ->
+              error "Genetic boundary %s doesn't line up with Nuclear boundary %s"
+                (marker_to_string gb) (marker_to_string nb)
+          | [], _   -> error "Genetic segments ended before nuclear."
+          |  _, []  -> error "Nuclear segments ended before genetic."
+        in
+        match gblst, nblst with
+        | ({ label = UTR5 } as gb1, gseq) :: gtl
+        , ({ label = Exon 1}, _) :: _ ->
+            need_exon (gb1.length + gb1.position)
+              [ FillFromGenetic (new_region gseq gb1.position gb1)] gtl nblst
+        | (gb1, _) :: _
+        , (nb1, _) :: _ -> error "First genetic marker isn't UTR5: %s or First nucleic marker %s isn't Exon 1"
+                            (marker_to_string gb1) (marker_to_string nb1)
+        | [], _         -> error "Empty genetic alignment_sequence"
+        | _, []         -> error "Empty nuclear alignment_sequence"
+      end
+    end
 
   let strip_start_ends_seq =
     List.filter ~f:(fun a -> (is_gap a) || (is_sequence a))
@@ -611,7 +613,10 @@ end (* Merge *) = struct
        this way we can make sure that the sequences are the same. *)
     let to_msg = sprintf "Merge.map_instr_to_alignments of %s %s sequence" allele_name in
     full_sequence_no_op (to_msg "bigger gDNA") bigger_gDNA >>= fun () ->
-      full_sequence_no_op (to_msg "bigger cDNA") bigger_cDNA >>= fun () ->
+    full_sequence_no_op (to_msg "bigger cDNA") bigger_cDNA >>= fun () ->
+    grouped (all_boundaries_before_start_or_end bigger_gDNA) >>= fun bigger_gDNA ->
+    grouped (all_boundaries_before_start_or_end bigger_cDNA) >>= fun bigger_cDNA ->
+    grouped (all_boundaries_before_start_or_end smaller_cDNA) >>= (fun smaller_cDNA ->
       let rec fill_from_g acc fr itl ~bigger_gDNA ~bigger_cDNA ~smaller_cDNA =
         match bigger_gDNA with
         | (gbm, gseq) :: gtl when gbm.label = fr.bm.label ->
@@ -670,10 +675,7 @@ end (* Merge *) = struct
                       (instruction_to_string_seqless i)
         | []     -> error "Premature end to instructions for %s" allele_name
       in
-      let bigger_gDNA = grouped (all_boundaries_before_start_or_end bigger_gDNA) in
-      let bigger_cDNA = grouped (all_boundaries_before_start_or_end bigger_cDNA) in
-      let smaller_cDNA = grouped (all_boundaries_before_start_or_end smaller_cDNA) in
-      need_fill [] instr ~bigger_gDNA ~bigger_cDNA ~smaller_cDNA
+      need_fill [] instr ~bigger_gDNA ~bigger_cDNA ~smaller_cDNA)
 
    let drop_before pos l =
      let _forget, rest = Split.al_el_at l ~pos ~excluding:false ~acc:[] in

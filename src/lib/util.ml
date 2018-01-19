@@ -42,6 +42,11 @@ let invalid_argf ?(prefix="") fmt =
 let failwithf fmt =
   ksprintf failwith fmt
 
+exception Local_error of string
+
+let local_errorf fmt =
+  ksprintf (fun s -> raise (Local_error s)) fmt
+
 let id x = x
 
 module Result = struct

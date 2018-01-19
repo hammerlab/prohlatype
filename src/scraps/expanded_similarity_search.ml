@@ -54,20 +54,24 @@ let drb_nuc_mp =
 let p_gen_mp =
   MSA.Parser.from_file (Common.to_alignment_file "P_gen")
 
+let funwrap = function
+  | Ok o -> o
+  | Error e -> failwithf "%s" e
+
 let mp_to_seq mp =
   let open MSA in
   let open Parser in
   let no_sequences = List.filter ~f:(fun a -> not (is_sequence a)) in
   let als =
     List.map mp.alt_elems ~f:(fun { allele; seq; _} ->
-      let seqs = allele_sequences ~reference:mp.ref_elems ~allele:seq in
-      let rels = Segments.distances ~reference:mp.ref_elems ~allele:seq in
+      let seqs = allele_sequences ~reference:mp.ref_elems ~allele:seq |> funwrap in
+      let rels = Segments.distances ~reference:mp.ref_elems ~allele:seq |> funwrap in
       ( allele, List.map2 seqs rels ~f:(fun s r -> (s, r))))
   in
   let rp =
     let allele = no_sequences mp.ref_elems in
-    let s = allele_sequences ~reference:mp.ref_elems ~allele in
-    let r = Segments.distances ~reference:mp.ref_elems ~allele in
+    let s = allele_sequences ~reference:mp.ref_elems ~allele |> funwrap in
+    let r = Segments.distances ~reference:mp.ref_elems ~allele |> funwrap in
     ( mp.reference, List.map2 s r ~f:(fun s r -> (s, r)))
   in
   List.sort ~cmp:compare (rp :: als)
@@ -77,6 +81,7 @@ let p_nuc_mp =
   let open Parser in
   let just_xons s =
     Boundaries.grouped s
+    |> funwrap
     |> List.filter ~f:(function (Boundaries.{ label = Exon _ }, _) -> true | _ -> false)
     |> Boundaries.ungrouped
   in
