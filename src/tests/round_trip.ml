@@ -67,22 +67,24 @@ let test_sequences file =
       ~input:(Alleles.Input.alignment (to_alignment_file file) ~selectors)
       ~arg:Ref_graph.default_construction_arg
   in
-  let gall = Cache.graph all_args in
-  let a_fasta = Fasta.all (to_fasta_file file) in
-  List.fold_left a_fasta ~init:[] ~f:(fun acc (header, seq) ->
-    let allele = List.nth_exn (String.split ~on:(`Character ' ') header) 1 in
-    match Ref_graph.sequence gall allele with
-    (* TODO: This should be an Error not an exception! *)
-    | exception Not_found -> Printf.printf "Couldn't find sequence for %s\n" allele;
-                             (allele, (seq, "")) :: acc
-    | Error msg           -> Printf.printf "missing sequence for %s because %s!\n" allele msg;
-                             (allele, (seq, "")) :: acc
-    | Ok graph_seq        ->
-        if seq <> graph_seq then
-          (allele, (seq, graph_seq)) :: acc
-        else
-          acc)
-  |> fun lst -> List.length a_fasta, lst
+  match Cache.graph all_args with
+  | Error e -> failwithf "Failed to construct graph: %s" e
+  | Ok gall ->
+      let a_fasta = Fasta.all (to_fasta_file file) in
+      List.fold_left a_fasta ~init:[] ~f:(fun acc (header, seq) ->
+        let allele = List.nth_exn (String.split ~on:(`Character ' ') header) 1 in
+        match Ref_graph.sequence gall allele with
+        (* TODO: This should be an Error not an exception! *)
+        | exception Not_found -> Printf.printf "Couldn't find sequence for %s\n" allele;
+                                (allele, (seq, "")) :: acc
+        | Error msg           -> Printf.printf "missing sequence for %s because %s!\n" allele msg;
+                                (allele, (seq, "")) :: acc
+        | Ok graph_seq        ->
+            if seq <> graph_seq then
+              (allele, (seq, graph_seq)) :: acc
+            else
+              acc)
+      |> fun lst -> List.length a_fasta, lst
 
 let test known_differences ~reference file =
   let number_sequences, different = test_sequences file in

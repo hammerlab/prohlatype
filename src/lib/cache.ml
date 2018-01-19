@@ -37,14 +37,14 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
       f arg
     else begin
       let file = Filename.concat dir (arg_to_string arg) in
-      let save r =
-        (**)
-        if not (Sys.file_exists dir) then make_full_path dir;
-        let o = open_out file in
-        Marshal.to_channel o r [Marshal.Closures];
-        close_out o;
-        (**)
-        r
+      let save r = match r with
+        | Error e -> r
+        | Ok ro ->
+            if not (Sys.file_exists dir) then make_full_path dir;
+            let o = open_out file in
+            Marshal.to_channel o ro [Marshal.Closures];
+            close_out o;
+            r
       in
       let load () =
         let i = open_in file in
@@ -110,20 +110,13 @@ let recent_check to_input to_date arg dateable =
     true
   end
 
-let invalid_arg_on_error action f =
-  (fun arg ->
-    (* Raise exception on error to avoid caching! *)
-    match f arg with
-    | Error e -> invalid_argf "Failed to %s: %s" action e;
-    | Ok o    -> o)
-
 let graph =
   let dir = Filename.concat (Sys.getcwd ()) graph_cache_dir in
   let up_to_date =
     recent_check (fun i -> i.input) (fun g -> g.Ref_graph.align_date)
   in
   disk_memoize ~dir ~up_to_date graph_args_to_string
-    (invalid_arg_on_error "construct graph" graph_no_cache)
+    graph_no_cache
 
 type par_phmm_args =
   { pinput    : Alleles.Input.t
@@ -149,5 +142,4 @@ let par_phmm =
   let up_to_date =
     recent_check (fun i -> i.pinput) (fun p -> p.ParPHMM.align_date)
   in
-  disk_memoize ~dir ~up_to_date par_phmm_args_to_string
-    (invalid_arg_on_error "construct parphmm" par_phmm_no_cache)
+  disk_memoize ~dir ~up_to_date par_phmm_args_to_string par_phmm_no_cache

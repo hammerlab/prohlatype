@@ -22,7 +22,9 @@ let to_read_size_dependent
     begin fun read_size ->
       List.map inputs ~f:(fun input ->
         let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
-        Cache.par_phmm ~skip_disk_cache par_phmm_args)
+        match Cache.par_phmm ~skip_disk_cache par_phmm_args with
+        | Ok phmm -> phmm
+        | Error e -> raise (Phmm_construction_error e))
     end
 
 module Pd = ParPHMM_drivers
@@ -88,34 +90,37 @@ let type_
       ~output_opt
       commandline
   in
-  let need_read_size =
-    to_read_size_dependent ~distance ~skip_disk_cache
-      file_prefix_or_directory only_class1 gen_nuc_mgd
-  in
-  match number_processes_opt with
-  | None  ->
-      let init =
-        match read_size_override with
-        | None   -> `Setup need_read_size
-        | Some r -> `Set (Sequential.init log_oc need_read_size conf r)
-      in
-      at_most_two_fastqs fastq_file_lst
-        ~single:(Sequential.across_fastq ~log_oc ~data_oc conf
-                  ?number_of_reads ~specific_reads init)
-        ~paired:(Sequential.across_paired ~log_oc ~data_oc ~finish_singles conf
-                  ?number_of_reads ~specific_reads init)
-  | Some nprocs ->
-      begin match read_size_override with
-      | None -> errored Term.exit_status_cli_error
-                  "Must specify read size override in parallel mode."
-      | Some r ->
-          let state = Parallel.init log_oc need_read_size conf r in
-          at_most_two_fastqs fastq_file_lst
-            ~single:(Parallel.across_fastq ~log_oc ~data_oc conf
-                      ?number_of_reads ~specific_reads ~nprocs state)
-            ~paired:(Parallel.across_paired ~log_oc ~data_oc conf
-                      ?number_of_reads ~specific_reads ~nprocs state)
-      end
+  try
+    let need_read_size =
+      to_read_size_dependent ~distance ~skip_disk_cache
+        file_prefix_or_directory only_class1 gen_nuc_mgd
+    in
+    match number_processes_opt with
+    | None  ->
+        let init =
+          match read_size_override with
+          | None   -> `Setup need_read_size
+          | Some r -> `Set (Sequential.init log_oc need_read_size conf r)
+        in
+        at_most_two_fastqs fastq_file_lst
+          ~single:(Sequential.across_fastq ~log_oc ~data_oc conf
+                    ?number_of_reads ~specific_reads init)
+          ~paired:(Sequential.across_paired ~log_oc ~data_oc ~finish_singles conf
+                    ?number_of_reads ~specific_reads init)
+    | Some nprocs ->
+        begin match read_size_override with
+        | None -> errored Term.exit_status_cli_error
+                    "Must specify read size override in parallel mode."
+        | Some r ->
+            let state = Parallel.init log_oc need_read_size conf r in
+            at_most_two_fastqs fastq_file_lst
+              ~single:(Parallel.across_fastq ~log_oc ~data_oc conf
+                        ?number_of_reads ~specific_reads ~nprocs state)
+              ~paired:(Parallel.across_paired ~log_oc ~data_oc conf
+                        ?number_of_reads ~specific_reads ~nprocs state)
+        end
+  with (Phmm_construction_error e) ->
+    errored phmm_construction_error "%s" e
 
 let () =
   let type_ =
@@ -225,6 +230,6 @@ let () =
               ~version
               ~doc
               ~man
-              ~exits:default_exits)
+              ~exits:(phmm_construction_exit_info :: default_exits))
   in
   Term.(exit_status (eval type_))
