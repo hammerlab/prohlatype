@@ -2,11 +2,11 @@
 
 (executables
   ((names (
-    mas_align_test
-    merged_sensible_test
+    mas_align
+    merged_sensible
     round_trip
-    test_allele_distances
-    test_parsing
+    allele_distances
+    alignment_parsing
     ))
    (libraries (prohlatype threads cmdliner))
    (preprocess (pps (bisect_ppx -conditional)))
@@ -15,9 +15,9 @@
 (alias
   ((name tests)
    (deps (
-    mas_align_test.exe
-    merged_sensible_test.exe
+    mas_align.exe
+    merged_sensible.exe
     round_trip.exe
-    test_allele_distances.exe
-    test_parsing.exe
+    allele_distances.exe
+    alignment_parsing.exe
    ))))
