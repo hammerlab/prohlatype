@@ -6,7 +6,7 @@ open MSA
 (* The set of loci for which I've tested these algorithms.  *)
 let supported_loci_lst =
   Nomenclature.[ A; B; C
-               ; E ; F ; G ; HFE ; H ; J ; K ; L ; MICA ; MICB ; P ; TAP1 ; TAP2 ; T ; V ; W ; Y 
+               ; E ; F ; G ; HFE ; H ; J ; K ; L ; MICA ; MICB ; P ; TAP1 ; TAP2 ; T ; V ; W ; Y
                ]
 
 
@@ -239,14 +239,14 @@ end (* Impute *) = struct
                                 aps ~start:last_smaller_pos ~end_ ps_acc >>= fun nps_acc ->
                                   Ok (final_seq, (List.rev nps_acc))               (* Fin *)
                           end
-        | ae :: _      -> invalid_argf "Not at Start or Empty: %s"
+        | ae :: _      -> error "Not at Start or Empty: %s"
                             (al_el_to_string ae)
       in
       let _before_smaller_start, at_smaller_start = Split.at_start smaller in
       match at_smaller_start with
       | Start p :: t -> merge_until_end [] [] p bigger ~smaller:t
-      | []           -> invalid_arg "Empty smaller sequence!"
-      | ae :: _      -> invalid_argf "Not at Start: %s" (al_el_to_string ae)
+      | []           -> error "Empty smaller sequence!"
+      | ae :: _      -> error "Not at Start: %s" (al_el_to_string ae)
 
   (* TODO: This logic is much simpler if the Distance logic is reference:
      move an allele's Start/End's to the references's. We don't need to
