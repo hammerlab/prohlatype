@@ -2,9 +2,6 @@
 
 default: build
 
-all: 
-	jbuilder build @scraps @tests
-
 build:
 	jbuilder build
 
@@ -15,13 +12,16 @@ clean:
 	jbuilder clean
 
 apps:
-	jbuilder build @apps  
+	jbuilder build @apps
 
 scraps:
-	jbuilder build @scraps  
+	jbuilder build @scraps
 
 tests:
 	jbuilder build @tests
+
+all:
+	jbuilder build @apps @scraps @tests
 
 covered_tests:
 	BISECT_ENABLE=Yes jbuilder build @tests
