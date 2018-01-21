@@ -1278,6 +1278,7 @@ module Multiple_loci (* :
     ; likelihood    : Lp.t array
     ; zygosity      : Zygosity_array.t
     }
+
   type state =
     { commandline       : string
     ; per_loci          : per_locus list
@@ -1580,44 +1581,40 @@ module Multiple_loci (* :
     in
     cons_per_reads state { pr with Output.d = { ml; aaps}}
 
+  let per_locus_to_output_pl pl zb =
+    Output.create_pl pl.imgt_release pl.pl_locus pl.allele_arr pl.likelihood zb
+
   let finalize { commandline; opt; per_reads; per_loci; _} =
-    let pl_lst, best_zygosities_by_loci =
-      List.map per_loci ~f:(fun { imgt_release; pl_locus; allele_arr; likelihood; zygosity } ->
+    let f_pl_lst, best_zygosities_by_loci_assoc =
+      List.map per_loci ~f:(fun pl ->
         let number_of_reads = List.fold_left per_reads ~init:0
-          ~f:(fun s { Output.d; _} -> if d.ml.locus = pl_locus then s + 1 else s)
+          ~f:(fun s { Output.d; _} ->
+                if d.ml.locus = pl.pl_locus then s + 1 else s)
         in
         let zb =
-          Zygosity_array.best opt.depth.Output.num_zygosities likelihood
-            number_of_reads zygosity
+          Zygosity_array.best opt.depth.Output.num_zygosities pl.likelihood
+            number_of_reads pl.zygosity
         in
-        let pl = Output.create_pl imgt_release pl_locus allele_arr likelihood zb in
-        pl, (pl_locus, zb))
+        let opl = per_locus_to_output_pl pl zb in
+        opl, (pl.pl_locus, (zb, pl.allele_arr)))
       |> List.split
     in
-    let to_zlst l =
-      let msg = sprintf "Missing %s in zygosity list!" (Nomenclature.show_locus l) in
-      Option.value_exn ~msg (List.Assoc.get l best_zygosities_by_loci)
-    in
-    let to_locus_allele_arr l =
-      let msg = sprintf "Missing %s in zygosity list!" (Nomenclature.show_locus l) in
-      Option.value_exn ~msg (List.find_map per_loci ~f:(fun { pl_locus; allele_arr} ->
-        if pl_locus = l then Some allele_arr else None))
-    in
+    let la aa i = fst (aa.(i)) in
     let assign_loci { locus; likelihood } =
-      let zlst = to_zlst locus in
-      let lopt =
-        List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
-          List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
-            let li = Pm.get likelihood i in
-            let lj = Pm.get likelihood j in
-            let l, ioj = if li >= lj then li, i else lj, j in
-            match s with
-            | None         -> Some (l, ioj)
-            | Some (bl, _) -> if bl >= l then s else Some (l, ioj)))
-      in
-      Option.map lopt ~f:(fun (_l, i) ->
-        let allele_arr = to_locus_allele_arr locus in
-        locus, (fst allele_arr.(i)))
+      Option.bind (List.Assoc.get locus best_zygosities_by_loci_assoc)
+        ~f:(fun (zlst, aa) ->
+              let lopt =
+                List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
+                  List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
+                    let li = Pm.get likelihood i in
+                    let lj = Pm.get likelihood j in
+                    let l, ioj = if li >= lj then li, i else lj, j in
+                    match s with
+                    | None         -> Some (l, (la aa ioj))
+                    | Some (bl, _) -> if bl >= l then s else Some (l, la aa ioj)))
+              in
+              Option.map lopt ~f:(fun (_likelihood, allele) ->
+                  locus, allele))
     in
     let f_per_reads = List.map per_reads ~f:(fun pr ->
       let { ml; aaps } = pr.Output.d in
@@ -1626,7 +1623,7 @@ module Multiple_loci (* :
     in
     { f_commandline = commandline
     ; f_opt         = opt
-    ; f_pl_lst      = pl_lst
+    ; f_pl_lst
     ; f_per_reads
     }
 

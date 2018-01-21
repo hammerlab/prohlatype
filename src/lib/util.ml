@@ -42,6 +42,11 @@ let invalid_argf ?(prefix="") fmt =
 let failwithf fmt =
   ksprintf failwith fmt
 
+exception Local_error of string
+
+let local_errorf fmt =
+  ksprintf (fun s -> raise (Local_error s)) fmt
+
 let id x = x
 
 module Result = struct
@@ -74,7 +79,7 @@ module Result = struct
 
   let unwrap = function
     | Ok o    -> o
-    | Error _ -> invalid_arg "Not Ok in unwrap_ok."
+    | Error _ -> invalid_arg "Not Ok in unwrap."
 
 end
 
@@ -207,8 +212,11 @@ let remove_and_assoc el list =
   in
   loop [] list
 
-let assoc v l =
-  Option.value_exn ~msg:"Not found" (List.Assoc.get v l)
+(* Prefer this idiom. *)
+let assoc_exn v l =
+  match List.Assoc.get v l with
+  | Some v -> v
+  | None   -> raise Not_found
 
 let group_by_assoc l =
   let insert assoc (k, v) =

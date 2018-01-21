@@ -10,7 +10,9 @@ let to_input prefix distance =
 
 let load prefix d t =
   let arg = Ref_graph.default_construction_arg in
-  Cache.(graph (graph_args ~input:(to_input prefix d t) ~arg))
+  match Cache.(graph (graph_args ~input:(to_input prefix d t) ~arg)) with
+  | Error e -> failwithf "failed to load %s : %s" prefix e
+  | Ok g -> g
 
 let split_into_xons s =
   String.split s ~on:(`Character '|')

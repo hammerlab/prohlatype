@@ -27,7 +27,11 @@ let to_filename_and_graph_args
     let option_based_fname = Cache.graph_args_to_string graph_arg in
     option_based_fname, graph_arg
 
-let dot_output_error = 4
+let graph_construction_error = 4
+let graph_construction_exit_info =
+  Term.exit_info ~doc:"graph construction error" graph_construction_error
+
+let dot_output_error = 5
 let dot_output_error_exit_info =
   Term.exit_info ~doc:"dot command error" dot_output_error
 
@@ -73,11 +77,13 @@ let construct
   let compress_edges = not not_compress_edges in
   let compress_start = not not_compress_start in
   let insert_newlines = not not_insert_newlines in
-  let graph = Cache.graph ~skip_disk_cache cargs in
-  let res = Ref_graph.output ~compress_edges ~compress_start ~insert_newlines
+  match Cache.graph ~skip_disk_cache cargs with
+  | Error e  -> errored graph_construction_error "%s" e
+  | Ok graph ->
+    let res = Ref_graph.output ~compress_edges ~compress_start ~insert_newlines
                 ~human_edges ?max_length ~short ~pdf ~open_ ofile graph
-  in
-  if res <> 0 then dot_output_error else 0
+    in
+    if res <> 0 then dot_output_error else 0
 
 let app_name = "mhc2gpdf"
 
@@ -240,6 +246,8 @@ let () =
              ~version
              ~doc
              ~man
-             ~exits:(dot_output_error_exit_info :: default_exits))
+             ~exits:(graph_construction_exit_info
+                    :: dot_output_error_exit_info
+                    :: default_exits))
   in
   Term.(exit_status (eval construct))

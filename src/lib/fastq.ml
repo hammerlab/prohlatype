@@ -320,10 +320,6 @@ let fold_paired_parany ?number_of_reads ?(specific_reads=[])
       in
       Parany.run ~verbose:false ~csize:1 ~nprocs ~demux:read ~work:map ~mux))
 
-let unwrap_cr_ok = function
-    | Result.Error _ -> invalid_arg "unwrap_cr_ok: " (*Error.to_string_hum e*)
-    | Result.Ok a    -> a
-
 let read_from_pair ~name file1 file2 =
   let res =
     fold_paired
@@ -338,13 +334,11 @@ let read_from_pair ~name file1 file2 =
     | `StoppedByFilter o
     | `DesiredReads o -> o
   in
-  match opt with
-  | None -> None
-  | Some (r1, r2) ->
-            Some ( r1.Biocaml_unix.Fastq.sequence
-                 , (phred_probabilities r1.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok)
-                 , r2.Biocaml_unix.Fastq.sequence
-                 , (phred_probabilities r2.Biocaml_unix.Fastq.qualities |> unwrap_cr_ok))
+  Option.map opt ~f:(fun (r1, r2) ->
+    ( r1.Biocaml_unix.Fastq.sequence
+    , (phred_probabilities r1.Biocaml_unix.Fastq.qualities |> Util.unwrap)
+    , r2.Biocaml_unix.Fastq.sequence
+    , (phred_probabilities r2.Biocaml_unix.Fastq.qualities |> Util.unwrap)))
 
 type paired_reading =
   { both    : (Biocaml_unix.Fastq.item * Biocaml_unix.Fastq.item) list

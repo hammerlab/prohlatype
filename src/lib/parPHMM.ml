@@ -1828,7 +1828,7 @@ module ForwardMultipleGen (R : Ring) = struct
       split. *)
     let lookup_previous_values ws row bands =
       Cm.concat_map bands ~f:(fun s (bv, cols) ->
-        let end_col = List.last cols |> Option.value_exn ~msg:"empty cols!" in
+        let end_col = List.last cols (* doesn't compile! ~msg:"empty cols!"*) in
         Cm.get_exn s (W.get ws ~i:row ~k:end_col)
         |> Cm.map ~bijective:true ~f:(fun lv -> (cols, bv, lv)))
 

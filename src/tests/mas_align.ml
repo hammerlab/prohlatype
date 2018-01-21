@@ -27,7 +27,8 @@ let test f =
   (r.reference, reference_sequence r)
   :: List.map r.alt_elems
       ~f:(fun alt ->
-          alt.allele, allele_sequence ~reference ~allele:alt.seq ())
+          let als = allele_sequence ~reference ~allele:alt.seq () |> unwrap in
+          alt.allele, als)
 
 let load_fasta f =
   List.map (Fasta.all f) ~f:(fun (hdr, s) ->

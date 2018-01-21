@@ -30,14 +30,17 @@ let single_mp ?width oc mp =
   let r = reference_sequence mp in
   let reference = mp.ref_elems in
   let locus, ref_res = fail_on_parse mp.reference in
-  List.map mp.alt_elems ~f:(fun a ->
+  List.filter_map mp.alt_elems ~f:(fun a ->
       let l, r = fail_on_parse a.allele in
       if l <> locus then
         failwithf "Different loci: %s vs %s"
           (Nomenclature.show_locus locus)
           (Nomenclature.show_locus l);
-      let aseq = allele_sequence ~reference ~allele:a.seq () in
-      r, a.allele, aseq, a.alters)
+      match allele_sequence ~reference ~allele:a.seq () with
+      | Error e -> eprintf "failed to construct allele sequence for %s because %s"
+                     a.allele e;
+                   None
+      | Ok aseq -> Some (r, a.allele, aseq, a.alters))
   |> fun l -> ((ref_res, mp.reference, r, []) :: l)
   |> List.sort ~cmp:(fun (r1,_,_,_) (r2,_,_,_) -> Nomenclature.compare_by_resolution r1 r2)
   |> List.iter ~f:(fun (_, a, s, alters) ->

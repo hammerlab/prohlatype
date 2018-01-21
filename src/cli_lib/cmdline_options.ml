@@ -823,3 +823,9 @@ let at_most_two_fastqs ~single ~paired = function
   | lst       -> errored Term.exit_status_cli_error
                     "Too many FASTQ files specified: %d"
                     (List.length lst)
+
+let phmm_construction_error = 4
+let phmm_construction_exit_info =
+  Term.exit_info ~doc:"PHMM construction error" phmm_construction_error
+
+exception Phmm_construction_error of string

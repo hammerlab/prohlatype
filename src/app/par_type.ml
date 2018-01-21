@@ -24,7 +24,9 @@ let to_read_size_dependent
     let input = file_or_prefix_to_allele_input ~distance ~selectors file_or_prefix in
     begin fun read_size ->
       let par_phmm_args = Cache.par_phmm_args ~input ~read_size in
-      Cache.par_phmm ~skip_disk_cache par_phmm_args
+      match Cache.par_phmm ~skip_disk_cache par_phmm_args with
+      | Ok phmm -> phmm
+      | Error e -> raise (Phmm_construction_error e)
     end
 
 module Pd = ParPHMM_drivers
@@ -114,6 +116,7 @@ let type_
       ~do_not_ignore_suffixed_alleles
       ~skip_disk_cache
   in
+  try
   (* Rename some arguments to clarify logic. *)
   let check_rc = not do_not_check_rc in
   let prealigned_transition_model = not not_prealigned in
@@ -136,19 +139,21 @@ let type_
       ?max_number_mismatches ~prealigned_transition_model
       ~past_threshold_filter ~check_rc ~output_opt commandline
   in
-  if viterbi then
-    Wev.f ~log_oc ~data_oc read_length_override need_read_length conf
-      number_of_reads specific_reads finish_singles fastq_file_list
-  else (* forward *)
-    match number_processes_opt with
-    | None  ->
-        Wef.f ~log_oc ~data_oc  read_length_override need_read_length
-          conf number_of_reads specific_reads finish_singles
-          fastq_file_list
-    | Some n ->
-        p_forward ~log_oc ~data_oc  read_length_override need_read_length
-          conf number_of_reads specific_reads finish_singles n
-          fastq_file_list
+    if viterbi then
+      Wev.f ~log_oc ~data_oc read_length_override need_read_length conf
+        number_of_reads specific_reads finish_singles fastq_file_list
+    else (* forward *)
+      match number_processes_opt with
+      | None  ->
+          Wef.f ~log_oc ~data_oc  read_length_override need_read_length
+            conf number_of_reads specific_reads finish_singles
+            fastq_file_list
+      | Some n ->
+          p_forward ~log_oc ~data_oc  read_length_override need_read_length
+            conf number_of_reads specific_reads finish_singles n
+            fastq_file_list
+  with (Phmm_construction_error e) ->
+    errored phmm_construction_error "%s" e
 
 let () =
   let do_not_check_rc_flag =
@@ -310,6 +315,6 @@ let () =
              ~version
              ~doc
              ~man
-             ~exits:default_exits)
+             ~exits:(phmm_construction_exit_info :: default_exits))
   in
   Term.(exit_status (eval type_))

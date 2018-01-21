@@ -54,32 +54,34 @@ let drb_nuc_mp =
 let p_gen_mp =
   MSA.Parser.from_file (Common.to_alignment_file "P_gen")
 
+let funwrap = function
+  | Ok o -> o
+  | Error e -> failwithf "%s" e
+
 let mp_to_seq mp =
   let open MSA in
   let open Parser in
   let no_sequences = List.filter ~f:(fun a -> not (is_sequence a)) in
   let als =
     List.map mp.alt_elems ~f:(fun { allele; seq; _} ->
-      let seqs = allele_sequences ~reference:mp.ref_elems ~allele:seq in
-      let rels = Segments.distances ~reference:mp.ref_elems ~allele:seq in
+      let seqs = allele_sequences ~reference:mp.ref_elems ~allele:seq |> funwrap in
+      let rels = Segments.distances ~reference:mp.ref_elems ~allele:seq |> funwrap in
       ( allele, List.map2 seqs rels ~f:(fun s r -> (s, r))))
   in
   let rp =
     let allele = no_sequences mp.ref_elems in
-    let s = allele_sequences ~reference:mp.ref_elems ~allele in
-    let r = Segments.distances ~reference:mp.ref_elems ~allele in
+    let s = allele_sequences ~reference:mp.ref_elems ~allele |> funwrap in
+    let r = Segments.distances ~reference:mp.ref_elems ~allele |> funwrap in
     ( mp.reference, List.map2 s r ~f:(fun s r -> (s, r)))
   in
   List.sort ~cmp:compare (rp :: als)
-
-let assoc v l =
-  Option.value_exn ~msg:"no assoc" (List.Assoc.get v l)
 
 let p_nuc_mp =
   let open MSA in
   let open Parser in
   let just_xons s =
     Boundaries.grouped s
+    |> funwrap
     |> List.filter ~f:(function (Boundaries.{ label = Exon _ }, _) -> true | _ -> false)
     |> Boundaries.ungrouped
   in
@@ -98,7 +100,7 @@ let print_exon_sequences mp_and_seq =
   let open MSA in
   let open Parser in
   List.iter mp_and_seq ~f:(fun (mp, seqs, distances) ->
-    let ref_lst = assoc mp.reference seqs in
+    let ref_lst = assoc_exn mp.reference seqs in
     printf "%s\n" mp.reference;
     List.iter ref_lst ~f:(fun (bm, seqs) ->
         printf "\t%s:%d\n"
@@ -284,43 +286,6 @@ let just_that_exon exon loci =
   List.map loci ~f:(fun locus ->
       let _, seqs = List.find_exn mp_and_seqs ~f:(fun (mp, _) -> mp.Parser.locus = locus) in
       spec_xon exon seqs)
-
-
-(*
-let search_1 ?n c z s1 a2 =
-  let n = Option.value n ~default:(Array.length a2) in
-  let rec loop i mm p =
-    if i = n then
-      mm, p
-    else
-      let al2, s2 = a2.(i) in
-      (*printf "comparing %s vs %s\n%!" al1 al2;*)
-      let msms = mismatches s1 s2 in
-      if msms > mm then
-        loop (i + 1) msms al2
-      else
-        loop (i + 1) mm p
-  in
-  loop 0 z ""
-
-let maximum1 = search_1 (fun x y -> x > y) min_int
-
-let max_of allele xarr =
-  let _, s =
-    Array.findi xarr ~f:(fun (a, _) -> a = allele)
-    |> Option.value_exn ~msg:"missing allele"
-    |> fun i -> xarr.(i)
-  in
-  (* let () = printf "%s: %s\n%!" allele s *)
-  maximum1 s xarr
-
-let disp1 s (d, a) =
-  printf "for %s -- %s: %d\n%!" s a d
-
-let max_of_d allele xarr =
-  let d, other_allele = max_of allele xarr in
-  printf "maximum from %s is %s with %d\n" allele other_allele d
-   *)
 
 let minimum_of arr1 arr2 =
   let n1 = Array.length arr1 in
