@@ -39,32 +39,25 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
       let file = Filename.concat dir (arg_to_string arg) in
       let save r = match r with
         | Error e -> r
-        | Ok ro ->
+        | Ok ro   ->
             if not (Sys.file_exists dir) then make_full_path dir;
             let o = open_out file in
-            Marshal.to_channel o ro [Marshal.Closures];
+            Marshal.to_channel o ro [];
             close_out o;
             r
       in
       let load () =
         let i = open_in file in
-        let r =
-          try 
-            printf "lets do it\n%!";
-            Marshal.from_channel i
-          with e ->
-            eprintf "Yes: %s\n%!" (Printexc.to_string e);
-            Printexc.print_backtrace stderr;
-            raise e
-        in
+        let r = Marshal.from_channel i in
         close_in i;
-        match after_load with | None -> r | Some f -> f r; r
+        Option.iter after_load ~f:(fun f -> f r);
+        r
       in
       if Sys.file_exists file then begin
         let r = load () in
         match up_to_date with
         | None       -> r
-        | Some check -> if check arg r then r else save (f arg)
+        | Some check -> if check arg r then Ok r else save (f arg)
       end else begin
         save (f arg)
       end
