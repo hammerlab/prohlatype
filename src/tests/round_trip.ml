@@ -49,7 +49,9 @@ let manual_diff ~reference ~allele ~file () =
       | r :: d :: tl -> loop ((apply_changes ~r d) :: acc)  tl
       | x :: []      -> eprintf "Unbalanced grep for %s %s, adding last sequence.\n"
                           allele file;
-                        let without_spaces = String.filter_map ~f:(function ' ' -> None | x -> Some x) x in
+                        let without_spaces =
+                          String.filter_map ~f:(function ' ' -> None | x -> Some x) x
+                        in
                         List.rev (without_spaces :: acc)
     in
     try
