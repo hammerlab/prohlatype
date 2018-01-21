@@ -11,7 +11,7 @@ module Alleles = Alleles
 module Distances = Distances
 module Nomenclature = Nomenclature
 
-module Fixed_width = Fixed_width
+module Bitvector = Bitvector
 module Ref_graph = Ref_graph
 
 module Partition_map = Partition_map

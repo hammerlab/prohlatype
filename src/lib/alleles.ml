@@ -8,7 +8,16 @@ let equal = equal_allele
 type index =
   { size      : int
   ; to_index  : int StringMap.t
+        [@equal StringMap.equal ~cmp:(fun (a:int) b -> a = b)]
+        [@compare StringMap.compare ~cmp:Int.compare]
   ; to_allele : string array
+  }
+  [@@deriving eq, ord]
+
+let empty_index =
+  { size      = 0
+  ; to_index  = StringMap.empty
+  ; to_allele = [||]
   }
 
 let length { size; _} = size
@@ -128,80 +137,74 @@ module CompressNames = struct
 
 end  (* CompressNames *)
 
-type set = Fixed_width.t
+module Set : sig
 
-let set_compare = Pervasives.compare  (*?*)
+  type t
 
-let set_equals = (=) (*?*)
+  val empty : t
 
-let set_empty = Fixed_width.empty
+  val equal : t -> t -> bool
 
-module type Index = sig
-  val index : index
-end
+  val compare : t -> t -> int
 
-module type Set = sig
+  val copy : t -> t
 
-  val copy : set -> set
-
-  val init : unit -> set
+  val init : index -> t
 
   (** [set set allele] will make sure that [allele] is
       in [set], specifically [is_set set allele] will be [true].
       [set] is mutated. *)
-  val set : set -> allele -> set
+  val set : t -> allele -> t
 
   (** [singleton allele] will create an edge set with just [allele]. *)
-  val singleton : allele -> set
+  val singleton : index -> allele -> t
 
   (** [clear set allele] will make sure that [allele] is not
       in [set], specifically [is_set set allele] will be
       [false]. [set] is mutated. *)
-  val clear : set -> allele -> set
+  val clear : t -> allele -> t
 
   (** [is_set set allele] is [allele] in [set]. *)
-  val is_set : set -> allele -> bool
+  val is_set : t -> allele -> bool
 
-  val fold : f:('a -> allele -> 'a) -> init:'a -> set -> 'a
+  val fold : f:('a -> allele -> 'a) -> init:'a -> t -> 'a
 
-  val fold_set_indices : f:('a -> int -> 'a) -> init:'a -> set -> 'a
+  val fold_set_indices : f:('a -> int -> 'a) -> init:'a -> t -> 'a
 
-  val iter : f:(allele -> unit) -> set -> unit
+  val iter : f:(allele -> unit) -> t -> unit
 
-  val iter_set_indices : f:(int -> unit) -> set -> unit
+  val iter_set_indices : f:(int -> unit) -> t -> unit
 
   (** [cardinal set] returns the number of alleles found in [set]. *)
-  val cardinal : set -> int
+  val cardinal : t -> int
 
   (** [union e1 e2] will return an edge set with all alleles found in
       [e1] and/or [e2]. *)
-  val union : set -> set -> set
+  val union : t -> t -> t
 
-  val unite : into:set -> set -> unit
+  val unite : into:t -> t -> unit
 
   (** [inter e1 e2] will return an edge set with alleles found in both
       [e1] and [e2]. *)
-  val inter : set -> set -> set
+  val inter : t -> t -> t
 
   (** [diff e1 e2] will return an edge set with alleles found in [e1] but not
       in [e2]. *)
-  val diff : set -> set -> set
+  val diff : t -> t -> t
 
-  val inter_diff : set -> set -> set * set * bool * bool
-
-  val split3 : set -> set -> set * set * set * bool * bool * bool
+  val inter_diff : t -> t -> t * t * bool * bool
 
   (** [complement set] returns a set of all the alleles not in [set].*)
-  val complement : set -> set
+  val complement : t -> t
 
   (** Construct a string of all the alleles found in the edge set. *)
-  val to_string : ?compress:bool -> set -> string
+  val to_string : ?compress:bool -> t -> string
 
   (** Construct a string with all of the alleles {b not} found in the edge set.
 
       @param prefix will determine if the complement string is prefixed
         (ie. "Complement of ") *)
-  val complement_string : ?compress:bool -> ?prefix:string -> set -> string
+  val complement_string : ?compress:bool -> ?prefix:string -> t -> string
 
   (** [to_human_readable] uses heuristics to pick a shorter string
       representation of the edge set.
@@ -219,42 +222,54 @@ module type Set = sig
                         [s] as a prefix
       *)
   val to_human_readable : ?compress:bool -> ?max_length:int ->
-    ?complement:[ `No | `Prefix of string | `Yes] -> set -> string
+    ?complement:[ `No | `Prefix of string | `Yes] -> t -> string
 
-end (* Set *)
+end (* Set *) = struct
 
-module MakeSet (I: Index) : Set = struct
+  type t =
+    { i : index
+    ; b : Bitvector.t
+    }
+  [@@deriving eq, ord]
 
-  module Fw = Fixed_width.Make(struct let size = I.index.size end)
+  let empty =
+    { i = empty_index
+    ; b = Bitvector.empty
+    }
 
-  let copy = Fw.copy
+  let copy s =
+    { s with b = Bitvector.copy s.b }
 
-  let init () = Fw.create false
+  let init index =
+    { b = Bitvector.create ~size:index.size false
+    ; i = index
+    }
 
   let set s allele =
-    Fw.set s (StringMap.find allele I.index.to_index);
+    Bitvector.set s.b (StringMap.find allele s.i.to_index);
     s
 
-  let unite ~into from = Fw.union_into ~into from
+  let unite ~into from =
+    Bitvector.union_into ~into:into.b from.b
 
-  let singleton allele =
-    let s = init () in
+  let singleton index allele =
+    let s = init index in
     set s allele
 
   let clear s allele =
-    Fw.reset s (StringMap.find allele I.index.to_index);
+    Bitvector.reset s.b (StringMap.find allele s.i.to_index);
     s
 
   let is_set s allele =
-    Fw.get s (StringMap.find allele I.index.to_index)
+    Bitvector.get s.b (StringMap.find allele s.i.to_index)
 
   let fold_set_indices ~f ~init s =
     let r = ref init in
-    Fw.iter_true s (fun i -> r := f !r i);
+    Bitvector.iter_true s.b (fun i -> r := f !r i);
     !r
 
   let fold ~f ~init s =
-    fold_set_indices s ~init ~f:(fun a i -> f a I.index.to_allele.(i))
+    fold_set_indices s ~init ~f:(fun a i -> f a s.i.to_allele.(i))
 
   let iter ~f s =
     fold ~init:() ~f:(fun () a -> f a) s
@@ -262,19 +277,26 @@ module MakeSet (I: Index) : Set = struct
   let iter_set_indices ~f s =
     fold_set_indices ~init:() ~f:(fun () i -> f i) s
 
-  let cardinal = Fw.cardinal
+  let cardinal s = Bitvector.cardinal s.b
 
-  let union = Fw.union
+  let union s t =
+    { s with b = Bitvector.union s.b t.b }
 
-  let inter = Fw.inter
+  let inter s t =
+    { s with b = Bitvector.inter s.b t.b }
 
-  let diff = Fw.diff
+  let diff s t =
+    { s with b = Bitvector.diff s.b t.b }
 
-  let inter_diff = Fw.inter_diff
+  let inter_diff s t =
+    let bi, bd, same, nots = Bitvector.inter_diff s.b t.b in
+    { s with b = bi}
+    , { s with b = bd }
+    , same
+    , nots
 
-  let split3 = Fw.split3
-
-  let complement = Fw.negate
+  let complement s =
+    { s with b = Bitvector.negate s.b }
 
   let to_string ?(compress=false) s =
     fold ~f:(fun a s -> s :: a) ~init:[] s
@@ -283,8 +305,8 @@ module MakeSet (I: Index) : Set = struct
     |> String.concat ~sep:";"
 
   let complement_string ?(compress=false) ?prefix s =
-    Array.fold_left I.index.to_allele ~init:(0, [])
-        ~f:(fun (i, acc) a -> if Fw.get s i
+    Array.fold_left s.i.to_allele ~init:(0, [])
+        ~f:(fun (i, acc) a -> if Bitvector.get s.b i
                               then (i + 1, acc)
                               else (i + 1, a :: acc))
     |> snd
@@ -300,11 +322,11 @@ module MakeSet (I: Index) : Set = struct
   let to_human_readable ?(compress=true) ?(max_length=1000) ?(complement=`Yes) s =
     let make_shorter =
       let p = cardinal s in
-      if p = I.index.size then
+      if p = s.i.size then
         "Everything"
       else if p = 0 then
         "Nothing"
-      else if p <= I.index.size / 2 then
+      else if p <= s.i.size / 2 then
         to_string ~compress s
       else
         match complement with
@@ -314,139 +336,129 @@ module MakeSet (I: Index) : Set = struct
     in
     String.take make_shorter ~index:max_length
 
-end (* MakeSet *)
+end (* Set *)
 
-type 'a map = 'a array
+module Map : sig
 
-module type Map = sig
+  type 'a t
 
-  val to_array : 'a map -> 'a array
+  val to_array : 'a t -> 'a array
 
   (** [make default_value]. *)
-  val make : 'a -> 'a map
+  val make : index -> 'a -> 'a t
 
   (** [init f]. *)
-  val init : (allele -> 'a) -> 'a map
+  val init : index -> (allele -> 'a) -> 'a t
 
   (** [get map allele]. *)
-  val get : 'a map -> allele -> 'a
+  val get : 'a t -> allele -> 'a
 
   (** [update2 source dest u] update the value of [dest] with the result of
       [u] and the values of the same allele of [source] and [dest]. *)
-  val update2 : source:'a map -> dest:'b map -> ('a -> 'b -> 'b) -> unit
+  val update2 : source:'a t -> dest:'b t -> ('a -> 'b -> 'b) -> unit
 
   (** [fold f init map] fold over all alleles found in the [map]. *)
-  val fold : f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b map -> 'a
+  val fold : f:('a -> 'b -> allele -> 'a) -> init:'a -> 'b t -> 'a
 
   (** [iter f map] iter over all allele assignments in the [map]. *)
-  val iter : f:('b -> allele -> unit) -> 'b map -> unit
+  val iter : f:('b -> allele -> unit) -> 'b t -> unit
 
   (** [map f cm] return a new map based on applying [f] to each element
        of [cm]. *)
-  val map : f:('a -> allele -> 'b) -> 'a map -> 'b map
+  val map : f:('a -> allele -> 'b) -> 'a t -> 'b t
 
   (** [fold_wa f init map] fold over all values found in the [map],
       without regard for the allele key (wa = without allele). *)
-  val fold_wa : f:('a -> 'b -> 'a) -> init:'a -> 'b map -> 'a
+  val fold_wa : f:('a -> 'b -> 'a) -> init:'a -> 'b t -> 'a
 
   (** [iter_wa f map] iter over all allele assignments in the [map],
       without regard for the allele key (wa = without allele). *)
-  val iter_wa : f:('b -> unit) -> 'b map -> unit
+  val iter_wa : f:('b -> unit) -> 'b t -> unit
 
   (** [map_wa f m] maps the values of the map [m] without regard to the allele
       key (wa = without allele) .*)
-  val map_wa : f:('a -> 'b) -> 'a map -> 'b map
+  val map_wa : f:('a -> 'b) -> 'a t -> 'b t
 
   (** [map2_wa f m1 m2] map from two maps. *)
-  val map2_wa : f:('a -> 'b -> 'c) -> 'a map -> 'b map -> 'c map
+  val map2_wa : f:('a -> 'b -> 'c) -> 'a t -> 'b t -> 'c t
 
   (** [values_assoc m] compress (invert) the values found in [m] into
       an association list.
   val values_assoc : 'a map -> ('a * Set.set) list
 *)
 
-  val update_from : set -> f:('a -> 'a) -> 'a map -> unit
+  val update_from : Set.t -> f:('a -> 'a) -> 'a t -> unit
 
   (** [update_from_and_fold set f init map] updates and folds over the [set]
       elements of [map].*)
-  val update_from_and_fold : set -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b map -> 'a
+  val update_from_and_fold : Set.t -> f:('a -> 'b -> 'b * 'a) -> init:'a -> 'b t -> 'a
 
   (** [choose m] return a single element from the map. *)
-  val choose : 'a map -> 'a
+  val choose : 'a t -> 'a
 
-end (* Map *)
+end (* Map *) = struct
 
-module MakeMap (I: Index) : Map = struct
+  type 'a t =
+    { i : index
+    ; a : 'a array
+    }
 
-  module Fw = Fixed_width.Make(struct let size = I.index.size end)
+  let to_array m = m.a
 
-  let to_array a = a
+  let make index e =
+    { a = Array.make index.size e
+    ; i = index
+    }
 
-  let make e =
-    Array.make I.index.size e
-
-  let init f =
-    Array.init I.index.size ~f:(fun i -> f I.index.to_allele.(i))
+  let init index f =
+    { a = Array.init index.size ~f:(fun i -> f index.to_allele.(i))
+    ; i = index
+    }
 
   let get m a =
-    m.(StringMap.find a I.index.to_index)
+    m.a.(StringMap.find a m.i.to_index)
 
   let update2 ~source ~dest f =
-    for i = 0 to Array.length source - 1 do
-      dest.(i) <- f source.(i) dest.(i)
+    for i = 0 to Array.length source.a - 1 do
+      dest.a.(i) <- f source.a.(i) dest.a.(i)
     done
 
   let map2_wa ~f m1 m2 =
-    Array.init (Array.length m1) ~f:(fun i -> f m1.(i) m2.(i))
+    { m1 with a = Array.init m1.i.size ~f:(fun i -> f m1.a.(i) m2.a.(i))}
 
-  let fold ~f ~init amap =
+  let fold ~f ~init m =
     let s = ref init in
-    for i = 0 to I.index.size - 1 do
-      s := f !s amap.(i) I.index.to_allele.(i)
+    for i = 0 to m.i.size - 1 do
+      s := f !s m.a.(i) m.i.to_allele.(i)
     done;
     !s
 
-  let iter ~f amap =
-    fold ~init:() ~f:(fun () m a -> f m a) amap
+  let iter ~f m =
+    fold ~init:() ~f:(fun () v a -> f v a) m
 
-  let map ~f amap =
-    Array.mapi amap ~f:(fun i c -> f amap.(i) (I.index.to_allele.(i)))
+  let map ~f m =
+    { m with a = Array.mapi m.a ~f:(fun i v -> f v m.i.to_allele.(i)) }
 
-  let fold_wa = Array.fold_left
+  let fold_wa ~f ~init m  = Array.fold_left m.a ~f ~init
 
-  let iter_wa = Array.iter
+  let iter_wa ~f m = Array.iter m.a ~f
 
-  let map_wa ~f amap =
-    Array.map amap ~f
-
-(*
-  let values_assoc amap =
-    Array.fold_left amap ~init:(0, []) ~f:(fun (i, asc) v ->
-      let a = I.index.to_allele.(i) in
-      try
-        let s, rest = remove_and_assoc v asc in
-        (* TODO: make these modules recursive to allow maps to see inside sets *)
-        (i + 1, (v, Set.set s a) :: rest)
-      with Not_found ->
-        (i + 1, (v, Set.singleton a) ::asc))
-    |> snd
-    *)
+  let map_wa ~f m =
+    { m with a = Array.map m.a ~f }
 
   let update_from s ~f m =
-    Fw.iter_true s (fun i -> m.(i) <- f m.(i))
+    Set.fold_set_indices s ~init:() ~f:(fun () i -> m.a.(i) <- f m.a.(i))
 
   let update_from_and_fold s ~f ~init m =
-    let r = ref init in
-    Fw.iter_true s (fun i ->
-      let nm, nacc = f !r m.(i) in (* Use in 1st position ala fold_left. *)
-      r := nacc;
-      m.(i) <- nm);
-    !r
+    Set.fold_set_indices s ~init ~f:(fun acc i ->
+      let nv, nacc = f acc m.a.(i) in
+      m.a.(i) <- nv;                    (* Use in 1st position ala fold_left. *)
+      nacc)
 
   let choose m =
-    m.(0)
+    m.a.(0)
 
-end (* MakeMap *)
+end (* Map *)
 
 (* Different logic of how we choose which alleles to include in the analysis. *)
 module Selectors = struct

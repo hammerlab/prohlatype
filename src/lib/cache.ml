@@ -48,7 +48,15 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
       in
       let load () =
         let i = open_in file in
-        let r = Marshal.from_channel i in
+        let r =
+          try 
+            printf "lets do it\n%!";
+            Marshal.from_channel i
+          with e ->
+            eprintf "Yes: %s\n%!" (Printexc.to_string e);
+            Printexc.print_backtrace stderr;
+            raise e
+        in
         close_in i;
         match after_load with | None -> r | Some f -> f r; r
       in
