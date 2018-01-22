@@ -38,8 +38,8 @@ module Past_threshold = struct
     Lp.max prev_threshold mm
 
   let new_value prev_threshold proc = function
-    | Filtered _  -> prev_threshold
-    | Completed _ -> new_ prev_threshold proc
+    | Pass_result.Filtered _  -> prev_threshold
+    | Pass_result.Completed _ -> new_ prev_threshold proc
 
   let update prev_threshold proc pr =
     match prev_threshold with
@@ -52,9 +52,8 @@ end  (* Past_threshold *)
 (* Consider a single orientation: either regular or reverse complement. *)
 let specific_orientation ?prev_threshold proc pass_result_map reverse_complement read read_errors =
   let open ParPHMM in
-  match proc.single ?prev_threshold ~read ~read_errors reverse_complement with
-  | Filtered m    -> Filtered m
-  | Completed ()  -> Completed (pass_result_map proc reverse_complement)
+  Pass_result.map (proc.single ?prev_threshold ~read ~read_errors reverse_complement)
+    ~f:(fun () -> pass_result_map proc reverse_complement)
 
 (* Sometimes (such as in the beginning) we do not know whether to prefer a
    regular or a reverse-complement orientation for read. *)
@@ -63,8 +62,8 @@ module Orientation = struct
   open ParPHMM
 
   type 'a t =
-    { regular     : 'a pass_result
-    ; complement  : 'a pass_result
+    { regular     : 'a Pass_result.t
+    ; complement  : 'a Pass_result.t
     }
     [@@deriving show,yojson]
 
@@ -95,6 +94,7 @@ module Orientation = struct
 
   let most_likely_between ~take_regular t =
     let open ParPHMM in
+    let open Pass_result in
     match t.regular, t.complement with
     | Filtered mr, Filtered mc -> Filtered (sprintf "Both! %s, %s" mr mc)
     | Filtered _r, Completed c -> Completed (true, c)
@@ -107,6 +107,7 @@ module Orientation = struct
 
   (* Compute a specific orientation and label the other as Filtered. *)
   let specific ?prev_threshold proc pass_result_map rc read read_errors =
+    let open Pass_result in
     if rc then
       { regular     = Filtered "Selected reverse complement"
       ; complement  = specific_orientation ?prev_threshold proc pass_result_map
@@ -836,9 +837,8 @@ module Forward (* : Worker *) = struct
                     (not c) rd2 re2 in
           { Output.name; d = Sp.Paired (r1, r2)})
 
-  let just_aap = function
-    | Filtered m   -> Filtered m
-    | Completed rm -> Completed rm.aap
+  let just_aap =
+    Pass_result.map ~f:(fun rm -> rm.aap)
 
   let just_aap_or = Orientation.map ~f:just_aap
 
@@ -1100,10 +1100,10 @@ module Multiple_loci (* :
   type 'single_result paired_dependent =
       { first_o : bool
       ; first   : 'single_result
-      ; second  : 'single_result pass_result
+      ; second  : 'single_result Pass_result.t
       }
     (* Orientation and gene of 2nd read is determined by 1st. There is no
-       {pass_result} since we're not going to apply a filter to the 2nd read.
+       {Pass_result.t} since we're not going to apply a filter to the 2nd read.
        Note that one could "naturally" combine the result of the first by
        passing the first's emission (via per_allele_hood) into the second
        read's forward pass (this is similar to thinking of the 2 reads as just
@@ -1122,8 +1122,8 @@ module Multiple_loci (* :
     if reverse_complement then 'C' else 'R'
 
   let pass_result_to_short_string sep sr_to_string = function
-    | Filtered m -> sprintf "F%c%s" sep m
-    | Completed r -> sr_to_string r
+    | Pass_result.Filtered m -> sprintf "F%c%s" sep m
+    | Pass_result.Completed r -> sr_to_string r
 
   let soi_to_string ?take_regular ?(sep='\t') sr_to_string soi =
     let ots = Orientation.to_string ?take_regular ~sep sr_to_string in
@@ -1195,10 +1195,10 @@ module Multiple_loci (* :
   and 'single_result first_oriented_second =
     { first_o : bool
     ; first   : 'single_result
-    ; second  : 'single_result pass_result
+    ; second  : 'single_result Pass_result.t
     }
     (* One of the orientations of the first wasn't filtered and we used
-       it to orient the second read. There is a {pass_result} for second
+       it to orient the second read. There is a {Pass_result.t} for second
        because in the cases where we have a split, those may trigger a
        filter that stops computation. *)
   and 'single_result paired =
@@ -1336,7 +1336,7 @@ module Multiple_loci (* :
             PairedDependent
               { first_o
               ; first = first.Forward.aap
-              ; second = map_completed ~f:(fun s -> s.Forward.aap) second
+              ; second = Pass_result.map ~f:(fun s -> s.Forward.aap) second
               }
         | SingleRead oi                             ->
            SingleRead (Forward.just_aap_or oi)
@@ -1404,7 +1404,7 @@ module Multiple_loci (* :
             FirstOrientedSecond
               { first_o
               ; first   = first.Forward.aap
-              ; second  = map_completed ~f:(fun s -> s.Forward.aap) second
+              ; second  = Pass_result.map ~f:(fun s -> s.Forward.aap) second
               })
 
   (*   Easier to reason about this as a distance, hence >= 0

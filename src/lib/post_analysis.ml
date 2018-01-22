@@ -18,6 +18,7 @@ type read_info =
   [@@deriving show]
 
 let read_metric of_alp_list =
+  let open Pass_result in
   let of_aalp_pr = function
     | Filtered _    -> invalid_argf "read was filtered ?!?"
     | Completed alp -> of_alp_list alp
@@ -25,7 +26,7 @@ let read_metric of_alp_list =
   let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
   let mlo fp =
     Orientation.most_likely_between ~take_regular fp
-    |> map_completed ~f:snd
+    |> Pass_result.map ~f:snd
   in
   function
   | Soi (Multiple_loci.SingleRead or_) ->
