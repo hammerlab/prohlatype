@@ -2,15 +2,7 @@
 open Util
 open Graph
 
-(* TODO:
-  - Hashcons the sequences
-  - Turn fold_succ_e from O(n) into something better
-*)
-
-type start =
-  MSA.position *
-  (Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare])
-    [@@deriving eq, ord]
+type start = MSA.position * Alleles.t [@@deriving eq, ord]
 type sequence = string [@@deriving eq, ord, show]
 
 (* start end pairs *)
