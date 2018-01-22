@@ -1,3 +1,4 @@
+(** Code and logic for constructing 'Reference' graphs of HLA genes. *)
 
 open Util
 open Graph
