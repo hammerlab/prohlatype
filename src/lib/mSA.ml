@@ -444,7 +444,7 @@ module Parser = struct
             end
         | Data _ when String.is_empty line -> loop_header state
         | Data (Position (st, p)) ->
-            if st = sequence_type then
+            if st <> sequence_type then
               perrorf "Different sequence type %s from expected: %s"
                 (Sequence.show_type_ st) (Sequence.show_type_ sequence_type)
             else begin
