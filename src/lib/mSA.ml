@@ -4,57 +4,17 @@
 *)
 
 open Util
+open Biology
 
 (* This refers to the alignment position.  *)
 type position = int [@@deriving eq, ord, show, yojson]
 
-let is_nucleotide allele  = function
-  | 'A' | 'C' | 'G' | 'T' -> true
-  (* We'll parse N as a nucleotide, but why does IMGT report this? *)
-  | 'N' -> eprintf "IMGT reports that %s has an 'N' as a base!" allele; true
-  | _   -> false
-
-let is_amino_acid =
-  function
-  | 'A'| 'C'| 'D'| 'E'| 'F'| 'G'| 'H'| 'I'| 'K'| 'L'
-  | 'M'| 'N'| 'P'| 'Q'| 'R'| 'S'| 'T'| 'V'| 'W'| 'Y' -> true
-  | _ -> false
-
-(* Ripe for stricter typing *)
-type boundary_label =
-  | UTR5
-  | UTR3
-  | Exon of int
-  | Intron of int
-  [@@deriving eq, ord, show, yojson]
-
-let next_boundary_label_gdna = function
-  | UTR5     -> Some (Exon 1)
-  | UTR3     -> None
-  | Exon n   -> Some (Intron n)
-  | Intron n -> Some (Exon (n + 1))
-
-let next_boundary_label_cdna = function
-  | Exon n   -> Some (Exon (n + 1))
-  | UTR5     -> None
-  | UTR3     -> None
-  | Intron n -> None
-
-let boundary_label_to_string = function
-  | UTR5     -> "UTR5"
-  | UTR3     -> "UTR3"
-  | Exon n   -> sprintf "Exon %d" n
-  | Intron n -> sprintf "Intron %d" n
-
-let boundary_label_to_short = function
-  | UTR5     -> "U5"
-  | UTR3     -> "U3"
-  | Exon n   -> sprintf "X%d" n
-  | Intron n -> sprintf "I%d" n
-
 type 'sr sequence = { start : position; s : 'sr }
 and gap = { gstart : position; length : int }
-and boundary = { label : boundary_label; pos : position }
+and boundary =
+  { label : Gene_region.t
+  ; pos : position
+  }
 and 'sr alignment_element =
   | Start of position
   | End of position
@@ -80,7 +40,7 @@ let al_el_to_string = function
   | Start p                 -> sprintf "Start at %d" p
   | End p                   -> sprintf "End at %d" p
   | Boundary { pos; label } -> sprintf "Boundary %s at %d"
-                                (boundary_label_to_string label) pos
+                                (Gene_region.to_string label) pos
   | Sequence { start; s }   -> sprintf "Sequence %s at %d" s start
   | Gap { gstart; length }  -> sprintf "Gap of %d from %d" length gstart
 
@@ -124,14 +84,14 @@ module Alteration = struct
 
   type per_segment =
     { full  : bool
-    ; type_ : boundary_label
+    ; type_ : Gene_region.t
     ; start : position
     ; end_  : position
     } [@@deriving eq, ord, show, yojson]
 
   let per_segment_to_string p =
     sprintf "[%s:%s:%d,%d)"
-      (boundary_label_to_short p.type_)
+      (Gene_region.to_short p.type_)
       (if p.full then "full" else "partial")
       p.start p.end_
 
@@ -166,33 +126,14 @@ module Parser = struct
   let perrorf fmt =
     ksprintf (fun s -> raise (Error s)) fmt
 
-  type boundary_schema =
-    | GDNA
-    | CDNA
-
-  let first_boundary_label p =
-    if p < 1 then UTR5 else Exon 1
-
-  let next_boundary_label scheme prev =
-    let opt =
-      match scheme with
-      | GDNA -> next_boundary_label_gdna prev
-      | CDNA -> next_boundary_label_cdna prev
-    in
-    let msg =
-      sprintf "Asked for next boundary label of %s; flawed logic!"
-        (boundary_label_to_string prev)
-    in
-    Option.value_exn opt ~msg
-
   type 'e parse_struct =
     { allele_n        : string
     (* For now, it makes it easier to have some kind of sane delimiter to align
        and spot check these alignments. The "|" are the 'boundaries'. This keeps
        track of the most recently encountered boundary marker, starting with 0.
      *)
-    ; boundary_schema : boundary_schema
-    ; boundary_label  : boundary_label
+    ; sequence_type   : Sequence.type_
+    ; boundary_label  : Gene_region.t
     (* Where we are in the sequence, this starts from the first number specified
        in the file and increments as we read characters. *)
     ; position        : position
@@ -200,11 +141,24 @@ module Parser = struct
     ; in_data         : bool
     }
 
-  let init_ps boundary_schema allele_n position =
-    let boundary_label = first_boundary_label position in
+  (* This method is here, as opposed to Biology.Gene_region, because it is
+   * specific to the way that the MSA file is parsed and what it represents.
+   *)
+  let first_gene_region st pos =
+    match st with
+    | Sequence.GDNA ->
+        if pos < 1 then
+          Gene_region.UTR5
+        else
+          Gene_region.Exon 1
+    | Sequence.CDNA
+    | Sequence.Protein -> Gene_region. Exon 1
+
+  let init_ps sequence_type allele_n position =
+    let boundary_label = first_gene_region sequence_type position in
     { allele_n
     ; position
-    ; boundary_schema
+    ; sequence_type
     ; boundary_label
     ; sequence = [ Boundary { label = boundary_label; pos = position } ]
     ; in_data  = false
@@ -244,7 +198,7 @@ module Parser = struct
   (* Specific alignment element inserts *)
 
   let insert_boundary ps =
-    let next_label = next_boundary_label ps.boundary_schema ps.boundary_label in
+    let next_label = Gene_region.next ps.sequence_type ps.boundary_label in
     let nps =
       next ps MetaCharacter ~f:(fun position sequence ->
           Boundary { label = next_label; pos = position} :: sequence)
@@ -289,24 +243,23 @@ module Parser = struct
     next ps UnknownChar ~f:(fun _position sequence -> sequence)
 
   (* Advance the parser struct across a string of characters. *)
-  let update ~allele ~dna ~fail_on_same ps s =
-    let is_nuc = if dna then is_nucleotide allele else is_amino_acid in
+  let update ~allele ~st ~fail_on_same ps s =
+    let is_vc = Sequence.is_valid_character ~s:allele st in
     let rec loop ps = function
       | []                    -> ps
       | '|' :: t              -> loop (insert_boundary ps) t
       | '*' :: t              -> loop (insert_unknown ps) t
-      | 'X' :: t when not dna -> loop (insert_unknown ps) t        (* add End *)
+      | 'X' :: t when st = Protein -> loop (insert_unknown ps) t   (* add End *)
       | '.' :: t              -> loop (insert_gap ps) t
       | '-' :: t              -> loop (insert_same ~fail_on_same ps) t
-      | c :: t when is_nuc c  -> loop (insert_nuc c ps) t
+      | c :: t when is_vc c   -> loop (insert_nuc c ps) t
       | x :: _                -> perrorf "Unrecognized char '%c' in %s"
                                    x (where ps)
     in
     loop ps (String.to_character_list s)
 
   type 'sr parse_result =
-    { dna       : bool       (* DNA or Amino Acid sequence -> diff characters *)
-    ; start_pos : position
+    { start_pos : position
     ; ref       : string                                (* Name of reference. *)
     (* As we parse the alternative tracks, we have to keep track of the gaps
        that we encounter in the reference, so that all positions are with
@@ -315,11 +268,10 @@ module Parser = struct
     ; alt_htbl  : (string, 'sr parse_struct) Hashtbl.t         (* Alternates. *)
     }
 
-  let init_parse_result boundary_schema ref_allele dna position =
-    { dna       = dna
-    ; start_pos = position
+  let init_parse_result sequence_type ref_allele position =
+    { start_pos = position
     ; ref       = ref_allele
-    ; ref_ps    = init_ps boundary_schema ref_allele position
+    ; ref_ps    = init_ps sequence_type ref_allele position
     ; alt_htbl  = Hashtbl.create 100
     }
 
@@ -337,7 +289,8 @@ module Parser = struct
      End in this normalization step. *)
   let normalized_seq ~boundary_swap ps =
     let empty_seq =
-      [ Boundary { label = first_boundary_label ps.position; pos = ps.position } ]
+      [ Boundary { label = first_gene_region ps.sequence_type ps.position
+                 ; pos = ps.position } ]
     in
     if ps.sequence = empty_seq then
       []
@@ -354,20 +307,21 @@ module Parser = struct
         reverse_seq ~boundary_swap (End ps.position :: ps.sequence)
 
   type line =
-    | Position of bool * int             (* nucleotide or amino acid sequence *)
+    | Position of Sequence.type_ * int             (* nucleotide or amino acid sequence *)
     | Dash
     | SeqData of string * string list
 
   (* Assume that it has been trimmed. *)
   let parse_data line =
+    let open Sequence in
     String.split line ~on:(`Character ' ')
     |> List.filter ~f:((<>) String.empty)
     |> function
         | s :: _ when String.get s 0 = Some '|' -> Some Dash
         | "AA" :: "codon" :: _  -> Some Dash   (* not modeling this at the moment. *)
-        | "gDNA" :: pos :: _    -> Some (Position (true, int_of_string pos))
-        | "cDNA" :: pos :: _    -> Some (Position (true, int_of_string pos))
-        | "Prot" :: pos :: _    -> Some (Position (false, int_of_string pos))
+        | "gDNA" :: pos :: _    -> Some (Position (GDNA, int_of_string pos))
+        | "cDNA" :: pos :: _    -> Some (Position (CDNA, int_of_string pos))
+        | "Prot" :: pos :: _    -> Some (Position (Protein, int_of_string pos))
         | []                    -> None
         | s :: lst              -> Some (SeqData (s, lst))
 
@@ -414,7 +368,7 @@ module Parser = struct
     with End_of_file ->
       None
 
-  let from_in_channel boundary_schema locus ic =
+  let from_in_channel sequence_type locus ic =
     let latest_reference_position = ref min_int in
     let update x = function
       (* Sometimes, the files position counting seems to disagree with this
@@ -429,11 +383,11 @@ module Parser = struct
         as opposed to the reference, ie gaps advance the position.
 
         So we don't check for: x.ref_ps.position = p as well. *)
-      | Position (dna, p)   -> assert (x.dna = dna); x
+      | Position (st, p)    -> assert (sequence_type = st); x
       | Dash                -> x                             (* ignore dashes *)
       | SeqData (allele, s) ->
           let fold_sequence ~fail_on_same init =
-            List.fold_left ~init ~f:(update ~allele ~dna:x.dna ~fail_on_same)
+            List.fold_left ~init ~f:(update ~allele ~st:sequence_type ~fail_on_same)
           in
           if allele = x.ref then begin
             let nref_ps = fold_sequence ~fail_on_same:true x.ref_ps s in
@@ -442,7 +396,7 @@ module Parser = struct
           end else begin
             let cur_ps =
               try Hashtbl.find x.alt_htbl allele
-              with Not_found -> init_ps boundary_schema allele x.start_pos
+              with Not_found -> init_ps sequence_type allele x.start_pos
             in
             let new_ps = fold_sequence ~fail_on_same:false cur_ps s in
             (* Can't make this into an assertion because of sequences such as
@@ -489,11 +443,14 @@ module Parser = struct
               | _                         -> perrorf "First data not position."
             end
         | Data _ when String.is_empty line -> loop_header state
-        | Data (Position (dna, p)) ->
-            begin
+        | Data (Position (st, p)) ->
+            if st = sequence_type then
+              perrorf "Different sequence type %s from expected: %s"
+                (Sequence.show_type_ st) (Sequence.show_type_ sequence_type)
+            else begin
               match parse_data line with
               | Some (SeqData (allele, _) as d) ->
-                  let res = init_parse_result boundary_schema allele dna p in
+                  let res = init_parse_result sequence_type allele p in
                   loop (Data d) (update res d)
               | _                        ->
                   loop_header state
@@ -507,9 +464,12 @@ module Parser = struct
     | Some (release, align_date) ->
         let reversed = loop_header Header in
         let boundary_swap =
-          match boundary_schema with
-          | CDNA  -> fun b -> b
-          | GDNA  ->
+          let open Sequence in
+          let open Gene_region in
+          match sequence_type with
+          | CDNA
+          | Protein -> id
+          | GDNA    ->
               let last_reference_boundary = reversed.ref_ps.boundary_label in
               begin match last_reference_boundary with
               | Intron _n -> fun b ->
@@ -542,7 +502,7 @@ module Parser = struct
         ; alt_elems
         }
 
-  let from_file ?boundary_schema f =
+  let from_file ?sequence_type f =
     let extension_less = Filename.chop_extension (Filename.basename f) in
     let locus, last_after_underscore =
       match String.split ~on:(`Character '_') extension_less with
@@ -559,21 +519,21 @@ module Parser = struct
       | _ -> perrorf "Filename: %s doesn't match the \"locus_[prot|nuc|gene].txt format."
               f
     in
-    let boundary_schema =
-      match boundary_schema with
+    let sequence_type =
+      match sequence_type with
       | Some bs -> bs
       | None    ->
           match last_after_underscore with
-          | "prot" -> CDNA
-          | "nuc"  -> CDNA
-          | "gen"  -> GDNA
+          | "prot" -> Sequence.Protein
+          | "nuc"  -> Sequence.CDNA
+          | "gen"  -> Sequence.GDNA
           | _           ->
               perrorf "Unrecognized alignment file name: %s, unable to infer \
                             Boundary scheme." f
     in
     let ic = open_in f in
     try
-      let r = from_in_channel boundary_schema locus ic in
+      let r = from_in_channel sequence_type locus ic in
       close_in ic;
       r
     with e ->
@@ -605,11 +565,12 @@ end (* Parser *)
 module Boundaries = struct
 
   type marker =
-    { label       : boundary_label
+    { label       : Gene_region.t
     ; position    : position
     ; length      : int
     ; seq_length  : int
     }
+    [@@deriving show]
 
   let marker ~label ~position =
     { label
@@ -617,6 +578,8 @@ module Boundaries = struct
     ; length = 0
     ; seq_length = 0
     }
+
+  let marker_to_string = show_marker
 
   let of_boundary { label; pos } =
     marker ~label ~position:pos
@@ -627,14 +590,6 @@ module Boundaries = struct
   let matches_boundary { label; position; _ } = function
     | Boundary b when b.label = label &&  b.pos = position -> true
     | _ -> false
-
-  let marker_to_string { label; position; length; seq_length } =
-    sprintf "{label: %s; position: %d; length %d; seq_length: %d }"
-      (boundary_label_to_string label) position length seq_length
-
-  let marker_to_boundary_string { label; position; _ } =
-    sprintf "{label: %s; pos: %d}"
-      (boundary_label_to_string label) position
 
   let all_boundaries_before_start_or_end =
     let rec loop = function

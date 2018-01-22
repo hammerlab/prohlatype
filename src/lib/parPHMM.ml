@@ -4,6 +4,7 @@
 *)
 
 open Util
+open Biology
 
 (* Add a short hand for partition maps and some helper functions for to
    make the code easier. *)
@@ -12,30 +13,6 @@ module Pm = Partition_map
 (* In all cases size is really just the number of alleles. *)
 let pm_init_all ~number_alleles v =
   Pm.init_all_a ~size:number_alleles v
-
-module Base = struct
-
-  type t =
-    | A
-    | C
-    | G
-    | T
-    [@@deriving eq,show]
-
-  let of_char = function
-    | 'A' -> A
-    | 'C' -> C
-    | 'G' -> G
-    | 'T' -> T
-    |  c  -> invalid_argf "Unsupported base: %c" c
-
-  let to_char = function
-    | A       -> 'A'
-    | C       -> 'C'
-    | G       -> 'G'
-    | T       -> 'T'
-
-end (* Base *)
 
 (* Construction
   1. From MSA.Parser.result -> Array of Base.t option 's.
@@ -505,7 +482,8 @@ module Forward_calcations_over_cells (R : Ring) = struct
   let to_match_prob (base, base_error) =
     let compare_against c =
       if base = 'N' then begin
-        (*printf "Spotted an N with %f\n%!" base_error; *)
+        (* This is commented out because this function needs to be fast.
+         * eprintf "Spotted an N with %f\n%!" base_error; *)
         R.one
       end else if base = c then
         match_p base_error

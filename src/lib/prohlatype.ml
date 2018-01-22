@@ -4,6 +4,7 @@ include Util
 module Fastq = Fastq
 module Fasta = Fasta
 
+module Biology = Biology
 module MSA = MSA
 module Alter_MSA = Alter_MSA
 

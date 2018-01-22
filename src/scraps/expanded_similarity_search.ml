@@ -4,6 +4,7 @@
  *)
 
 open Prohlatype
+open Biology
 
 let loci_to_check =
   let open Nomenclature in
@@ -104,7 +105,7 @@ let print_exon_sequences mp_and_seq =
     printf "%s\n" mp.reference;
     List.iter ref_lst ~f:(fun (bm, seqs) ->
         printf "\t%s:%d\n"
-          (boundary_label_to_string bm.MSA.Boundaries.label)
+          (Gene_region.to_string bm.MSA.Boundaries.label)
           (String.length seqs)))
 
 module IntSet = Set.Make (struct type t = int let compare = compare end)
@@ -257,7 +258,7 @@ let all_distances a =
 
 let spec_xon exon seqs =
   let open MSA in
-  let e = Exon exon in
+  let e = Gene_region.Exon exon in
   List.filter_map seqs ~f:(fun (allele, exon_list) ->
     match Nomenclature.parse allele with
     | Ok (_, (_, None)) ->  (* Doesn't have a qualifier *)

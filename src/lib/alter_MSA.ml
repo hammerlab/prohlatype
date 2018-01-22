@@ -2,6 +2,7 @@
 
 open Util
 open MSA
+open Biology
 
 (* The set of loci for which I've tested these algorithms.  *)
 let supported_loci_lst =
@@ -628,8 +629,8 @@ end (* Merge *) = struct
         | []            -> error "Empty genetic sequence"
         | (gbm, _) :: _ -> error "Genetic boundary label %s doesn't match \
                             instruction's: %s"
-                            (boundary_label_to_string gbm.label)
-                            (boundary_label_to_string fr.bm.label)
+                            (Gene_region.to_string gbm.label)
+                            (Gene_region.to_string fr.bm.label)
 
       and fill_from_m acc itl ~genetic ~nuclear ~bigger_gDNA ~bigger_cDNA ~smaller_cDNA =
         match bigger_gDNA, bigger_cDNA, smaller_cDNA with
@@ -656,10 +657,10 @@ end (* Merge *) = struct
         , (bcbm, _) :: _
         , (sbm, _) :: _ -> error "Bigger gDNA %s or Bigger cDNA %s or Smaller \
                             cDNA %s boundary labels don't match instruction's: %s"
-                            (boundary_label_to_string bgbm.label)
-                            (boundary_label_to_string bcbm.label)
-                            (boundary_label_to_string sbm.label)
-                            (boundary_label_to_string genetic.bm.label)
+                            (Gene_region.to_string bgbm.label)
+                            (Gene_region.to_string bcbm.label)
+                            (Gene_region.to_string sbm.label)
+                            (Gene_region.to_string genetic.bm.label)
 
       and need_fill acc ilst ~bigger_gDNA ~bigger_cDNA ~smaller_cDNA = match ilst with
         | FillFromGenetic f :: tl
@@ -785,7 +786,7 @@ end (* Merge *) = struct
             end else begin
               if !debug then
                 printf "Didn't find start in %s; last_end: %d took everything from genetic:%s? \t %s \n"
-                  (boundary_label_to_string nuclear.bm.Boundaries.label)
+                  (Gene_region.to_string nuclear.bm.Boundaries.label)
                   last_end
                   (al_seq_to_string nuclear.al_seq)
                   (al_seq_to_string genetic.al_seq);
