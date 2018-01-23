@@ -522,7 +522,7 @@ module Output = struct
     | []   -> ()
     | lst  -> ignore (b ()); List.iter ~f lst
 
-  let tabs oc d_to_string { per_loci; per_reads } =
+  let tabs oc d_to_string { header; per_loci; per_reads } =
     let open Nomenclature in
     let alters_to_string a =
       string_of_list ~show_empty:false ~sep:";"
@@ -538,6 +538,8 @@ module Output = struct
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
         number_of_reads1 number_of_reads2
     in
+    fprintf oc "Prohlatype version: %s\n" header.prohlatype_version;
+    fprintf oc "Command Line: %s\n" header.commandline;
     List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
