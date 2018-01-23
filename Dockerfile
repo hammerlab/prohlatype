@@ -7,6 +7,6 @@ RUN git clone https://github.com/hammerlab/prohlatype.git
 WORKDIR ./prohlatype
 RUN opam info ppx_deriving
 RUN opam info ppx_deriving_yojson
-RUN make setup
+RUN opam pin add -k git prohlatype .
 RUN opam config exec -- make build tools
 
