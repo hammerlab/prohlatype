@@ -1,4 +1,4 @@
-opam-version: "2.0"
+opam-version: "1.2"
 maintainer: "Leonid Rozenberg <leonidr@gmail.com>"
 authors: "Leonid Rozenberg <leonidr@gmail.com>"
 homepage: "https://github.com/hammerlab/prohlatype/"
@@ -6,15 +6,15 @@ dev-repo: "git+https://github.com/hammerlab/prohlatype.git"
 bug-reports: "https://github.com/hammerlab/prohlatype/issues"
 license: "Apache2"
 
-#available: [ ocaml-version >= "4.03" ]
+available: [ ocaml-version >= "4.03" ]
 
 build: [
   [ "jbuilder" "subst"] {pinned}
-  [ "jbuilder" "build" "-p" name "-j" jobs ]
+  [ "jbuilder" "build" "-p" name "-j" jobs "@install"]
 ]
 
 depends: [
-  "ocaml"               { >= "4.03" }
+#  "ocaml"               { >= "4.03" }
   "ocamlfind"           { build }
   "ocamlbuild"          { build }
   "jbuilder"            { build & >="1.0+beta16" }
