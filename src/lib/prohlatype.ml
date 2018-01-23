@@ -1,6 +1,8 @@
 
 include Util
 
+module Version = Version
+
 module Fastq = Fastq
 module Fasta = Fasta
 

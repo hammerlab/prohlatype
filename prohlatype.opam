@@ -16,7 +16,6 @@ build: [
 depends: [
 #  "ocaml"               { >= "4.03" }
   "ocamlfind"           { build }
-  "ocamlbuild"          { build }
   "jbuilder"            { build & >="1.0+beta16" }
   "ppx_deriving"        { >= "4.2.1" }
   "ppx_deriving_yojson" { >= "3.1" }

@@ -13,7 +13,7 @@ let bugs =
 
 let author = "Leonid Rozenberg <leonidr@gmail.com>"
 
-let version = "%%VERSION%%"
+let version = Version.version
 
 (*** Basic command line parsers and printers. ***)
 let positive_int_parser w s =

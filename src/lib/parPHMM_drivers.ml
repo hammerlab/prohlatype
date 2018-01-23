@@ -890,7 +890,7 @@ module Forward (* : Worker *) = struct
       let pl      = Output.create_pl state.imgt_release state.locus state.allele_arr
                       state.per_allele_lhood zbest in
       let header  =
-        { Output.prohlatype_version = "%%VERSION%%"
+        { Output.prohlatype_version = Version.version
         ; Output.commandline        = state.commandline } in
       Output.create header [pl] state.per_reads
     in
@@ -1629,7 +1629,7 @@ module Multiple_loci (* :
 
   let output { f_commandline; f_opt; f_pl_lst; f_per_reads } oc =
     let header  =
-      { Output.prohlatype_version = "%%VERSION%%"
+      { Output.prohlatype_version = Version.version
       ; Output.commandline        = f_commandline }
     in
     let ot = Output.create header f_pl_lst f_per_reads in
