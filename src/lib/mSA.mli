@@ -40,23 +40,15 @@ val equal_position : position -> position -> bool
 val compare_position : position -> position -> int
 val pp_position : Format.formatter -> position -> unit
 
-type boundary_label =
-  | UTR5
-  | UTR3
-  | Exon of int
-  | Intron of int
-
-val equal_boundary_label : boundary_label -> boundary_label -> bool
-val compare_boundary_label : boundary_label -> boundary_label -> int
-val boundary_label_to_string : boundary_label -> string
-val boundary_label_to_short : boundary_label -> string
-
 (** Elements that describe alignment sequence.
 
     All positions are given relative the global alignment. *)
 type 'sr sequence = { start : position; s : 'sr }
 and gap = { gstart : position; length : int }
-and boundary = { label : boundary_label; pos : position }
+and boundary =
+  { label : Biology.Gene_region.t
+  ; pos : position
+  }
 and 'sr alignment_element =
   | Start of position
   (** Start of sequence, contains position and name *)
@@ -104,7 +96,12 @@ val al_seq_to_string
 
 module Alteration : sig
 
-  type per_segment = { full : bool; type_ : boundary_label; start : position; end_ : position; }
+  type per_segment =
+    { full : bool
+    ; type_ : Biology.Gene_region.t
+    ; start : position
+    ; end_ : position
+    }
   val equal_per_segment : per_segment -> per_segment -> bool
   val compare_per_segment : per_segment -> per_segment -> int
   val per_segment_to_string : per_segment -> string
@@ -162,23 +159,17 @@ module Parser : sig
     (** Sequence elements of alternative alleles.*)
     }
 
-  (** Does the source contain alignment for a gDNA (UTR's, Exons & Introns)
-      or from cDNA (just Exons)? *)
-  type boundary_schema =
-    | GDNA
-    | CDNA
-
   (** Parse an input channel. *)
-  val from_in_channel : boundary_schema
+  val from_in_channel : Biology.Sequence.type_
                       -> Nomenclature.locus
                       -> in_channel
                       -> sequence_alignment
 
   (** Parse an alignment file.
 
-      @param boundary_schema if not supplied is based upon the filename
+      @param sequence_type if not supplied is based upon the filename
              suffix (ie. 'gen' -> GDNA,  'nuc', 'prot' -> CNDA *)
-  val from_file : ?boundary_schema:boundary_schema
+  val from_file : ?sequence_type:Biology.Sequence.type_
                 -> string
                 -> sequence_alignment
 
@@ -194,15 +185,13 @@ end (* Parser *)
 module Boundaries : sig
 
   type marker =
-    { label       : boundary_label                  (* What kind of Boundary? *)
+    { label       : Biology.Gene_region.t           (* What kind of Boundary? *)
     ; position    : position              (* Position of the boundary marker. *)
     ; length      : int                           (* Length to next boundary. *)
     ; seq_length  : int
     }
 
   val marker_to_string : marker -> string
-
-  (* val before_start : marker -> bool *)
 
   val to_boundary
       : ?offset:int

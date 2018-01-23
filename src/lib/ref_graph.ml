@@ -1,29 +1,23 @@
+(** Code and logic for constructing 'Reference' graphs of HLA genes. *)
 
 open Util
+open Biology
 open Graph
 
-(* TODO:
-  - Hashcons the sequences
-  - Turn fold_succ_e from O(n) into something better
-*)
-
-type start =
-  MSA.position *
-  (Alleles.allele [@equal Alleles.equal] [@compare Alleles.compare])
-    [@@deriving eq, ord]
+type start = MSA.position * Alleles.t [@@deriving eq, ord]
 type sequence = string [@@deriving eq, ord, show]
 
 (* start end pairs *)
 type sep = { start : start ; end_ : MSA.position } [@@deriving eq, ord]
 
-let blts = MSA.boundary_label_to_string
+let blts = Gene_region.to_string
 
 module Nodes = struct
 
   type t =
     | S of start
     | E of MSA.position
-    | B of MSA.position * MSA.boundary_label(* Boundary of position and label *)
+    | B of MSA.position * Gene_region.t     (* Boundary of position and label *)
     | N of MSA.position * sequence                               (* Sequences *)
     [@@deriving eq, ord]
 

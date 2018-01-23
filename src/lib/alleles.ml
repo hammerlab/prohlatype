@@ -1,10 +1,16 @@
 
 open Util
 
-type allele = string [@@deriving eq, ord]
-let compare = compare_allele
-let equal = equal_allele
+(** An allele name.
+ * This type represents an abstraction for how we refer to actual biological
+ * allele. An allele is a version of a gene; as [D|R]NA sequence that
+ * has some biological function. *)
+type t = string [@@deriving eq, ord]
 
+(** For efficient Sets and Maps on alleles, we can know ahead of time the full
+ * set of alleles that we will encounter (for any given gene). Consequently,
+ * we'll build a custom index for this set to create faster Set and Map
+ * data structures. *)
 type index =
   { size      : int
   ; to_index  : int StringMap.t
@@ -23,7 +29,7 @@ let empty_index =
 let length { size; _} = size
 
 let index lst =
-  let to_allele = Array.of_list (List.sort ~cmp:compare_allele lst) in
+  let to_allele = Array.of_list (List.sort ~cmp:compare lst) in
   let size, to_index =
     Array.fold_left to_allele ~init:(0, StringMap.empty )
       ~f:(fun (i, sm) a -> (i + 1, StringMap.add a i sm))
@@ -139,6 +145,7 @@ end  (* CompressNames *)
 
 module Set : sig
 
+  type allele = t
   type t
 
   val empty : t
@@ -225,6 +232,8 @@ module Set : sig
     ?complement:[ `No | `Prefix of string | `Yes] -> t -> string
 
 end (* Set *) = struct
+
+  type allele = t
 
   type t =
     { i : index
@@ -340,6 +349,8 @@ end (* Set *)
 
 module Map : sig
 
+  type allele = t
+
   type 'a t
 
   val to_array : 'a t -> 'a array
@@ -397,6 +408,8 @@ module Map : sig
   val choose : 'a t -> 'a
 
 end (* Map *) = struct
+
+  type allele = t
 
   type 'a t =
     { i : index

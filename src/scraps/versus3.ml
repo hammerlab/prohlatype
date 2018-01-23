@@ -97,8 +97,8 @@ let do_it rn p rs re rc =
 let paired readname rs1 re1 rs2 re2 =
   let of_alp_list alp = (List.hd_exn alp).ParPHMM.position in
   let of_aalp_pr = function
-    | ParPHMM.Filtered _    -> invalid_argf "read was filtered ?!?"
-    | ParPHMM.Completed alp -> of_alp_list alp
+    | ParPHMM.Pass_result.Filtered _    -> invalid_argf "read was filtered ?!?"
+    | ParPHMM.Pass_result.Completed alp -> of_alp_list alp
   in
   match StringMap.find readname smap with
   | Pa.Pr (Ml.FirstFiltered _) ->
@@ -124,8 +124,8 @@ let single rp readname rs re =
   match StringMap.find readname smap with
   | Pa.Soi (Ml.SingleRead or_) ->
       begin match mlo or_ with
-      | ParPHMM.Filtered _ -> eprintf "%s filtered!" readname
-      | ParPHMM.Completed (rc, rplst) ->
+      | ParPHMM.Pass_result.Filtered _ -> eprintf "%s filtered!" readname
+      | ParPHMM.Pass_result.Completed (rc, rplst) ->
           let p = of_alp_list rplst in
           if first_end_pos < p && p < last_end_pos then
             do_it readname (sprintf "S %s" rp) rs re rc

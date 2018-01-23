@@ -77,13 +77,14 @@ let paired readname rs1 re1 rs2 re2 =
       eprintf "%s supposed to be paired!" readname
 
 let single rp readname rs re =
+  let open ParPHMM in
   let take_regular r c = Pd.Alleles_and_positions.descending_cmp r c <= 0 in
   let mlo fp = Pd.Orientation.most_likely_between ~take_regular fp in
   match StringMap.find readname smap with
   | Pa.Soi (Ml.SingleRead or_) ->
       begin match mlo or_ with
-      | ParPHMM.Filtered _ -> eprintf "%s filtered!" readname
-      | ParPHMM.Completed (rc, _) ->
+      | Pass_result.Filtered _ -> eprintf "%s filtered!" readname
+      | Pass_result.Completed (rc, _) ->
         let l1 = callhd fpt1 rs re rc in
         let l2 = callhd fpt2 rs re rc in
         printf "%s\ts %s\t%c\t%s\t%d\t%s\t%d\n%!"
