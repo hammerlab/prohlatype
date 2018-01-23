@@ -1,6 +1,6 @@
 .PHONY: default setup clean build tests covered_tests
 
-default: build
+default: build release
 
 build:
 	jbuilder build
@@ -23,10 +23,14 @@ tests:
 all:
 	jbuilder build @apps @scraps @tests
 
-covered_tests:
-	BISECT_ENABLE=Yes jbuilder build @tests
+release:
+	patch -p1 < tools/static_patch &&\
+	jbuilder build @apps
 
 ## Coverage
+
+covered_tests:
+	BISECT_ENABLE=Yes jbuilder build @tests
 
 report_dir:
 	mkdir report_dir
