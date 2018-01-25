@@ -1,6 +1,6 @@
 .PHONY: default setup clean build tests covered_tests
 
-default: build release
+default: build
 
 build:
 	jbuilder build
