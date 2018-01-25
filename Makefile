@@ -25,7 +25,8 @@ all:
 
 release:
 	patch -p1 < tools/static_patch &&\
-	jbuilder build @apps
+	jbuilder build @apps &&\
+	zip -l prohlatype.zip _build/default/src/app/*.exe
 
 ## Coverage
 
