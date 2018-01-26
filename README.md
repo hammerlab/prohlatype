@@ -99,8 +99,8 @@ one can calculate:
 
           $ samtools fastq ${SAMPLE}.bam > ${SAMPLE}_filtered.fastq
 
-  4. Infer types:
+  4. Infer types (see `$ multi_par --help` for further details): 
 
-          $ multi_par path-to-imgthla/aignments ${SAMPLE}_filtered.fast -o ${SAMPLE}_output.tsv
+          $ multi_par path-to-imgthla/aignments ${SAMPLE}_filtered.fastq -o ${SAMPLE}_output.tsv
 
-    See `$ multi_par --help` for further detail and optimizations.
+    
