@@ -49,25 +49,25 @@ one can calculate:
 
       b. Make sure that the opam packages are up to date:
 
-        $ opam update
+          $ opam update
 
       c. Make sure that you're on the relevant compiler:
 
-        $ opam switch 4.05.0
-        $ eval `opam config env`
+          $ opam switch 4.05.0
+          $ eval `opam config env`
 
       d. Get source:
 
-        $ git clone https://github.com/hammerlab/prohlatype.git prohlatype
-        $ cd prohlatype
+          $ git clone https://github.com/hammerlab/prohlatype.git prohlatype
+          $ cd prohlatype
 
       e. Install the dependent packages:
 
-        $ make setup
+          $ make setup
 
       f. Build the programs (afterwards they'll be in `_build/default/src/apps`):
 
-        $ make
+          $ make
 
 ### Make sure that you have [IMGT/HLA](https://github.com/ANHIG/IMGTHLA) available:
 
@@ -81,15 +81,15 @@ one can calculate:
      we normally do **not** have sequence information will still align (in the
      next filtering step), albeit poorly:
 
-        $ align2fasta path-to-imgthla/alignments -o imputed_hla_class_I.fasta
+          $ align2fasta path-to-imgthla/alignments -o imputed_hla_class_I.fasta
 
      This step needs to be performed only once, per each IMGT version.
      Run `$align2fasta --help` for further information.
 
   2. Filter your data against the reference, by first aligning. Ex:
 
-        $ bwa mem imputed_hla_class_I.fasta ${SAMPLE}.fastq | \
-            samtools view -F 4 -bT imputed_hla_class_I.fasta -o ${SAMPLE}.bam
+          $ bwa mem imputed_hla_class_I.fasta ${SAMPLE}.fastq | \
+              samtools view -F 4 -bT imputed_hla_class_I.fasta -o ${SAMPLE}.bam
 
      While fundamentally, the algorithms here are *alignment* based. They're
      too slow to run for all sequences. Sequences that do not originate from
@@ -97,10 +97,10 @@ one can calculate:
 
   3. and then convert aligned reads back to FASTQ:
 
-        $ samtools fastq ${SAMPLE}.bam > ${SAMPLE}_filtered.fastq
+          $ samtools fastq ${SAMPLE}.bam > ${SAMPLE}_filtered.fastq
 
-  4. Infer types:
+  4. Infer types (see `$ multi_par --help` for further details): 
 
-        $ multi_par path-to-imgthla/aignments ${SAMPLE}_filtered.fast -o ${SAMPLE}_output.tsv
+          $ multi_par path-to-imgthla/aignments ${SAMPLE}_filtered.fastq -o ${SAMPLE}_output.tsv
 
-    See `$ multi_par --help` for further detail and optimizations.
+    
