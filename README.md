@@ -42,7 +42,7 @@ one can calculate:
 ### There are three options to obtain the software:
 
   1. If you are running on Linux, standalone binaries are available with each [release](https://github.com/hammerlab/prohlatype/releases).
-  2. Use the linked Dockerfile (TODO).
+  2. Use the linked Docker [image](https://hub.docker.com/r/leonidr/prohlatype/).
   3. Build the software from source:
 
       a. Install [opam](https://opam.ocaml.org/).
