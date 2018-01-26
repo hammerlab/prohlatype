@@ -49,7 +49,7 @@ one can calculate:
 
       b. Make sure that the opam packages are up to date:
 
-        $ opam update
+          $ opam update
 
       c. Make sure that you're on the relevant compiler:
 
