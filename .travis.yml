@@ -1,34 +1,39 @@
-sudo: required
 language: c
-install:
-  - wget https://raw.githubusercontent.com/ocaml/ocaml-ci-scripts/master/.travis-ocaml.sh
-matrix:
-  fast_finish: true
-  include:
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=scraps
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=parsing
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mas
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=round
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=alleleDiffA
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=impute
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeA
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeB
-    - os: linux
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2 TEST=mergeC
+sudo: false
 
-    # At the moment bootstrapping OCaml on OSX takes too long, for the sake of
-    # simplicity just test compilation
-    - os: osx
-      env: OCAML_VERSION=4.05 OPAM_VERSION=1.2.2
+env:
+  - OCAML_VERSION=4.05.0 TEST=scraps
+  - OCAML_VERSION=4.05.0 TEST=parsing
+  - OCAML_VERSION=4.05.0 TEST=mas
+  - OCAML_VERSION=4.05.0 TEST=round
+  - OCAML_VERSION=4.05.0 TEST=alleleDiffA
+  - OCAML_VERSION=4.05.0 TEST=impute
+  - OCAML_VERSION=4.05.0 TEST=mergeA
+  - OCAML_VERSION=4.05.0 TEST=mergeB
+  - OCAML_VERSION=4.05.0 TEST=mergeC
+
+cache:
+  directories:
+    - ${HOME}/.opam
+
+before_cache:
+  - rm ${HOME}/.opam/log/.*
+
+before_install:
+  # Download and use opam2
+  - wget -O ${HOME}/opam https://github.com/ocaml/opam/releases/download/2.0.0-beta6/opam-2.0.0-beta6-x86_64-linux
+  - chmod +x ${HOME}/opam
+  # Some opam boilerplate
+  - export OPAMYES=1
+  - export OPAMJOBS=2
+  # Init opam, and the default switch with the right ocaml version
+  - ${HOME}/opam init --compiler=${OCAML_VERSION}
+  - eval `${HOME}/opam config env`
+
+install:
+  # Install dependencies
+  - ${HOME}/opam pin add --no-action prohlatype .
+  - ${HOME}/opam install --deps-only prohlatype
 
 script:
-  - bash -ex .travis-ocaml.sh
   - bash -ex ./tools/travis_ci_test.sh

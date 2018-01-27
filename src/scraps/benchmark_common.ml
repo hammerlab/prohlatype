@@ -1,17 +1,8 @@
 open Prohlatype
-
-let (//) = Filename.concat
-let imgthla_dir =
-  try Sys.getenv "IMGTHLA_DIR"
-  with _ -> "../foreign/IMGTHLA"
-
-let to_alignment_file f = imgthla_dir // "alignments" // (f ^ ".txt")
-let to_merge_prefix p = imgthla_dir // "alignments" // p
-let to_fasta_file f = imgthla_dir // "fasta" // (f ^ ".fasta")
+open Common
 
 let sample_path = "FILL_ME"
 let sample = sample_path // "205673_1.fastq"
-
 
 let all_reads = Fastq.all sample
 
