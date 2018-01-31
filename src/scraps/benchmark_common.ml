@@ -15,7 +15,6 @@ let load_samples s =
 
 (* Constant parameters. *)
 
-
 let prealigned_transition_model = true
 let loci_to_test = [ "A"; "B"; "C"]
 let read_length = 100
