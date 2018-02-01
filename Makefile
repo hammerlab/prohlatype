@@ -31,13 +31,14 @@ release:
 ## Coverage
 
 covered_tests:
-	BISECT_ENABLE=Yes jbuilder build @tests
+	make clean &&\
+	BISECT_ENABLE=Yes jbuilder build @tests @apps
 
 report_dir:
 	mkdir report_dir
 
 report: report_dir
-	bisect-ppx-report -html report_dir $(shell ls -t bisect*.out | head -1)
+	bisect-ppx-report -html report_dir bisect*.out
 
 clean_reports:
 	rm -rf report_dir bisect*.out
