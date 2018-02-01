@@ -27,10 +27,10 @@ let to_parPHMM_t gen s =
 let gen_parPHMM_ts gen =
   List.map loci_to_test ~f:(to_parPHMM_t gen)
 
-let reads ?fastq () =
-  [ Test_sample.a_reads ?fastq ()
-  ; Test_sample.b_reads ?fastq ()
-  ; Test_sample.c_reads ?fastq ()
+let reads ~n ?fastq () =
+  [ Test_sample.a_reads ~n ?fastq ()
+  ; Test_sample.b_reads ~n ?fastq ()
+  ; Test_sample.c_reads ~n ?fastq ()
   ]
 
 let setup_one_read parPHMM_t rd =
@@ -86,6 +86,7 @@ let describe_sorted individual_assoc aggregate_assoc =
 exception TestFailure of string
 
 let test_one_read parPHMM_t loci rn (aggregate_assoc_arr, individual_assoc_arr) =
+  pritnf "Testing relative PHMM calculations for: %s in %s \n" rn loci;
   let open ParPHMM in
   let open Oml in
   let module Sd = Statistics.Descriptive in
@@ -118,8 +119,9 @@ let test_one_read parPHMM_t loci rn (aggregate_assoc_arr, individual_assoc_arr) 
   end
 
 let () =
+  let n = 1 in
   try
-    List.iter2 loci_to_test (reads ())
+    List.iter2 loci_to_test (reads ~n ())
       ~f:(fun loci reads ->
             let phmm = to_parPHMM_t true loci in
             List.iter reads ~f:(fun rd ->

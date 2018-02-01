@@ -72,6 +72,10 @@ case "$TEST" in
     echo imputing C
     time _build/default/src/app/mhc2gpdf.exe $IMGTHLA_DIR/alignments/C_gen.txt --no-pdf
     ;;
+  relPhmm)
+    echo Testing relative PHMM calculations
+    time _build/default/src/tests/relative_phmm.exe > relative_phmm.log
+    ;;
   *)
     ;;
 esac

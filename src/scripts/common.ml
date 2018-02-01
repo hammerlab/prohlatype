@@ -105,8 +105,16 @@ module Test_sample = struct
   let all_reads ?(fastq=fastq) () =
     Fastq.all fastq
 
-  let a_reads ?fastq () =
-    let s = string_set_of_list
+  let filter_spec ?n ?fastq lst =
+    let s = string_set_of_list lst in
+    let all =
+      List.filter (all_reads ?fastq ()) ~f:(fun r ->
+        StringSet.mem r.Biocaml_unix.Fastq.name s)
+    in
+    Option.value_map n ~default:all ~f:(List.take all)
+
+  let a_reads ?n ?fastq () =
+    filter_spec ?n ?fastq
       [ "HWI-ST1027:158:C13N2ACXX:4:1101:15995:139901"
       ; "HWI-ST1027:158:C13N2ACXX:5:1102:6092:9466"
       ; "HWI-ST1027:158:C13N2ACXX:5:1102:5678:41173"
@@ -138,12 +146,9 @@ module Test_sample = struct
       ; "HWI-ST1027:158:C13N2ACXX:5:1108:17624:18419"
       ; "HWI-ST1027:158:C13N2ACXX:5:1108:3646:55403"
       ]
-    in
-    List.filter (all_reads ?fastq ()) ~f:(fun r ->
-        StringSet.mem r.Biocaml_unix.Fastq.name s)
 
-  let b_reads ?fastq () =
-    let s = string_set_of_list
+  let b_reads ?n ?fastq () =
+    filter_spec ?n ?fastq
       [ "HWI-ST1027:158:C13N2ACXX:5:1101:7937:10753"
       ; "HWI-ST1027:158:C13N2ACXX:4:1102:7125:25298"
       ; "HWI-ST1027:158:C13N2ACXX:4:1102:6901:130524"
@@ -175,12 +180,9 @@ module Test_sample = struct
       ; "HWI-ST1027:158:C13N2ACXX:4:1304:9581:124107"
       ; "HWI-ST1027:158:C13N2ACXX:5:1104:1713:95950"
       ]
-    in
-    List.filter (all_reads ?fastq ()) ~f:(fun r ->
-        StringSet.mem r.Biocaml_unix.Fastq.name s)
 
-  let c_reads ?fastq () =
-    let s = string_set_of_list
+  let c_reads ?n ?fastq () =
+    filter_spec ?n ?fastq
       [ "HWI-ST1027:158:C13N2ACXX:4:1101:4388:50134"
       ; "HWI-ST1027:158:C13N2ACXX:4:1101:9239:124375"
       ; "HWI-ST1027:158:C13N2ACXX:4:1101:4015:192279"
@@ -212,8 +214,5 @@ module Test_sample = struct
       ; "HWI-ST1027:158:C13N2ACXX:5:1106:13165:84883"
       ; "HWI-ST1027:158:C13N2ACXX:5:1106:16542:125493"
       ]
-    in
-    List.filter (all_reads ?fastq ()) ~f:(fun r ->
-        StringSet.mem r.Biocaml_unix.Fastq.name s)
 
 end (* Test_sample *)

@@ -38,7 +38,7 @@ report_dir:
 	mkdir report_dir
 
 report: report_dir
-	bisect-ppx-report -html report_dir bisect*.out
+	cd _build/default && bisect-ppx-report -html ../../report_dir ../../bisect*.out && cd -
 
 clean_reports:
 	rm -rf report_dir bisect*.out
