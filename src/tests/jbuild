@@ -7,8 +7,9 @@
     round_trip
     allele_distances
     alignment_parsing
+    relative_phmm
     ))
-   (libraries (prohlatype threads cmdliner))
+   (libraries (prohlatype threads cmdliner oml))
    (preprocess (pps (bisect_ppx -conditional)))
    ))
 
@@ -20,4 +21,5 @@
     round_trip.exe
     allele_distances.exe
     alignment_parsing.exe
+    relative_phmm.exe
    ))))
