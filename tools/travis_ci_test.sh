@@ -5,7 +5,7 @@ set -e
 git clone https://github.com/ANHIG/IMGTHLA.git
 
 # for test coverage
-${HOME}/opam install bisect_ppx ocveralls
+${HOME}/opam install bisect_ppx ocveralls parmap oml core_bench
 
 make
 make apps
@@ -17,8 +17,6 @@ ls
 
 case "$TEST" in
   scraps)
-    # TODO: Figure out a way to keep this in sync with jbuilder
-    ${HOME}/opam install parmap oml core_bench
     make scraps
     ;;
   parsing)
