@@ -86,7 +86,7 @@ let describe_sorted individual_assoc aggregate_assoc =
 exception TestFailure of string
 
 let test_one_read parPHMM_t loci rn (aggregate_assoc_arr, individual_assoc_arr) =
-  pritnf "Testing relative PHMM calculations for: %s in %s \n" rn loci;
+  printf "Testing relative PHMM calculations for: %s in %s \n" rn loci;
   let open ParPHMM in
   let open Oml in
   let module Sd = Statistics.Descriptive in
