@@ -8,6 +8,7 @@
       biocaml.unix ocamlgraph nonstd parany sosa threads 
       ppx_deriving_yojson.runtime yojson))
   (preprocess (pps (ppx_deriving.std ppx_deriving_yojson)))
+  (ocamlopt_flags -O3)
   ))
   
 
