@@ -4,6 +4,7 @@
 (executables
   ((names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
    (public_names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
+   (ocamlopt_flags -O3)
    (libraries (threads prohlatype cmdline_options))))
 
 ; TODO: Globs don't seem to work in my current version of jbuilder.

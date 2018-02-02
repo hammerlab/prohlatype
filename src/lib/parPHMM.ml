@@ -223,20 +223,15 @@ module type Ring = sig
 
   val probability : ?maxl:t -> t -> float
 
+  val as_float : ?precision:int -> t -> float
+
 end (* Ring *)
 
-module MultiplicativeProbability = struct
-  type t = float [@@deriving show,yojson]
-  let zero  = 0.
-  let one   = 1.
+module Just_floats = struct
 
+  (* Code that is common to both rings. *)
   let gap   = nan
   let is_gap = is_nan
-
-  let ( + ) = ( +. )
-  let ( * ) = ( *. )
-  let ( / ) = ( /. )
-  let max   = max
 
   let ( < ) x y =
     if is_gap x then true else
@@ -248,8 +243,16 @@ module MultiplicativeProbability = struct
       if is_gap y then false else
         x <= y
 
-  let compare (x : float) y = compare x y
+  let max x y =
+    if x <= y then y else x
 
+  let compare x y =
+    if is_gap x then -1 else
+      if is_gap y then 1 else
+        compare x y
+
+  (* For some weird reason this isn't inlined correctly and it is much faster
+   * to leave the original close_enough defined above. *)
   let close_enough x y =
     close_enough x y
 
@@ -261,6 +264,30 @@ module MultiplicativeProbability = struct
     else
       1
 
+  let to_string ?(precision=10) t =
+    sprintf "%.*f" precision t
+
+  let as_float ?precision x =
+    Option.value_map precision ~default:x
+      ~f:(fun p ->
+            let m = 10. ** (float p) in
+            (floor (x *. m)) /. m)
+
+end (* Just_floats *)
+
+module MultiplicativeProbability = struct
+
+  type t = float [@@deriving show,yojson]
+
+  include Just_floats
+
+  let zero  = 0.
+  let one   = 1.
+
+  let ( + ) = ( +. )
+  let ( * ) = ( *. )
+  let ( / ) = ( /. )
+
   let constant x = x
 
   let complement_probability p =
@@ -268,9 +295,6 @@ module MultiplicativeProbability = struct
 
   let times_one_third p =
     p /. 3.
-
-  let to_string ?(precision=10) t =
-    sprintf "%.*f" precision t
 
   let probability ?maxl x = x
 
@@ -281,8 +305,8 @@ module LogProbability : Ring = struct
   type t = float
   [@@deriving show,yojson]
 
-  let to_string ?(precision=10) t =
-    sprintf "%.*f" precision t
+  include Just_floats
+
 
   let zero  = neg_infinity
   let one   = 0.  (* log10 1. *)
@@ -302,32 +326,6 @@ module LogProbability : Ring = struct
     else (* lx < ly *)             ly +. log10 (1. +. exp10 (lx -. ly))
 
   let max   = max
-
-  let ( < ) x y =
-    if is_gap x then true else
-      if is_gap y then false else
-        x < y
-
-  let ( <= ) x y =
-    if is_gap x then true else
-      if is_gap y then false else
-        x <= y
-
-  let compare x y =
-    if is_gap x then -1 else
-      if is_gap y then 1 else
-        compare x y
-
-  let close_enough x y =
-    close_enough x y
-
-  let close_enough_cmp x y =
-    if close_enough x y then
-      0
-    else if x < y then
-      -1
-    else
-      1
 
   let constant = log10
 
@@ -1325,6 +1323,10 @@ module Pass_result = struct
       Completed r
     with FilterIsPastThreshold msg ->
       Filtered msg
+
+  let unwrap = function
+    | Completed c -> c
+    | Filtered f  -> invalid_argf "Asked to unwrap a filtered %s result." f
 
 end (* Pass_result *)
 

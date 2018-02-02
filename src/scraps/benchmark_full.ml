@@ -25,6 +25,8 @@ let time_aggregate ?(seed=11) parPHMM_t reads =
 
 let () =
   let gen = true in
+  let fastq = if Array.length Sys.argv > 1 then Some Sys.argv.(1) else None in
+  let reads = reads ?fastq () in
   let tests =
     gen_parPHMM_ts gen
     |> List.map2 ~f:(fun reads_by_loci pt -> time_aggregate pt reads_by_loci) reads
