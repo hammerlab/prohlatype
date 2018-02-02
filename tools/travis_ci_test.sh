@@ -23,7 +23,6 @@ case "$TEST" in
     make covered_tests
     echo testing parsing
     _build/default/src/tests/alignment_parsing.exe
-    export BISECT="true"
     ;;
   mas)
     echo mas alignment
@@ -31,7 +30,6 @@ case "$TEST" in
     cp src/tests/mas_align_script.sh .
     cp _build/default/src/tests/mas_align.exe .
     ./mas_align_script.sh
-    export BISECT="true"
     ;;
   round)
     echo testing round trip graph construction
@@ -39,7 +37,6 @@ case "$TEST" in
     cp src/tests/round_trips.sh .
     cp _build/default/src/tests/round_trip.exe .
     ./round_trips.sh
-    export BISECT="true"
     ;;
   mergeA)
     echo testing merging of A
@@ -60,7 +57,6 @@ case "$TEST" in
     echo testing allele differences between A_gen
     make covered_tests
     time _build/default/src/tests/allele_distances.exe A_gen > A_sim.csv
-    export BISECT="true"
     ;;
   impute)
     echo imputing A
@@ -77,8 +73,3 @@ case "$TEST" in
   *)
     ;;
 esac
-
-if [ -n "$TEST" -a -n "$BISECT" ] ; then
-  ocveralls --repo_token $COVERALLSTOKEN --git --send bisect*.out
-fi
-
