@@ -17,7 +17,9 @@ cache:
     - ${HOME}/.opam
 
 before_cache:
-  - rm ${HOME}/.opam/log/.*
+  # Remove the pin so that dependencies are not cached.
+  - ${HOME}/opam pin remove prohlatype
+  - rm ${HOME}/.opam/log/*
 
 before_install:
   # Download and use opam2
@@ -32,7 +34,7 @@ before_install:
 
 install:
   # Install dependencies
-  - ${HOME}/opam pin add --no-action prohlatype .
+  - ${HOME}/opam pin add --no-action prohlatype prohlatype.opam
   - ${HOME}/opam install --deps-only prohlatype
 
 script:
