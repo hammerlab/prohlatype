@@ -168,59 +168,29 @@ module Alleles_and_positions = struct
 
 end (* Alleles_and_positions *)
 
-(* Storing the log likelihoods of heterozygous pairs.
-   Homozygous is equivalent to the individual pairs. *)
+(* Storing the log likelihoods (and other metrics) of heterozygous pairs.
+   Homozygous is equivalent to the individual pairs and is derived there. *)
 module Zygosity_array = struct
 
   open ParPHMM
 
-  (* Not exactly the triangular number, T_(n-1);
-     just have less subtractions this way. *)
-  let triangular_number n =
-    n * (n - 1) / 2
-
-  let triangular_inverse t =
-    let tf = float t in
-    (truncate (sqrt (1.0 +. 8.0 *. tf)) - 1) / 2
-
-  let k_n n i j =
-    triangular_number n - triangular_number (n - i) + j - i - 1
-
-  let kinv_n n k =
-    let tn = triangular_number n in
-    let i  = n - 1 - (triangular_inverse (tn - k - 1)) - 1 in
-    let j  = k + i + 1 - triangular_number n + triangular_number (n - i) in
-    i, j
-
-  (* Test the k <-> i, j mapping logic. *)
-  let test n =
-    let kn = k_n n in
-    let ki = kinv_n n in
-    for i = 0 to n - 2 do
-      for j = i + 1 to n - 1 do
-        let k = kn i j in
-        let ni, nj = ki k in
-        printf "i: %d\tj: %d\t:k: %d\ ---- ni: %d\tnk: %d %b\n"
-          i j k ni nj (i = ni && j = nj)
-      done
-    done
-
   (* Top triangle of pair wise comparison *)
   type t =
     { n : int
-    ; l : Lp.t array
-    ; c : (float * float) array   (* Number of reads where first, second allele
-                                     was better. When the same, add a .5 to both.*)
+    (* Number of alleles *)
+
+    ; l : Lp.t Triangular_array.t
+    (* Array of all the likelihoods *)
+
+    ; c : (float * float) Triangular_array.t
+    (* Number of reads where first or second, allele, of pair, is better.
+     * When they are the same, add a 0.5 to both. *)
     }
 
-  let storage_size number_alleles =
-    triangular_number number_alleles                               (* T_(n-1) *)
-
   let init number_alleles =
-    let s = storage_size number_alleles in
     { n = number_alleles
-    ; l = Array.make s Lp.one
-    ; c = Array.init s ~f:(fun _ -> (0., 0.))
+    ; l = Triangular_array.make number_alleles Lp.one
+    ; c = Triangular_array.make number_alleles (0., 0.)
     }
 
   let update t ~allele1 ~allele2 ~v1 ~v2 single_read =
@@ -231,16 +201,16 @@ module Zygosity_array = struct
       else
         allele2, v2, allele1, v1
     in
-    let k = k_n t.n i j in
-    t.l.(k) <- Lp.(t.l.(k) * likelihood);
-    let f, s = t.c.(k) in
+    Triangular_array.update t.l i j ~f:(fun l -> Lp.(l * likelihood));
     let o, h = if single_read then 1.0, 0.5 else 2.0, 1.0 in
-    if Lp.close_enough vi vj then
-      t.c.(k) <- f +. h, s +. h
-    else if Lp.close_enough vi likelihood then
-      t.c.(k) <- f +. o, s
-    else
-      t.c.(k) <- f, s +. o
+    Triangular_array.update t.c i j
+      ~f:(fun (f, s) ->
+            if Lp.close_enough vi vj then
+              f +. h, s +. h
+            else if Lp.close_enough vi likelihood then
+              f +. o, s
+            else
+              f, s +. o)
 
   type best_size =
     | NonZero of float
@@ -262,9 +232,9 @@ module Zygosity_array = struct
   let best size likelihood_arr num_reads t =
     let desired_size, nz =
       match size with
-      | NonZero v -> storage_size t.n, Some v
+      | NonZero v -> Triangular_array.size t.l, Some v
       | Spec n    -> max 1 n, None
-      | NoSpec    -> storage_size t.n, None
+      | NoSpec    -> Triangular_array.size t.l, None
     in
 (* Create a sorted, grouped, and constrained, list of the paired likelihoods.
   The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
@@ -312,12 +282,10 @@ module Zygosity_array = struct
             current_size + 1, insert lst
         end
     in
-    let _fk, fcs, fres =                                     (* Heterozygous. *)
-      Array.fold_left t.l ~init:(0, 0, [])
-        ~f:(fun (k, cs, acc) l ->
-              let i, j = kinv_n t.n k in
-              let ncs, nacc = sorted_insert l i j cs acc in
-              (k + 1, ncs, nacc))
+    let fcs, fres =                                     (* Heterozygous. *)
+      Triangular_array.foldi_left t.l ~init:(0, [])
+        ~f:(fun (cs, acc) i j v ->
+              sorted_insert v i j cs acc)
     in
     let _fk, _cs, res =                                        (* Homozygous. *)
       Array.fold_left likelihood_arr ~init:(0, fcs, fres)
@@ -335,7 +303,7 @@ module Zygosity_array = struct
   (* Compute the normalizing constant. *)
       let ns =
         let f s l = s +. prob l in
-        let heterozygous_sum = Array.fold_left ~init:0. ~f t.l in
+        let heterozygous_sum = Triangular_array.fold_left ~init:0. ~f t.l in
         Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
       in
       let lookup_nor (i, j) =
@@ -343,8 +311,7 @@ module Zygosity_array = struct
           let h = (float num_reads) /. 2. in
           (i, j, h, h)
         else
-          let k = k_n t.n i j in
-          let irds, jrds = t.c.(k) in
+          let irds, jrds = Triangular_array.get t.c i j in
           (i, j, irds, jrds)
       in
       match nz with
@@ -392,7 +359,7 @@ end (* Likelihoods_and_zygosity *)
 
 (* Outputing results.
 
-   TODO: Expose a separator argument. *)
+   TODO: Expose a separator argument besides tab. *)
 module Output = struct
 
   open ParPHMM

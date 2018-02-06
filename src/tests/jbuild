@@ -8,6 +8,7 @@
     allele_distances
     alignment_parsing
     relative_phmm
+    tri_logic_is_correct
     ))
    (libraries (prohlatype threads cmdliner oml))
    (preprocess (pps (bisect_ppx -conditional)))
@@ -22,4 +23,5 @@
     allele_distances.exe
     alignment_parsing.exe
     relative_phmm.exe
+    tri_logic_is_correct.exe
    ))))
