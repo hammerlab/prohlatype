@@ -1,28 +1,7 @@
 (** Imperative Bitvectors.  *)
 
 open Util
-
-let width_ = Sys.word_size - 1
-
-(** We use OCamls ints to store the bits. We index them from the
-    least significant bit. We create masks to zero out the most significant
-    bits that aren't used to store values. This is necessary when we are
-    constructing or negating a bit vector. *)
-let lsb_masks_ =
-  let a = Array.make (width_ + 1) 0 in
-  for i = 1 to width_ do
-    a.(i) <- a.(i-1) lor (1 lsl (i - 1))
-  done;
-  a
-
-let all_ones_ = lsb_masks_.(width_)
-
-(* count the 1 bits in [n]. See https://en.wikipedia.org/wiki/Hamming_weight *)
-let count_bits_ n =
-  let rec recurse count n =
-    if n = 0 then count else recurse (count+1) (n land (n-1))
-  in
-  recurse 0 n
+module Iab = Ints_as_bits
 
 type t =
   { mask              : int
@@ -41,13 +20,13 @@ let empty =
 
 let create ~size default =
   let mask, final_length, array_length =
-    let r = size mod width_ in
-    lsb_masks_.(r)
-    , (if r = 0 then width_ else r)
-    , (if r = 0 then size / width_ else size / width_ + 1)
+    let r = size mod Iab.width in
+    Iab.lsb_masks.(r)
+    , (if r = 0 then Iab.width else r)
+    , (if r = 0 then size / Iab.width else size / Iab.width + 1)
   in
   let a = if default
-    then Array.make array_length all_ones_
+    then Array.make array_length Iab.all_ones
     else Array.make array_length 0
   in
   (* adjust last bits *)
@@ -57,12 +36,12 @@ let create ~size default =
 
 let copy bv = { bv with a = Array.copy bv.a }
 
-let capacity bv = width_ * (bv.last_array_index + 1)
+let capacity bv = Iab.width * (bv.last_array_index + 1)
 
 let cardinal bv =
   let n = ref 0 in
   for i = 0 to bv.last_array_index do
-    n := !n + count_bits_ bv.a.(i)         (* MSB of last element are all 0 *)
+    n := !n + Iab.count_bits bv.a.(i)         (* MSB of last element are all 0 *)
   done;
   !n
 
@@ -78,23 +57,23 @@ let is_empty bv =
 (* Use the safe array access and throw an exception if out of bounds.
     This can be compiled away with -unsafe. *)
 let get bv i =
-  let n = i / width_ in
-  let j = i mod width_ in
+  let n = i / Iab.width in
+  let j = i mod Iab.width in
   bv.a.(n) land (1 lsl j) <> 0
 
 let set bv i =
-  let n = i / width_ in
-  let j = i mod width_ in
+  let n = i / Iab.width in
+  let j = i mod Iab.width in
   bv.a.(n) <- bv.a.(n) lor (1 lsl j)
 
 let reset bv i =
-  let n = i / width_ in
-  let j = i mod width_ in
+  let n = i / Iab.width in
+  let j = i mod Iab.width in
   bv.a.(n) <- bv.a.(n) land (lnot (1 lsl j))
 
 let flip bv i =
-  let n = i / width_ in
-  let j = i mod width_ in
+  let n = i / Iab.width in
+  let j = i mod Iab.width in
   bv.a.(n) <- bv.a.(n) lxor (1 lsl j)
 
 let clear bv =
@@ -102,13 +81,13 @@ let clear bv =
 
 let iter bv f =
   for n = 0 to bv.last_array_index - 1 do
-    let j = width_ * n in
-    for i = 0 to width_ - 1 do
+    let j = Iab.width * n in
+    for i = 0 to Iab.width - 1 do
       let () = f (j+i) (bv.a.(n) land (1 lsl i) <> 0) in
       ()
     done
   done;
-  let j = width_ * bv.last_array_index in
+  let j = Iab.width * bv.last_array_index in
   for i = 0 to bv.final_length - 1 do
     let () = f (j + i) (bv.a.(bv.last_array_index) land (1 lsl i) <> 0) in
     ()

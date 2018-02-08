@@ -5,12 +5,11 @@
   (public_name prohlatype)
   (synopsis "Probablistic HLA typing.")
   (libraries (
-      biocaml.unix ocamlgraph nonstd parany sosa threads 
+      biocaml.unix ocamlgraph nonstd parany sosa threads
       ppx_deriving_yojson.runtime yojson))
   (preprocess (pps (ppx_deriving.std ppx_deriving_yojson bisect_ppx -conditional)))
   (ocamlopt_flags -O3)
   ))
-  
 
 (rule
  ((targets (version.ml))

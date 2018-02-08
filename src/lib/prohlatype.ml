@@ -14,6 +14,7 @@ module Alleles = Alleles
 module Distances = Distances
 module Nomenclature = Nomenclature
 
+module Ints_as_bits = Ints_as_bits
 module Bitvector = Bitvector
 module Ref_graph = Ref_graph
 

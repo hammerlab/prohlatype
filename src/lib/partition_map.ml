@@ -6,11 +6,13 @@
 
 open Util
 
-module Interval : sig
+module Interval (*: sig
 
   type t
 
   val compare : t -> t -> int
+
+  val max_value : int
 
   val make : int -> int -> t
 
@@ -52,11 +54,18 @@ module Interval : sig
 
   val iter : t -> f:(int -> unit) -> unit
 
-end = struct
+end*) = struct
 
-(* Start will occupy the higher order bits. This way a comparison can test
- * for equality (the most common case) and determine the Before/After path
- * without looking at end.
+module Iab = Ints_as_bits
+
+(* We encode an interval (pair) of integers in one integer by putting the start
+ * (first) into the higher half of the bits an the end (second) into the lower
+ * half. This implies that we reduce the total domain in half, but even on
+ * 32-bit systems, that is more than enough for our goals.
+ *
+ * Since start occupies the higher order bits, once nice consequences is that
+ * we can test for comparison and equality (the most common case) without
+ * looking at the end in most cases, ie. in a single operation.
  *
  * This means that the new range must start at 1 and 0 is no longer a valid
  * element in our partition. We'll use 0 to encode a None
@@ -69,17 +78,18 @@ let is_none t =
   t = none_t
 
 (* Masks *)
-let lower32 = 4294967295
-let upper32 = -4294967296
+let half_width = Iab.width / 2    (* 31 or 15 *)
+let lower_mask = Iab.lsb_masks.(half_width)
+let upper_mask = lower_mask lsl half_width
 
 let start_of_int i =
-   (i lsl 32)
+  (i lsl half_width)
 
 let int_of_start  i =
-  ((i land upper32) lsr 32)
+  ((i land upper_mask) lsr half_width)
 
 let start_p t =
-  t land upper32
+  t land upper_mask
 
 let end_of_int i =
   i
@@ -88,7 +98,7 @@ let int_of_end i =
   i
 
 let end_p t =
-  t land lower32
+  t land lower_mask
 
 let make64 s e =
   s lor e
@@ -115,16 +125,25 @@ let inside i t =
 let to_string t =
   sprintf "(%d,%d)" (start t) (end_ t)
 
-let make s e =
-  if e < s then
-    invalid_argf "Not in order %d < %d" e s
-  else if e < 0 then
-    invalid_argf "End %d less than 0" e
-  else if s < 0 then
-    invalid_argf "Start %d less than 0" e
+let max_value = lower_mask - 1
+
+let within_bounds what v =
+  if v < 0 then
+    invalid_argf "%s %d less than 0." what v
+  else if v >= max_value then
+    invalid_argf "%s %d is greater than max value %d, it not representable."
+      what v max_value
   else
-    let s64 = start_of_int (s + 1) in
-    let e64 = end_of_int (e + 1) in
+    ()
+
+let make ~start ~end_ =
+  if end_ < start then
+    invalid_argf "Not in order snd: %d < start: %d." end_ start
+  else
+    within_bounds "Start" start;
+    within_bounds "End" end_;
+    let s64 = start_of_int (start + 1) in
+    let e64 = end_of_int (end_ + 1) in
     make64 s64 e64
 
 let extend_one t =
