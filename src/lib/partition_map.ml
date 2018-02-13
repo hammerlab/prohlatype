@@ -6,55 +6,7 @@
 
 open Util
 
-module Interval (*: sig
-
-  type t
-
-  val compare : t -> t -> int
-
-  val max_value : int
-
-  val make : int -> int -> t
-
-  val extend_one : t -> t
-
-  val width : t -> int
-
-  val inside : int -> t -> bool
-
-  val start : t -> int
-
-  val end_ : t -> int
-
-  val to_string : t -> string
-
-  val is_none : t -> bool
-
-  val strict_before : t -> t -> bool
-
-  val before_separate : t -> t -> bool
-
-  val merge : t -> t -> t
-
-  val split_inter_diff2 : t -> t ->
-                          t * t * t * t * t
-  val split_inter_diff3 : t -> t -> t ->
-                          t * t * t * t * t * t * t
-  val split_inter_diff4 : t -> t -> t -> t ->
-                          t * t * t * t * t * t * t * t * t
-
-  val aligned_inter_diff2 : t -> t ->
-                            t * t * t
-  val aligned_inter_diff3 : t -> t -> t ->
-                            t * t * t * t
-  val aligned_inter_diff4 : t -> t -> t -> t ->
-                            t * t * t * t * t
-
-  val fold : t -> init:'a -> f:('a -> int -> 'a) -> 'a
-
-  val iter : t -> f:(int -> unit) -> unit
-
-end*) = struct
+module Interval = struct
 
 module Iab = Ints_as_bits
 
