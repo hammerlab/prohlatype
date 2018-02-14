@@ -10,27 +10,30 @@ let is_invalid f =
   with (Invalid_argument _) ->
     true
 
-let count = 20
+let tests =
+  ref []
+
+let add_test ~count ~name a p =
+  tests := (Test.make ~count ~name a p) :: !tests
 
 let strictly_neg_int =
   make Gen.(map (fun i -> i - 1) neg_int)
 
-let t1 = Test.make ~count
+let () = add_test ~count:20
   ~name:"Interval construction fail on negative values."
   (pair strictly_neg_int strictly_neg_int)
   (fun (start, end_) -> is_invalid (fun () -> Interval.make ~start ~end_))
 
-let t2 =
-  let larger_than_max_value = int_range (Interval.max_value + 1) max_int in
-  Test.make ~count
-    ~name:"Interval construction fail on values too large."
-    (pair larger_than_max_value larger_than_max_value)
-    (fun (start, end_) -> is_invalid (fun () -> Interval.make ~start ~end_))
+let larger_than_max_value = int_range (Interval.max_value + 1) max_int
+let () = add_test ~count:20
+  ~name:"Interval construction fail on values too large."
+  (pair larger_than_max_value larger_than_max_value)
+  (fun (start, end_) -> is_invalid (fun () -> Interval.make ~start ~end_))
 
 let valid_range =
   int_range 0 Interval.max_value
 
-let t3 = Test.make ~count
+let () = add_test ~count:20
   ~name:"Interval construction fail on out of order values."
   (pair valid_range valid_range)
   (fun (start, end_) ->
@@ -40,31 +43,33 @@ let t3 = Test.make ~count
 (* Compress the range so that we can actually have a non-zero
  * chance of intersects *)
 
-let count = 100
+let max_range = 1000
+let max_value = max_range - 1
 
 let valid_interval_gen =
-  let start_range = Gen.int_range 0 1000 in
-    Gen.(map (fun (s, i) -> s, s + i) (pair start_range nat))
+  let start_range = Gen.int_range 0 max_value in
+  Gen.(start_range >>= fun s ->
+        map (fun e -> s,e) (int_range s max_value))
 
 let valid_interval_pair =
   make ~print:(fun (s, e) -> sprintf "(%d,%d)" s e)
     valid_interval_gen
 
-let t4 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval construction for non negative works and not none."
   valid_interval_pair
   (fun (start, end_) ->
      let i = Interval.make ~start ~end_ in
      not (Interval.is_none i))
 
-let t5 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval start property is correct."
   valid_interval_pair
   (fun (start, end_) ->
      let i = Interval.make ~start ~end_ in
      start = Interval.start i)
 
-let t6 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval end property is correct."
   valid_interval_pair
   (fun (start, end_) ->
@@ -76,17 +81,17 @@ let valid_interval =
     Gen.(map (fun (start, end_) -> Interval.make ~start ~end_)
            valid_interval_gen)
 
-let t7 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval width property is correct."
   valid_interval
   (fun i -> Interval.(width i = end_ i - start i + 1))
 
-let t8 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval average is inside."
   valid_interval
   (fun i -> Interval.(inside ((start i + end_ i) / 2) i))
 
-let t9 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval extending just changes the end."
   valid_interval
   (fun i ->
@@ -94,7 +99,7 @@ let t9 = Test.make ~count
      let ip1 = extend_one i in
      start i = start ip1 && end_ i + 1 = end_ ip1)
 
-let t10 = Test.make ~count
+let () = add_test ~count:100
   ~name:"Interval merging works."
   (pair valid_interval valid_interval)
   (fun (i1, i2) ->
@@ -105,20 +110,38 @@ let t10 = Test.make ~count
      else
        is_none m)
 
-let tests =
-  [ t1
-  ; t2
-  ; t3
-  ; t4
-  ; t5
-  ; t6
-  ; t7
-  ; t8
-  ; t9
-  ; t10
-  ]
+let () =
+  let k = Triangular_array.full_upper_triangular_index in
+  let ki  = Triangular_array.full_upper_triangular_inverse in
+  let generate_all_pairs n =
+    List.init n ~f:(fun i ->
+        List.init n ~f:(fun j ->
+            i, j, k n i j))
+    |> List.concat
+    |> List.filter ~f:(fun (i, j,_) -> (i <= j))
+  in
+  let manually n i1 i2 =
+    generate_all_pairs n
+    |> List.filter_map ~f:(fun (i,j,_k) ->
+        if Interval.inside i i1 && Interval.inside j i2 then
+          Some (i,j)
+        else None)
+  in
+  let test n i1 i2 =
+    let plst  = Interval.pair n i1 i2 in
+    List.map plst ~f:(fun i ->
+        let s = Interval.start i in
+        let w = Interval.width i in
+        List.init w ~f:(fun j -> ki n (j + s)))
+    |> List.concat
+  in
+  add_test ~count:50
+  ~name:"Pairing round trip."
+  (pair valid_interval valid_interval)
+  (fun (i1, i2) ->
+     manually max_range i1 i2 = test max_range i1 i2)
 
 let () =
-  QCheck_runner.run_tests_main tests
+  QCheck_runner.run_tests_main (List.rev !tests)
 
 (*BISECT-IGNORE-END*)

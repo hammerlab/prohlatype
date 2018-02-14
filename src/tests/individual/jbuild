@@ -12,21 +12,20 @@
   ))
 
 (rule (
-  (targets (util.ml))
-  (action (copy# ../../lib/util.ml util.ml)
-  )))
-
-(rule (
-  (targets (ints_as_bits.ml))
-  (action (copy# ../../lib/ints_as_bits.ml ints_as_bits.ml)
-  )))
-
-
-(rule (
   (targets (partition_map.ml))
   (action (with-stdout-to partition_map.ml
     (progn
-      (echo "# 0 src/lib/partition_map.ml\n")
+      (echo "# 1 src/lib/partition_map.ml\n")
       (cat ../../lib/partition_map.ml)
-      (echo "# 0 src/tests/individual/pm.ml\n")
+      (echo "# 1 src/tests/individual/pm.ml\n")
       (cat pm.ml))))))
+
+(rule (
+  (targets (util.ml
+            ints_as_bits.ml
+            triangular_array.ml))
+  (action (progn
+      (copy# ../../lib/util.ml util.ml)
+      (copy# ../../lib/ints_as_bits.ml ints_as_bits.ml)
+      (copy# ../../lib/triangular_array.ml triangular_array.ml)
+      ))))

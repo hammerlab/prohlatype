@@ -272,6 +272,35 @@ let fold t ~init ~f =
   for i = (start t) to (end_ t) do acc := f !acc i done;
   !acc
 
+let non_none_pair n f s =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular_array.full_upper_triangular_index n in
+  if se - ss + 1 = n then
+    let start = tn fs (max fs ss) in
+    let end_  = tn fe se in
+    [ make start end_]
+  else
+    let rec loop i =
+      if i > fe || i > se then
+        []
+      else
+        let start = tn i (max i ss) in
+        let end_  = tn i se in
+        make start end_ :: loop (i + 1)
+    in
+    loop fs
+
+let pair n f s =
+  if is_none f then
+    []
+  else if is_none s then
+    []
+  else
+    non_none_pair n f s
+
 end (* Interval *)
 
 module Set = struct

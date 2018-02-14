@@ -46,6 +46,7 @@ module Interval : sig
 
   val iter : t -> f:(int -> unit) -> unit
 
+  val pair : int -> t -> t -> t list
 end
 
 (** A partition map is a data structure for a map over a partition of elements.
