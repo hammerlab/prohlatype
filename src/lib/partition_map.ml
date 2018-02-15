@@ -272,7 +272,7 @@ let fold t ~init ~f =
   for i = (start t) to (end_ t) do acc := f !acc i done;
   !acc
 
-let non_none_pair n f s =
+let non_none_cpair n f s =
   let fs = start f in
   let fe = end_ f in
   let ss = start s in
@@ -293,13 +293,96 @@ let non_none_pair n f s =
     in
     loop fs
 
-let pair n f s =
+let cpair n f s =
   if is_none f then
     []
   else if is_none s then
     []
   else
-    non_none_pair n f s
+    non_none_cpair n f s
+
+let non_none_cpair_cps n f s k =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular_array.full_upper_triangular_index n in
+  if se - ss + 1 = n then
+    let start = tn fs (max fs ss) in
+    let end_  = tn fe se in
+    k (make start end_)
+  else
+    let fi = make ~start:(tn fs (max fs ss)) ~end_:(tn fs se) in
+    let rec loop p i =
+      if i > fe || i > se then
+        k p
+      else
+        let ni = make ~start:(tn i (max i ss)) ~end_:(tn i se) in
+        p :: loop ni (i + 1)
+    in
+    loop fi (fs + 1)
+
+let cpair_cps n f s ~e ~ne =
+  if is_none f then
+    e ()
+  else if is_none s then
+    e ()
+  else
+    non_none_cpair_cps n f s ne
+
+let merge_or_reorder t1 t2 =
+  let s1 = start_p t1 in
+  let s2 = start_p t2 in
+  let e1 = end_p t1 in
+  let e2 = end_p t2 in
+  if succ e1 = (end_of_start s2) then
+    make64 s1 e2, none_t
+  else if succ e2 = (end_of_start s1) then
+    make64 s2 e1, none_t
+  else if s1 < s2 then
+    t1, t2
+  else
+    t2, t1
+
+let non_none_cpair_cm_cps n f s p k =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular_array.full_upper_triangular_index n in
+  if se - ss + 1 = n then
+    let i = make ~start:(tn fs (max fs ss)) ~end_:(tn fe se) in
+    let m, n = merge_or_reorder p i in
+    if is_none n then
+      k m
+    else
+      m :: k n
+  else
+    let rec loop p i =
+      if i > fe || i > se then
+        k p
+      else
+        let ni = make ~start:(tn i (max i ss)) ~end_:(tn i se) in
+        let m, n = merge_or_reorder p ni in
+        if is_none n then
+          loop m (i + 1)
+        else
+          m :: loop n (i + 1)
+    in
+    let fi = make ~start:(tn fs (max fs ss)) ~end_:(tn fs se) in
+    let m, n = merge_or_reorder p fi in
+    if is_none n then
+      loop m (fs + 1)
+    else
+      m :: loop n (fs + 1)
+
+let cpair_cm_cps n f s p ~e ~ne =
+  if is_none f then
+    e p
+  else if is_none s then
+    e p
+  else
+    non_none_cpair_cm_cps n f s p ne
 
 end (* Interval *)
 
@@ -518,6 +601,33 @@ module Set = struct
 
   let iter t ~f =
     fold t ~init:() ~f:(fun () i -> f i)
+
+  let cpair_unsorted n t =
+    let cp = Interval.cpair_cm_cps n in
+    let rec first_fixed f l k p = match l with
+      | []     -> k p
+      | h :: t ->
+          cp f h p                                  (* Intersection possible. *)
+            ~e:(fun p -> [p])              (* assert false -> don't work for empty! *)
+            ~ne:(fun p -> first_fixed f t k p) (* Intersection NOT possible, but check anyway ? *)
+    and descend l p = match l with
+      | []     -> [p]
+      | h :: t -> first_fixed h l (fun p -> descend t p ) p
+    and start = function
+      | []     -> []
+      | h :: t ->
+          Interval.cpair_cps n h h
+            ~e:(fun () -> [])
+            ~ne:(fun p -> first_fixed h t (fun p -> descend t p) p)
+    in
+    start t
+
+  let cpair n t =
+    (* Though we write the underlying algorithm in CPS style to try and avoid
+     * some excessive list allocations and merging against last created element
+     * I can't think of a better way to guarantee that the result is in order
+     * during construction... So we have to sort. *)
+    List.sort ~cmp:Interval.compare (cpair_unsorted n t)
 
 end (* Set *)
 
