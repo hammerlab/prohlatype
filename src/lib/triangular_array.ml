@@ -32,7 +32,14 @@ let upper_triangular_inverse n k =
   i, j
 
 let full_upper_triangular_index n i j =
-  Triangular.(number n - number (n - i) + j - i)
+  if i >= n then
+    invalid_argf "First index %d greater than or equal to max value %d."
+      i n
+  else if j >= n then
+    invalid_argf "Second index %d greater than or equal to max value %d."
+      j n
+  else
+    Triangular.(number n - number (n - i) + j - i)
 
 let full_upper_triangular_inverse n k =
   let open Triangular in

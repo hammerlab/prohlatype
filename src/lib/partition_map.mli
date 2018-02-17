@@ -164,3 +164,8 @@ val descending : (ascending, 'a) t -> (descending, 'a) t
 
 (** Set a value. *)
 val set : (ascending, 'a) t -> int -> 'a -> (ascending, 'a) t
+
+val cpair : f:('a -> 'a -> 'b)
+          -> ('b -> 'b -> bool)
+          -> (ascending, 'a) t
+          -> (ascending, 'b) t

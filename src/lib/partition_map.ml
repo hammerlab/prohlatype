@@ -90,7 +90,7 @@ let within_bounds what v =
 
 let make ~start ~end_ =
   if end_ < start then
-    invalid_argf "Not in order snd: %d < start: %d." end_ start
+    invalid_argf "Not in order end: %d < start: %d." end_ start
   else
     within_bounds "Start" start;
     within_bounds "End" end_;
@@ -344,13 +344,18 @@ let merge_or_reorder t1 t2 =
   else
     t2, t1
 
+(* Not none
+ * cross pair
+ * check merge
+ * cps - style
+ *)
 let non_none_cpair_cm_cps n f s p k =
   let fs = start f in
   let fe = end_ f in
   let ss = start s in
   let se = end_ s in
   let tn = Triangular_array.full_upper_triangular_index n in
-  if se - ss + 1 = n then
+  if se - ss + 1 = n then                                      (* or ss = 0 ? *)
     let i = make ~start:(tn fs (max fs ss)) ~end_:(tn fe se) in
     let m, n = merge_or_reorder p i in
     if is_none n then
@@ -624,12 +629,75 @@ module Set = struct
     in
     start t
 
+  let cpair_separate_unsorted n t1 t2 =
+    let cp = Interval.cpair_cm_cps n in
+    let rec first_fixed f l k p = match l with
+      | []     -> k p
+      | h :: t ->
+          cp f h p                                  (* Intersection possible. *)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> [p])
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> first_fixed f t k p)
+    and descend l1 l2 p = match l1, l2 with
+      | [],       _
+      | _,        []       -> [p]
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then
+            cp h1 h2 p
+              ~e:(fun p -> [p])
+              ~ne:(fun p -> first_fixed h1 t2 (fun p -> descend t1 l2 p) p)
+          else
+            cp h2 h1 p
+              ~e:(fun p -> [p])
+              ~ne:(fun p -> first_fixed h2 t1 (fun p -> descend l1 t2 p) p)
+    and start l1 l2 = match l1, l2 with
+      | [],       _
+      | _,        []       -> []
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then
+            Interval.cpair_cps n h1 h2
+              ~e:(fun () -> [])
+              ~ne:(fun p -> first_fixed h1 t2 (fun p -> descend t1 l2 p) p)
+          else
+            Interval.cpair_cps n h2 h1
+              ~e:(fun () -> [])
+              ~ne:(fun p -> first_fixed h2 t1 (fun p -> descend l1 t2 p) p)
+    in
+    start t1 t2
+
+  (* Though we write the underlying algorithm in CPS style to try and avoid
+    * some excessive list allocations and merging against last created element
+    * I can't think of a better way to guarantee that the result is in order
+    * during construction... So we have to sort and then remerge ...
+    *
+    * Maybe the right approach is to maintain a reverse-ordered list into
+    * which we'll push the new elements?
+    * *)
+  let cpair_norm l =
+    let sorted = List.sort ~cmp:Interval.compare l in
+    let rec dedup p = function
+      | []     -> [p]
+      | h :: t ->
+          let m = Interval.merge p h in
+          if Interval.is_none m then
+            p :: dedup h t
+          else
+            dedup m t
+    in
+    match sorted with
+    | []     -> []
+    | h :: t -> dedup h t
+
   let cpair n t =
-    (* Though we write the underlying algorithm in CPS style to try and avoid
-     * some excessive list allocations and merging against last created element
-     * I can't think of a better way to guarantee that the result is in order
-     * during construction... So we have to sort. *)
-    List.sort ~cmp:Interval.compare (cpair_unsorted n t)
+    cpair_norm (cpair_unsorted n t)
+
+  let cpair_separate n t1 t2 =
+    if compare t1 t2 >= 0 then
+      invalid_argf "Sets are not in ordered for separate cpair: %s %s"
+        (to_string t1) (to_string t2)
+    else
+      cpair_norm (cpair_separate_unsorted n t1 t2)
 
 end (* Set *)
 
@@ -896,18 +964,18 @@ and merge ~eq t1 t2 f =
   | Asc E          , _
   | _              , Asc E           -> invalid_argf "Can't merge empty"
   | Asc (U {size = s1; value = v1; set}), Asc (U {size = s2; value = v2})   ->
-    size_guard2 s1 s2 (fun size -> Asc (U {size = s1; set; value = f v1 v2}))
+      size_guard2 s1 s2 (fun size -> Asc (U {size = s1; set; value = f v1 v2}))
 
   | Asc (U {size = s1; value = v1}),      Asc (S {size = s2; values = l2})  ->
-    size_guard2 s1 s2 (fun size ->
+      size_guard2 s1 s2 (fun size ->
         Asc (S {size; values = map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)}))
 
   | Asc (S {size = s1; values = l1}),     Asc (U {size = s2; value = v2})   ->
-    size_guard2 s1 s2 (fun size ->
+      size_guard2 s1 s2 (fun size ->
         Asc (S {size; values = map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)}))
 
   | Asc (S { size = s1; values = l1}),    Asc (S { size = s2; values = l2}) ->
-    size_guard2 s1 s2 (fun size -> Asc (S {size ; values = start2 eq f l1 l2}))
+      size_guard2 s1 s2 (fun size -> Asc (S {size ; values = start2 eq f l1 l2}))
 
 let size_guard3 s1 s2 s3 k =
   if s1 = s2 && s2 = s3 then
@@ -955,48 +1023,48 @@ and merge3 ~eq t1 t2 t3 f =
   | Asc (U {size = s1; value = v1; set})
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})   ->
-    size_guard3 s1 s2 s3 (fun size -> Asc (U {size; set; value = f v1 v2 v3}))
+      size_guard3 s1 s2 s3 (fun size -> Asc (U {size; set; value = f v1 v2 v3}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})  ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3)}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})   ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3)}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})   ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3)}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})  ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = start2 eq (fun v2 v3 -> f v1 v2 v3) l2 l3}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})  ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = start2 eq (fun v1 v3 -> f v1 v2 v3) l1 l3}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})   ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = start2 eq (fun v1 v2 -> f v1 v2 v3) l1 l2}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})  ->
-    size_guard3 s1 s2 s3 (fun size ->
+      size_guard3 s1 s2 s3 (fun size ->
         Asc (S {size; values = start3 eq f l1 l2 l3}))
 
 let size_guard4 s1 s2 s3 s4 k =
@@ -1058,35 +1126,35 @@ and merge4 ~eq t1 t2 t3 t4 f =
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size -> Asc (U {size; set; value = f v1 v2 v3 v4}))
+      size_guard4 s1 s2 s3 s4 (fun size -> Asc (U {size; set; value = f v1 v2 v3 v4}))
 
   (* 1 S's, 3 U's *)
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3 v4)}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3 v4)}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3 v4)}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})
   , Asc (S {size = s4; values = l4})  ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = map_with_full_check eq l4 ~f:(fun v4 -> f v1 v2 v3 v4)}))
 
   (* 2 S's, 2 U's *)
@@ -1094,72 +1162,71 @@ and merge4 ~eq t1 t2 t3 t4 f =
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v1 v2 -> f v1 v2 v3 v4) l1 l2}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v1 v3 -> f v1 v2 v3 v4) l1 l3}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (U {size = s3; value = v3})
   , Asc (S {size = s4; values = l4})  ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v1 v4 -> f v1 v2 v3 v4) l1 l4}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v2 v3 -> f v1 v2 v3 v4) l2 l3}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})
   , Asc (S {size = s4; values = l4})  ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v2 v4 -> f v1 v2 v3 v4) l2 l4}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})
   , Asc (S {size = s4; values = l4})  ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start2 eq (fun v3 v4 -> f v1 v2 v3 v4) l3 l4}))
-
 
   (* 3 S's, 1 U's *)
   | Asc (S {size = s1; values = l1})
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})
   , Asc (U {size = s4; value = v4})   ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start3 eq (fun v1 v2 v3 -> f v1 v2 v3 v4) l1 l2 l3}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (S {size = s2; values = l2})
   , Asc (U {size = s3; value = v3})
   , Asc (S {size = s4; values = l4}) ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start3 eq (fun v1 v2 v4 -> f v1 v2 v3 v4) l1 l2 l4}))
 
   | Asc (S {size = s1; values = l1})
   , Asc (U {size = s2; value = v2})
   , Asc (S {size = s3; values = l3})
   , Asc (S {size = s4; values = l4}) ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start3 eq (fun v1 v3 v4 -> f v1 v2 v3 v4) l1 l3 l4}))
 
   | Asc (U {size = s1; value = v1})
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})
   , Asc (S {size = s4; values = l4}) ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start3 eq (fun v2 v3 v4 -> f v1 v2 v3 v4) l2 l3 l4}))
 
   (* 4 S's, 0 U's *)
@@ -1167,7 +1234,7 @@ and merge4 ~eq t1 t2 t3 t4 f =
   , Asc (S {size = s2; values = l2})
   , Asc (S {size = s3; values = l3})
   , Asc (S {size = s4; values = l4}) ->
-    size_guard4 s1 s2 s3 s4 (fun size ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
         Asc (S {size; values = start4 eq f l1 l2 l3 l4}))
 
 let fold_values : type o a. (o, a) t -> init:'b -> f:('b -> a -> 'b) -> 'b =
@@ -1224,3 +1291,35 @@ let to_array = function
         fill s v;
         List.iter t ~f:(fun (s, v) -> fill s v);
         r
+
+let cpair ~f eq = function
+  | Asc E                       ->
+      Asc E
+  | Asc (U { size; set; value}) ->
+      Asc (U { size  = Triangular_array.Triangular.number size
+             ; set   = Set.cpair size set
+             ; value = f value value
+             })
+  | Asc (S { size; values })    ->
+      let values =
+        let rec loop acc = function
+          | []     -> List.rev acc
+          | (s, v) :: t ->
+              let sm = Set.cpair size s in
+              let nv = f v v in
+              let nacc = merge_or_add_to_end eq sm nv acc in
+              let nacc2 = fixed_first s v nacc t in
+              loop nacc2 t
+        and fixed_first sf fv acc = function
+          | []           -> acc
+          | (s, v)  :: t ->
+              let cm = Set.cpair_separate size sf s in
+              let nv = f fv v in
+              let nacc = merge_or_add_to_end eq cm nv acc in
+              fixed_first sf fv nacc t
+        in
+        loop [] values
+      in
+      Asc (S { size = Triangular_array.Triangular.number size
+             ; values
+             })
