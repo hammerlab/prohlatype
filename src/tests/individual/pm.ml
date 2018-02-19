@@ -131,30 +131,27 @@ let manually n i1 i2 =
         Some (i,j)
       else None)
 
-let expand_ranges_back_to_pairs n plst =
-  List.map plst ~f:(fun i ->
-      let s = Interval.start i in
-      let w = Interval.width i in
-      List.init w ~f:(fun j -> ki n (j + s)))
+let expand_ranges l =
+  List.map l ~f:(Interval.to_cross_indices max_range)
   |> List.concat
 
+let in_order = function
+  | []       -> true
+  | p1 :: ps -> List.fold_left ps ~init:(true, p1)
+                  ~f:(fun (io, prev) i ->
+                      let nio = io && Interval.strict_before prev i in
+                      nio, i)
+                |> fst
+
 let () =
-  add_test ~count:50
-  ~name:"Pairing round trip."
-  (pair valid_interval valid_interval)
-  (fun (i1, i2) ->
-     let m = manually max_range i1 i2 in
-     let plst = Interval.cpair max_range i1 i2 in
-     let t = expand_ranges_back_to_pairs max_range plst in
-     match plst with
-     | []       -> m = []
-     | p1 :: ps ->
-        let in_order, _last =
-          List.fold_left ps ~init:(true, p1) ~f:(fun (io, prev) i ->
-            let nio = io && Interval.strict_before prev i in
-            nio, i)
-        in
-        in_order && t = m)
+  add_test ~count:100
+    ~name:"Intervals can recover cross indices."
+    valid_interval
+    (fun i ->
+      let cpl = Interval.cpair max_range i i in
+      let iplst = expand_ranges cpl in
+      let iplst2 = manually max_range i i in
+      iplst = iplst2)
 
 let valid_interval_after rs after =
   let bound = max_range - after in
@@ -209,17 +206,10 @@ let () =
     valid_set
     (fun s ->
       let plst = Set.cpair max_range s in
-      let t = expand_ranges_back_to_pairs max_range plst in
+      let t = expand_ranges plst in
       let iplst = all_sequential_pairs s in
       let m = manually_lst max_range iplst in
-      match plst with
-      | []       -> m = []
-      | p1 :: ps ->
-          let in_order, _last = List.fold_left ps ~init:(true, p1) ~f:(fun (io, prev) i ->
-              let nio = io && Interval.strict_before prev i in
-              nio, i)
-          in
-          in_order && t = m)
+      in_order plst && m = t)
 
 let complement_set set =
   let rec loop p acc = function
@@ -281,28 +271,20 @@ let ordered_sequential_pairs lst1 lst2 =
   loop [] lst1 lst2
 
 let () =
-  add_test ~count:500
+  add_test ~count:50
     ~name:"Cross pairing separate sets round trip."
     non_intersecting_pair_opt
     (fun (s, c) ->
       let plst = Set.cpair_separate max_range s c in
-      let t = expand_ranges_back_to_pairs max_range plst in
+      let t = expand_ranges plst in
       let orp = ordered_sequential_pairs s c in
       let m = manually_lst max_range orp in
-      match plst with
-      | []       -> m = []
-      | p1 :: ps ->
-          let in_order, _last =
-            List.fold_left ps ~init:(true, p1) ~f:(fun (io, prev) i ->
-              let nio = io && Interval.strict_before prev i in
-              nio, i)
-          in
-          in_order && t = m)
+      in_order plst && m = t)
 
 let () =
   let u = Triangular.number max_range - 1 in
   let t = Set.of_interval (Interval.make 0 u) in
-  add_test ~count:100
+  add_test ~count:10
     ~name:"Cross pairing separate and against self should yield universal."
     non_intersecting_pair_opt
     (fun (s, c) ->
@@ -350,23 +332,15 @@ let subsampled_non_intersecting_pairs =
  * that the two sets do not partition the entire universe, ie. there are
  * elements missing. *)
 let () =
-  add_test ~count:500
+  add_test ~count:50
     ~name:"Cross pairing separate (not full) sets round trip."
     subsampled_non_intersecting_pairs
     (fun (s, c) ->
       let plst = Set.cpair_separate max_range s c in
-      let t = expand_ranges_back_to_pairs max_range plst in
+      let t = expand_ranges plst in
       let orp = ordered_sequential_pairs s c in
       let m = manually_lst max_range orp in
-      match plst with
-      | []       -> m = []
-      | p1 :: ps ->
-          let in_order, _last =
-            List.fold_left ps ~init:(true, p1) ~f:(fun (io, prev) i ->
-              let nio = io && Interval.strict_before prev i in
-              nio, i)
-          in
-          in_order && t = m)
+      in_order plst && m = t)
 
 let () =
   QCheck_runner.run_tests_main (List.rev !tests)

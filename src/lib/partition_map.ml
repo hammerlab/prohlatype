@@ -389,6 +389,17 @@ let cpair_cm_cps n f s p ~e ~ne =
   else
     non_none_cpair_cm_cps n f s p ne
 
+let to_cross_indices n i =
+  let tni = Triangular.Indices.full_upper_inverse n in
+  let e = end_ i in
+  let rec loop acc j =
+    if j > e then
+      List.rev acc
+    else
+      loop (tni j :: acc) (j + 1)
+  in
+  loop [] (start i)
+
 end (* Interval *)
 
 module Set = struct

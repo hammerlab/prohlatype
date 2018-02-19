@@ -48,6 +48,8 @@ module Interval : sig
 
   val cpair : int -> t -> t -> t list
 
+  val to_cross_indices : int -> t -> (int * int) list
+
 end (* Interval *)
 
 module Set : sig
