@@ -1562,8 +1562,10 @@ module ForwardMultipleGen (R : Ring) = struct
 
   let median_of_pm apm =
     let values_with_size =
-      Pm.fold_set_sizes_and_values apm ~init:[]
-        ~f:(fun acc nv v -> insert_sorted ~greater:R.( < ) v nv acc)
+      Pm.fold_set_and_values apm ~init:[]
+        ~f:(fun acc st v ->
+              let nv = Partition_map.Set.size st in
+              insert_sorted ~greater:R.( < ) v nv acc)
     in
     let n = Pm.size apm in
     let m = n / 2 in

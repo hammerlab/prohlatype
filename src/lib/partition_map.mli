@@ -47,7 +47,17 @@ module Interval : sig
   val iter : t -> f:(int -> unit) -> unit
 
   val cpair : int -> t -> t -> t list
-end
+
+end (* Interval *)
+
+module Set : sig
+
+  type t = Interval.t list
+
+  (* Number of elements in the set. *)
+  val size : t -> int
+
+end (* Sig *)
 
 (** A partition map is a data structure for a map over a partition of elements.
 
@@ -127,10 +137,11 @@ val fold_values : (_, 'a) t
                 -> f:('b -> 'a -> 'b)
                 -> 'b
 
-val fold_set_sizes_and_values : (_, 'a) t
-                              -> init:'b
-                              -> f:('b -> int -> 'a -> 'b)
-                              -> 'b
+(* Fold over the values passing the underlying set to the lambda. *)
+val fold_set_and_values : (_, 'a) t
+                        -> init:'b
+                        -> f:('b -> Set.t -> 'a -> 'b)
+                        -> 'b
 
 (** Fold over the indices [0,size) and values. *)
 val fold_indices_and_values : (_, 'a) t
