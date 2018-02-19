@@ -1250,7 +1250,7 @@ let fold_set_sizes_and_values : type o a. (o, a) t -> init:'b -> f:('b -> int ->
     match l with
     | Desc ld               -> ascf (ascending_t (fun x y -> x = y) ld)     (* TODO: Probably could be faster. *)
     | Asc E                 -> invalid_arg "Can't fold_set_sizes_and_values on empty!"
-    | Asc (U {set; value})  -> Set.fold set ~init ~f:(fun acc l -> f acc l value)
+    | Asc (U {set; value})  -> f init (Set.size set) value
     | Asc (S {values})      -> ascf values
 
 let fold_indices_and_values :
