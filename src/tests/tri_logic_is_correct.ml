@@ -5,9 +5,9 @@ open Prohlatype
 
 (* Test the k <-> i, j mapping logic. *)
 let test_upper n =
-  let open Triangular_array in
-  let kn = upper_triangular_index n in
-  let ki = upper_triangular_inverse n in
+  let open Triangular in
+  let kn = Indices.upper n in
+  let ki = Indices.upper_inverse n in
   let kprev = ref (-1) in
   for i = 0 to n - 2 do
     for j = i + 1 to n - 1 do
@@ -22,9 +22,9 @@ let test_upper n =
   done
 
 let test_full_upper n =
-  let open Triangular_array in
-  let kn = full_upper_triangular_index n in
-  let ki = full_upper_triangular_inverse n in
+  let open Triangular in
+  let kn = Indices.full_upper n in
+  let ki = Indices.full_upper_inverse n in
   let kprev = ref (-1) in
   for i = 0 to n - 1 do
     for j = i to n - 1 do
@@ -40,7 +40,7 @@ let test_full_upper n =
 
 
 let () =
-  let module Tn = Triangular_array.Triangular in
+  let module Tn = Triangular in
   assert Tn.(number 0 |> inverse = 0);  (* NOT true for number_m1 *)
   for i = 1 to 1000 do
     printf "%d\t%!" i;

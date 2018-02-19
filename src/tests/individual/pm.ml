@@ -114,8 +114,8 @@ let () = add_test ~count:100
      else
        is_none m)
 
-let k = Triangular_array.full_upper_triangular_index
-let ki = Triangular_array.full_upper_triangular_inverse
+let k = Triangular.Indices.full_upper
+let ki = Triangular.Indices.full_upper_inverse
 
 let generate_all_pairs n =
   List.init n ~f:(fun i ->
@@ -300,7 +300,7 @@ let () =
           in_order && t = m)
 
 let () =
-  let u = Triangular_array.Triangular.number max_range - 1 in
+  let u = Triangular.number max_range - 1 in
   let t = Set.of_interval (Interval.make 0 u) in
   add_test ~count:100
     ~name:"Cross pairing separate and against self should yield universal."

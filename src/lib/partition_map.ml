@@ -277,7 +277,7 @@ let non_none_cpair n f s =
   let fe = end_ f in
   let ss = start s in
   let se = end_ s in
-  let tn = Triangular_array.full_upper_triangular_index n in
+  let tn = Triangular.Indices.full_upper n in
   if se - ss + 1 = n then
     let start = tn fs (max fs ss) in
     let end_  = tn fe se in
@@ -306,7 +306,7 @@ let non_none_cpair_cps n f s k =
   let fe = end_ f in
   let ss = start s in
   let se = end_ s in
-  let tn = Triangular_array.full_upper_triangular_index n in
+  let tn = Triangular.Indices.full_upper n in
   if se - ss + 1 = n then
     let start = tn fs (max fs ss) in
     let end_  = tn fe se in
@@ -354,7 +354,7 @@ let non_none_cpair_cm_cps n f s p k =
   let fe = end_ f in
   let ss = start s in
   let se = end_ s in
-  let tn = Triangular_array.full_upper_triangular_index n in
+  let tn = Triangular.Indices.full_upper n in
   if se - ss + 1 = n then                                      (* or ss = 0 ? *)
     let i = make ~start:(tn fs (max fs ss)) ~end_:(tn fe se) in
     let m, n = merge_or_reorder p i in
@@ -1299,7 +1299,7 @@ let cpair ~f eq = function
   | Asc E                       ->
       Asc E
   | Asc (U { size; set; value}) ->
-      Asc (U { size  = Triangular_array.Triangular.number size
+      Asc (U { size  = Triangular.number size
              ; set   = Set.cpair size set
              ; value = f value value
              })
@@ -1323,6 +1323,6 @@ let cpair ~f eq = function
         in
         loop [] values
       in
-      Asc (S { size = Triangular_array.Triangular.number size
+      Asc (S { size = Triangular.number size
              ; values
              })

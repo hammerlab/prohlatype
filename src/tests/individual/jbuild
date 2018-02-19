@@ -23,9 +23,9 @@
 (rule (
   (targets (util.ml
             ints_as_bits.ml
-            triangular_array.ml))
+            triangular.ml))
   (action (progn
       (copy# ../../lib/util.ml util.ml)
       (copy# ../../lib/ints_as_bits.ml ints_as_bits.ml)
-      (copy# ../../lib/triangular_array.ml triangular_array.ml)
+      (copy# ../../lib/triangular.ml triangular.ml)
       ))))

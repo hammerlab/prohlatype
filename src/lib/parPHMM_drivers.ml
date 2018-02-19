@@ -179,18 +179,18 @@ module Zygosity_array = struct
     { n : int
     (* Number of alleles *)
 
-    ; l : Lp.t Triangular_array.t
+    ; l : Lp.t Triangular.Array.t
     (* Array of all the likelihoods *)
 
-    ; c : (float * float) Triangular_array.t
+    ; c : (float * float) Triangular.Array.t
     (* Number of reads where first or second, allele, of pair, is better.
      * When they are the same, add a 0.5 to both. *)
     }
 
   let init number_alleles =
     { n = number_alleles
-    ; l = Triangular_array.make number_alleles Lp.one
-    ; c = Triangular_array.make number_alleles (0., 0.)
+    ; l = Triangular.Array.make number_alleles Lp.one
+    ; c = Triangular.Array.make number_alleles (0., 0.)
     }
 
   let update t ~allele1 ~allele2 ~v1 ~v2 single_read =
@@ -201,9 +201,9 @@ module Zygosity_array = struct
       else
         allele2, v2, allele1, v1
     in
-    Triangular_array.update t.l i j ~f:(fun l -> Lp.(l * likelihood));
+    Triangular.Array.update t.l i j ~f:(fun l -> Lp.(l * likelihood));
     let o, h = if single_read then 1.0, 0.5 else 2.0, 1.0 in
-    Triangular_array.update t.c i j
+    Triangular.Array.update t.c i j
       ~f:(fun (f, s) ->
             if Lp.close_enough vi vj then
               f +. h, s +. h
@@ -232,9 +232,9 @@ module Zygosity_array = struct
   let best size likelihood_arr num_reads t =
     let desired_size, nz =
       match size with
-      | NonZero v -> Triangular_array.size t.l, Some v
+      | NonZero v -> Triangular.Array.size t.l, Some v
       | Spec n    -> max 1 n, None
-      | NoSpec    -> Triangular_array.size t.l, None
+      | NoSpec    -> Triangular.Array.size t.l, None
     in
 (* Create a sorted, grouped, and constrained, list of the paired likelihoods.
   The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
@@ -283,7 +283,7 @@ module Zygosity_array = struct
         end
     in
     let fcs, fres =                                     (* Heterozygous. *)
-      Triangular_array.foldi_left t.l ~init:(0, [])
+      Triangular.Array.foldi_left t.l ~init:(0, [])
         ~f:(fun (cs, acc) i j v ->
               sorted_insert v i j cs acc)
     in
@@ -303,7 +303,7 @@ module Zygosity_array = struct
   (* Compute the normalizing constant. *)
       let ns =
         let f s l = s +. prob l in
-        let heterozygous_sum = Triangular_array.fold_left ~init:0. ~f t.l in
+        let heterozygous_sum = Triangular.Array.fold_left ~init:0. ~f t.l in
         Array.fold_left ~init:heterozygous_sum ~f likelihood_arr
       in
       let lookup_nor (i, j) =
@@ -311,7 +311,7 @@ module Zygosity_array = struct
           let h = (float num_reads) /. 2. in
           (i, j, h, h)
         else
-          let irds, jrds = Triangular_array.get t.c i j in
+          let irds, jrds = Triangular.Array.get t.c i j in
           (i, j, irds, jrds)
       in
       match nz with

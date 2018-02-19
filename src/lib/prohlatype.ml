@@ -22,7 +22,7 @@ module Partition_map = Partition_map
 module Phmm = Phmm
 module ParPHMM = ParPHMM
 
-module Triangular_array = Triangular_array
+module Triangular = Triangular
 module ParPHMM_drivers = ParPHMM_drivers
 module Post_analysis = Post_analysis
 
