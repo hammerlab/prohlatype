@@ -488,7 +488,7 @@ let likelihood_report_size_arg =
              & info ~doc ~docv [likelihood_report_size_argument])
 
 let non_negative_zygosity =
-  let open ParPHMM_drivers.Zygosity_array in
+  let open ParPHMM_drivers.Zygosity_pm in
   let non_negative_int_parser =
     fun s ->
       try
@@ -519,10 +519,10 @@ let zygosity_report_size_arg =
     the zygosity portion. By defaults only the pairs that have non-zero \
     (> %f) probability will be reported. Set this value to zero to report \
     all (could be > 10e6) values."
-    Zygosity_array.default_non_zero
+    Zygosity_pm.default_non_zero
   in
   Arg.(value & opt non_negative_zygosity
-                      Zygosity_array.(NonZero default_non_zero)
+                      Zygosity_pm.(NonZero default_non_zero)
              & info ~doc ~docv [zygosity_report_size_argument])
 
 let zygosity_non_zero_value_arg =
@@ -532,14 +532,14 @@ let zygosity_non_zero_value_arg =
     "Override the default lowerbound of non-zero zygosities. The \
     default (%f) probability might be too high for some scenarios, such \
     as if there are too few reads. This argument overrides --%s."
-    Zygosity_array.default_non_zero zygosity_report_size_argument
+    Zygosity_pm.default_non_zero zygosity_report_size_argument
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["zygosity-non-zero"])
 
 let to_num_zygosities ~zygosity_non_zero_value ~zygosity_report_size =
   Option.value_map zygosity_non_zero_value
-    ~f:(fun v -> ParPHMM_drivers.Zygosity_array.NonZero v)
+    ~f:(fun v -> ParPHMM_drivers.Zygosity_pm.NonZero v)
     ~default:zygosity_report_size
 
 let per_reads_report_size_argument = "per-read-report-size"

@@ -525,8 +525,8 @@ module Set = struct
   let must_match_at_beginning s1 s2 =
     match s1, s2 with
     | [], []  -> invalid_argf "Empty sets!"
-    | [], s   -> invalid_argf "Different lengths! s2: %s" (to_string s)
-    | s , []  -> invalid_argf "Different lengths! s1: %s" (to_string s)
+    | [], s   -> invalid_argf "must_match_at_beginning: different lengths! s2: %s" (to_string s)
+    | s , []  -> invalid_argf "must_match_at_beginning: different lengths! s1: %s" (to_string s)
     | h1 :: t1
     , h2 :: t2 ->
       let open Interval in
@@ -946,8 +946,8 @@ let size_guard2 s1 s2 k =
 (* The reason for all this logic. *)
 let rec start2 eq f l1 l2 = match l1, l2 with
   | [],     []      -> []
-  | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s      -> invalid_argf "start2 different lengths! l2: %s" (asc_sets_to_str s)
+  |  s,     []      -> invalid_argf "start2 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2  ->
       let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -957,8 +957,8 @@ let rec start2 eq f l1 l2 = match l1, l2 with
       loop2 eq f acc nt1 nt2
 and loop2 eq f acc l1 l2 = match l1, l2 with
   | [],     []      -> acc
-  | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s      -> invalid_argf "loop2 different lengths! l2: %s" (asc_sets_to_str s)
+  |  s,     []      -> invalid_argf "loop2 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2  ->
       let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -997,9 +997,9 @@ let size_guard3 s1 s2 s3 k =
 let rec start3 eq f l1 l2 l3 =
   match l1, l2, l3 with
   | [],     [],     []  -> []
-  | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _  -> invalid_argf "start3 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s  -> invalid_argf "start3 different lengths! l3: %s" (asc_sets_to_str s)
+  |  s,      _,     []  -> invalid_argf "start3 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3      ->
@@ -1012,9 +1012,9 @@ let rec start3 eq f l1 l2 l3 =
 and loop3 eq f acc l1 l2 l3 =
   match l1, l2, l3 with
   | [],     [],     []  -> acc     (* We insert at the end, thereby preserving order *)
-  | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _  -> invalid_argf "loop3 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s  -> invalid_argf "loop3 different lengths! l3: %s" (asc_sets_to_str s)
+  |  s,      _,     []  -> invalid_argf "loop3 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3      ->
@@ -1087,10 +1087,10 @@ let size_guard4 s1 s2 s3 s4 k =
 let rec start4 eq f l1 l2 l3 l4 =
   match l1, l2, l3, l4 with
   | [],     [],     [],     []      -> []
-  | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
-  |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _,      _      -> invalid_argf "start4 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s,      _      -> invalid_argf "start4 different lengths! l3: %s" (asc_sets_to_str s)
+  |  _,      _,     [],      s      -> invalid_argf "start4 different lengths! l4: %s" (asc_sets_to_str s)
+  |  s,      _,      _,     []      -> invalid_argf "start4 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3
@@ -1105,10 +1105,10 @@ let rec start4 eq f l1 l2 l3 l4 =
 and loop4 eq f acc l1 l2 l3 l4 =
   match l1, l2, l3, l4 with
   | [],     [],     [],     []      -> acc     (* We insert at the end, thereby preserving order *)
-  | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
-  |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _,      _      -> invalid_argf "loop4 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s,      _      -> invalid_argf "loop4 different lengths! l3: %s" (asc_sets_to_str s)
+  |  _,      _,     [],      s      -> invalid_argf "loop4 different lengths! l4: %s" (asc_sets_to_str s)
+  |  s,      _,      _,     []      -> invalid_argf "loop4 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3
@@ -1310,14 +1310,16 @@ let cpair ~f eq = function
   | Asc E                       ->
       Asc E
   | Asc (U { size; set; value}) ->
-      Asc (U { size  = Triangular.number size
-             ; set   = Set.cpair size set
+      let nset = Set.cpair size set in
+      let nsize = Set.size nset in
+      Asc (U { size  = nsize (*Triangular.number size *)
+             ; set   = nset (* Set.cpair size set *)
              ; value = f value value
              })
   | Asc (S { size; values })    ->
       let values =
         let rec loop acc = function
-          | []     -> List.rev acc
+          | []          -> List.sort ~cmp:(fun (s1, _) (s2,_ ) -> Set.compare s1 s2) acc
           | (s, v) :: t ->
               let sm = Set.cpair size s in
               let nv = f v v in
@@ -1334,6 +1336,7 @@ let cpair ~f eq = function
         in
         loop [] values
       in
+      (* assert (ascending_invariant values) *)
       Asc (S { size = Triangular.number size
              ; values
              })
