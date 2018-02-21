@@ -313,7 +313,7 @@ module Sp = struct
   type 'a t =
     | Single of 'a
     | Paired of ('a * 'a)
-  [@@deriving yojson]
+    [@@deriving eq, yojson]
 
   let map f = function
     | Single  v       -> Single (f v)
