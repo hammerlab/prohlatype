@@ -43,58 +43,61 @@ let read_length = 125
 let fpt1 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
     read_length a1 pt
+let alleles1 = [| a1 |]
 
 let fpt2 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
     read_length a2 pt
 
-let callhd pt rs re rc =
-  let _ = pt.ParPHMM.single rs re rc in
-  List.hd_exn (pt.ParPHMM.best_allele_pos 1)
+let alleles2 = [| a2 |]
+
+open Versus_common
 
 let paired readname rs1 re1 rs2 re2 =
+  let module Aap = Pd.Alleles_and_positions in
   match StringMap.find readname smap with
   | Pa.Pr (Ml.FirstFiltered _) ->
       eprintf "%s was FirstFiltered ?" readname
   | Pa.Pr (Ml.FirstOrientedSecond { Ml.first_o; _}) ->
-      let l11 = callhd fpt1 rs1 re1 first_o in
-      let l12 = callhd fpt1 rs2 re2 (not first_o) in
-      let l21 = callhd fpt2 rs1 re1 first_o in
-      let l22 = callhd fpt2 rs2 re2 (not first_o) in
+      let l11 = callhd alleles1 fpt1 rs1 re1 first_o in
+      let l12 = callhd alleles1 fpt1 rs2 re2 (not first_o) in
+      let l21 = callhd alleles2 fpt2 rs1 re1 first_o in
+      let l22 = callhd alleles2 fpt2 rs2 re2 (not first_o) in
       printf "%s\tp 1\t%c\t%s\t%d\t%s\t%d\n%!"
-        readname (char_of_two_ls l11.ParPHMM.llhd l21.ParPHMM.llhd)
-          (ParPHMM.Lp.to_string l11.ParPHMM.llhd)
-          l11.ParPHMM.position
-          (ParPHMM.Lp.to_string l21.ParPHMM.llhd)
-          l21.ParPHMM.position;
+        readname (char_of_two_ls l11.Aap.llhd l21.Aap.llhd)
+          (ParPHMM.Lp.to_string l11.Aap.llhd)
+          l11.Aap.position
+          (ParPHMM.Lp.to_string l21.Aap.llhd)
+          l21.Aap.position;
       printf "%s\tp 2\t%c\t%s\t%d\t%s\t%d\n%!"
-        readname (char_of_two_ls l12.ParPHMM.llhd l22.ParPHMM.llhd)
-          (ParPHMM.Lp.to_string l12.ParPHMM.llhd)
-          l12.ParPHMM.position
-          (ParPHMM.Lp.to_string l22.ParPHMM.llhd)
-          l22.ParPHMM.position
+        readname (char_of_two_ls l12.Aap.llhd l22.Aap.llhd)
+          (ParPHMM.Lp.to_string l12.Aap.llhd)
+          l12.Aap.position
+          (ParPHMM.Lp.to_string l22.Aap.llhd)
+          l22.Aap.position
   | Pa.Soi _ ->
       eprintf "%s supposed to be paired!" readname
 
 let single rp readname rs re =
   let open ParPHMM in
-  let take_regular r c = Pd.Alleles_and_positions.descending_cmp r c <= 0 in
+  let module Aap = Pd.Alleles_and_positions in
+  let take_regular r c = Aap.descending_cmp r c <= 0 in
   let mlo fp = Pd.Orientation.most_likely_between ~take_regular fp in
   match StringMap.find readname smap with
   | Pa.Soi (Ml.SingleRead or_) ->
       begin match mlo or_ with
       | Pass_result.Filtered _ -> eprintf "%s filtered!" readname
       | Pass_result.Completed (rc, _) ->
-        let l1 = callhd fpt1 rs re rc in
-        let l2 = callhd fpt2 rs re rc in
+        let l1 = callhd alleles1 fpt1 rs re rc in
+        let l2 = callhd alleles2 fpt2 rs re rc in
         printf "%s\ts %s\t%c\t%s\t%d\t%s\t%d\n%!"
         readname
           rp
-          (char_of_two_ls l1.ParPHMM.llhd l2.ParPHMM.llhd)
-          (ParPHMM.Lp.to_string l1.ParPHMM.llhd)
-          l1.ParPHMM.position
-          (ParPHMM.Lp.to_string l2.ParPHMM.llhd)
-          l2.ParPHMM.position;
+          (char_of_two_ls l1.Aap.llhd l2.Aap.llhd)
+          (ParPHMM.Lp.to_string l1.Aap.llhd)
+          l1.Aap.position
+          (ParPHMM.Lp.to_string l2.Aap.llhd)
+          l2.Aap.position;
       end
   | Pa.Soi (Ml.PairedDependent _) ->
       eprintf "%s not paired dependent!" readname

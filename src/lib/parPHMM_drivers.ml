@@ -4,7 +4,9 @@ open Util
 
 module Pm = Partition_map
 
-let max_pm = Pm.fold_values ~init:ParPHMM.Lp.zero ~f:ParPHMM.Lp.max
+let max_pm =
+  Pm.fold_values ~init:ParPHMM.Lp.zero
+    ~f:(fun m (l,_p) -> ParPHMM.Lp.max m l)
 
 let higher_value_in_first e1 e2 =
   let r1 = max_pm e1 in
@@ -144,12 +146,16 @@ module Orientation = struct
 
 end (* Orientation *)
 
-(* Represent a diagnostc result of reads. *)
+(* Represent diagnostic result of reads.  *)
 module Alleles_and_positions = struct
 
   open ParPHMM
 
-  type datum = per_allele_datum
+  type datum =
+    { allele    : string
+    ; llhd      : Lp.t
+    ; position  : int
+    }
   and t = datum list
   [@@deriving show,yojson]
 
@@ -166,23 +172,108 @@ module Alleles_and_positions = struct
     | _ , []            -> 1
     | t1  :: _, t2 :: _ -> descending_lg_llhd_cmp t1.llhd t2.llhd
 
+  let of_mt lookup_allele depth mt =
+    let lg = ParPHMM.largest depth in
+    Pm.fold_indices_and_values mt ~init:[]
+        ~f:(fun acc i (lp, pos) -> lg lp (i, pos) acc)
+    |> List.map ~f:(fun (llhd, (i, position)) ->
+        { allele = lookup_allele i            (* 2nd usually has alterations. *)
+        ; llhd
+        ; position
+        })
+
+  let of_mt_pr la depth =
+    ParPHMM.Pass_result.map ~f:(of_mt la depth)
+
+  let of_mt_or la depth or_ =
+    Orientation.map or_ ~f:(of_mt_pr la depth)
+
 end (* Alleles_and_positions *)
+
+module Per_read_result = struct
+
+  type t = Alleles_and_positions.t Orientation.t Sp.t [@@deriving yojson]
+
+  let to_string =
+    let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
+    function
+    | Sp.Single aap ->
+      sprintf "\n\t%s"
+        (Orientation.to_string ~take_regular
+            Alleles_and_positions.string_of_list aap)
+    | Sp.Paired (ap1, ap2) ->
+      sprintf "\n\t%s\n\t%s"
+        (Orientation.to_string ~take_regular
+            Alleles_and_positions.string_of_list ap1)
+        (Orientation.to_string ~take_regular
+            Alleles_and_positions.string_of_list ap2)
+
+end (* Per_read_result *)
+
+module Emissions = struct
+
+  type t = (int * float) list
+  [@@deriving eq, show { with_path = false },yojson ]
+
+  let insert pos weight emissions =
+    let rec loop = function
+      | []  -> [pos, weight]
+      | (p, c) :: tl ->
+          if pos = p then
+            (p, c +. weight) :: tl
+          else if pos < p then
+            (pos, weight) :: (p, c) :: tl
+          else (* pos > p *)
+            (p, c) :: loop tl
+    in
+    loop emissions
+
+  let insert_pair weight emissions = function
+    | Sp.Single pos      -> insert pos weight emissions
+    | Sp.Paired (p1, p2) -> insert p2 weight (insert p1 weight emissions)
+
+  let number_of_reads =
+    List.fold_left ~init:0. ~f:(fun s (_, w) -> s +. w)
+
+end (* Emissions *)
 
 module Zygosity_pm = struct
 
   open ParPHMM
 
   type d =
-    { likelihood  : Lp.t      (* of a pair. *)
-    ; first       : float     (* Number of reads where first is better. *)
-    ; second      : float     (* Number of reads where second pair is better. *)
+    { likelihood  : Lp.t          (* of a pair, the max of individual values. *)
+    ; first       : Emissions.t      (* Alignment is better for first allele. *)
+    ; second      : Emissions.t      (*     "     "    "    "  second allele. *)
     } [@@deriving show { with_path = false} ]
 
-  let merge d1 d2 =
-    { likelihood = Lp.(d1.likelihood * d2.likelihood)
-    ; first      = d1.first +. d2.first
-    ; second     = d1.second +. d2.second
-    }
+  type assignment =
+    | First of (Lp.t * int Sp.t)
+    | Second of (Lp.t * int Sp.t)
+    | Both of (Lp.t * int Sp.t * int Sp.t)
+    (* Same likelihood but different positions? Highly unlikely, but maybe
+     * possible if there is a gap at the end of * one of the two alleles? *)
+
+  let equal_assignment a1 a2 = match a1, a2 with                (* So close to Lpr *)
+    | First (l1, p1),       First (l2, p2)      -> p1 = p2 && Lp.(close_enough l1 l2)
+    | Second (l1, p1),      Second (l2, p2)     -> p1 = p2 && Lp.(close_enough l1 l2)
+    | Both (l1, p11, p12),  Both (l2, p21, p22) -> p11 = p21 && p12 = p22 && Lp.(close_enough l1 l2)
+    | _,                    _                   -> false
+
+  let merge d = function
+    | First (l, p)      ->
+        { d with likelihood = Lp.(d.likelihood * l)
+               ; first = Emissions.insert_pair 1.0 d.first p
+        }
+    | Second (l, p)     ->
+        { d with likelihood = Lp.(d.likelihood * l)
+               ; second = Emissions.insert_pair 1.0 d.second p
+        }
+    | Both (l, p1, p2)  ->
+        { likelihood = Lp.(d.likelihood * l)
+        ; first      = Emissions.insert_pair 0.5 d.first p1
+        ; second     = Emissions.insert_pair 0.5 d.second p2
+        }
 
   type t =
     { n : int
@@ -191,27 +282,31 @@ module Zygosity_pm = struct
     }
 
   let init number_alleles =
-    let d = { likelihood = Lp.one; first = 0.; second = 0. } in
+    let d = { likelihood = Lp.one; first = []; second = [] } in
     let r = Pm.init_all_a ~size:number_alleles d in
     let l = Pm.cpair ~f:(fun d _ -> d) (fun _ _ -> true) r in
     { n = number_alleles; l }
 
-  let update t llhd single_read =
-    let o, h = if single_read then 1.0, 0.5 else 2.0, 1.0 in
-    let f l1 l2 =
+  let update t llhd =
+    (* Compute the max but keep track of the assignment so that we split the
+     * read coverage appropriately. *)
+    let f (l1, p1) (l2, p2) =
       if Lp.(l1 < l2) then
-        { likelihood = l2; first = 0.; second = o }
+        Second (l2, p2)
       else if Lp.(l2 < l1) then
-        { likelihood = l1; first = o; second = 0. }
+        First (l1, p1)
       else (* l2 = l1 *)
-        { likelihood = l1; first = h; second = h }
+        Both (l1, p1, p2)
     in
+    let n = Pm.cpair ~f equal_assignment llhd in
     let eq d1 d2 =
       Lp.(close_enough d1.likelihood d2.likelihood)
-      && d1.first = d2.first
+      (* I'm not certain that this is ultimately the best trade-off between
+       * resources. *)
+      && Emissions.equal d1.first d2.first
+      && Emissions.equal d1.second d2.second
     in
-    let n = Pm.cpair ~f eq llhd in
-    t.l <- Pm.merge eq t.l n merge
+    t.l <- Pm.merge ~eq t.l n merge
 
   type best_size =
     | NonZero of float
@@ -221,7 +316,7 @@ module Zygosity_pm = struct
   let default_non_zero = 0.000001
 
   (* log likelihood, probability, index 1st, index 2nd *)
-  let best name size t =
+  let best size t =
     let greater d1 d2 = Lp.(d1.likelihood > d2.likelihood) in
     let sets_by_likelihood =
       Pm.fold_set_and_values t.l ~init:[] ~f:(fun acc st v ->
@@ -279,27 +374,15 @@ module Likelihoods_and_zygosity = struct
   open ParPHMM
 
   let add_ll state_llhd llhd =
-    Pm.iter_set llhd ~f:(fun i v ->
+    Pm.iter_set llhd ~f:(fun i (v, _p) ->
       state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
-  (*let add_lz zygosity llhd single_read =
-    Pm.iter_set llhd ~f:(fun allele1 v1 ->
-      Pm.iter_set llhd ~f:(fun allele2 v2 ->
-        (* The Zygosity array only stores the upper triangle of the full
-           pairwise likelihood matrix. Therefore, ignore the diagonal and
-           lower triangular elements to avoid double counting (per read). *)
-        if allele1 >= allele2 then
-          ()
-        else
-          Zygosity_array.update zygosity ~allele1 ~allele2 ~v1 ~v2 single_read )) *)
+  let add_lz zygosity llhd =
+    Zygosity_pm.update zygosity llhd
 
-  let add_lz zygosity llhd single_read =
-    Zygosity_pm.update zygosity llhd single_read
-
-  (* State is labled because it is modified. *)
-  let add_ll_and_lz state_llhd zygosity llhd single_read =
+  let add_ll_and_lz state_llhd zygosity llhd =
     add_ll state_llhd llhd;
-    add_lz zygosity llhd single_read
+    add_lz zygosity llhd
 
 end (* Likelihoods_and_zygosity *)
 
@@ -323,10 +406,10 @@ module Output = struct
   and zygosity_log_likelihood =
     { allele1           : string
     ; allele2           : string
-    ; number_of_reads1  : float
-    ; number_of_reads2  : float
     ; z_llhd            : Lp.t
     ; prob              : float
+    ; read1_emissions   : Emissions.t
+    ; read2_emissions   : Emissions.t
     }
   and per_locus =
     { imgt_release  : string
@@ -380,7 +463,7 @@ module Output = struct
         (parse_to_resolution_exn pl1.allele)
         (parse_to_resolution_exn pl2.allele))
 
-  let create_pl imgt_release locus allele_arr allele_llhd_arr zbest =
+  let create_per_locus imgt_release locus allele_arr allele_llhd_arr zbest =
     let per_allele =
       Array.mapi allele_arr ~f:(fun i (allele, alters) ->
         { allele; a_llhd = allele_llhd_arr.(i); alters })
@@ -388,13 +471,13 @@ module Output = struct
     Array.sort ~cmp:cmp_pall per_allele;
     let zygosity =
       List.map zbest ~f:(fun (l, p, ijlist) ->
-        List.map ijlist ~f:(fun (i, j, number_of_reads1, number_of_reads2) ->
+        List.map ijlist ~f:(fun (i, j, read1_emissions, read2_emissions) ->
             { allele1 = fst allele_arr.(i)
             ; allele2 = fst allele_arr.(j)
             ; z_llhd  = l
             ; prob    = p
-            ; number_of_reads1
-            ; number_of_reads2
+            ; read1_emissions
+            ; read2_emissions
             }))
         |> List.concat
     in
@@ -446,10 +529,13 @@ module Output = struct
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood
-      { allele1; allele2; z_llhd; prob; number_of_reads1; number_of_reads2 } =
-      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\n"
+      { allele1; allele2; z_llhd; prob; read1_emissions; read2_emissions } =
+      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\t%s\t%s\n"
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
-        number_of_reads1 number_of_reads2
+        (Emissions.number_of_reads read1_emissions) 
+        (Emissions.number_of_reads read2_emissions) 
+        (Emissions.show read1_emissions)
+        (Emissions.show read2_emissions)
     in
     fprintf oc "Prohlatype version: %s\n" header.prohlatype_version;
     fprintf oc "Command Line: %s\n" header.commandline;
@@ -457,7 +543,8 @@ module Output = struct
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
         (fun () ->
-          fprintf oc "Zygosity %s:\n%-16s\t%-16s\tlog likelihood\tProb    \t# of reads1\t# of reads2\n"
+          fprintf oc "Zygosity %s:\n%-16s\t%-16s\tlog likelihood\tProb    \t\
+                      # of reads1\t# of reads2\t    E1\t    E2\n"
             (show_locus locus)
             "Allele 1" "Allele 2")
         zygosity;
@@ -621,45 +708,18 @@ module Forward (* : Worker *) = struct
 
   open ParPHMM
 
-  let empty_mt = Pm.empty_a
+  type stat = (Lp.t * int) mt
 
-  type stat =
-    { aap        : Alleles_and_positions.t
-    ; likelihood : Lp.t mt
-    }
+  let proc_to_stat proc _rc = proc.per_allele_llhd_and_pos ()
 
-  let stat_to_string { aap; likelihood } =
-    sprintf "%s\n%s" (Alleles_and_positions.string_of_list aap)
-      (Pm.to_string likelihood (Lp.to_string ~precision:3))
-
-  let proc_to_stat allele_depth proc _comp =
-    { aap        = proc.best_allele_pos allele_depth
-    ; likelihood = proc.per_allele_llhd ()
-    }
-
-  let forward oc allele_depth past_threshold proc read read_errors =
-    time oc (sprintf "forward of %s, allele_depth: %d; past_threshold: %s; read: %s"
-      proc.ParPHMM.name allele_depth (Past_threshold.to_string past_threshold)
+  let forward oc past_threshold proc read read_errors =
+    time oc (sprintf "forward of %s, past_threshold: %s; read: %s"
+      proc.ParPHMM.name (Past_threshold.to_string past_threshold)
         (String.sub_exn read ~index:0 ~length:10))
     (fun () ->
-      Orientation.check past_threshold (proc_to_stat allele_depth)
+      Orientation.check past_threshold proc_to_stat
         proc read read_errors)
 
-  type aapt = Alleles_and_positions.t Orientation.t Sp.t [@@deriving yojson]
-
-  let aapt_to_string =
-    let take_regular r c = Alleles_and_positions.descending_cmp r c <= 0 in
-    function
-    | Sp.Single aap ->
-      sprintf "\n\t%s"
-        (Orientation.to_string ~take_regular
-            Alleles_and_positions.string_of_list aap)
-    | Sp.Paired (ap1, ap2) ->
-      sprintf "\n\t%s\n\t%s"
-        (Orientation.to_string ~take_regular
-            Alleles_and_positions.string_of_list ap1)
-        (Orientation.to_string ~take_regular
-            Alleles_and_positions.string_of_list ap2)
 
   type opt = output_opt
 
@@ -669,7 +729,7 @@ module Forward (* : Worker *) = struct
     ; locus             : Nomenclature.locus
     ; per_allele_lhood  : Lp.t array
     ; zygosity          : Zygosity_pm.t
-    ; mutable per_reads : aapt Output.per_read list
+    ; mutable per_reads : Per_read_result.t Output.per_read list
     ; initial_pt        : Past_threshold.t
     ; proc              : ParPHMM.proc
     ; allele_arr        : (string * MSA.Alteration.t list) array
@@ -680,7 +740,8 @@ module Forward (* : Worker *) = struct
 
   type read_result = stat Orientation.t Sp.t Output.per_read
 
-  let to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
+  let to_proc_and_allele_arr
+    ?allele ?insert_p ?max_number_mismatches ?band ?split
     ~prealigned_transition_model read_length parPHMM_t =
     match allele with
     | None ->
@@ -712,8 +773,8 @@ module Forward (* : Worker *) = struct
         ; max_number_mismatches; past_threshold_filter ; split; _} = conf
     in
     let open ParPHMM in
-    let proc, allele_arr =
-      to_proc_allele_arr ?allele ?insert_p ?max_number_mismatches ?band ?split
+    let proc, allele_arr = to_proc_and_allele_arr
+        ?allele ?insert_p ?max_number_mismatches ?band ?split
         ~prealigned_transition_model read_length parPHMM_t
     in
     let initial_pt = Past_threshold.init past_threshold_filter in
@@ -731,16 +792,14 @@ module Forward (* : Worker *) = struct
     }
 
   let single oc { initial_pt; proc; opt; _} fqi =
-    let forward pt r re = fst (forward oc opt.allele_depth pt proc r re) in
+    let forward pt r re = fst (forward oc pt proc r re) in
     Fastq_items.single oc fqi ~k:(fun name read read_errors ->
       { Output.name; d = Sp.Single (forward initial_pt read read_errors) })
 
-  let take_regular_by_likelihood  r c =
-    higher_value_in_first r.likelihood c.likelihood
+  let take_regular = higher_value_in_first
 
   let paired oc { initial_pt; proc; opt } fq1 fq2 =
-    let forward pt r re = fst (forward oc opt.allele_depth pt proc r re) in
-    let take_regular = take_regular_by_likelihood in
+    let forward pt r re = fst (forward oc pt proc r re) in
     Fastq_items.paired oc fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
       let r1 = forward initial_pt rd1 re1 in
       match Orientation.most_likely_between r1 ~take_regular with
@@ -748,25 +807,32 @@ module Forward (* : Worker *) = struct
           let r2 = forward initial_pt rd2 re2 in
           { Output.name; d = Sp.Paired (r1, r2)}
       | Completed (c, _)  ->
-          let r2 = Orientation.specific proc (proc_to_stat opt.allele_depth)
+          let r2 = Orientation.specific proc proc_to_stat
                     (not c) rd2 re2 in
           { Output.name; d = Sp.Paired (r1, r2)})
 
-  let just_aap =
-    Pass_result.map ~f:(fun rm -> rm.aap)
-
-  let just_aap_or = Orientation.map ~f:just_aap
-
   let cons_per_reads state name stat_or_sp =
-    let d = Sp.map just_aap_or stat_or_sp in
+    let la i = fst state.allele_arr.(i) in
+    let f = Alleles_and_positions.of_mt_or la state.opt.allele_depth in
+    let d = Sp.map f stat_or_sp in
     state.per_reads <- { Output.name; d } :: state.per_reads
 
-  let pm_merge_two_llhd s1 s2 =
-    Pm.merge ~eq:Lp.close_enough
-      s1.likelihood s2.likelihood Lp.( * )
+  let merge_paired_pms s1 s2 =
+    let m (l1,p1) (l2,p2) =
+      let p =
+        if p1 <= p2 then
+          Sp.Paired (p1, p2)
+        else
+          Sp.Paired (p2, p1)
+      in
+      Lp.(l1 * l2), p
+    in
+    Pm.merge ~eq:Lpr.equal s1 s2 m
+
+  let to_single_pms s =
+    Pm.map s (fun _ _ -> false) ~f:(fun (l,p) -> l, Sp.Single p)
 
   let merge oc state rr =
-    let take_regular = take_regular_by_likelihood in
     let pr s = Orientation.most_likely_between s ~take_regular in
     cons_per_reads state rr.Output.name rr.Output.d;
     match rr.Output.d with
@@ -776,8 +842,7 @@ module Forward (* : Worker *) = struct
             fprintf oc "Both orientations filtered %s: %s\n" rr.Output.name m
         | Completed (_c, s) ->
             Likelihoods_and_zygosity.add_ll_and_lz
-              state.per_allele_lhood state.zygosity s.likelihood
-              true
+              state.per_allele_lhood state.zygosity (to_single_pms s)
         end
     | Sp.Paired (s1, s2) ->
         begin match pr s1 with
@@ -788,10 +853,9 @@ module Forward (* : Worker *) = struct
             | Filtered m    ->
                 fprintf oc "Both orientations of second read filtered %s: %s\n" rr.Output.name m
             | Completed (_, sf2) ->
-                let cml = pm_merge_two_llhd sf1 sf2 in
+                let cml = merge_paired_pms sf1 sf2 in
                 Likelihoods_and_zygosity.add_ll_and_lz
                   state.per_allele_lhood state.zygosity cml
-                  false
             end
         end
 
@@ -799,8 +863,8 @@ module Forward (* : Worker *) = struct
 
   let output state oc =
     let ot =
-      let zbest   = Zygosity_pm.best (Nomenclature.show_locus state.locus) state.opt.depth.Output.num_zygosities state.zygosity in
-      let pl      = Output.create_pl state.imgt_release state.locus state.allele_arr
+      let zbest   = Zygosity_pm.best state.opt.depth.Output.num_zygosities state.zygosity in
+      let pl      = Output.create_per_locus state.imgt_release state.locus state.allele_arr
                       state.per_allele_lhood zbest in
       let header  =
         { Output.prohlatype_version = Version.version
@@ -810,9 +874,9 @@ module Forward (* : Worker *) = struct
     let of_ =
       match state.opt.output_format with
       | `TabSeparated ->
-          Output.TabSeparated aapt_to_string
+          Output.TabSeparated Per_read_result.to_string
       | `Json ->
-          Output.Json aapt_to_yojson
+          Output.Json Per_read_result.to_yojson
     in
     Output.f oc ot state.opt.depth of_
 
@@ -887,7 +951,7 @@ module Viterbi :
 
   type opt = unit
 
-  let init _oc conf ~read_length parPHMM_t =
+  let init _oc conf ~read_length (parPHMM_t : ParPHMM.t) =
     let { prealigned_transition_model; allele; insert_p; _ } = conf in
     let open ParPHMM in
     (* Relying on reference being first in the specified ParPHMM.t allele list. *)
@@ -1049,14 +1113,14 @@ module Multiple_loci (* :
           sep (sr_to_string first)
           sep (pass_result_to_short_string sep sr_to_string second)
 
-  let take_regular = Forward.take_regular_by_likelihood
+  let take_regular = Forward.take_regular
 
   let most_likely_orientation or_ =
     Orientation.most_likely_between ~take_regular or_
 
   (* true if s1 is better than s2 *)
   let better_soi s1 s2 =
-    let l s = max_pm s.Forward.likelihood in
+    let l s = max_pm s in
     match s1, s2 with
     | PairedDependent p1, PairedDependent p2  ->
         begin
@@ -1154,24 +1218,21 @@ module Multiple_loci (* :
 
   type read_result = Forward.stat pp Output.per_read
 
-  type chosen_locus =
-    { locus       : Nomenclature.locus
-    ; likelihood  : Lp.t mt
-    }
-
-  (* We'll determine the locus, once we (merge, multiply by the likelihood)
-     during the merge step. *)
-  type middle_read_info =
-    { ml    : chosen_locus                          (* most likely locus. *)
-    ; aaps  : Alleles_and_positions.t pp
+  (* The information about each read that we store during the processing of all
+   * the read data.  *)
+  type initial_read_info =
+    { locus         : Nomenclature.locus
+    ; llhd_and_pos  : (Lp.t * int Sp.t) mt
+    ; aaps          : Alleles_and_positions.t pp
     }
 
   (* What we'll report. Once we know the final, most likely (P > ~0.0) set of
-     alleles. We'll use the orignal likelihoods to guess which chromosome this
-     read comes from. *)
+   * alleles. We'll use the orignal likelihoods to guess which chromosome,
+   * specifically which of two alleles, this read comes from.
+   *)
   type final_read_info =
-                                             (* most likely locus and allele. *)
     { most_likely   : (Nomenclature.locus * string) option
+    (* most likely locus and allele. *)
     ; aaps          : Alleles_and_positions.t pp
     }
     [@@deriving yojson]
@@ -1195,7 +1256,7 @@ module Multiple_loci (* :
   type state =
     { commandline       : string
     ; per_loci          : per_locus list
-    ; mutable per_reads : middle_read_info Output.per_read list
+    ; mutable per_reads : initial_read_info Output.per_read list
     ; single_read       : bytes -> float array -> Forward.stat pp
     ; ordinary_paired   : string -> bytes -> float array
                                  -> bytes -> float array
@@ -1241,24 +1302,33 @@ module Multiple_loci (* :
       in
       loci, sp
 
-  let map_soi_to_aap lst =
+  let allele_arr_from_pl per_loci loci =
+    List.find_map per_loci (function
+      | {pl_locus; allele_arr} when pl_locus = loci -> Some allele_arr
+      | _                                           -> None)
+    |> Option.value_exn
+          ~msg:(sprintf "Missig %s loci!" (Nomenclature.show_locus loci))
+
+  let map_soi_to_aap per_loci depth lst =
     List.map lst ~f:(fun (loci, soi) ->
+      let alleles = allele_arr_from_pl per_loci loci in
+      let la i = fst alleles.(i) in
+      let of_mt = Alleles_and_positions.of_mt la depth in
+      let of_mt_pr = Alleles_and_positions.of_mt_pr la depth in
+      let of_mt_or = Alleles_and_positions.of_mt_or la depth in
       let n =
         match soi with
-        | PairedDependent { first_o; first; second } ->
+        | PairedDependent { first_o; first; second }  ->
             PairedDependent
-              { first_o
-              ; first = first.Forward.aap
-              ; second = Pass_result.map ~f:(fun s -> s.Forward.aap) second
-              }
-        | SingleRead oi                             ->
-           SingleRead (Forward.just_aap_or oi)
+              { first_o; first = of_mt first; second = of_mt_pr second }
+        | SingleRead oi                               ->
+           SingleRead (of_mt_or oi)
       in
       (loci, n))
 
   (* true if m1 is better than m2, ie higher likelihood. *)
   let better_mpr m1 m2 =
-    let l s = max_pm s.Forward.likelihood in
+    let l s = max_pm s in
     let ml = most_likely_orientation in
     match m1, m2 with
     | FirstFiltered ff1, FirstFiltered ff2 ->
@@ -1309,55 +1379,40 @@ module Multiple_loci (* :
         in
         loci, sp
 
-  let map_pr_to_aap lst =
-    List.map_snd lst ~f:(function
+  let map_pr_to_aap per_loci depth lst =
+    List.map lst ~f:(fun (loci, pr) ->
+      let alleles = allele_arr_from_pl per_loci loci in
+      let la i = fst alleles.(i) in
+      let of_mt = Alleles_and_positions.of_mt la depth in
+      let of_mt_pr = Alleles_and_positions.of_mt_pr la depth in
+      let of_mt_or = Alleles_and_positions.of_mt_or la depth in
+      let pr =
+        match pr with
         | FirstFiltered { ff_first; ff_second } ->
-            FirstFiltered { ff_first; ff_second = Forward.just_aap_or ff_second }
+            FirstFiltered { ff_first; ff_second = of_mt_or ff_second }
         | FirstOrientedSecond { first_o; first; second } ->
             FirstOrientedSecond
-              { first_o
-              ; first   = first.Forward.aap
-              ; second  = Pass_result.map ~f:(fun s -> s.Forward.aap) second
-              })
-
-  (*   Easier to reason about this as a distance, hence >= 0
-  let abs_logp_one_over_hundred = abs_float (log10 0.01)
-
-  type incremental_classification =
-    | LessLikely
-    | Within
-    | MoreLikely
-
-  let classify_likelihood ?(log_gap=abs_logp_one_over_hundred) ~best newl =
-    if newl <= best then begin
-      if (best -. newl) < log_gap then
-        Within
-      else
-        LessLikely
-    end else begin (* newl > best *)
-      if (newl -. best) < log_gap then
-        Within
-      else
-        MoreLikely
-    end *)
+              { first_o; first = of_mt first; second = of_mt_pr second}
+      in
+      loci, pr)
 
   let init oc conf ~read_length parPHMM_t_lst =
     let { prealigned_transition_model; insert_p; band; max_number_mismatches
         ; split; output_opt; _ } = conf in
     let paa =
       List.map parPHMM_t_lst ~f:(fun parPHMM_t ->
-        let proc, allele_arr =
-          Forward.to_proc_allele_arr ?insert_p ?max_number_mismatches ?band
-            ?split ~prealigned_transition_model read_length parPHMM_t
+        let proc, allele_arr = Forward.to_proc_and_allele_arr
+            ?insert_p ?max_number_mismatches ?band ?split
+            ~prealigned_transition_model read_length parPHMM_t
         in
         let n = Array.length allele_arr in
         let iml = parPHMM_t.ParPHMM.release,parPHMM_t.ParPHMM.locus in
         iml, proc, allele_arr, n)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
-    let forward = Forward.forward oc output_opt.allele_depth in
+    let forward = Forward.forward oc in
     let specific_orientation p rc r re =
-      specific_orientation p (Forward.proc_to_stat output_opt.allele_depth) rc r re
+      specific_orientation p Forward.proc_to_stat rc r re
     in
     let single_read read read_errors =
       List.fold_left paa ~init:(initial_pt, [])
@@ -1458,74 +1513,73 @@ module Multiple_loci (* :
   let cons_per_reads state pr =
     state.per_reads <- pr :: state.per_reads
 
-  let assign_to_per_locus { likelihood; zygosity; _ } sp =
-    let l, single_read  =
-      match sp with
-      | Sp.Single stat     ->
-          stat.Forward.likelihood, true
-      | Sp.Paired (s1, s2) ->
-          (* Since a paired read is a physical thing there should only
-             be 1 likelihood for each allele.*)
-          Forward.pm_merge_two_llhd s1 s2, false
-    in
-    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity l single_read
+  let assign_to_per_locus { likelihood; zygosity; _ } llhd_and_pos =
+    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity llhd_and_pos
+
+  let assign_to_best state best_locus llhd_and_pos =
+    List.iter state.per_loci ~f:(fun pl ->
+      if best_locus = pl.pl_locus then
+        assign_to_per_locus pl llhd_and_pos)
 
   let merge _oc state pr =
-    let assign_to_best best_locus best_stat =
-      List.iter state.per_loci ~f:(fun pl ->
-        if best_locus = pl.pl_locus then
-          assign_to_per_locus pl best_stat)
+    let locus, best_stat =
+      match pr.Output.d with
+      | Single_or_incremental l -> reduce_soi l
+      | MPaired l               -> reduce_mpr l
     in
-    let (locus, best_stat), aaps =
+    let llhd_and_pos =
+      match best_stat with
+      | Sp.Single s        -> Forward.to_single_pms s
+      (* Since a paired read is a physical thing there should only be 1
+       * likelihood for each allele, but we'll separate the positions. *)
+      | Sp.Paired (s1, s2) -> Forward.merge_paired_pms s1 s2
+    in
+    assign_to_best state locus llhd_and_pos;   (* modify state by side effect *)
+    let aaps =
       match pr.Output.d with
       | Single_or_incremental l ->
-          reduce_soi l, Single_or_incremental (map_soi_to_aap l)
+          let nl = map_soi_to_aap state.per_loci state.opt.allele_depth l in
+          Single_or_incremental nl
       | MPaired l               ->
-          reduce_mpr l, MPaired (map_pr_to_aap l)
+          let nl = map_pr_to_aap state.per_loci state.opt.allele_depth l in
+          MPaired nl
     in
-    let ml =
-      assign_to_best locus best_stat;       (* modify state by side effect *)
-      { locus
-      ; likelihood =
-          match best_stat with
-          | Sp.Single s        -> s.Forward.likelihood
-          | Sp.Paired (s1, s2) -> Forward.pm_merge_two_llhd s1 s2
-      }
-    in
-    cons_per_reads state { pr with Output.d = { ml; aaps}}
+    let iri = { locus; llhd_and_pos; aaps } in
+    cons_per_reads state { pr with Output.d = iri }
 
-  let per_locus_to_output_pl pl zb =
-    Output.create_pl pl.imgt_release pl.pl_locus pl.allele_arr pl.likelihood zb
+  let per_locus_to_output_per_locus pl zb =
+    Output.create_per_locus pl.imgt_release pl.pl_locus
+      pl.allele_arr pl.likelihood zb
 
   let finalize { commandline; opt; per_reads; per_loci; _} =
-    let f_pl_lst, best_zygosities_by_loci_assoc =
+    let f_pl_lst, zygosities_by_locus_assoc =
       List.map per_loci ~f:(fun pl ->
-        let zb = Zygosity_pm.best (Nomenclature.show_locus pl.pl_locus) opt.depth.Output.num_zygosities pl.zygosity in
-        let opl = per_locus_to_output_pl pl zb in
+        let zb = Zygosity_pm.best opt.depth.Output.num_zygosities pl.zygosity in
+        let opl = per_locus_to_output_per_locus pl zb in
         opl, (pl.pl_locus, (zb, pl.allele_arr)))
       |> List.split
     in
-    let la aa i = fst (aa.(i)) in
-    let assign_loci { locus; likelihood } =
-      Option.bind (List.Assoc.get locus best_zygosities_by_loci_assoc)
-        ~f:(fun (zlst, aa) ->
-              let lopt =
-                List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
-                  List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
-                    let li = Pm.get likelihood i in
-                    let lj = Pm.get likelihood j in
-                    let l, ioj = if li >= lj then li, i else lj, j in
-                    match s with
-                    | None         -> Some (l, (la aa ioj))
-                    | Some (bl, _) -> if bl >= l then s else Some (l, la aa ioj)))
+    let la allele_arr i = fst (allele_arr.(i)) in
+    let assign { locus; llhd_and_pos; _ } =
+      let open Option in
+      List.Assoc.get locus zygosities_by_locus_assoc >>= (fun (zlst, aa) ->
+        let lopt =
+          List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
+            List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
+              let li, _pi = Pm.get llhd_and_pos i in
+              let lj, _pj = Pm.get llhd_and_pos j in
+              let l, k = if Lp.(lj <= li) then li, i else lj, j in
+              match s with
+              | None         -> Some (l, (la aa k))
+              | Some (bl, _) -> if Lp.(l <= bl) then s else Some (l, la aa k)))
               in
               Option.map lopt ~f:(fun (_likelihood, allele) ->
                   locus, allele))
     in
-    let f_per_reads = List.map per_reads ~f:(fun pr ->
-      let { ml; aaps } = pr.Output.d in
-      let most_likely = assign_loci ml  in
-      { pr with Output.d = { most_likely; aaps }})
+    let f_per_reads =
+      List.map per_reads ~f:(fun pr ->
+        let most_likely = assign pr.Output.d in
+        { pr with Output.d = { most_likely; aaps = pr.Output.d.aaps }})
     in
     { f_commandline = commandline
     ; f_opt         = opt
