@@ -1515,7 +1515,7 @@ module Multiple_loci (* :
 
   let assign_to_per_locus oc name { pl_locus; likelihood; zygosity; _ } llhd_and_pos =
     let msg =
-      sprintf "For %s merging into %s zygosity length: %d read result: %d\n"
+      sprintf "For %s merging into %s zygosity length: %d read result: %d"
         name
         (Nomenclature.show_locus pl_locus)
         (Pm.length zygosity.Zygosity_pm.l)
