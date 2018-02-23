@@ -532,8 +532,8 @@ module Output = struct
       { allele1; allele2; z_llhd; prob; read1_emissions; read2_emissions } =
       fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\t%s\t%s\n"
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
-        (Emissions.number_of_reads read1_emissions) 
-        (Emissions.number_of_reads read2_emissions) 
+        (Emissions.number_of_reads read1_emissions)
+        (Emissions.number_of_reads read2_emissions)
         (Emissions.show read1_emissions)
         (Emissions.show read2_emissions)
     in
@@ -1513,15 +1513,23 @@ module Multiple_loci (* :
   let cons_per_reads state pr =
     state.per_reads <- pr :: state.per_reads
 
-  let assign_to_per_locus { likelihood; zygosity; _ } llhd_and_pos =
-    Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity llhd_and_pos
+  let assign_to_per_locus oc name { pl_locus; likelihood; zygosity; _ } llhd_and_pos =
+    let msg =
+      sprintf "For %s merging into %s zygosity length: %d read result: %d\n"
+        name
+        (Nomenclature.show_locus pl_locus)
+        (Pm.length zygosity.Zygosity_pm.l)
+        (Pm.length llhd_and_pos)
+    in
+    time oc msg (fun () ->
+      Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity llhd_and_pos)
 
-  let assign_to_best state best_locus llhd_and_pos =
+  let assign_to_best oc name state best_locus llhd_and_pos =
     List.iter state.per_loci ~f:(fun pl ->
       if best_locus = pl.pl_locus then
-        assign_to_per_locus pl llhd_and_pos)
+        assign_to_per_locus oc name pl llhd_and_pos)
 
-  let merge _oc state pr =
+  let merge oc state pr =
     let locus, best_stat =
       match pr.Output.d with
       | Single_or_incremental l -> reduce_soi l
@@ -1534,7 +1542,8 @@ module Multiple_loci (* :
        * likelihood for each allele, but we'll separate the positions. *)
       | Sp.Paired (s1, s2) -> Forward.merge_paired_pms s1 s2
     in
-    assign_to_best state locus llhd_and_pos;   (* modify state by side effect *)
+    (* modify state by side effect *)
+    assign_to_best oc pr.Output.name state locus llhd_and_pos;
     let aaps =
       match pr.Output.d with
       | Single_or_incremental l ->
