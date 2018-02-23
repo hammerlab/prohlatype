@@ -50,37 +50,53 @@ module Array = struct
 
   (* Public Api *)
   type 'a t =
-    { n : int
+    { full : bool
+    ; n : int
     ; a : 'a array
     }
 
   let size t =
     Array.length t.a
 
-  let make max_j z =
+  let make full max_j z =
     let n = max_j in
-    let s = number_m1 max_j in
-    { n ; a = Array.make s z }
+    let s = if full then number max_j else number_m1 max_j in
+    { full; n ; a = Array.make s z }
 
   let get t i j =
-    assert (i < j);
-    Array.get t.a (Indices.upper t.n i j)
-
-  (*let set t i j v =
-    assert (i < j);
-    Array.set t.a (Indices.upper t.n i j) v*)
+    if t.full then begin
+      assert (i <= j);
+      Array.get t.a (Indices.full_upper t.n i j)
+    end else begin
+      assert (i < j);
+      Array.get t.a (Indices.upper t.n i j)
+    end
 
   let update t i j ~f =
-    assert (i < j);
-    let ki = Indices.upper t.n i j in
-    Array.set t.a ki (f (Array.get t.a ki))
+    if t.full then begin
+      assert (i <= j);
+      let ki = Indices.full_upper t.n i j in
+      Array.set t.a ki (f (Array.get t.a ki))
+    end else begin
+      assert (i < j);
+      let ki = Indices.upper t.n i j in
+      Array.set t.a ki (f (Array.get t.a ki))
+    end
 
   let foldi_left t ~init ~f =
-    Array.fold_left t.a ~init:(0, init)
-      ~f:(fun (k, acc) v ->
-          let i, j = Indices.upper_inverse t.n k in
-          (k + 1, f acc i j v))
-    |> snd
+    if t.full then begin
+      Array.fold_left t.a ~init:(0, init)
+        ~f:(fun (k, acc) v ->
+            let i, j = Indices.full_upper_inverse t.n k in
+            (k + 1, f acc i j v))
+      |> snd
+    end else begin
+      Array.fold_left t.a ~init:(0, init)
+        ~f:(fun (k, acc) v ->
+            let i, j = Indices.upper_inverse t.n k in
+            (k + 1, f acc i j v))
+      |> snd
+    end
 
   let fold_left t ~init ~f =
     Array.fold_left t.a ~init ~f
