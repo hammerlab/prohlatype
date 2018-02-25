@@ -98,6 +98,18 @@ module Array = struct
       |> snd
     end
 
+  let foldk_left t ~init ~f =
+    if t.full then begin
+      Array.fold_left t.a ~init:(0, init)
+        ~f:(fun (k, acc) v -> (k + 1, f acc k v))
+      |> snd
+    end else begin
+      Array.fold_left t.a ~init:(0, init)
+        ~f:(fun (k, acc) v -> (k + 1, f acc k v))
+      |> snd
+    end
+
+
   let fold_left t ~init ~f =
     Array.fold_left t.a ~init ~f
 
