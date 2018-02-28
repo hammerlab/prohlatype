@@ -210,10 +210,24 @@ module Per_read_result = struct
 
 end (* Per_read_result *)
 
-module Emissions = struct
+module Emissions :
+  sig
+    type t
+    val equal : t -> t -> bool
+    val show : t -> string
+    val pp : Format.formatter -> t -> unit
+    val to_yojson : t -> Yojson.Safe.json
+    val of_yojson : Yojson.Safe.json -> (t, string) result
+    val empty : t
+    val insert_one : t -> int Sp.t -> t
+    val insert_half : t -> int Sp.t -> t
+    val number_of_reads : t -> float
+  end = struct
 
   type t = (int * float) list
-  [@@deriving eq, show { with_path = false },yojson ]
+  [@@deriving eq, show { with_path = false }, yojson ]
+
+  let empty = []
 
   let insert pos weight emissions =
     let rec loop = function
@@ -231,6 +245,12 @@ module Emissions = struct
   let insert_pair weight emissions = function
     | Sp.Single pos      -> insert pos weight emissions
     | Sp.Paired (p1, p2) -> insert p2 weight (insert p1 weight emissions)
+
+  let insert_one emissions p =
+    insert_pair 1.0 emissions p
+
+  let insert_half emissions p =
+    insert_pair 0.5 emissions p
 
   let number_of_reads =
     List.fold_left ~init:0. ~f:(fun s (_, w) -> s +. w)
@@ -263,7 +283,7 @@ module Zygosity_array = struct
   type t = d Triangular.Array.t
 
   let init number_alleles =
-    let z = { likelihood = Lp.one; first = []; second = [] } in
+    let z = { likelihood = Lp.one; first = Emissions.empty; second = Emissions.empty } in
     Triangular.Array.make true number_alleles z
 
   type assignment =
@@ -284,16 +304,16 @@ module Zygosity_array = struct
   let assignment_to_datum a d = match a with
     | First (l, p)      ->
         { d with likelihood = Lp.(d.likelihood * l)
-               ; first = Emissions.insert_pair 1.0 d.first p
+               ; first = Emissions.insert_one d.first p
         }
     | Second (l, p)     ->
         { d with likelihood = Lp.(d.likelihood * l)
-               ; second = Emissions.insert_pair 1.0 d.second p
+               ; second = Emissions.insert_one d.second p
         }
     | Both (l, p1, p2)  ->
         { likelihood = Lp.(d.likelihood * l)
-        ; first      = Emissions.insert_pair 0.5 d.first p1
-        ; second     = Emissions.insert_pair 0.5 d.second p2
+        ; first      = Emissions.insert_half d.first p1
+        ; second     = Emissions.insert_half d.second p2
         }
 
   let update t ~allele1 ~lp1 ~allele2 ~lp2 =
@@ -419,16 +439,16 @@ module Zygosity_pm = struct
   let merge d = function
     | First (l, p)      ->
         { d with likelihood = Lp.(d.likelihood * l)
-               ; first = Emissions.insert_pair 1.0 d.first p
+               ; first = Emissions.insert_one d.first p
         }
     | Second (l, p)     ->
         { d with likelihood = Lp.(d.likelihood * l)
-               ; second = Emissions.insert_pair 1.0 d.second p
+               ; second = Emissions.insert_one d.second p
         }
     | Both (l, p1, p2)  ->
         { likelihood = Lp.(d.likelihood * l)
-        ; first      = Emissions.insert_pair 0.5 d.first p1
-        ; second     = Emissions.insert_pair 0.5 d.second p2
+        ; first      = Emissions.insert_half d.first p1
+        ; second     = Emissions.insert_half d.second p2
         }
 
   type t =
@@ -438,7 +458,7 @@ module Zygosity_pm = struct
     }
 
   let init number_alleles =
-    let d = { likelihood = Lp.one; first = []; second = [] } in
+    let d = { likelihood = Lp.one; first = Emissions.empty; second = Emissions.empty } in
     let r = Pm.init_all_a ~size:number_alleles d in
     let l = Pm.cpair ~f:(fun d _ -> d) (fun _ _ -> true) r in
     { n = number_alleles; l }
@@ -529,7 +549,7 @@ module Zygosity_mixed = struct
 
   let init number_alleles =
     let size = Triangular.number number_alleles in
-    let et = Pm.init_all_a ~size ([],[]) in
+    let et = Pm.init_all_a ~size (Emissions.empty, Emissions.empty) in
     let ta = Triangular.Array.make true number_alleles Lp.one in
     { ta; et}
 
@@ -555,10 +575,10 @@ module Zygosity_mixed = struct
       Both (p1, p2)
 
   let merge (e1, e2) = function
-    | First p       -> (Emissions.insert_pair 1.0 e1 p, e2)
-    | Second p      -> (e1, Emissions.insert_pair 1.0 e2 p)
-    | Both (p1, p2) -> (Emissions.insert_pair 0.5 e1 p1
-                       , Emissions.insert_pair 0.5 e2 p2)
+    | First p       -> (Emissions.insert_one e1 p, e2)
+    | Second p      -> (e1, Emissions.insert_one e2 p)
+    | Both (p1, p2) -> (Emissions.insert_half e1 p1
+                       , Emissions.insert_half e2 p2)
 
   let update t llhd_and_pos =
     Pm.iter_set llhd_and_pos ~f:(fun allele1 (l1, _p1) ->
