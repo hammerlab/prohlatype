@@ -216,6 +216,7 @@ module Emissions :
     val equal : t -> t -> bool
     val show : t -> string
     val pp : Format.formatter -> t -> unit
+    val to_string : t -> string
     val to_yojson : t -> Yojson.Safe.json
     val of_yojson : Yojson.Safe.json -> (t, string) result
     val empty : t
@@ -224,8 +225,13 @@ module Emissions :
     val number_of_reads : t -> float
   end = struct
 
-  type t = (int * float) list
+  type t = (int * int) list
   [@@deriving eq, show { with_path = false }, yojson ]
+
+  let to_string t =
+    string_of_list t ~show_empty:false ~sep:";"
+      ~f:(fun (j,w) -> sprintf "%d,%f" j (float w /. 2.0))
+    |> sprintf "[%s]"
 
   let empty = []
 
@@ -234,7 +240,7 @@ module Emissions :
       | []  -> [pos, weight]
       | (p, c) :: tl ->
           if pos = p then
-            (p, c +. weight) :: tl
+            (p, c + weight) :: tl
           else if pos < p then
             (pos, weight) :: (p, c) :: tl
           else (* pos > p *)
@@ -247,13 +253,14 @@ module Emissions :
     | Sp.Paired (p1, p2) -> insert p2 weight (insert p1 weight emissions)
 
   let insert_one emissions p =
-    insert_pair 1.0 emissions p
+    insert_pair 2 emissions p
 
   let insert_half emissions p =
-    insert_pair 0.5 emissions p
+    insert_pair 1 emissions p
 
-  let number_of_reads =
-    List.fold_left ~init:0. ~f:(fun s (_, w) -> s +. w)
+  let number_of_reads t =
+    let twice = List.fold_left t ~init:0 ~f:(fun s (_, w) -> s + w) in
+    (float twice) /. 2.0
 
 end (* Emissions *)
 
@@ -865,8 +872,8 @@ module Output = struct
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
         (Emissions.number_of_reads read1_emissions)
         (Emissions.number_of_reads read2_emissions)
-        (Emissions.show read1_emissions)
-        (Emissions.show read2_emissions)
+        (Emissions.to_string read1_emissions)
+        (Emissions.to_string read2_emissions)
     in
     fprintf oc "Prohlatype version: %s\n" header.prohlatype_version;
     fprintf oc "Command Line: %s\n" header.commandline;
