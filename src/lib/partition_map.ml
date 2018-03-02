@@ -406,6 +406,11 @@ module Set = struct
 
   type t = Interval.t list
 
+  let empty = []
+  let is_empty = function
+    | [] -> true
+    | _  -> false
+
   let of_interval i =                 (* This isn't the cleanest abstraction ... *)
     if Interval.is_none i then
       []

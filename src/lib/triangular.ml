@@ -83,6 +83,12 @@ module Array = struct
       Array.set t.a ki (f (Array.get t.a ki))
     end
 
+  let update_k t k ~f =
+    if t.full then
+      Array.set t.a k (f (Array.get t.a k))
+    else
+      Array.set t.a k (f (Array.get t.a k))
+
   let foldi_left t ~init ~f =
     if t.full then begin
       Array.fold_left t.a ~init:(0, init)
@@ -108,7 +114,6 @@ module Array = struct
         ~f:(fun (k, acc) v -> (k + 1, f acc k v))
       |> snd
     end
-
 
   let fold_left t ~init ~f =
     Array.fold_left t.a ~init ~f

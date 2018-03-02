@@ -56,8 +56,19 @@ module Set : sig
 
   type t = Interval.t list
 
+  val empty : t
+  val is_empty : t -> bool
+
   (* Number of elements in the set. *)
   val size : t -> int
+
+  val inside : int -> t -> bool
+
+  (* [all_intersections t1 t2] returns the intersection, remaining in t1 and
+     remaining t2. *)
+  val all_intersections : t -> t -> t * t * t
+
+  val iter : t -> f:(int -> unit) -> unit
 
 end (* Sig *)
 

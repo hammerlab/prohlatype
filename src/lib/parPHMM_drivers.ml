@@ -210,60 +210,6 @@ module Per_read_result = struct
 
 end (* Per_read_result *)
 
-module Emissions :
-  sig
-    type t
-    val equal : t -> t -> bool
-    val show : t -> string
-    val pp : Format.formatter -> t -> unit
-    val to_string : t -> string
-    val to_yojson : t -> Yojson.Safe.json
-    val of_yojson : Yojson.Safe.json -> (t, string) result
-    val empty : t
-    val insert_one : t -> int Sp.t -> t
-    val insert_half : t -> int Sp.t -> t
-    val number_of_reads : t -> float
-  end = struct
-
-  type t = (int * int) list
-  [@@deriving eq, show { with_path = false }, yojson ]
-
-  let to_string t =
-    string_of_list t ~show_empty:false ~sep:";"
-      ~f:(fun (j,w) -> sprintf "%d,%f" j (float w /. 2.0))
-    |> sprintf "[%s]"
-
-  let empty = []
-
-  let insert pos weight emissions =
-    let rec loop = function
-      | []  -> [pos, weight]
-      | (p, c) :: tl ->
-          if pos = p then
-            (p, c + weight) :: tl
-          else if pos < p then
-            (pos, weight) :: (p, c) :: tl
-          else (* pos > p *)
-            (p, c) :: loop tl
-    in
-    loop emissions
-
-  let insert_pair weight emissions = function
-    | Sp.Single pos      -> insert pos weight emissions
-    | Sp.Paired (p1, p2) -> insert p2 weight (insert p1 weight emissions)
-
-  let insert_one emissions p =
-    insert_pair 2 emissions p
-
-  let insert_half emissions p =
-    insert_pair 1 emissions p
-
-  let number_of_reads t =
-    let twice = List.fold_left t ~init:0 ~f:(fun s (_, w) -> s + w) in
-    (float twice) /. 2.0
-
-end (* Emissions *)
-
 module Zygosity_best = struct
 
   type t =
@@ -275,335 +221,116 @@ module Zygosity_best = struct
 
 end (* Zygosity_best *)
 
-(* Storing the log likelihoods of heterozygous pairs.
-   Homozygous is equivalent to the individual pairs. *)
-module Zygosity_array = struct
-
-  open ParPHMM
-
-  (* Top triangle of pair wise comparison *)
-  type d =
-    { likelihood  : Lp.t          (* of a pair, the max of individual values. *)
-    ; first       : Emissions.t      (* Alignment is better for first allele. *)
-    ; second      : Emissions.t      (*     "     "    "    "  second allele. *)
-    } [@@deriving show { with_path = false} ]
-  type t = d Triangular.Array.t
-
-  let init number_alleles =
-    let z = { likelihood = Lp.one; first = Emissions.empty; second = Emissions.empty } in
-    Triangular.Array.make true number_alleles z
-
-  type assignment =
-    | First of (Lp.t * int Sp.t)
-    | Second of (Lp.t * int Sp.t)
-    | Both of (Lp.t * int Sp.t * int Sp.t)
-    (* Same likelihood but different positions? Highly unlikely, but maybe
-     * possible if there is a gap at the end of * one of the two alleles? *)
-
-  let to_assignment (l1, p1) (l2, p2) =
-    if Lp.(l1 < l2) then
-      Second (l2, p2)
-    else if Lp.(l2 < l1) then
-      First (l1, p1)
-    else (* l2 = l1 *)
-      Both (l1, p1, p2)
-
-  let assignment_to_datum a d = match a with
-    | First (l, p)      ->
-        { d with likelihood = Lp.(d.likelihood * l)
-               ; first = Emissions.insert_one d.first p
-        }
-    | Second (l, p)     ->
-        { d with likelihood = Lp.(d.likelihood * l)
-               ; second = Emissions.insert_one d.second p
-        }
-    | Both (l, p1, p2)  ->
-        { likelihood = Lp.(d.likelihood * l)
-        ; first      = Emissions.insert_half d.first p1
-        ; second     = Emissions.insert_half d.second p2
-        }
-
-  let update t ~allele1 ~lp1 ~allele2 ~lp2 =
-    (*assert (allele1 <= allele2); Checked in TA code. *)
-    let assignment = to_assignment lp1 lp2 in
-    Triangular.Array.update t allele1 allele2
-      ~f:(assignment_to_datum assignment)
-
-  (* log likelihood, probability, index 1st, index 2nd *)
-  let best size t =
-    let desired_size, nz =
-      let open Zygosity_best in
-      match size with
-      | NonZero v -> Triangular.Array.size t, Some v
-      | Spec n    -> max 1 n, None
-      | NoSpec    -> Triangular.Array.size t, None
-    in
-(* Create a sorted, grouped, and constrained, list of the paired likelihoods.
-  The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
-  point we don't care about the tail, only about where there is actual
-  probability mass. But in-order to properly normalize we need the max
-  likelihood of all values (for the log-sum-exp trick) and a normalizing
-  constant.
-  [sorted_insert] keeps an ascending list list of the [desired_size] highest
-  likelihoods (all indices of the inner list have the same likelihood: grouped),
-  such that only these values are afterwards exported.
-  *)
-    let sorted_insert l i j current_size lst =
-      let insert lst =
-        let rec loop acc lst =
-          match lst with
-          | []     -> List.rev acc @ [l, 1, [i,j]]
-          | h :: t ->
-              let hl, hn, hv = h in
-              if Lp.(hl < l) then
-                loop (h :: acc) t
-              else if Lp.(close_enough l hl) then
-                List.rev acc @ ((hl, hn + 1, (i,j) :: hv) :: t)
-              else (* l < hl *)
-                List.rev acc @ ((l, 1, [i,j]) :: lst)
-        in
-        loop [] lst
-      in
-      match lst with
-      | []
-      | _ :: [] -> current_size + 1, insert lst
-      | h :: t  ->
-        let hl, hn, hv = h in
-        if Lp.(hl < l) then begin
-           if current_size - hn < desired_size then
-            current_size + 1, h :: insert t
-          else
-            current_size + 1 - hn, insert t
-        end else if Lp.(close_enough l hl) then
-          current_size + 1, ((hl, hn + 1, (i,j) :: hv) :: t)
-        else (* l < hl *) begin
-          if current_size >= desired_size then
-            current_size, lst
-          else
-            current_size + 1, insert lst
-        end
-    in
-    let _cs, res =
-      Triangular.Array.foldi_left t ~init:(0, [])
-        ~f:(fun (cs, acc) i j d ->
-              sorted_insert d.likelihood i j cs acc)
-    in
-    let most_likely = List.rev_map ~f:(fun (l, _n, ijlist) -> (l, ijlist)) res in
-    let maxl, _ = List.hd_exn most_likely in
-    (* If we've never added any values then just return empty list. *)
-    if maxl = Lp.one then
-      []
-    else
-      let prob = Lp.probability ~maxl in
-      (* Compute the normalizing constant. *)
-      let ns =
-        let f s d = s +. prob d.likelihood in
-        Triangular.Array.fold_left t ~init:0. ~f
-      in
-      let lookup_ems (i, j) =
-        let d = Triangular.Array.get t i j in
-        i, j, d.first, d.second
-      in
-      match nz with
-      | Some lb ->
-        List.filter_map most_likely ~f:(fun (l, ij) ->
-          let p = prob l /. ns in
-          if p > lb then     (* This isn't necessarily the right notion of zero. *)
-            let ijlst = List.map ij ~f:lookup_ems in
-            Some (l, p, ijlst)
-          else
-            None)
-      | None ->
-          List.map most_likely ~f:(fun (lp, ij) ->
-            let ijlst = List.map ij ~f:lookup_ems in
-            (lp, prob lp /. ns, ijlst))
-
-end (* Zygosity_array *)
-
-module Zygosity_pm = struct
-
-  open ParPHMM
-
-  type d =
-    { likelihood  : Lp.t          (* of a pair, the max of individual values. *)
-    ; first       : Emissions.t      (* Alignment is better for first allele. *)
-    ; second      : Emissions.t      (*     "     "    "    "  second allele. *)
-    } [@@deriving show { with_path = false} ]
-
-  type assignment =
-    | First of (Lp.t * int Sp.t)
-    | Second of (Lp.t * int Sp.t)
-    | Both of (Lp.t * int Sp.t * int Sp.t)
-    (* Same likelihood but different positions? Highly unlikely, but maybe
-     * possible if there is a gap at the end of * one of the two alleles? *)
-
-  let equal_assignment a1 a2 = match a1, a2 with                (* So close to Lpr *)
-    | First (l1, p1),       First (l2, p2)      -> p1 = p2 && Lp.(close_enough l1 l2)
-    | Second (l1, p1),      Second (l2, p2)     -> p1 = p2 && Lp.(close_enough l1 l2)
-    | Both (l1, p11, p12),  Both (l2, p21, p22) -> p11 = p21 && p12 = p22 && Lp.(close_enough l1 l2)
-    | _,                    _                   -> false
-
-  let merge d = function
-    | First (l, p)      ->
-        { d with likelihood = Lp.(d.likelihood * l)
-               ; first = Emissions.insert_one d.first p
-        }
-    | Second (l, p)     ->
-        { d with likelihood = Lp.(d.likelihood * l)
-               ; second = Emissions.insert_one d.second p
-        }
-    | Both (l, p1, p2)  ->
-        { likelihood = Lp.(d.likelihood * l)
-        ; first      = Emissions.insert_half d.first p1
-        ; second     = Emissions.insert_half d.second p2
-        }
-
-  type t =
-    { n : int
-    (* Number of alleles *)
-    ; mutable l : (Pm.ascending, d) Pm.t
-    }
-
-  let init number_alleles =
-    let d = { likelihood = Lp.one; first = Emissions.empty; second = Emissions.empty } in
-    let r = Pm.init_all_a ~size:number_alleles d in
-    let l = Pm.cpair ~f:(fun d _ -> d) (fun _ _ -> true) r in
-    { n = number_alleles; l }
-
-  let update t llhd =
-    (* Compute the max but keep track of the assignment so that we split the
-     * read coverage appropriately. *)
-    let f (l1, p1) (l2, p2) =
-      if Lp.(l1 < l2) then
-        Second (l2, p2)
-      else if Lp.(l2 < l1) then
-        First (l1, p1)
-      else (* l2 = l1 *)
-        Both (l1, p1, p2)
-    in
-    let n = Pm.cpair ~f equal_assignment llhd in
-    let eq d1 d2 =
-      Lp.(close_enough d1.likelihood d2.likelihood)
-      (* I'm not certain that this is ultimately the best trade-off between
-       * resources. *)
-      && Emissions.equal d1.first d2.first
-      && Emissions.equal d1.second d2.second
-    in
-    t.l <- Pm.merge ~eq t.l n merge
-
-  (* log likelihood, probability, index 1st, index 2nd *)
-  let best size t =
-    let greater d1 d2 = Lp.(d1.likelihood > d2.likelihood) in
-    let sets_by_likelihood =
-      Pm.fold_set_and_values t.l ~init:[] ~f:(fun acc st v ->
-        insert_sorted ~greater v st acc)
-    in
-    match sets_by_likelihood with
-    | []               -> []
-    | (maxd, _bs) :: _ ->
-      let maxl = maxd.likelihood in
-      (* The init case. *)
-      if maxl = Lp.one then [] else
-      let prob d = Lp.probability ~maxl d.likelihood in
-      let ns =                                      (* Sum up the likelihoods *)
-        let f s (d, st) = s +. float (Pm.Set.size st) *. prob d in
-        List.fold_left ~init:0. ~f sets_by_likelihood
-      in
-      let ijlist_of_set st =
-        List.map st ~f:(Pm.Interval.to_cross_indices t.n)
-        |> List.concat
-      in
-      let to_triple d st =
-        let p = prob d /. ns in
-        let ijlist = ijlist_of_set st in
-        let ijwc = List.map ijlist ~f:(fun (i,j) -> (i,j,d.first,d.second)) in
-        d.likelihood, p, ijwc
-      in
-      let open Zygosity_best in
-      match size with
-      | NonZero lb ->
-          List.filter_map sets_by_likelihood ~f:(fun (d, st) ->
-            let p = prob d /. ns in
-            if p <= lb then
-              None
-            else (* p > lb *)
-              Some (to_triple d st))
-      | Spec n ->
-          (* fold while *)
-          let rec loop t acc = function
-            | []            -> List.rev acc
-            | (d, st) :: tl -> let nt = t + Pm.Set.size st in
-                               let nacc = (to_triple d st) :: acc in
-                               if nt >= n then
-                                List.rev acc
-                               else
-                                 loop nt nacc  tl
-          in
-          loop 0 [] sets_by_likelihood
-      | NoSpec  ->
-          List.map sets_by_likelihood ~f:(fun (d, st) -> to_triple d st)
-
-end (* Zygosity_pm *)
-
 module Zygosity_mixed = struct
 
   open ParPHMM
 
+  (* When storing Zygosity (per pair of allele) information it is important
+     to encode the information in the most compressed form: there is quiet
+     a lot of it and since most of the pairs have another that is almost
+     identical, a lot of is redundant.
+
+     For the purposes of storing coverage, a position of maximum PHMM emission,
+     we'll store a list. But across most zygosity pairs, for a given read, that
+     position is almost identical.  Therefore, we'll order these values by that
+     position.
+
+     Afterwards we'll track a set (in the Partition map sense) of the
+     cross-paired index (see cpair) and the first and second "weight".
+     A weight is 2x the number of reads that emit from that position.
+     This way if the likelihood is the same for a given allele pair
+     (ex. homozygous) we can assign a "half"-weight of 1.
+  *)
+
+  type emissions = (Pm.Set.t * int * int) list
+
   type t =
+    (* I believe that it still makes sense to store this value expicitly
+       as embedding it into a Pm will slow down the merging at the end.*)
     { ta : Lp.t Triangular.Array.t
-    ; mutable et : (Emissions.t * Emissions.t) mt
+    ; mutable et : (int * emissions) list
     }
 
   let init number_alleles =
-    let size = Triangular.number number_alleles in
-    let et = Pm.init_all_a ~size (Emissions.empty, Emissions.empty) in
-    let ta = Triangular.Array.make true number_alleles Lp.one in
-    { ta; et}
+    { ta = Triangular.Array.make true number_alleles Lp.one
+    ; et = []
+    }
 
-  type assignment =
-    | First of int Sp.t
-    | Second of int Sp.t
-    | Both of (int Sp.t * int Sp.t)
-    (* Same likelihood but different positions? Highly unlikely, but maybe
-     * possible if there is a gap at the end of * one of the two alleles? *)
+  let insert_at pos ~new_ ~merge et =
+    let rec loop = function
+      | []  -> [pos, new_ ()]
+      | (p, c) :: tl ->
+          if pos = p then
+            (p, merge c) :: tl
+          else if pos < p then
+            (pos, new_ ()) :: (p, c) :: tl
+          else (* pos > p *)
+            (p, c) :: loop tl
+    in
+    loop et
 
-  let equal_assignment a1 a2 = match a1, a2 with
-    | First p1,        First p2        -> p1 = p2
-    | Second p1,       Second p2       -> p1 = p2
-    | Both (p11, p12), Both (p21, p22) -> p11 = p21 && p12 = p22
-    | _,                    _          -> false
+  let insert_into st f s st_lst =
+    let rec loop remaining = function
+      | []                 -> [ remaining, f, s ]
+      | (ps, fn, sn) :: tl ->
+          let inter, to_add, didnotm = Pm.Set.all_intersections remaining ps in
+          let nf, ns =
+            if Pm.Set.is_empty inter then
+              fn, sn
+            else
+              f + fn, s + sn
+          in
+          if Pm.Set.is_empty to_add then begin (* stopping *)
+            if Pm.Set.is_empty didnotm then  (* Complete match ie inter = sp *)
+              (inter, nf, ns) :: tl
+            else
+              (inter, nf, ns) :: (didnotm, fn, sn) :: tl
+          end else begin
+            if Pm.Set.is_empty didnotm then  (* Complete match ie inter = sp *)
+              (inter, nf, ns) :: loop to_add tl
+            else
+              (inter, nf, ns) :: (didnotm, fn, sn) :: loop to_add tl
+          end
+    in
+    loop st st_lst
+
+  let sp_to_string = function
+    | Sp.Single d        -> sprintf "S %d" d
+    | Sp.Paired (p1, p2) -> sprintf "P %d %d" p1 p2
 
   let fa (l1, p1) (l2, p2) =
     if Lp.(l1 < l2) then
-      Second p2
+      (p2, 0, 2, l2)
     else if Lp.(l2 < l1) then
-      First p1
-    else (* l2 = l1 *)
-      Both (p1, p2)
+      (p1, 2, 0, l1)
+    else begin (* l2 = l1 *)
+      if p1 <> p2 then
+        invalid_argf "Same likelihoods %s %s at different positions %s %s!"
+          (Lp.to_string l1) (Lp.to_string l2)
+          (sp_to_string p1) (sp_to_string p2);
+      (p1, 1, 1, l1)
+    end
 
-  let merge (e1, e2) = function
-    | First p       -> (Emissions.insert_one e1 p, e2)
-    | Second p      -> (e1, Emissions.insert_one e2 p)
-    | Both (p1, p2) -> (Emissions.insert_half e1 p1
-                       , Emissions.insert_half e2 p2)
+  let equal_triples (a, b, c, l1) (d, e, f, l2) =
+    a = d && b = e && c = f && Lp.close_enough l1 l2
 
   let update t llhd_and_pos =
-    Pm.iter_set llhd_and_pos ~f:(fun allele1 (l1, _p1) ->
-        Pm.iter_set llhd_and_pos ~f:(fun allele2 (l2, _p2) ->
-          if allele1 > allele2 then () else begin
-            if Lp.(l1 <= l2) then
-              Triangular.Array.update t.ta allele1 allele2
-                ~f:(fun lp -> Lp.(lp * l2))
-            else (* Lp.(l1 > l2) *)
-              Triangular.Array.update t.ta allele1 allele2
-                ~f:(fun lp -> Lp.(lp * l1))
-         end));
-    let n = Pm.cpair ~f:fa equal_assignment llhd_and_pos in
-    let eq (p11,p12) (p21,p22) =
-      Emissions.equal p11 p21 && Emissions.equal p12 p22
+    let cp = Pm.cpair ~f:fa equal_triples llhd_and_pos in
+    let net =
+      Pm.fold_set_and_values cp ~init:t.et
+        ~f:(fun lst st (sp_pos, f, s, l) ->
+              (* Update the Lp Ta, by side-effect. *)
+              Pm.Set.iter st ~f:(fun k ->
+                  Triangular.Array.update_k t.ta k
+                    ~f:(fun lp -> Lp.(lp * l)));
+              let i p l = insert_at p l ~new_:(fun () -> [st, f, s])
+                ~merge:(insert_into st f s)
+              in
+              match sp_pos with
+              | Sp.Single p1       -> i p1 lst
+              | Sp.Paired (p1, p2) -> i p2 (i p1 lst))
     in
-    t.et <- Pm.merge ~eq t.et n merge
-
+    t.et <- net
 
   (* Create a sorted, grouped, and constrained, list of the paired likelihoods.
    * The total size (4000^2 = 16_000_000) is a little bit unwieldly and at this
@@ -681,8 +408,22 @@ module Zygosity_mixed = struct
       let lookup_ems k =
         (* A leaky abstraction here. *)
         let i, j = kinv k in
-        let e1, e2 = Pm.get t.et k in
-        i, j, e1, e2
+        let e1, e2 =
+          List.fold_left t.et ~init:([], [])
+            ~f:(fun (a1, a2) (pos, lst) ->
+                let inside_opt =
+                  List.find_map lst ~f:(fun (st, f, s) ->
+                      if Pm.Set.inside k st then Some (f, s) else None)
+                in
+                match inside_opt with
+                | None -> (a1, a2)
+                | Some (0, 0) -> invalid_argf "for %d -> %d, %d, double zero count at %d"
+                                    k i j pos
+                | Some (n, 0) -> (pos, n) :: a1, a2
+                | Some (0, n) -> a1, (pos, n) :: a2
+                | Some (n, m) -> (pos, n) :: a1, (pos, m) :: a2)
+        in
+        i, j, List.rev e1, List.rev e2
       in
       match nz with
       | Some lb ->
@@ -698,6 +439,14 @@ module Zygosity_mixed = struct
             let ijlst = List.map klst ~f:lookup_ems in
             (lp, prob lp /. ns, ijlst))
 
+  let number_of_reads lst =
+    let s = List.fold_left lst ~init:0 ~f:(fun a (_p, w) -> a + w) in
+    (float s) /. 2.
+
+  let single_emission_to_string lst =
+    string_of_list lst ~show_empty:false ~sep:";"
+      ~f:(fun (p,w) -> sprintf "%d,%f" p (float w /. 2.0))
+    |> sprintf "[%s]"
 
 end (* Zygosity_mixed *)
 
@@ -746,8 +495,8 @@ module Output = struct
     ; allele2           : string
     ; z_llhd            : Lp.t
     ; prob              : float
-    ; read1_emissions   : Emissions.t
-    ; read2_emissions   : Emissions.t
+    ; read1_emissions   : (int * int) list
+    ; read2_emissions   : (int * int) list
     }
   and per_locus =
     { imgt_release  : string
@@ -870,10 +619,10 @@ module Output = struct
       { allele1; allele2; z_llhd; prob; read1_emissions; read2_emissions } =
       fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\t%s\t%s\n"
         allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
-        (Emissions.number_of_reads read1_emissions)
-        (Emissions.number_of_reads read2_emissions)
-        (Emissions.to_string read1_emissions)
-        (Emissions.to_string read2_emissions)
+        (Zygosity_mixed.number_of_reads read1_emissions)
+        (Zygosity_mixed.number_of_reads read2_emissions)
+        (Zygosity_mixed.single_emission_to_string read1_emissions)
+        (Zygosity_mixed.single_emission_to_string read2_emissions)
     in
     fprintf oc "Prohlatype version: %s\n" header.prohlatype_version;
     fprintf oc "Command Line: %s\n" header.commandline;
