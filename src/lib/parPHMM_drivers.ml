@@ -270,29 +270,35 @@ module Zygosity_mixed = struct
     loop et
 
   let insert_into st f s st_lst =
-    let rec loop remaining = function
-      | []                 -> [ remaining, f, s ]
+    let rec loop acc remaining = function
+      | []                 -> List.rev ((remaining, f, s) :: acc)
       | (ps, fn, sn) :: tl ->
           let inter, to_add, didnotm = Pm.Set.all_intersections remaining ps in
-          let nf, ns =
-            if Pm.Set.is_empty inter then
-              fn, sn
+          (* Using length as a faster proxy for set... *)
+          let li = Pm.Set.length inter in
+          let ld = Pm.Set.length didnotm in
+          if li = 0 then begin      (* No intersection *)
+            if ld = 0 then          (* Nothing remaining in ps ? *)
+              invalid_argf "Empty sets? %s with weights %d %d"
+                (Pm.Set.to_string ps) fn sn
+            else (* ld > 0 ... didnotm = ps & to_add = remaining *)
+              loop ((ps, fn, sn) :: acc) to_add tl
+          end else (* li > 0 *) begin
+            let nacc =
+              if ld = 0 then
+                (inter, fn + f, sn + s) :: acc
+              else if ld > li then
+                (inter, fn + f, sn + s) :: (didnotm, fn, sn) :: acc
+              else (* ld <= li *)
+                (didnotm, fn, sn) :: (inter, fn + f, sn + s) :: acc
+            in
+            if Pm.Set.length to_add = 0 then                         (* done! *)
+              List.rev_append nacc tl
             else
-              f + fn, s + sn
-          in
-          if Pm.Set.is_empty to_add then begin (* stopping *)
-            if Pm.Set.is_empty didnotm then  (* Complete match ie inter = sp *)
-              (inter, nf, ns) :: tl
-            else
-              (inter, nf, ns) :: (didnotm, fn, sn) :: tl
-          end else begin
-            if Pm.Set.is_empty didnotm then  (* Complete match ie inter = sp *)
-              (inter, nf, ns) :: loop to_add tl
-            else
-              (inter, nf, ns) :: (didnotm, fn, sn) :: loop to_add tl
+              loop nacc to_add tl
           end
     in
-    loop st st_lst
+    loop [] st st_lst
 
   let sp_to_string = function
     | Sp.Single d        -> sprintf "S %d" d

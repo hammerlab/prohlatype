@@ -430,10 +430,12 @@ module Set = struct
     in
     loop
 
-  let to_string  =
-    string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string i))
+  let to_string t =
+    string_of_list t ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string i))
 
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
+
+  let length = List.length
 
   let inside i l =
     List.exists l ~f:(Interval.inside i)

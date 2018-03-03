@@ -56,11 +56,16 @@ module Set : sig
 
   type t = Interval.t list
 
+  val to_string : t -> string
+
   val empty : t
   val is_empty : t -> bool
 
   (* Number of elements in the set. *)
   val size : t -> int
+
+  (* Number of intervals, a faster proxy for size. *)
+  val length : t -> int
 
   val inside : int -> t -> bool
 
