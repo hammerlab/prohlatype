@@ -81,7 +81,9 @@ let type_
   (* Process *)
     skip_disk_cache
   (* What to do? *)
-    fastq_file_list number_of_reads specific_reads
+    fastq_file_list
+    number_of_reads
+    specific_reads
     do_not_finish_singles
   (* options *)
     insert_p

@@ -227,8 +227,8 @@ let fastq_file_arg =
   let docv = "FASTQ-FILE" in
   let doc = "Fastq formatted DNA reads file. Only one file per sample. \
              List paired end reads as 2 sequential files." in
-  Arg.(non_empty
-      & pos_right ~rev:true 1 file []
+  Arg.( non_empty
+      & pos_right 0 file []
       & info ~doc ~docv [])
 
 let num_reads_arg =
