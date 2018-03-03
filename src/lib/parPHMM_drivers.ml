@@ -300,9 +300,7 @@ module Zygosity_mixed = struct
     in
     loop [] st st_lst
 
-  let sp_to_string = function
-    | Sp.Single d        -> sprintf "S %d" d
-    | Sp.Paired (p1, p2) -> sprintf "P %d %d" p1 p2
+  let sp_to_string = Sp.to_string (sprintf "%d")
 
   let fa (l1, p1) (l2, p2) =
     if Lp.(l1 < l2) then
@@ -467,11 +465,6 @@ module Likelihoods_and_zygosity = struct
 
   let add_lz zygosity llhd =
     Zygosity_mixed.update zygosity llhd
-    (* Pm.iter_set llhd ~f:(fun allele1 lp1 ->
-        Pm.iter_set llhd ~f:(fun allele2 lp2 ->
-          if allele1 > allele2 then () else
-            Zygosity_array.update zygosity
-              ~allele1 ~lp1 ~allele2 ~lp2)) *)
 
   let add_ll_and_lz state_llhd zygosity llhd =
     add_ll state_llhd llhd;

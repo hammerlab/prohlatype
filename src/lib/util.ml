@@ -319,6 +319,10 @@ module Sp = struct
     | Single  v       -> Single (f v)
     | Paired (v1, v2) -> Paired (f v1, f v2)
 
+  let to_string f = function
+    | Single a -> sprintf "Single %s" (f a)
+    | Paired (a1, a2) -> sprintf "Paired (%s, %s)" (f a1) (f a2)
+
 end
 
 let insert_sorted ~greater a i l =
