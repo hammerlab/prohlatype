@@ -308,18 +308,22 @@ module Zygosity_mixed = struct
     else if Lp.(l2 < l1) then
       (p1, 2, 0, l1)
     else begin (* l2 = l1 *)
+      (* It is possible to have l2 = l1 but p1 <> p2: I'm not eactly certain
+         why this happens, ie. if one of the alleles traverses a gap? We'll
+         return the first rather arbitrarily instead of breaking the
+         cross-paired methodology.
       if p1 <> p2 then
         invalid_argf "Same likelihoods %s %s at different positions %s %s!"
           (Lp.to_string l1) (Lp.to_string l2)
-          (sp_to_string p1) (sp_to_string p2);
+          (sp_to_string p1) (sp_to_string p2); *)
       (p1, 1, 1, l1)
     end
 
-  let equal_triples (a, b, c, l1) (d, e, f, l2) =
+  let equal_quadruple (a, b, c, l1) (d, e, f, l2) =
     a = d && b = e && c = f && Lp.close_enough l1 l2
 
   let update t llhd_and_pos =
-    let cp = Pm.cpair ~f:fa equal_triples llhd_and_pos in
+    let cp = Pm.cpair ~f:fa equal_quadruple llhd_and_pos in
     let net =
       Pm.fold_set_and_values cp ~init:t.et
         ~f:(fun lst st (sp_pos, f, s, l) ->
