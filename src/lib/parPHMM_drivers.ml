@@ -413,23 +413,23 @@ module Zygosity_mixed = struct
       let kinv k =
         Triangular.(Indices.full_upper_inverse t.ta.Array.n k)
       in
-      let lookup_ems k =
+      let lookup_emissions k =
         (* A leaky abstraction here. *)
         let i, j = kinv k in
         let e1, e2 =
           List.fold_left t.et ~init:([], [])
             ~f:(fun (a1, a2) (pos, lst) ->
-                let inside_opt =
-                  List.find_map lst ~f:(fun (st, f, s) ->
-                      if Pm.Set.inside k st then Some (f, s) else None)
-                in
-                match inside_opt with
-                | None -> (a1, a2)
-                | Some (0, 0) -> invalid_argf "for %d -> %d, %d, double zero count at %d"
-                                    k i j pos
-                | Some (n, 0) -> (pos, n) :: a1, a2
-                | Some (0, n) -> a1, (pos, n) :: a2
-                | Some (n, m) -> (pos, n) :: a1, (pos, m) :: a2)
+                  let inside_opt =
+                    List.find_map lst ~f:(fun (st, f, s) ->
+                        if Pm.Set.inside k st then Some (f, s) else None)
+                  in
+                  match inside_opt with
+                  | None        -> (a1, a2)
+                  | Some (0, 0) -> invalid_argf "for %d -> %d, %d, double zero count at %d"
+                                      k i j pos
+                  | Some (n, 0) -> (pos, n) :: a1, a2
+                  | Some (0, n) -> a1, (pos, n) :: a2
+                  | Some (n, m) -> (pos, n) :: a1, (pos, m) :: a2)
         in
         i, j, List.rev e1, List.rev e2
       in
@@ -438,13 +438,13 @@ module Zygosity_mixed = struct
         List.filter_map most_likely ~f:(fun (l, klst) ->
           let p = prob l /. ns in
           if p > lb then     (* This isn't necessarily the right notion of zero. *)
-            let ijlst = List.map klst ~f:lookup_ems in
+            let ijlst = List.map klst ~f:lookup_emissions in
             Some (l, p, ijlst)
           else
             None)
       | None ->
           List.map most_likely ~f:(fun (lp, klst) ->
-            let ijlst = List.map klst ~f:lookup_ems in
+            let ijlst = List.map klst ~f:lookup_emissions in
             (lp, prob lp /. ns, ijlst))
 
   let number_of_reads lst =
