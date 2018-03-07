@@ -303,11 +303,7 @@ module Zygosity_mixed = struct
   let sp_to_string = Sp.to_string (sprintf "%d")
 
   let fa (l1, p1) (l2, p2) =
-    if Lp.(l1 < l2) then
-      (p2, 0, 2, l2)
-    else if Lp.(l2 < l1) then
-      (p1, 2, 0, l1)
-    else begin (* l2 = l1 *)
+    if Lp.close_enough l1 l2 then
       (* It is possible to have l2 = l1 but p1 <> p2: I'm not eactly certain
          why this happens, ie. if one of the alleles traverses a gap? We'll
          return the first rather arbitrarily instead of breaking the
@@ -317,7 +313,10 @@ module Zygosity_mixed = struct
           (Lp.to_string l1) (Lp.to_string l2)
           (sp_to_string p1) (sp_to_string p2); *)
       (p1, 1, 1, l1)
-    end
+    else if Lp.(l1 < l2) then
+      (p2, 0, 2, l2)
+    else (* Lp.(l2 < l1) *)
+      (p1, 2, 0, l1)
 
   let equal_quadruple (a, b, c, l1) (d, e, f, l2) =
     a = d && b = e && c = f && Lp.close_enough l1 l2
