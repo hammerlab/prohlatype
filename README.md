@@ -81,7 +81,7 @@ one can calculate:
      we normally do **not** have sequence information will still align (in the
      next filtering step), albeit poorly:
 
-          $ align2fasta path-to-imgthla/alignments -o imputed_hla_class_I.fasta
+          $ align2fasta path-to-imgthla/alignments -o imputed_hla_class_I
 
      This step needs to be performed only once, per each IMGT version.
      Run `$align2fasta --help` for further information.
