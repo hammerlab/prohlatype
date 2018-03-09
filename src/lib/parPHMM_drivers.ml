@@ -305,9 +305,9 @@ module Zygosity_mixed = struct
   let fa (l1, p1) (l2, p2) =
     if Lp.close_enough l1 l2 then
       (* It is possible to have l2 = l1 but p1 <> p2: I'm not eactly certain
-         why this happens, ie. if one of the alleles traverses a gap? We'll
-         return the first rather arbitrarily instead of breaking the
-         cross-paired methodology.
+        why this happens, ie. if one of the alleles traverses a gap? We'll
+        return the first rather arbitrarily instead of breaking the
+        cross-paired methodology.
       if p1 <> p2 then
         invalid_argf "Same likelihoods %s %s at different positions %s %s!"
           (Lp.to_string l1) (Lp.to_string l2)
