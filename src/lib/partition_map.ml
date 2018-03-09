@@ -301,7 +301,7 @@ let cpair n f s =
   else
     non_none_cpair n f s
 
-let non_none_cpair_cps n f s k =
+let non_none_cpair_cps n f s c k =
   let fs = start f in
   let fe = end_ f in
   let ss = start s in
@@ -318,17 +318,17 @@ let non_none_cpair_cps n f s k =
         k p
       else
         let ni = make ~start:(tn i (max i ss)) ~end_:(tn i se) in
-        p :: loop ni (i + 1)
+        c p (loop ni (i + 1))
     in
     loop fi (fs + 1)
 
-let cpair_cps n f s ~e ~ne =
+let cpair_cps n f s ~c ~e ~ne =
   if is_none f then
     e ()
   else if is_none s then
     e ()
   else
-    non_none_cpair_cps n f s ne
+    non_none_cpair_cps n f s c ne
 
 let merge_or_reorder t1 t2 =
   let s1 = start_p t1 in
@@ -349,7 +349,7 @@ let merge_or_reorder t1 t2 =
  * check merge
  * cps - style
  *)
-let non_none_cpair_cm_cps n f s p k =
+let non_none_cpair_cm_cps n f s p c k =
   let fs = start f in
   let fe = end_ f in
   let ss = start s in
@@ -361,7 +361,7 @@ let non_none_cpair_cm_cps n f s p k =
     if is_none n then
       k m
     else
-      m :: k n
+      c m (k n)
   else
     let rec loop p i =
       if i > fe || i > se then
@@ -372,22 +372,22 @@ let non_none_cpair_cm_cps n f s p k =
         if is_none n then
           loop m (i + 1)
         else
-          m :: loop n (i + 1)
+          c m (loop n (i + 1))
     in
     let fi = make ~start:(tn fs (max fs ss)) ~end_:(tn fs se) in
     let m, n = merge_or_reorder p fi in
     if is_none n then
       loop m (fs + 1)
     else
-      m :: loop n (fs + 1)
+      c m (loop n (fs + 1))
 
-let cpair_cm_cps n f s p ~e ~ne =
+let cpair_cm_cps n f s p ~c ~e ~ne =
   if is_none f then
     e p
   else if is_none s then
     e p
   else
-    non_none_cpair_cm_cps n f s p ne
+    non_none_cpair_cm_cps n f s p c ne
 
 let to_cross_indices n i =
   let tni = Triangular.Indices.full_upper_inverse n in
@@ -408,8 +408,9 @@ module Set = struct
 
   let empty = []
   let is_empty = function
-    | [] -> true
-    | _  -> false
+    | []  -> true
+    | [i] -> Interval.is_none i
+    | _   -> false
 
   let of_interval i =                 (* This isn't the cleanest abstraction ... *)
     if Interval.is_none i then
@@ -631,6 +632,7 @@ module Set = struct
       | []     -> k p
       | h :: t ->
           cp f h p                                  (* Intersection possible. *)
+            ~c:List.cons
             (* assert false -> don't work for empty! *)
             ~e:(fun p -> [p])
             (* Intersection NOT possible, but check anyway ? *)
@@ -642,13 +644,14 @@ module Set = struct
       | []     -> []
       | h :: t ->
           Interval.cpair_cps n h h
+            ~c:List.cons
             ~e:(fun () -> [])
             ~ne:(fun p -> first_fixed h t (fun p -> descend t p) p)
     in
     start t
 
   let cpair_separate_unsorted n t1 t2 =
-    let cp = Interval.cpair_cm_cps n in
+    let cp = Interval.cpair_cm_cps n ~c:List.cons in
     let rec first_fixed f l k p = match l with
       | []     -> k p
       | h :: t ->
@@ -675,14 +678,66 @@ module Set = struct
       | h1 :: t1, h2 :: t2 ->
           if Interval.before_separate h1 h2 then
             Interval.cpair_cps n h1 h2
+              ~c:List.cons
               ~e:(fun () -> [])
               ~ne:(fun p -> first_fixed h1 t2 (fun p -> descend t1 l2 p) p)
           else
             Interval.cpair_cps n h2 h1
+              ~c:List.cons
               ~e:(fun () -> [])
               ~ne:(fun p -> first_fixed h2 t1 (fun p -> descend l1 t2 p) p)
     in
     start t1 t2
+
+  let cpair_separate_unsorted2 n t1 t2 =
+    let cp = Interval.cpair_cm_cps n in
+    let rec first_fixed f l k (p1, p2) = match l with
+      | []     -> k (p1, p2)
+      | h :: t ->
+          cp f h p1                                 (* Intersection possible. *)
+            ~c:(fun a (l1, l2) -> a :: l1, l2)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> assert false)
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> first_fixed f t k (p, p2))
+    and second_fixed f l k (p1, p2) = match l with
+      | []     -> k (p1, p2)
+      | h :: t ->
+          cp f h p2                                 (* Intersection possible. *)
+            ~c:(fun a (l1, l2) -> l1, a :: l2)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> assert false)
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> second_fixed f t k (p2, p))
+    and descend l1 l2 (p1, p2) = match l1, l2 with
+      | [],       _
+      | _,        []       -> [p1], [p2]
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then begin
+            if Interval.is_none p1 then
+              Interval.cpair_cps n h1 h2
+                ~c:(fun a (l1, l2) -> a :: l1, l2)
+                ~e:(fun () -> [], [])
+                ~ne:(fun p -> first_fixed h1 t2 (fun pp -> descend t1 l2 pp) (p,p2))
+            else
+              cp h1 h2 p1
+                ~c:(fun a (l1, l2) -> a :: l1, l2)
+                ~e:(fun p -> [p],[p2])
+                ~ne:(fun p -> first_fixed h1 t2 (fun pp -> descend t1 l2 pp) (p,p2))
+          end else begin
+            if Interval.is_none p2 then
+              Interval.cpair_cps n h2 h1
+                ~c:(fun a (l1, l2) -> l1, a :: l2)
+                ~e:(fun () -> [], [])
+                ~ne:(fun p -> second_fixed h2 t1 (fun pp -> descend l1 t2 pp) (p1,p))
+            else
+              cp h2 h1 p2
+                ~c:(fun a (l1, l2) -> l1, a :: l2)
+                ~e:(fun p -> [p1],[p])
+                ~ne:(fun p -> second_fixed h2 t1 (fun pp -> descend l1 t2 pp) (p1,p))
+          end
+    in
+    descend t1 t2 (Interval.none_t, Interval.none_t)
 
   (* Though we write the underlying algorithm in CPS style to try and avoid
     * some excessive list allocations and merging against last created element
@@ -716,6 +771,14 @@ module Set = struct
         (to_string t1) (to_string t2)
     else
       cpair_norm (cpair_separate_unsorted n t1 t2)
+
+  let cpair_separate2 n t1 t2 =
+    if compare t1 t2 >= 0 then
+      invalid_argf "Sets are not in ordered for separate cpair: %s %s"
+        (to_string t1) (to_string t2)
+    else
+      let v1, v2 = cpair_separate_unsorted2 n t1 t2 in
+      cpair_norm v1, cpair_norm v2
 
 end (* Set *)
 
@@ -1324,26 +1387,46 @@ let cpair ~f eq = function
              ; value = f value value
              })
   | Asc (S { size; values })    ->
-      let values =
-        let rec loop acc = function
-          | []          -> List.sort ~cmp:(fun (s1, _) (s2,_ ) -> Set.compare s1 s2) acc
-          | (s, v) :: t ->
-              let sm = Set.cpair size s in
-              let nv = f v v in
-              let nacc = merge_or_add_to_end eq sm nv acc in
-              let nacc2 = fixed_first s v nacc t in
-              loop nacc2 t
-        and fixed_first sf fv acc = function
-          | []           -> acc
-          | (s, v)  :: t ->
-              let cm = Set.cpair_separate size sf s in
-              let nv = f fv v in
-              let nacc = merge_or_add_to_end eq cm nv acc in
-              fixed_first sf fv nacc t
-        in
-        loop [] values
+      let rec loop acc = function
+        | []          -> List.sort ~cmp:(fun (s1, _) (s2, _) -> Set.compare s1 s2) acc
+        | (s, v) :: t ->
+            let sm = Set.cpair size s in
+            let nv = f v v in
+            let nacc = merge_or_add_to_end eq sm nv acc in
+            let nacc2 = fixed_first s v nacc t in
+            loop nacc2 t
+      and fixed_first sf fv acc = function
+        | []           -> acc
+        | (s, v)  :: t ->
+            let cm1, cm2 = Set.cpair_separate2 size sf s in
+            let nacc =
+              if Set.is_empty cm1 then begin
+                if Set.is_empty cm2 then
+                  invalid_argf "Both cross pairs are are emtpy"
+                else
+                  let nv = f v fv in
+                  merge_or_add_to_end eq cm2 nv acc
+              end else begin
+                if Set.is_empty cm2 then
+                  let nv = f fv v in
+                  merge_or_add_to_end eq cm1 nv acc
+                else begin
+                  if compare cm1 cm2 <= 0 then
+                    let nv1 = f fv v in
+                    let nacc1 = merge_or_add_to_end eq cm1 nv1 acc in
+                    let nv2 = f v fv in
+                    merge_or_add_to_end eq cm2 nv2 nacc1
+                  else
+                    let nv2 = f v fv in
+                    let nacc1 = merge_or_add_to_end eq cm2 nv2 acc in
+                    let nv1 = f fv v in
+                    merge_or_add_to_end eq cm1 nv1 nacc1
+                end
+              end
+            in
+            fixed_first sf fv nacc t
       in
-      (* assert (ascending_invariant values) *)
+      let values = loop [] values in
       Asc (S { size = Triangular.number size
              ; values
              })
