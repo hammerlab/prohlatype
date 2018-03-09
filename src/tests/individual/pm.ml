@@ -342,6 +342,39 @@ let () =
       let m = manually_lst max_range orp in
       in_order plst && m = t)
 
+let ascending_char_pm =
+  let ascending_char_gen =
+    Gen.(list_size (int_range 1 100) char
+         |> map (List.fold_left ~init:empty_d ~f:(fun l c -> add c l))
+         |> map (ascending (=)))
+  in
+  make ~print:(fun a -> to_string a (sprintf "%c"))
+    ascending_char_gen
+
+let correct_cross_pair pm pmc =
+  let n = size pm in
+  let rec loop i j =
+    if i = n then
+      true
+    else
+      if j = n then
+        loop (i + 1) 0
+      else
+        let ci = get pm i in
+        let cj = get pm j in
+        let ci_j = get pmc (k n i j) in
+        (ci, cj) = ci_j || loop i (j + 1)
+  in
+  loop 0 0
+
+let () =
+  add_test ~count:50
+    ~name:"Cross pairs of Partition maps."
+    ascending_char_pm
+    (fun pm_a ->
+       let pm_c = cpair ~f:(fun ci cj -> (ci, cj)) (=) pm_a in
+       correct_cross_pair pm_a pm_c)
+
 let () =
   QCheck_runner.run_tests_main (List.rev !tests)
 
