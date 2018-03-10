@@ -708,7 +708,7 @@ module Set = struct
             (* assert false -> don't work for empty! *)
             ~e:(fun p -> assert false)
             (* Intersection NOT possible, but check anyway ? *)
-            ~ne:(fun p -> second_fixed f t k (p2, p))
+            ~ne:(fun p -> second_fixed f t k (p1, p))
     and descend l1 l2 (p1, p2) = match l1, l2 with
       | [],       _
       | _,        []       -> [p1], [p2]
@@ -1404,14 +1404,14 @@ let cpair ~f eq = function
                 if Set.is_empty cm2 then
                   invalid_argf "Both cross pairs are are emtpy"
                 else
-                  let nv = f v fv in
-                  merge_or_add_to_end eq cm2 nv acc
+                  let nv2 = f v fv in
+                  merge_or_add_to_end eq cm2 nv2 acc
               end else begin
                 if Set.is_empty cm2 then
-                  let nv = f fv v in
-                  merge_or_add_to_end eq cm1 nv acc
+                  let nv1 = f fv v in
+                  merge_or_add_to_end eq cm1 nv1 acc
                 else begin
-                  if compare cm1 cm2 <= 0 then
+                  if Set.compare cm1 cm2 <= 0 then
                     let nv1 = f fv v in
                     let nacc1 = merge_or_add_to_end eq cm1 nv1 acc in
                     let nv2 = f v fv in
