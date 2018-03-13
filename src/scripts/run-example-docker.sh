@@ -80,7 +80,7 @@ default () {
     runcmd "bwa mem /results/imputed_hla_class_I.fasta /results/sample.fastq > /results/sample.sam"
     runcmd "samtools view -F 4 -b -T /results/imputed_hla_class_I.fasta /results/sample.sam -o /results/sample.bam"
     runcmd "samtools fastq /results/sample.bam > /results/sample_filtered.fastq"
-    runcmd "multi_par /imgthla/alignments /results/sample_filtered.fastq -o /results/sample_output.tsv"
+    runcmd "multi_par /imgthla/alignments /results/sample_filtered.fastq -o /results/sample_output"
 }
 
 if [ "$1" = "" ] ; then
