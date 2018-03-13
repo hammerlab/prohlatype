@@ -103,4 +103,7 @@ one can calculate:
 
           $ multi_par path-to-imgthla/aignments ${SAMPLE}_filtered.fastq -o ${SAMPLE}_output.tsv
 
-    
+**Note:** The script `src/scripts/run-example-docker.sh` provides an end-to-end
+example of the above. It depends only on `docker`, `wget`, and `git`; it fetches
+the data and runs everything in a docker container
+(see `sh src/scripts/run-example-docker.sh help`).
