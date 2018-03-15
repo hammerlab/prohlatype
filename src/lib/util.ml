@@ -313,11 +313,15 @@ module Sp = struct
   type 'a t =
     | Single of 'a
     | Paired of ('a * 'a)
-  [@@deriving yojson]
+    [@@deriving eq, yojson]
 
   let map f = function
     | Single  v       -> Single (f v)
     | Paired (v1, v2) -> Paired (f v1, f v2)
+
+  let to_string f = function
+    | Single a -> sprintf "Single %s" (f a)
+    | Paired (a1, a2) -> sprintf "Paired (%s, %s)" (f a1) (f a2)
 
 end
 

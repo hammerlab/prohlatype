@@ -275,6 +275,7 @@ module Just_floats = struct
 
 end (* Just_floats *)
 
+(* Mostly for demonstration purposes. *)
 module MultiplicativeProbability = struct
 
   type t = float [@@deriving show,yojson]
@@ -833,6 +834,7 @@ module type Workspace_intf = sig
       -> f:('a -> entry -> 'a)
       -> 'a
 
+  (* Necessary for bands *)
   val foldi_over_row
       : ?range:(int * int)
       -> t
@@ -866,13 +868,13 @@ end (* Workspace_intf *)
 module CommonWorkspace = struct
 
   (* The recurrence logic (see {middle} _below_) relies only upon the previous
-     state of the read, or the row (the Markov in pphMm). Therefore for the
+     state of the read, or the row (the Markov in pphMm). Therefore, for the
      bulk of the forward pass (ignoring final emission) we can conserve space
      by storing only 2 rows and alternating. Externally, the workspace allows
      access to {read_length} amount of rows; although this isn't enforced and
      is only a product of Perform_forward_calculation calling {rows} correctly.
 
-     Internally, the workspace maps (mod) to the appriate offset into the 2
+     Internally, the workspace maps (via mod) to the appriate offset into the 2
      rows. In practice this has a small impact on run time performance: ~1-3,
      as we essentially just shift when GC work gets done. But this has a huge
      impact on total memory usage and is probably an important change as it
@@ -941,21 +943,22 @@ end (* CommonWorkspace *)
 module SingleWorkspace (R : Ring) :
   (Workspace_intf with type entry = R.t cell
                    and type final_entry = R.t
-                   and type final_emission = R.t) = struct
+                   and type final_emission = (R.t * int)) = struct
 
   module Fc = Forward_calcations_over_cells(R)
 
   type entry = R.t cell
   type final_entry = R.t
-  type final_emission = R.t
+  type final_emission = R.t * int             (* Position of max final entry. *)
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
+  let init_emission = R.zero, -1
   let generate ~ref_length ~read_length =
     { forward  = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length Fc.zero_cell)
     ; final    = Array.make ref_length R.zero
-    ; emission = R.zero
+    ; emission = init_emission
     ; read_length
     }
 
@@ -964,7 +967,7 @@ module SingleWorkspace (R : Ring) :
     let number_rows = Array.length ws.forward in
     ws.forward  <- Array.init number_rows ~f:(fun _ -> Array.make ref_length Fc.zero_cell);
     ws.final    <- Array.make ref_length R.zero;
-    ws.emission <- R.zero
+    ws.emission <- init_emission
 
   let save ws =
     let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
@@ -1111,11 +1114,11 @@ type 'a mt = (Pm.ascending, 'a) Pm.t
 module MakeMultipleWorkspace (R : Ring) :
   (Workspace_intf with type entry = R.t cell mt
                    and type final_entry = R.t mt
-                   and type final_emission = R.t mt) = struct
+                   and type final_emission = (R.t * int) mt) = struct
 
   type entry = R.t cell mt
   type final_entry = R.t mt
-  type final_emission = R.t mt
+  type final_emission = (R.t * int) mt
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
@@ -1150,6 +1153,34 @@ module MakeMultipleWorkspace (R : Ring) :
     ws
 
 end (* MakeMultipleWorkspace *)
+
+(* Ring and position functions. *)
+module R_p (R : Ring) = struct
+
+  let equal (l1, p1) (l2, p2) =
+    p1 = p2 && R.(close_enough l1 l2)
+
+  (* R.t, int, R.t when reducing/merging a pm. *)
+  let equal3 (l1, p1, bl1) (l2, p2, bl2) =
+    p1 = p2 && R.(close_enough l1 l2 && close_enough bl1 bl2)
+
+  (* We're tacitly taking the _first_ best final entry. Perhaps we should warn
+   * if there is ever more than one? Ex. The read is small enough that we can't
+   * tell? *)
+
+  (* Add values and track best position . *)
+  let avatbp acc pos new_value =
+    let sum, best_pos, value_at_best_pos = acc in
+    if R.is_gap new_value then
+      acc
+    else if R.(value_at_best_pos < new_value) then
+      R.(sum + new_value), pos, new_value
+    else
+      R.(sum + new_value), best_pos, value_at_best_pos
+
+end (* R_p *)
+
+module Lpr = R_p(Lp)
 
 (* Pairing the observation makes it easier to abstract the regular vs
    reverse complement access pattern. Leaving this as a pair to avoid
@@ -1341,6 +1372,7 @@ module ForwardSingleGen (R: Ring) = struct
   module W = SingleWorkspace(R)
   module Fc = Forward_calcations_over_cells(R)
   module Ff = ForwardFilters(R)
+  module Rp = R_p(R)
 
   let debug_ref = ref false
 
@@ -1379,7 +1411,8 @@ module ForwardSingleGen (R: Ring) = struct
           ; paired = paired Filter.empty
           }
       | Some number_mismatches ->
-          let filter = Ff.Max_number_of_mismatches.create tm ~number_mismatches of_entry in
+          let filter = Ff.Max_number_of_mismatches.create tm
+                          ~number_mismatches of_entry in
           { full   = full filter
           ; paired = paired filter
           }
@@ -1390,6 +1423,7 @@ module ForwardSingleGen (R: Ring) = struct
     let r, _ = Fc.g ?insert_p tm read_length in
     let start ?base_p ws obsp base ~k =
       let prev_c = if k = 0 then Fc.zero_cell else (W.get ws ~i:0 ~k:(k-1)) in
+      let base_p = Option.map base_p ~f:fst in      (* Ignore best position. *)
       r.start ?base_p (Fc.to_match_prob obsp base) prev_c
     in
     let fst_col ws obsp base ~i ~k =
@@ -1405,11 +1439,13 @@ module ForwardSingleGen (R: Ring) = struct
     in
     let end_ ws k = r.end_ (W.get ws ~i:(read_length-1) ~k) in
     let final_e ~range ws =
-      let open R in
-      W.fold_over_final ~range ws ~init:zero ~f:(+)
+      let sum_likelihoods, best_pos, _entry_at_best_pos =
+        W.foldi_over_final ~range ws ~init:(R.zero, -1, R.zero)
+          ~f:Rp.avatbp
+      in
+      sum_likelihoods, best_pos
     in
     { start ; fst_col ; middle ; end_ ; final_e }
-
 
   module SinglePasses = MakePasses(W)
 
@@ -1497,7 +1533,7 @@ module ForwardSingleGen (R: Ring) = struct
       let open R in
       V.fold_over_final ~range ws ~init:(zero, [])
         ~f:(fun ((be, _) as b) ((fe, _) as e)->
-              if fe > be then e else b)
+              if R.(be < fe) then e else b)
     in
     { start ; fst_col ; middle ; end_ ; final_e }
 
@@ -1562,8 +1598,10 @@ module ForwardMultipleGen (R : Ring) = struct
 
   let median_of_pm apm =
     let values_with_size =
-      Pm.fold_set_sizes_and_values apm ~init:[]
-        ~f:(fun acc nv v -> insert_sorted ~greater:R.( < ) v nv acc)
+      Pm.fold_set_and_values apm ~init:[]
+        ~f:(fun acc st v ->
+              let nv = Partition_map.Set.size st in
+              insert_sorted ~greater:R.( < ) v nv acc)
     in
     let n = Pm.size apm in
     let m = n / 2 in
@@ -1615,6 +1653,7 @@ module ForwardMultipleGen (R : Ring) = struct
 
   module Fc = Forward_calcations_over_cells(R)
   module Ff = ForwardFilters(R)
+  module Rp = R_p(R)
 
   let pm_max_cell =
     Pm.fold_values ~init:Fc.zero_cell ~f:Fc.max_cell_by_match
@@ -1641,8 +1680,9 @@ module ForwardMultipleGen (R : Ring) = struct
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
       let m2 =
         match base_p with
-        | None    -> Pm.merge ~eq  ems prev_pm r.start       (* Not weighing alleles *)
-        | Some l  -> Pm.merge3 ~eq l ems prev_pm (fun base_p emission prev_c ->
+        | None    -> Pm.merge ~eq  ems prev_pm r.start         (* Not weighing alleles. *)
+        | Some l  -> let nl = Pm.map l R.close_enough ~f:fst in       (* Drop best pos. *)
+                     Pm.merge3 ~eq nl ems prev_pm (fun base_p emission prev_c ->
                         r.start ~base_p emission prev_c)
       in
       m2
@@ -1678,9 +1718,13 @@ module ForwardMultipleGen (R : Ring) = struct
     let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
-      let init = pm_init_all ~number_alleles R.zero in
-      let eq = R.close_enough in
-      W.fold_over_final ~range ws ~init ~f:(fun e1 e2 -> Pm.merge ~eq e1 e2 R.(+))
+      let init = pm_init_all ~number_alleles (R.zero, -1, R.zero) in
+      let triple_pm =
+        W.foldi_over_final ~range ws ~init
+          ~f:(fun e1 p e2 -> Pm.merge ~eq:Rp.equal3 e1 e2
+                (fun acc l -> Rp.avatbp acc p l))
+      in
+      Pm.map triple_pm Rp.equal ~f:(fun (ls, bp, _bl) -> ls, bp)
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -2235,14 +2279,8 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
 (* The forward pass return type requires a bit more subtlety as we want
    diagnostic ability; to debug and to pass along values for downstream filters.
    Therefore these passes return a structure that can (1) execute the pass
-   (ex [single]) and (2) interrogate the result (ex [best_allele_pos]). *)
-
-type per_allele_datum =
-  { allele    : string                                            (* allele *)
-  ; llhd      : Lp.t                                 (* likelihood emission *)
-  ; position  : int                         (* position of highest emission *)
-  }
-  [@@deriving show,yojson]
+   (ex [single]) and (2) interrogate the result
+   (ex. [maximum_positions_median_match]). *)
 
 type proc =
   { name              : string
@@ -2252,27 +2290,28 @@ type proc =
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
   ; single            : ?prev_threshold:Lp.t
-                      -> ?base_p:Lp.t mt          (* ascending partition map. *)
+                      -> ?base_p:(Lp.t * int) mt
                       (* NOTE: Be careful about passing in a base_p. It could
                          slow down the calculation dramnatically, so have think
                          carefully about whether these values couldn't be
                          factored out. *)
                       -> read:string
                       -> read_errors:float array    (* also enforce that these are log p ?*)
-                      -> bool                          (* reverse_complement *)
+                      -> bool
+                      (* reverse_complement *)
                       -> unit Pass_result.t
   (* Perform a forward pass. We purposefully only signal whether we fully
      completed the pass or were filtered, because we may have different uses
      for the result of a pass. The accessors below allow the user to extract
      more purposeful information. *)
 
-  ; best_allele_pos   : int -> per_allele_datum list
-  (* After we perform a forward pass we might be interested in either some
+  (*; best_allele_pos   : int -> per_allele_datum list
+     After we perform a forward pass we might be interested in either some
      diagnostic information such as which were the best alleles or where
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd   : unit -> Lp.t mt
+  ; per_allele_llhd_and_pos   : unit -> (Lp.t * int) mt
   (* If we're not interested in diagnostics, but just the end result, we want
      the per allele likelihood. *)
 
@@ -2323,50 +2362,16 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
     let read = access reverse_complement read read_errors in
     pass.full read
   in
-  let best_allele_pos _n =
-    let lgn = largest 1 in
-    ForwardSLogSpace.W.fold_over_final ws ~init:(0, [])
-      ~f:(fun (p, acc) l -> (p + 1, lgn l p acc))
-    |> snd
-    |> List.map ~f:(fun (llhd, position) -> { allele; llhd; position})
-  in
-  let per_allele_llhd () =
+  let per_allele_llhd_and_pos () =
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
   in
   let init_global_state () = [| Lp.one |] in
   { name = sprintf "Single allele %s" allele
   ; single
-  ; best_allele_pos
-  ; per_allele_llhd
+  ; per_allele_llhd_and_pos
   ; init_global_state
   ; maximum_positions_median_match
   }
-
-let highest_emission_position_pm ?(debug=false) number_alleles foldi_over_final =
-  let init = pm_init_all ~number_alleles (Lp.zero, -1) in
-  foldi_over_final ~init ~f:(fun hep_pm k em_pm ->
-    Pm.merge ~eq:(fun (e1, k1) (e2, k2) -> k1 = k2 && Lp.close_enough e1 e2)
-      hep_pm em_pm (fun (be, bk) e ->
-      if debug then
-        printf "at %d e %s\n" k (Lp.to_string e);
-      if Lp.is_gap e then
-        (be, bk)
-      else if e > be then
-        (e, k)
-      else
-        (be, bk)))
-
-let to_best_allele_pos alleles foldi_over_final get_emission_pm n =
-  let number_alleles = Array.length alleles in
-  let hepp = highest_emission_position_pm number_alleles foldi_over_final in
-  let lgn a p = largest n a p in
-  let emission_pm = get_emission_pm () in
-  Pm.fold_indices_and_values emission_pm ~init:[]
-      ~f:(fun acc i emission -> lgn emission i acc)
-  |> List.map ~f:(fun (llhd, i) ->
-      let allele = alleles.(i) in
-      let _, position = Pm.get hepp i in
-      { allele; llhd; position})
 
 (* Return
   1. a function to process one read
@@ -2386,12 +2391,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
   let r(*, br*) = F.recurrences ?insert_p tm read_length number_alleles in
   let ws = F.W.generate ref_length read_length in
   let last_read_index = read_length - 1 in
-  let alleles = Array.map ~f:fst alleles in
-  let per_allele_llhd () = F.W.get_emission ws in
-  let best_allele_pos n =
-    to_best_allele_pos alleles (F.W.foldi_over_final ws)
-      per_allele_llhd n
-  in
+  let per_allele_llhd_and_pos () = F.W.get_emission ws in
   let maximum_positions_median_match () =
     F.maximum_positions_median_match ws (read_length - 1)
   in
@@ -2427,8 +2427,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
     in
     { name = sprintf "Locus: %s" (Nomenclature.show_locus t.locus)
     ; single
-    ; best_allele_pos
-    ; per_allele_llhd
+    ; per_allele_llhd_and_pos
     ; maximum_positions_median_match
     ; init_global_state
     }
@@ -2486,7 +2485,7 @@ let non_gapped_emissions_arr arr =
 module Splitting_state = struct
 
   type t =
-    { mutable emission_pm   : (Pm.ascending, Lp.t) Pm.t
+    { mutable emission_pm   : (Lp.t * int) mt
     ; mutable max_med_match : Lp.t
     (* The splitting passes incur an etra start/stop emission probability
       that makes them difficult to compare against the normal version.
@@ -2496,20 +2495,21 @@ module Splitting_state = struct
     }
 
   let init number_alleles =
-    { emission_pm = pm_init_all ~number_alleles Lp.one
+    { emission_pm = pm_init_all ~number_alleles (Lp.one, -1)
     ; max_med_match = Lp.one
     ; scaling = []
     }
 
   let reset ss =
     ss.emission_pm <-
-      pm_init_all ~number_alleles:(Pm.size ss.emission_pm) Lp.one;
+      pm_init_all ~number_alleles:(Pm.size ss.emission_pm) (Lp.one, -1);
     ss.max_med_match <- Lp.one;
     ss.scaling <- []
 
   let add_emission ss em mm =
-    let eq = Lp.close_enough in
-    ss.emission_pm <- Pm.merge ~eq ss.emission_pm em (Lp.( * ));
+    (* Choose second position, that is the one farther in the match. *)
+    let m (l1,_p1) (l2,p2) = Lp.(l1 * l2), p2 in
+    ss.emission_pm <- Pm.merge ~eq:Lpr.equal ss.emission_pm em m;
     ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
@@ -2518,8 +2518,8 @@ module Splitting_state = struct
   let finish ss =
     let pr = List.fold_left ss.scaling ~init:Lp.one
         ~f:Lp.( * ) in
-    ss.emission_pm <- Pm.map ss.emission_pm Lp.close_enough
-      ~f:(fun e -> Lp.(e / pr))
+    ss.emission_pm <- Pm.map ss.emission_pm Lpr.equal
+      ~f:(fun (e,p) -> Lp.(e / pr),p)
 
 end (* Splitting_state *)
 
@@ -2555,7 +2555,6 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
     (* Set the emission and maximum match as references that we update after
        each split run. Only {single} defined below is different between the
        prealigned_transition_model case. *)
-    let alleles = Array.map ~f:fst alleles in
     let ss = Splitting_state.init number_alleles in
     let merge_after_pass ?range () =
       let em = F.W.get_emission ws in
@@ -2563,12 +2562,8 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
       let max_med_em = F.maximum_positions_median_match ?range ws (read_length - 1) in
       Splitting_state.add_emission ss em max_med_em;
     in
-    let per_allele_llhd () = ss.Splitting_state.emission_pm in
+    let per_allele_llhd_and_pos () = ss.Splitting_state.emission_pm in
     let maximum_positions_median_match () = ss.Splitting_state.max_med_match in
-    let best_allele_pos n =
-      to_best_allele_pos alleles (F.W.foldi_over_final ws)
-        per_allele_llhd n
-    in
     let reference i = emissions_a.(i) in
     let init_global_state () = F.per_allele_emission_arr t.number_alleles in
     if not prealigned_transition_model then begin
@@ -2630,8 +2625,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
       in
       { name
       ; single
-      ; best_allele_pos
-      ; per_allele_llhd
+      ; per_allele_llhd_and_pos
       ; maximum_positions_median_match
       ; init_global_state
       }
@@ -2649,32 +2643,18 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
           if n = 0 then
             0
           else begin
-            let hepp = highest_emission_position_pm
-              number_alleles
-              (F.W.foldi_over_final ?range ws)
-            in
-            let _, best_pos =
-              Pm.fold_indices_and_values hepp ~init:(Lp.zero, -1)
-                ~f:(fun (bprob, bpos) i (prob, pos) ->
-                      if prob > bprob then
-                        prob, pos
-                      else
-                        bprob, bpos)
+            let _highest_emission, best_pos =
+              Pm.fold_values (per_allele_llhd_and_pos ()) ~init:(Lp.zero, -1)
+                ~f:(fun (bem, bpos) (em, pos) ->
+                      if Lp.is_gap em || not Lp.(bem < em) then
+                        (bem, bpos)
+                      else (* Lp.(bem < em) *)
+                        (em, pos))
             in
             if best_pos = -1 then begin
-              (*let hepp = highest_emission_position_pm (*~debug:true*) number_alleles
-              (F.W.foldi_over_final ?range ws)
-              in
-              let () = F.W.foldi_over_row ?range ws (eff_read_length - 1)
-                ~init:() ~f:(fun () k e ->
-                  printf "at %d, final pm: %s\n"
-                    k (Pm.to_string e (cell_to_string Lp.to_string)))
-                in *)
-              invalid_argf "range: %s, hepp: %s\n"
+              invalid_argf "range: %s\n"
                 (Option.value_map range ~default:"None"
                     ~f:(fun (s,e) -> sprintf "Some (%d,%d)" s e))
-                (Pm.to_string hepp (fun (lp, p) ->
-                  sprintf "(%s, %d)" (Lp.to_string lp) p))
             end else
               best_pos
           end
@@ -2773,8 +2753,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
       in
       { name
       ; single
-      ; best_allele_pos
-      ; per_allele_llhd
+      ; per_allele_llhd_and_pos
       ; maximum_positions_median_match
       ; init_global_state
       }

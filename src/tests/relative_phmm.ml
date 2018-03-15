@@ -40,7 +40,7 @@ let setup_one_read parPHMM_t rd =
   let read = rd.Biocaml_unix.Fastq.sequence in
   let read_errors = unwrap (Fastq.phred_log_probs rd.Biocaml_unix.Fastq.qualities) in
   Pass_result.unwrap (pta.single ~read ~read_errors false);
-  let aggregate_result = pta.per_allele_llhd () in
+  let aggregate_result = pta.per_allele_llhd_and_pos () in
   let read_length = String.length read in
   let individual_assoc_arr =
     Array.map parPHMM_t.alleles ~f:(fun (allele, _alts) ->
@@ -48,11 +48,11 @@ let setup_one_read parPHMM_t rd =
                   ~prealigned_transition_model read_length allele parPHMM_t
       in
       Pass_result.unwrap (sta.single ~read ~read_errors false);
-      allele, Pt.get (sta.per_allele_llhd ()) 0)
+      allele, fst (Pt.get (sta.per_allele_llhd_and_pos ()) 0))
   in
   let aggregate_assoc_arr =
     Array.map2 parPHMM_t.alleles (Pt.to_array aggregate_result)
-      ~f:(fun (allele, _alts) lp -> allele, lp)
+      ~f:(fun (allele, _alts) (lp, _pos) -> allele, lp)
   in
   aggregate_assoc_arr, individual_assoc_arr
 

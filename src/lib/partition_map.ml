@@ -6,57 +6,18 @@
 
 open Util
 
-module Interval : sig
+module Interval = struct
 
-  type t
+module Iab = Ints_as_bits
 
-  val compare : t -> t -> int
-
-  val make : int -> int -> t
-
-  val extend_one : t -> t
-
-  val width : t -> int
-
-  val inside : int -> t -> bool
-
-  val start : t -> int
-
-  val end_ : t -> int
-
-  val to_string : t -> string
-
-  val is_none : t -> bool
-
-  val strict_before : t -> t -> bool
-
-  val before_separate : t -> t -> bool
-
-  val merge : t -> t -> t
-
-  val split_inter_diff2 : t -> t ->
-                          t * t * t * t * t
-  val split_inter_diff3 : t -> t -> t ->
-                          t * t * t * t * t * t * t
-  val split_inter_diff4 : t -> t -> t -> t ->
-                          t * t * t * t * t * t * t * t * t
-
-  val aligned_inter_diff2 : t -> t ->
-                            t * t * t
-  val aligned_inter_diff3 : t -> t -> t ->
-                            t * t * t * t
-  val aligned_inter_diff4 : t -> t -> t -> t ->
-                            t * t * t * t * t
-
-  val fold : t -> init:'a -> f:('a -> int -> 'a) -> 'a
-
-  val iter : t -> f:(int -> unit) -> unit
-
-end = struct
-
-(* Start will occupy the higher order bits. This way a comparison can test
- * for equality (the most common case) and determine the Before/After path
- * without looking at end.
+(* We encode an interval (pair) of integers in one integer by putting the start
+ * (first) into the higher half of the bits an the end (second) into the lower
+ * half. This implies that we reduce the total domain in half, but even on
+ * 32-bit systems, that is more than enough for our goals.
+ *
+ * Since start occupies the higher order bits, once nice consequences is that
+ * we can test for comparison and equality (the most common case) without
+ * looking at the end in most cases, ie. in a single operation.
  *
  * This means that the new range must start at 1 and 0 is no longer a valid
  * element in our partition. We'll use 0 to encode a None
@@ -69,17 +30,18 @@ let is_none t =
   t = none_t
 
 (* Masks *)
-let lower32 = 4294967295
-let upper32 = -4294967296
+let half_width = Iab.width / 2    (* 31 or 15 *)
+let lower_mask = Iab.lsb_masks.(half_width)
+let upper_mask = lower_mask lsl half_width
 
 let start_of_int i =
-   (i lsl 32)
+  (i lsl half_width)
 
 let int_of_start  i =
-  ((i land upper32) lsr 32)
+  ((i land upper_mask) lsr half_width)
 
 let start_p t =
-  t land upper32
+  t land upper_mask
 
 let end_of_int i =
   i
@@ -88,7 +50,7 @@ let int_of_end i =
   i
 
 let end_p t =
-  t land lower32
+  t land lower_mask
 
 let make64 s e =
   s lor e
@@ -115,16 +77,25 @@ let inside i t =
 let to_string t =
   sprintf "(%d,%d)" (start t) (end_ t)
 
-let make s e =
-  if e < s then
-    invalid_argf "Not in order %d < %d" e s
-  else if e < 0 then
-    invalid_argf "End %d less than 0" e
-  else if s < 0 then
-    invalid_argf "Start %d less than 0" e
+let max_value = lower_mask - 1
+
+let within_bounds what v =
+  if v < 0 then
+    invalid_argf "%s %d less than 0." what v
+  else if v >= max_value then
+    invalid_argf "%s %d is greater than max value %d, it not representable."
+      what v max_value
   else
-    let s64 = start_of_int (s + 1) in
-    let e64 = end_of_int (e + 1) in
+    ()
+
+let make ~start ~end_ =
+  if end_ < start then
+    invalid_argf "Not in order end: %d < start: %d." end_ start
+  else
+    within_bounds "Start" start;
+    within_bounds "End" end_;
+    let s64 = start_of_int (start + 1) in
+    let e64 = end_of_int (end_ + 1) in
     make64 s64 e64
 
 let extend_one t =
@@ -301,11 +272,145 @@ let fold t ~init ~f =
   for i = (start t) to (end_ t) do acc := f !acc i done;
   !acc
 
+let non_none_cpair n f s =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular.Indices.full_upper n in
+  if se - ss + 1 = n then
+    let start = tn fs (max fs ss) in
+    let end_  = tn fe se in
+    [ make start end_]
+  else
+    let rec loop i =
+      if i > fe || i > se then
+        []
+      else
+        let start = tn i (max i ss) in
+        let end_  = tn i se in
+        make start end_ :: loop (i + 1)
+    in
+    loop fs
+
+let cpair n f s =
+  if is_none f then
+    []
+  else if is_none s then
+    []
+  else
+    non_none_cpair n f s
+
+let non_none_cpair_cps n f s c k =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular.Indices.full_upper n in
+  if se - ss + 1 = n then
+    let start = tn fs (max fs ss) in
+    let end_  = tn fe se in
+    k (make start end_)
+  else
+    let fi = make ~start:(tn fs (max fs ss)) ~end_:(tn fs se) in
+    let rec loop p i =
+      if i > fe || i > se then
+        k p
+      else
+        let ni = make ~start:(tn i (max i ss)) ~end_:(tn i se) in
+        c p (loop ni (i + 1))
+    in
+    loop fi (fs + 1)
+
+let cpair_cps n f s ~c ~e ~ne =
+  if is_none f then
+    e ()
+  else if is_none s then
+    e ()
+  else
+    non_none_cpair_cps n f s c ne
+
+let merge_or_reorder t1 t2 =
+  let s1 = start_p t1 in
+  let s2 = start_p t2 in
+  let e1 = end_p t1 in
+  let e2 = end_p t2 in
+  if succ e1 = (end_of_start s2) then
+    make64 s1 e2, none_t
+  else if succ e2 = (end_of_start s1) then
+    make64 s2 e1, none_t
+  else if s1 < s2 then
+    t1, t2
+  else
+    t2, t1
+
+(* Not none
+ * cross pair
+ * check merge
+ * cps - style
+ *)
+let non_none_cpair_cm_cps n f s p c k =
+  let fs = start f in
+  let fe = end_ f in
+  let ss = start s in
+  let se = end_ s in
+  let tn = Triangular.Indices.full_upper n in
+  if se - ss + 1 = n then                                      (* or ss = 0 ? *)
+    let i = make ~start:(tn fs (max fs ss)) ~end_:(tn fe se) in
+    let m, n = merge_or_reorder p i in
+    if is_none n then
+      k m
+    else
+      c m (k n)
+  else
+    let rec loop p i =
+      if i > fe || i > se then
+        k p
+      else
+        let ni = make ~start:(tn i (max i ss)) ~end_:(tn i se) in
+        let m, n = merge_or_reorder p ni in
+        if is_none n then
+          loop m (i + 1)
+        else
+          c m (loop n (i + 1))
+    in
+    let fi = make ~start:(tn fs (max fs ss)) ~end_:(tn fs se) in
+    let m, n = merge_or_reorder p fi in
+    if is_none n then
+      loop m (fs + 1)
+    else
+      c m (loop n (fs + 1))
+
+let cpair_cm_cps n f s p ~c ~e ~ne =
+  if is_none f then
+    e p
+  else if is_none s then
+    e p
+  else
+    non_none_cpair_cm_cps n f s p c ne
+
+let to_cross_indices n i =
+  let tni = Triangular.Indices.full_upper_inverse n in
+  let e = end_ i in
+  let rec loop acc j =
+    if j > e then
+      List.rev acc
+    else
+      loop (tni j :: acc) (j + 1)
+  in
+  loop [] (start i)
+
 end (* Interval *)
 
 module Set = struct
 
   type t = Interval.t list
+
+  let empty = []
+  let is_empty = function
+    | []  -> true
+    | [i] -> Interval.is_none i
+    | _   -> false
 
   let of_interval i =                 (* This isn't the cleanest abstraction ... *)
     if Interval.is_none i then
@@ -326,10 +431,12 @@ module Set = struct
     in
     loop
 
-  let to_string  =
-    string_of_list ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string i))
+  let to_string t =
+    string_of_list t ~sep:";" ~f:(fun i -> sprintf "%s" (Interval.to_string i))
 
   let size = List.fold_left ~init:0 ~f:(fun a i -> a + Interval.width i)
+
+  let length = List.length
 
   let inside i l =
     List.exists l ~f:(Interval.inside i)
@@ -426,8 +533,8 @@ module Set = struct
   let must_match_at_beginning s1 s2 =
     match s1, s2 with
     | [], []  -> invalid_argf "Empty sets!"
-    | [], s   -> invalid_argf "Different lengths! s2: %s" (to_string s)
-    | s , []  -> invalid_argf "Different lengths! s1: %s" (to_string s)
+    | [], s   -> invalid_argf "must_match_at_beginning: different lengths! s2: %s" (to_string s)
+    | s , []  -> invalid_argf "must_match_at_beginning: different lengths! s1: %s" (to_string s)
     | h1 :: t1
     , h2 :: t2 ->
       let open Interval in
@@ -519,6 +626,160 @@ module Set = struct
   let iter t ~f =
     fold t ~init:() ~f:(fun () i -> f i)
 
+  let cpair_unsorted n t =
+    let cp = Interval.cpair_cm_cps n in
+    let rec first_fixed f l k p = match l with
+      | []     -> k p
+      | h :: t ->
+          cp f h p                                  (* Intersection possible. *)
+            ~c:List.cons
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> [p])
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> first_fixed f t k p)
+    and descend l p = match l with
+      | []     -> [p]
+      | h :: t -> first_fixed h l (fun p -> descend t p ) p
+    and start = function
+      | []     -> []
+      | h :: t ->
+          Interval.cpair_cps n h h
+            ~c:List.cons
+            ~e:(fun () -> [])
+            ~ne:(fun p -> first_fixed h t (fun p -> descend t p) p)
+    in
+    start t
+
+  let cpair_separate_unsorted n t1 t2 =
+    let cp = Interval.cpair_cm_cps n ~c:List.cons in
+    let rec first_fixed f l k p = match l with
+      | []     -> k p
+      | h :: t ->
+          cp f h p                                  (* Intersection possible. *)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> [p])
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> first_fixed f t k p)
+    and descend l1 l2 p = match l1, l2 with
+      | [],       _
+      | _,        []       -> [p]
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then
+            cp h1 h2 p
+              ~e:(fun p -> [p])
+              ~ne:(fun p -> first_fixed h1 t2 (fun p -> descend t1 l2 p) p)
+          else
+            cp h2 h1 p
+              ~e:(fun p -> [p])
+              ~ne:(fun p -> first_fixed h2 t1 (fun p -> descend l1 t2 p) p)
+    and start l1 l2 = match l1, l2 with
+      | [],       _
+      | _,        []       -> []
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then
+            Interval.cpair_cps n h1 h2
+              ~c:List.cons
+              ~e:(fun () -> [])
+              ~ne:(fun p -> first_fixed h1 t2 (fun p -> descend t1 l2 p) p)
+          else
+            Interval.cpair_cps n h2 h1
+              ~c:List.cons
+              ~e:(fun () -> [])
+              ~ne:(fun p -> first_fixed h2 t1 (fun p -> descend l1 t2 p) p)
+    in
+    start t1 t2
+
+  let cpair_separate_unsorted2 n t1 t2 =
+    let cp = Interval.cpair_cm_cps n in
+    let rec first_fixed f l k (p1, p2) = match l with
+      | []     -> k (p1, p2)
+      | h :: t ->
+          cp f h p1                                 (* Intersection possible. *)
+            ~c:(fun a (l1, l2) -> a :: l1, l2)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> assert false)
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> first_fixed f t k (p, p2))
+    and second_fixed f l k (p1, p2) = match l with
+      | []     -> k (p1, p2)
+      | h :: t ->
+          cp f h p2                                 (* Intersection possible. *)
+            ~c:(fun a (l1, l2) -> l1, a :: l2)
+            (* assert false -> don't work for empty! *)
+            ~e:(fun p -> assert false)
+            (* Intersection NOT possible, but check anyway ? *)
+            ~ne:(fun p -> second_fixed f t k (p1, p))
+    and descend l1 l2 (p1, p2) = match l1, l2 with
+      | [],       _
+      | _,        []       -> [p1], [p2]
+      | h1 :: t1, h2 :: t2 ->
+          if Interval.before_separate h1 h2 then begin
+            if Interval.is_none p1 then
+              Interval.cpair_cps n h1 h2
+                ~c:(fun a (l1, l2) -> a :: l1, l2)
+                ~e:(fun () -> [], [])
+                ~ne:(fun p -> first_fixed h1 t2 (fun pp -> descend t1 l2 pp) (p,p2))
+            else
+              cp h1 h2 p1
+                ~c:(fun a (l1, l2) -> a :: l1, l2)
+                ~e:(fun p -> [p],[p2])
+                ~ne:(fun p -> first_fixed h1 t2 (fun pp -> descend t1 l2 pp) (p,p2))
+          end else begin
+            if Interval.is_none p2 then
+              Interval.cpair_cps n h2 h1
+                ~c:(fun a (l1, l2) -> l1, a :: l2)
+                ~e:(fun () -> [], [])
+                ~ne:(fun p -> second_fixed h2 t1 (fun pp -> descend l1 t2 pp) (p1,p))
+            else
+              cp h2 h1 p2
+                ~c:(fun a (l1, l2) -> l1, a :: l2)
+                ~e:(fun p -> [p1],[p])
+                ~ne:(fun p -> second_fixed h2 t1 (fun pp -> descend l1 t2 pp) (p1,p))
+          end
+    in
+    descend t1 t2 (Interval.none_t, Interval.none_t)
+
+  (* Though we write the underlying algorithm in CPS style to try and avoid
+    * some excessive list allocations and merging against last created element
+    * I can't think of a better way to guarantee that the result is in order
+    * during construction... So we have to sort and then remerge ...
+    *
+    * Maybe the right approach is to maintain a reverse-ordered list into
+    * which we'll push the new elements?
+    * *)
+  let cpair_norm l =
+    let sorted = List.sort ~cmp:Interval.compare l in
+    let rec dedup p = function
+      | []     -> [p]
+      | h :: t ->
+          let m = Interval.merge p h in
+          if Interval.is_none m then
+            p :: dedup h t
+          else
+            dedup m t
+    in
+    match sorted with
+    | []     -> []
+    | h :: t -> dedup h t
+
+  let cpair n t =
+    cpair_norm (cpair_unsorted n t)
+
+  let cpair_separate n t1 t2 =
+    if compare t1 t2 >= 0 then
+      invalid_argf "Sets are not in ordered for separate cpair: %s %s"
+        (to_string t1) (to_string t2)
+    else
+      cpair_norm (cpair_separate_unsorted n t1 t2)
+
+  let cpair_separate2 n t1 t2 =
+    if compare t1 t2 >= 0 then
+      invalid_argf "Sets are not in ordered for separate cpair: %s %s"
+        (to_string t1) (to_string t2)
+    else
+      let v1, v2 = cpair_separate_unsorted2 n t1 t2 in
+      cpair_norm v1, cpair_norm v2
+
 end (* Set *)
 
 type ascending  (*= Ascending*)
@@ -529,9 +790,14 @@ type descending (*= Descending*)
   better for merging. *)
 
 type +'a asc =
-  | E                       (* empty, merging against this will fail! *)
-  | U of Set.t * 'a           (* universal, hold size - 1 = end_ *)
-  | S of (Set.t * 'a) list
+  | E                               (* empty, merging against this will fail! *)
+  | U of { size   : int
+         ; set    : Set.t
+         ; value  : 'a
+         }
+  | S of { size   : int
+         ; values : (Set.t * 'a) list
+         }
 
 type +'a desc = (Interval.t * 'a) list
 
@@ -541,7 +807,7 @@ type (_, +'a) t =
 
 let ascending_invariant =
   let rec loop = function
-    | []           -> false             (* fail? don't expect empty lists *)
+    | []           -> false                 (* fail? don't expect empty lists *)
     | (s, _) :: [] -> Set.invariant s
     | (s1, _) :: (s2, v) :: t ->
         Set.invariant s1
@@ -552,10 +818,10 @@ let ascending_invariant =
 
 let invariant : type o a. (o, a) t -> bool =
   function
-    | Asc E      -> true
-    | Asc U _    -> true
-    | Asc (S la) -> ascending_invariant la
-    | Desc _     -> true                               (* being a bit lazy atm. *)
+    | Asc E             -> true
+    | Asc U _           -> true
+    | Asc (S {values})  -> ascending_invariant values
+    | Desc _            -> true                      (* being a bit lazy atm. *)
 
 (* Empty Constructors *)
 let empty_d = Desc []
@@ -566,9 +832,9 @@ let init_first_d v =
   let i = Interval.make 0 0 in
   Desc [i, v]
 
-let init_all_a ~size v =
+let init_all_a ~size value =
   let i = Interval.make 0 (size - 1) in
-  Asc (U (Set.of_interval i, v))
+  Asc (U { size; set = Set.of_interval i; value} )
 
 (* Properties *)
 let asc_to_string la to_s =
@@ -581,12 +847,10 @@ let desc_to_string ld to_s =
 
 let to_string: type o a. (o, a) t -> (a -> string) -> string =
   fun t to_s -> match t with
-    | Asc E         -> "Empty!"
-    | Asc (U (s,v)) -> sprintf "%s:%s" (Set.to_string s) (to_s v)
-    | Asc (S l)     -> asc_to_string l to_s
-    | Desc ld       -> desc_to_string ld to_s
-
-let size_a = List.fold_left ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
+    | Asc E               -> "Empty!"
+    | Asc (U {set;value}) -> sprintf "%s:%s" (Set.to_string set) (to_s value)
+    | Asc (S { values })  -> asc_to_string values to_s
+    | Desc ld             -> desc_to_string ld to_s
 
 let size_d = function
   | []            -> 0
@@ -594,15 +858,15 @@ let size_d = function
 
 let size : type o a. (o, a) t -> int = function
   | Asc E          -> 0
-  | Asc (U (s, _)) -> Set.size s
-  | Asc (S l)      -> size_a l
+  | Asc (U {size}) -> size
+  | Asc (S {size}) -> size
   | Desc l         -> size_d l
 
 let length : type o a. (o, a) t -> int = function
-  | Asc E     -> 0
-  | Asc (U _) -> 1
-  | Asc (S l) -> List.length l
-  | Desc l    -> List.length l
+  | Asc E            -> 0
+  | Asc (U _)        -> 1
+  | Asc (S {values}) -> List.length values
+  | Desc l           -> List.length l
 
 let assoc_remove_and_get el list =
   let rec loop acc = function
@@ -641,22 +905,25 @@ let ascending_t eq l =
 let asc_sets_to_str s =
   asc_to_string s (fun _ -> "")
 
+let size_a = List.fold_left ~init:0 ~f:(fun a (s, _) -> a + Set.size s)
+
 let ascending eq = function
   | Desc l ->
-    let a = ascending_t eq l in                             (* assert (ascending_invariant l); *)
+    let a = ascending_t eq l in            (* assert (ascending_invariant l); *)
     match a with
-    | []      -> invalid_arg "Empty descending!"
-    | [s,v]   -> if Set.universal s then
-                   Asc (U (s, v))
-                 else
-                  invalid_argf "Single set but not universal? %s" (Set.to_string s)
-    | lst     -> Asc (S lst)
+    | []          -> invalid_arg "Empty descending!"
+    | [set,value] -> if Set.universal set then
+                       Asc (U {size = Set.size set; set; value})
+                     else
+                       invalid_argf "Single set but not universal? %s"
+                         (Set.to_string set)
+    | values      -> Asc (S {size = size_a values; values })
 
 let descending = function
-  | Asc E          -> invalid_arg "Can't convert empty to descending"
-  | Asc (U (s, v)) -> Desc [List.hd_exn s, v]
-  | Asc (S l)      ->
-      List.map l ~f:(fun (s, v) -> List.map s ~f:(fun i -> i, v))
+  | Asc E                -> invalid_arg "Can't convert empty to descending"
+  | Asc (U {set; value}) -> Desc [List.hd_exn set, value]
+  | Asc (S {values})     ->
+      List.map values ~f:(fun (s, v) -> List.map s ~f:(fun i -> i, v))
       |> List.concat
       |> List.sort ~cmp:(fun (i1, _) (i2, _) -> Interval.compare i2 i1)
       |> fun l -> Desc l
@@ -670,9 +937,9 @@ let add v = function
 
 
 let get t i = match t with
-  | Asc E          -> invalid_arg "Can't get from empty"
-  | Asc (U (_, v)) -> v
-  | Asc (S l)      ->
+  | Asc E             -> invalid_arg "Can't get from empty"
+  | Asc (U {value})   -> value
+  | Asc (S {values})  ->
       let rec loop = function
         | []          -> raise Not_found      (* Need a better failure mode. *)
         | (s, v) :: t ->
@@ -681,32 +948,32 @@ let get t i = match t with
             else
               loop t
       in
-      loop l
+      loop values
 
-let set t i v = match t with
-  | Asc E          -> invalid_arg "Can't set from empty"
-  | Asc (U (s, _)) -> Asc (U (s, v))
-  | Asc (S l)      ->
+let set t i value = match t with
+  | Asc E                   -> invalid_arg "Can't set from empty"
+  | Asc (U {size; set})     -> Asc (U { set; size; value})
+  | Asc (S {size; values})  ->
     let open Interval in
     let ii = make i i in
     let rec loop l = match l with
       | []      -> raise Not_found
       | h :: t  ->
           let s, ov = h in
-          if v = ov && Set.inside i s then              (* No use splitting *)
+          if value = ov && Set.inside i s then              (* No use splitting *)
             l
           else
             match Set.split_if_in ii s with
             | None,    _     -> h :: loop t
-            | Some [], after -> (Set.of_interval ii, v) :: (after, ov) :: t
+            | Some [], after -> (Set.of_interval ii, value) :: (after, ov) :: t
             (* Technically this isn't scanning l again to find the
                appropriate set for {v}, we're just inserting it and maintaing
                the invariant that the sets inside are ordered.
                I'm not actually using this method in ParPHMM so I'll avoid
                a better implementation for now. *)
-            | Some be, after -> (be @ after, ov) :: (Set.of_interval ii, v) :: t
+            | Some be, after -> (be @ after, ov) :: (Set.of_interval ii, value) :: t
     in
-    Asc (S (loop l))
+    Asc (S {size; values = loop values})
 
 let insert s v l =
   let sl = Set.first_pos s in
@@ -740,11 +1007,17 @@ let map_with_just_last_check ~f = function
     in
     loop s (f v) t
 
+let size_guard2 s1 s2 k =
+  if s1 <> s2 then
+    invalid_argf "Trying to merge sets of two different sizes: %d %d" s1 s2
+  else
+    k s1
+
 (* The reason for all this logic. *)
 let rec start2 eq f l1 l2 = match l1, l2 with
   | [],     []      -> []
-  | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s      -> invalid_argf "start2 different lengths! l2: %s" (asc_sets_to_str s)
+  |  s,     []      -> invalid_argf "start2 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2  ->
       let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -754,8 +1027,8 @@ let rec start2 eq f l1 l2 = match l1, l2 with
       loop2 eq f acc nt1 nt2
 and loop2 eq f acc l1 l2 = match l1, l2 with
   | [],     []      -> acc
-  | [],      s      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  s,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s      -> invalid_argf "loop2 different lengths! l2: %s" (asc_sets_to_str s)
+  |  s,     []      -> invalid_argf "loop2 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2  ->
       let intersect, r1, r2 = Set.must_match_at_beginning s1 s2 in
@@ -771,17 +1044,32 @@ and merge ~eq t1 t2 f =
   match t1, t2 with
   | Asc E          , _
   | _              , Asc E           -> invalid_argf "Can't merge empty"
-  | Asc (U (s, v1)), Asc (U (_s,v2)) -> Asc (U (s, f v1 v2))
-  | Asc (U (_, v1)), Asc (S l2)      -> Asc (S (map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)))
-  | Asc (S l1),      Asc (U (_, v2)) -> Asc (S (map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)))
-  | Asc (S l1),      Asc (S l2)      -> Asc (S (start2 eq f l1 l2))
+  | Asc (U {size = s1; value = v1; set}), Asc (U {size = s2; value = v2})   ->
+      size_guard2 s1 s2 (fun size -> Asc (U {size = s1; set; value = f v1 v2}))
+
+  | Asc (U {size = s1; value = v1}),      Asc (S {size = s2; values = l2})  ->
+      size_guard2 s1 s2 (fun size ->
+        Asc (S {size; values = map_with_just_last_check l2 ~f:(fun v2 -> f v1 v2)}))
+
+  | Asc (S {size = s1; values = l1}),     Asc (U {size = s2; value = v2})   ->
+      size_guard2 s1 s2 (fun size ->
+        Asc (S {size; values = map_with_just_last_check l1 ~f:(fun v1 -> f v1 v2)}))
+
+  | Asc (S { size = s1; values = l1}),    Asc (S { size = s2; values = l2}) ->
+      size_guard2 s1 s2 (fun size -> Asc (S {size ; values = start2 eq f l1 l2}))
+
+let size_guard3 s1 s2 s3 k =
+  if s1 = s2 && s2 = s3 then
+    k s1
+  else
+    invalid_argf "Trying to merge2 sets of different sizes: %d %d %d" s1 s2 s3
 
 let rec start3 eq f l1 l2 l3 =
   match l1, l2, l3 with
   | [],     [],     []  -> []
-  | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _  -> invalid_argf "start3 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s  -> invalid_argf "start3 different lengths! l3: %s" (asc_sets_to_str s)
+  |  s,      _,     []  -> invalid_argf "start3 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3      ->
@@ -794,9 +1082,9 @@ let rec start3 eq f l1 l2 l3 =
 and loop3 eq f acc l1 l2 l3 =
   match l1, l2, l3 with
   | [],     [],     []  -> acc     (* We insert at the end, thereby preserving order *)
-  | [],      s,      _  -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s  -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  s,      _,     []  -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _  -> invalid_argf "loop3 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s  -> invalid_argf "loop3 different lengths! l3: %s" (asc_sets_to_str s)
+  |  s,      _,     []  -> invalid_argf "loop3 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3      ->
@@ -813,25 +1101,66 @@ and merge3 ~eq t1 t2 t3 f =
   | _              , Asc E          , _
   | _              , _              , Asc E           -> invalid_argf "Can't merge3 empty"
 
-  | Asc (U (s, v1)), Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (U (s, f v1 v2 v3))
+  | Asc (U {size = s1; value = v1; set})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})   ->
+      size_guard3 s1 s2 s3 (fun size -> Asc (U {size; set; value = f v1 v2 v3}))
 
-  | Asc (U (_, v1)), Asc (U (_, v2)), Asc (S l3)      -> Asc (S (map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3)))
-  | Asc (U (_, v1)), Asc (S l2),      Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3)))
-  | Asc (S l1),      Asc (U (_, v2)), Asc (U (_, v3)) -> Asc (S (map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3)))
+  | Asc (U {size = s1; value = v1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})  ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3)}))
 
-  | Asc (U (_, v1)), Asc (S l2),      Asc (S l3)      -> Asc (S (start2 eq (fun v2 v3 -> f v1 v2 v3) l2 l3))
-  | Asc (S l1),      Asc (U (_, v2)), Asc (S l3)      -> Asc (S (start2 eq (fun v1 v3 -> f v1 v2 v3) l1 l3))
-  | Asc (S l1),      Asc (S l2),      Asc (U (_, v3)) -> Asc (S (start2 eq (fun v1 v2 -> f v1 v2 v3) l1 l2))
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})   ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3)}))
 
-  | Asc (S l1),      Asc (S l2),      Asc (S l3)      -> Asc (S (start3 eq f l1 l2 l3))
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})   ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3)}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})  ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = start2 eq (fun v2 v3 -> f v1 v2 v3) l2 l3}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})  ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = start2 eq (fun v1 v3 -> f v1 v2 v3) l1 l3}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})   ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = start2 eq (fun v1 v2 -> f v1 v2 v3) l1 l2}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})  ->
+      size_guard3 s1 s2 s3 (fun size ->
+        Asc (S {size; values = start3 eq f l1 l2 l3}))
+
+let size_guard4 s1 s2 s3 s4 k =
+  if s1 = s2 && s2 = s3 && s3 = s4 then
+    k s1
+  else
+    invalid_argf "Trying to merge3 sets of different sizes: %d %d %d %d" s1 s2 s3 s4 s4 s4 s4
 
 let rec start4 eq f l1 l2 l3 l4 =
   match l1, l2, l3, l4 with
   | [],     [],     [],     []      -> []
-  | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
-  |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _,      _      -> invalid_argf "start4 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s,      _      -> invalid_argf "start4 different lengths! l3: %s" (asc_sets_to_str s)
+  |  _,      _,     [],      s      -> invalid_argf "start4 different lengths! l4: %s" (asc_sets_to_str s)
+  |  s,      _,      _,     []      -> invalid_argf "start4 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3
@@ -846,10 +1175,10 @@ let rec start4 eq f l1 l2 l3 l4 =
 and loop4 eq f acc l1 l2 l3 l4 =
   match l1, l2, l3, l4 with
   | [],     [],     [],     []      -> acc     (* We insert at the end, thereby preserving order *)
-  | [],      s,      _,      _      -> invalid_argf "Different lengths! l2: %s" (asc_sets_to_str s)
-  |  _,     [],      s,      _      -> invalid_argf "Different lengths! l3: %s" (asc_sets_to_str s)
-  |  _,      _,     [],      s      -> invalid_argf "Different lengths! l4: %s" (asc_sets_to_str s)
-  |  s,      _,      _,     []      -> invalid_argf "Different lengths! l1: %s" (asc_sets_to_str s)
+  | [],      s,      _,      _      -> invalid_argf "loop4 different lengths! l2: %s" (asc_sets_to_str s)
+  |  _,     [],      s,      _      -> invalid_argf "loop4 different lengths! l3: %s" (asc_sets_to_str s)
+  |  _,      _,     [],      s      -> invalid_argf "loop4 different lengths! l4: %s" (asc_sets_to_str s)
+  |  s,      _,      _,     []      -> invalid_argf "loop4 different lengths! l1: %s" (asc_sets_to_str s)
   | (s1, v1) :: t1
   , (s2, v2) :: t2
   , (s3, v3) :: t3
@@ -874,86 +1203,230 @@ and merge4 ~eq t1 t2 t3 t4 f =
   | _,              _,              _,              Asc E           -> invalid_argf "Can't merge empty4"
 
   (* 0 S's, 4 U's *)
-  | Asc (U (s,v1)), Asc (U (_,v2)), Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (U (s, f v1 v2 v3 v4))
+  | Asc (U {size = s1; value = v1; set})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size -> Asc (U {size; set; value = f v1 v2 v3 v4}))
 
   (* 1 S's, 3 U's *)
-  | Asc (S l1),     Asc (U (_,v2)), Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3 v4)))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3 v4)))
-  | Asc (U (_,v1)), Asc (U (_,v2)), Asc (S l3),     Asc (U (_,v4))  -> Asc (S (map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3 v4)))
-  | Asc (U (_,v1)), Asc (U (_,v2)), Asc (U (_,v3)), Asc (S l4)      -> Asc (S (map_with_full_check eq l4 ~f:(fun v4 -> f v1 v2 v3 v4)))
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l1 ~f:(fun v1 -> f v1 v2 v3 v4)}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l2 ~f:(fun v2 -> f v1 v2 v3 v4)}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l3 ~f:(fun v3 -> f v1 v2 v3 v4)}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (S {size = s4; values = l4})  ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = map_with_full_check eq l4 ~f:(fun v4 -> f v1 v2 v3 v4)}))
 
   (* 2 S's, 2 U's *)
-  | Asc (S l1),     Asc (S l2),     Asc (U (_,v3)), Asc (U (_,v4))  -> Asc (S (start2 eq (fun v1 v2 -> f v1 v2 v3 v4) l1 l2))
-  | Asc (S l1),     Asc (U (_,v2)), Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 eq (fun v1 v3 -> f v1 v2 v3 v4) l1 l3))
-  | Asc (S l1),     Asc (U (_,v2)), Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 eq (fun v1 v4 -> f v1 v2 v3 v4) l1 l4))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start2 eq (fun v2 v3 -> f v1 v2 v3 v4) l2 l3))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start2 eq (fun v2 v4 -> f v1 v2 v3 v4) l2 l4))
-  | Asc (U (_,v1)), Asc (U (_,v2)), Asc (S l3),     Asc (S l4)      -> Asc (S (start2 eq (fun v3 v4 -> f v1 v2 v3 v4) l3 l4))
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v1 v2 -> f v1 v2 v3 v4) l1 l2}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v1 v3 -> f v1 v2 v3 v4) l1 l3}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (S {size = s4; values = l4})  ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v1 v4 -> f v1 v2 v3 v4) l1 l4}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v2 v3 -> f v1 v2 v3 v4) l2 l3}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (S {size = s4; values = l4})  ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v2 v4 -> f v1 v2 v3 v4) l2 l4}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (S {size = s4; values = l4})  ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start2 eq (fun v3 v4 -> f v1 v2 v3 v4) l3 l4}))
 
   (* 3 S's, 1 U's *)
-  | Asc (S l1),     Asc (S l2),     Asc (S l3),     Asc (U (_,v4))  -> Asc (S (start3 eq (fun v1 v2 v3 -> f v1 v2 v3 v4) l1 l2 l3))
-  | Asc (S l1),     Asc (S l2),     Asc (U (_,v3)), Asc (S l4)      -> Asc (S (start3 eq (fun v1 v2 v4 -> f v1 v2 v3 v4) l1 l2 l4))
-  | Asc (S l1),     Asc (U (_,v2)), Asc (S l3),     Asc (S l4)      -> Asc (S (start3 eq (fun v1 v3 v4 -> f v1 v2 v3 v4) l1 l3 l4))
-  | Asc (U (_,v1)), Asc (S l2),     Asc (S l3),     Asc (S l4)      -> Asc (S (start3 eq (fun v2 v3 v4 -> f v1 v2 v3 v4) l2 l3 l4))
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (U {size = s4; value = v4})   ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start3 eq (fun v1 v2 v3 -> f v1 v2 v3 v4) l1 l2 l3}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (U {size = s3; value = v3})
+  , Asc (S {size = s4; values = l4}) ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start3 eq (fun v1 v2 v4 -> f v1 v2 v3 v4) l1 l2 l4}))
+
+  | Asc (S {size = s1; values = l1})
+  , Asc (U {size = s2; value = v2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (S {size = s4; values = l4}) ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start3 eq (fun v1 v3 v4 -> f v1 v2 v3 v4) l1 l3 l4}))
+
+  | Asc (U {size = s1; value = v1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (S {size = s4; values = l4}) ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start3 eq (fun v2 v3 v4 -> f v1 v2 v3 v4) l2 l3 l4}))
 
   (* 4 S's, 0 U's *)
-  | Asc (S l1),     Asc (S l2),     Asc (S l3),     Asc (S l4)      -> Asc (S (start4 eq f l1 l2 l3 l4))
+  | Asc (S {size = s1; values = l1})
+  , Asc (S {size = s2; values = l2})
+  , Asc (S {size = s3; values = l3})
+  , Asc (S {size = s4; values = l4}) ->
+      size_guard4 s1 s2 s3 s4 (fun size ->
+        Asc (S {size; values = start4 eq f l1 l2 l3 l4}))
 
 let fold_values : type o a. (o, a) t -> init:'b -> f:('b -> a -> 'b) -> 'b =
   fun l ~init ~f -> match l with
-    | Desc ld         -> List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
-    | Asc E           -> invalid_arg "Can't fold_values on empty!"
-    | Asc (U (_, v))  -> f init v
-    | Asc (S la)      -> List.fold_left la ~init ~f:(fun acc (_l, v) -> f acc v)
+    | Desc ld           -> List.fold_left ld ~init ~f:(fun acc (_i, v) -> f acc v)
+    | Asc E             -> invalid_arg "Can't fold_values on empty!"
+    | Asc (U {value})   -> f init value
+    | Asc (S {values})  -> List.fold_left values ~init ~f:(fun acc (_l, v) -> f acc v)
 
-let fold_set_sizes_and_values : type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =
+let fold_set_and_values : type o a. (o, a) t
+                        -> init:'b
+                        -> f:('b -> Set.t -> a -> 'b)
+                        -> 'b =
   fun l ~init ~f ->
-    let ascf = List.fold_left ~init ~f:(fun acc (l, v) -> f acc (Set.size l) v) in
+    let ascf = List.fold_left ~init ~f:(fun acc (l, v) -> f acc l v) in
     match l with
-    | Desc ld         -> ascf (ascending_t (fun x y -> x = y) ld)     (* TODO: Probably could be faster. *)
-    | Asc E           -> invalid_arg "Can't fold_set_sizes_and_values on empty!"
-    | Asc (U (s, v))  -> Set.fold s ~init ~f:(fun acc l -> f acc l v)
-    | Asc (S la)      -> ascf la
+    | Desc ld               -> ascf (ascending_t (fun x y -> x = y) ld)     (* TODO: Probably could be faster. *)
+    | Asc E                 -> invalid_arg "Can't fold_set_and_values on empty!"
+    | Asc (U {set; value})  -> f init set value
+    | Asc (S {values})      -> ascf values
 
 let fold_indices_and_values :
   type o a. (o, a) t -> init:'b -> f:('b -> int -> a -> 'b) -> 'b =
   fun l ~init ~f -> match l with
     | Desc ld -> List.fold_left ld ~init ~f:(fun init (l, v) ->
                     Interval.fold l ~init ~f:(fun acc i -> f acc i v))
-    | Asc E          -> invalid_arg "Can't fold_indices_and_values on empty!"
-    | Asc (U (s, v)) -> Set.fold s ~init ~f:(fun acc i -> f acc i v)
-    | Asc (S la)     -> List.fold_left la ~init ~f:(fun init (s, v) ->
-                          Set.fold s ~init ~f:(fun acc i -> f acc i v))
+    | Asc E                -> invalid_arg "Can't fold_indices_and_values on empty!"
+    | Asc (U {set; value}) -> Set.fold set ~init ~f:(fun acc i -> f acc i value)
+    | Asc (S {values})     -> List.fold_left values ~init ~f:(fun init (s, v) ->
+                                Set.fold s ~init ~f:(fun acc i -> f acc i v))
 
 
 let map : type o a. (o, a) t -> ('b -> 'b -> bool) -> f:(a -> 'b) -> (o, 'b) t =
   fun t eq ~f -> match t with
     | Desc ld         -> Desc (List.map_snd ld ~f)
     | Asc E           -> invalid_argf "Can't map empty!"
-    | Asc (U (s, v))  -> Asc (U (s, f v))
-    | Asc (S la)      -> Asc (S (map_with_full_check eq la ~f))
+    | Asc (U {set; size; value})  -> Asc (U {set; size; value = f value})
+    | Asc (S {size; values})      -> Asc (S {size; values = map_with_full_check eq values ~f})
 
 let iter_set : type o a. (o, a) t -> f:(int -> a -> unit) -> unit =
   fun t ~f -> match t with
     | Desc ld ->
         List.iter ld ~f:(fun (s, v) ->
           Interval.iter s ~f:(fun i -> f i v))
-    | Asc E   -> invalid_argf "Can't iter_set empty"
-    | Asc (U (s, v))  -> Set.iter s ~f:(fun i -> f i v)
-    | Asc (S la)      -> List.iter la ~f:(fun (l, v) ->
-                          List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
+    | Asc E                 -> invalid_argf "Can't iter_set empty"
+    | Asc (U {set; value})  -> Set.iter set ~f:(fun i -> f i value)
+    | Asc (S {values})      -> List.iter values ~f:(fun (l, v) ->
+                                 List.iter l ~f:(Interval.iter ~f:(fun i -> f i v)))
 
 let to_array = function
   | Asc E           -> invalid_argf "Can't to_array empty"
-  | Asc (U (s, v))  -> Array.make (Set.size s) v
-  | Asc (S la)      ->
-    match la with
-    | []  -> [||]
-    | h :: t ->
-        let s, v = h in
-        let n = List.fold_left la ~init:0 ~f:(fun a (s, _) -> a + Set.size s) in
-        let r = Array.make n v in
+  | Asc (U {size; value})      -> Array.make size value
+  | Asc (S {values = []})      -> [||]
+  | Asc (S {size; values = (s, v) :: t }) ->
+        let r = Array.make size v in
         let fill s v = Set.iter s ~f:(fun i -> r.(i) <- v) in
         fill s v;
         List.iter t ~f:(fun (s, v) -> fill s v);
         r
+
+let cpair ~f eq = function
+  | Asc E                       ->
+      Asc E
+  | Asc (U { size; set; value}) ->
+      let nset = Set.cpair size set in
+      let nsize = Set.size nset in
+      Asc (U { size  = nsize (*Triangular.number size *)
+             ; set   = nset (* Set.cpair size set *)
+             ; value = f value value
+             })
+  | Asc (S { size; values })    ->
+      let rec loop acc = function
+        | []          -> List.sort ~cmp:(fun (s1, _) (s2, _) -> Set.compare s1 s2) acc
+        | (s, v) :: t ->
+            let sm = Set.cpair size s in
+            let nv = f v v in
+            let nacc = merge_or_add_to_end eq sm nv acc in
+            let nacc2 = fixed_first s v nacc t in
+            loop nacc2 t
+      and fixed_first sf fv acc = function
+        | []           -> acc
+        | (s, v)  :: t ->
+            let cm1, cm2 = Set.cpair_separate2 size sf s in
+            let nacc =
+              if Set.is_empty cm1 then begin
+                if Set.is_empty cm2 then
+                  invalid_argf "Both cross pairs are are emtpy"
+                else
+                  let nv2 = f v fv in
+                  merge_or_add_to_end eq cm2 nv2 acc
+              end else begin
+                if Set.is_empty cm2 then
+                  let nv1 = f fv v in
+                  merge_or_add_to_end eq cm1 nv1 acc
+                else begin
+                  if Set.compare cm1 cm2 <= 0 then
+                    let nv1 = f fv v in
+                    let nacc1 = merge_or_add_to_end eq cm1 nv1 acc in
+                    let nv2 = f v fv in
+                    merge_or_add_to_end eq cm2 nv2 nacc1
+                  else
+                    let nv2 = f v fv in
+                    let nacc1 = merge_or_add_to_end eq cm2 nv2 acc in
+                    let nv1 = f fv v in
+                    merge_or_add_to_end eq cm1 nv1 nacc1
+                end
+              end
+            in
+            fixed_first sf fv nacc t
+      in
+      let values = loop [] values in
+      Asc (S { size = Triangular.number size
+             ; values
+             })

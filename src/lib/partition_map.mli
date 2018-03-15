@@ -1,3 +1,82 @@
+module Interval : sig
+
+  type t
+
+  val compare : t -> t -> int
+
+  val max_value : int
+
+  val make : start:int -> end_:int -> t
+
+  val extend_one : t -> t
+
+  val width : t -> int
+
+  val inside : int -> t -> bool
+
+  val start : t -> int
+
+  val end_ : t -> int
+
+  val to_string : t -> string
+
+  val is_none : t -> bool
+
+  val strict_before : t -> t -> bool
+
+  val before_separate : t -> t -> bool
+
+  val merge : t -> t -> t
+
+  val split_inter_diff2 : t -> t ->
+                          t * t * t * t * t
+  val split_inter_diff3 : t -> t -> t ->
+                          t * t * t * t * t * t * t
+  val split_inter_diff4 : t -> t -> t -> t ->
+                          t * t * t * t * t * t * t * t * t
+
+  val aligned_inter_diff2 : t -> t ->
+                            t * t * t
+  val aligned_inter_diff3 : t -> t -> t ->
+                            t * t * t * t
+  val aligned_inter_diff4 : t -> t -> t -> t ->
+                            t * t * t * t * t
+
+  val fold : t -> init:'a -> f:('a -> int -> 'a) -> 'a
+
+  val iter : t -> f:(int -> unit) -> unit
+
+  val cpair : int -> t -> t -> t list
+
+  val to_cross_indices : int -> t -> (int * int) list
+
+end (* Interval *)
+
+module Set : sig
+
+  type t = Interval.t list
+
+  val to_string : t -> string
+
+  val empty : t
+  val is_empty : t -> bool
+
+  (* Number of elements in the set. *)
+  val size : t -> int
+
+  (* Number of intervals, a faster proxy for size. *)
+  val length : t -> int
+
+  val inside : int -> t -> bool
+
+  (* [all_intersections t1 t2] returns the intersection, remaining in t1 and
+     remaining t2. *)
+  val all_intersections : t -> t -> t * t * t
+
+  val iter : t -> f:(int -> unit) -> unit
+
+end (* Sig *)
+
 (** A partition map is a data structure for a map over a partition of elements.
 
   Specifically, if we know (and specifically can enumerate) the elements of
@@ -76,10 +155,11 @@ val fold_values : (_, 'a) t
                 -> f:('b -> 'a -> 'b)
                 -> 'b
 
-val fold_set_sizes_and_values : (_, 'a) t
-                              -> init:'b
-                              -> f:('b -> int -> 'a -> 'b)
-                              -> 'b
+(* Fold over the values passing the underlying set to the lambda. *)
+val fold_set_and_values : (_, 'a) t
+                        -> init:'b
+                        -> f:('b -> Set.t -> 'a -> 'b)
+                        -> 'b
 
 (** Fold over the indices [0,size) and values. *)
 val fold_indices_and_values : (_, 'a) t
@@ -113,3 +193,8 @@ val descending : (ascending, 'a) t -> (descending, 'a) t
 
 (** Set a value. *)
 val set : (ascending, 'a) t -> int -> 'a -> (ascending, 'a) t
+
+val cpair : f:('a -> 'a -> 'b)
+          -> ('b -> 'b -> bool)
+          -> (ascending, 'a) t
+          -> (ascending, 'b) t

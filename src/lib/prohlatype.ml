@@ -14,12 +14,15 @@ module Alleles = Alleles
 module Distances = Distances
 module Nomenclature = Nomenclature
 
+module Ints_as_bits = Ints_as_bits
 module Bitvector = Bitvector
 module Ref_graph = Ref_graph
 
 module Partition_map = Partition_map
 module Phmm = Phmm
 module ParPHMM = ParPHMM
+
+module Triangular = Triangular
 module ParPHMM_drivers = ParPHMM_drivers
 module Post_analysis = Post_analysis
 

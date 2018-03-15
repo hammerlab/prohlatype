@@ -37,19 +37,19 @@ let read_length = 125
 let fpt1 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
     read_length a1 pt
+let alleles1 = [| a1 |]
 
 let fpt2 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
     read_length a2 pt
+let alleles2 = [| a2 |]
 
 let fpt3 =
   ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
     read_length a3 pt
+let alleles3 = [| a3 |]
 
-
-let callhd pt rs re rc =
-  let _ = pt.ParPHMM.single rs re rc in
-  (List.hd_exn (pt.ParPHMM.best_allele_pos 1)).ParPHMM.llhd
+open Versus_common
 
 (* We're searching for a specific window. *)
 let last_end_pos = 1372 + 12
@@ -87,15 +87,15 @@ let describe lst =
   str, values
 
 let do_it rn p rs re rc =
-  let l1 = callhd fpt1 rs re rc in
-  let l2 = callhd fpt2 rs re rc in
-  let l3 = callhd fpt3 rs re rc in
+  let l1 = (callhd alleles1 fpt1 rs re rc).llhd in
+  let l2 = (callhd alleles2 fpt2 rs re rc).llhd in
+  let l3 = (callhd alleles3 fpt3 rs re rc).llhd in
   let s,v = describe [(l1, a1); (l2, a2); (l3, a3)] in
   printf "%s\t%s\t%s\t%s\n%!"
     rn p s v
 
 let paired readname rs1 re1 rs2 re2 =
-  let of_alp_list alp = (List.hd_exn alp).ParPHMM.position in
+  let of_alp_list alp = (List.hd_exn alp).Pd.Alleles_and_positions.position in
   let of_aalp_pr = function
     | ParPHMM.Pass_result.Filtered _    -> invalid_argf "read was filtered ?!?"
     | ParPHMM.Pass_result.Completed alp -> of_alp_list alp
@@ -118,7 +118,7 @@ let paired readname rs1 re1 rs2 re2 =
       eprintf "%s supposed to be paired!" readname
 
 let single rp readname rs re =
-  let of_alp_list alp = (List.hd_exn alp).ParPHMM.position in
+  let of_alp_list alp = (List.hd_exn alp).Pd.Alleles_and_positions.position in
   let take_regular r c = Pd.Alleles_and_positions.descending_cmp r c <= 0 in
   let mlo fp = Pd.Orientation.most_likely_between ~take_regular fp in
   match StringMap.find readname smap with

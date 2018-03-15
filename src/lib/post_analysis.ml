@@ -40,14 +40,14 @@ let read_metric of_alp_list =
   | Pr (Multiple_loci.FirstOrientedSecond fos) ->
       let p1 = of_alp_list (fos.Multiple_loci.first) in
       let p2 = of_aalp_pr (fos.Multiple_loci.second) in
-      Sp.Paired (min p1 p2, max p1 p2) 
+      Sp.Paired (min p1 p2, max p1 p2)
 
 let read_position =
-  let of_alp alp = (List.hd_exn alp).position in
+  let of_alp alp = (List.hd_exn alp).Alleles_and_positions.position in
   read_metric of_alp
 
 let read_llhd =
-  let of_alp alp = (List.hd_exn alp).llhd in
+  let of_alp alp = (List.hd_exn alp).Alleles_and_positions.llhd in
   read_metric of_alp
 
 let compare_sp_snd rp1 rp2 =
@@ -61,7 +61,7 @@ let aggregate_read_positions ?(readsize=100) =
   List.fold_left ~init:[] ~f:(fun acc (_, read_info) ->
     match read_position read_info with
     | Sp.Single end_         -> (end_ - readsize, end_) :: acc
-    | Sp.Paired (end1, end2) -> (end1 - readsize, end1) :: 
+    | Sp.Paired (end1, end2) -> (end1 - readsize, end1) ::
                                 (end2 - readsize, end2) :: acc)
 
 
@@ -83,7 +83,6 @@ let group_by_boundary_positions bp_lst rlst =
   match bp_lst with
   | []                -> []
   | (bm, bp) :: bp_tl -> loop [] bm bp bp_tl rlst
-  
 
 let reads_by_loci po =
   let open Multiple_loci in
