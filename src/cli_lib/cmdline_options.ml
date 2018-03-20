@@ -452,7 +452,7 @@ let forward_pass_accuracy_arg =
     which is sufficient for most Phred error profiles.
     The implementation uses 63 bit floats which is more than sufficient for \
     this calculation."
-    !ParPHMM.dx
+    !Probability.dx
   in
   Arg.(value & opt (some positive_float) None
              & info ~doc ~docv ["numerical-accuracy"])

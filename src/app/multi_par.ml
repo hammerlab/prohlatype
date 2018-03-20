@@ -67,7 +67,7 @@ let type_
     =
   let commandline = String.concat ~sep:" " (Array.to_list Sys.argv) in
   Option.value_map forward_accuracy_opt ~default:()
-    ~f:(fun fa -> ParPHMM.dx := fa);
+    ~f:(fun fa -> Probability.dx := fa);
   let log_oc, data_oc = setup_oc output output_format in
   let past_threshold_filter = not do_not_past_threshold_filter in
   let prealigned_transition_model = not not_prealigned in

@@ -20,6 +20,7 @@ module Ref_graph = Ref_graph
 
 module Partition_map = Partition_map
 module Phmm = Phmm
+module Probability = Probability
 module ParPHMM = ParPHMM
 
 module Triangular = Triangular
