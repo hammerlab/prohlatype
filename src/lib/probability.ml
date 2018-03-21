@@ -60,6 +60,8 @@ module type Ring = sig
 
   val as_float : ?precision:int -> t -> float
 
+  val pow : float -> t -> t
+
 end (* Ring *)
 
 module Just_floats = struct
@@ -134,6 +136,8 @@ module RegularFloats = struct
 
   let probability ?maxl x = x
 
+  let pow x t = t ** x
+
 end (* RegularFloats *)
 
 (* For the calculations inside of ParPHMM we'll just use Log10 because the
@@ -179,6 +183,8 @@ module Log10 : Ring = struct
     match maxl with
     | None    -> exp10 l
     | Some ml -> exp10 (l -. ml)
+
+  let pow x t = x *. t
 
   (* The base error (qualities) are generally know. To avoid repeating the manual
     calculation (as described above) of the log quality to log (1. -. base error)
@@ -298,5 +304,7 @@ module Ln : Ring = struct
     match maxl with
     | None    -> exp l
     | Some ml -> exp (l -. ml)
+
+  let pow x t = x *. t
 
 end (* Ln *)
