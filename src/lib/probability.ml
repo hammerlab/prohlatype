@@ -136,13 +136,15 @@ module RegularFloats = struct
 
 end (* RegularFloats *)
 
+(* For the calculations inside of ParPHMM we'll just use Log10 because the
+   errors are already represented that way via Phred quality scores. A
+   benchmark left TODO is to benchmark this choice. *)
 module Log10 : Ring = struct
 
   type t = float
   [@@deriving show,yojson]
 
   include Just_floats
-
 
   let zero  = neg_infinity
   let one   = 0.  (* log10 1. *)
@@ -232,3 +234,69 @@ module Log10 : Ring = struct
  *)
 
 end (* Log10 *)
+
+(* Note that functorizing this code, with
+
+module type Exponentiable = sig
+  val exp : float -> float
+  val log : float -> float
+end
+
+and
+
+module MakeLog(E : Exponentiable) : Ring = struct
+   ...
+
+end (* MakeLog *)
+
+module Ln = MakeLog(struct
+   let exp = exp
+   let log = log
+   end)
+
+Seems to incur a big ~8% overhead that the compiler doesn't get rid of
+automatically (haven't tested with flambda). It is unfortunate, but in this
+case we will Repeat Ourselves. This is the reason that we expliclty name
+exp10 in the previous module and DON'T in this case.
+*)
+
+module Ln : Ring = struct
+
+  type t = float
+  [@@deriving show,yojson]
+
+  include Just_floats
+
+  let zero  = neg_infinity
+  let one   = 0.  (* log 1. *)
+
+  let gap   = nan
+  let is_gap = is_nan
+
+  let ( * ) lx ly = lx +. ly
+  let ( / ) lx ly = lx -. ly
+
+  let ( + ) lx ly =
+         if lx = neg_infinity then ly
+    else if ly = neg_infinity then lx
+    else if lx > ly           then lx +. log (1. +. exp (ly -. lx))
+    else (* lx < ly *)             ly +. log (1. +. exp (lx -. ly))
+
+  let max   = max
+
+  let constant = log
+
+  let l13 = constant (1. /. 3.)
+
+  let times_one_third = ( * ) l13
+
+  let complement_probability lq =
+    log (1. -. (exp lq))
+
+  (* Embed the log-sum-exp procedure in converting back to probabilities *)
+  let probability ?maxl l =
+    match maxl with
+    | None    -> exp l
+    | Some ml -> exp (l -. ml)
+
+end (* Ln *)
