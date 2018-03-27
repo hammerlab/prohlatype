@@ -38,6 +38,11 @@ module type Ring = sig
   val ( + ) : t -> t -> t
   val ( * ) : t -> t -> t
   val ( / ) : t -> t -> t
+  (* Non standard OCaml power notation. *)
+  val ( ^ ) : t -> float -> t
+  (* Again, this has to be applied on the left so the operation does look a bit
+     awkward, we'll reserve judgement for later. *)
+  val ( ! ) : float -> t
   val max   : t -> t -> t
   val ( < ) : t -> t -> bool
   val ( <= ) : t -> t -> bool
@@ -59,8 +64,6 @@ module type Ring = sig
   val probability : ?maxl:t -> t -> float
 
   val as_float : ?precision:int -> t -> float
-
-  val pow : float -> t -> t
 
 end (* Ring *)
 
@@ -126,6 +129,9 @@ module RegularFloats = struct
   let ( * ) = ( *. )
   let ( / ) = ( /. )
 
+  let ( ^ ) t x = t ** x
+  let ( ! ) x = Ocephes.gamma (x +. 1.)
+
   let constant x = x
 
   let complement_probability p =
@@ -135,8 +141,6 @@ module RegularFloats = struct
     p /. 3.
 
   let probability ?maxl x = x
-
-  let pow x t = t ** x
 
 end (* RegularFloats *)
 
@@ -184,7 +188,9 @@ module Log10 : Ring = struct
     | None    -> exp10 l
     | Some ml -> exp10 (l -. ml)
 
-  let pow x t = x *. t
+  let ( ^ ) t x = x *. t
+
+  let ( ! ) x = Ocephes.lgam (x +. 1.) /. (log 10.)
 
   (* The base error (qualities) are generally know. To avoid repeating the manual
     calculation (as described above) of the log quality to log (1. -. base error)
@@ -305,6 +311,8 @@ module Ln : Ring = struct
     | None    -> exp l
     | Some ml -> exp (l -. ml)
 
-  let pow x t = x *. t
+  let ( ^ ) t x = x *. t
+
+  let ( ! ) x = Ocephes.lgam (x +. 1.)
 
 end (* Ln *)

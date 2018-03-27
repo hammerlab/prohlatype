@@ -214,56 +214,19 @@ module Coverage_likelihood = struct
 
   open ParPHMM
 
-  let choose ~n ~k =
-    let e = n - k in
-    let rec mult p n_i =
-      if n_i <= e then
-        div p k
-      else
-        mult Lp.(p * constant (float n_i)) (n_i - 1)
-    and div p i =
-      if i <= 0 then
-        p
-      else
-        div Lp.(p / constant (float i)) (i - 1)
-    in
-    mult Lp.one n
-
-  (* n ^ e *)
-  let pow ~n ~e =
-    if e = 0 then
-      Lp.one
-    else
-      Lp.pow (float e) (Lp.constant (float n))
-
-  let prob_at ~n ~k ~m =
-    let c = choose ~n ~k:m in
-    let p = pow ~n:(k - 1) ~e:(n - m) in
-    let numer = Lp.(c * p) in
-    let denom = pow ~n:k ~e:n in
-    Lp.(numer / denom)
-
-  (* Lp *)
   let prob ~l ~g plst =
-    let k = g - l + 1 in
-    let n = List.fold_left plst ~init:0 ~f:(fun s (_p, w) -> s + w) in
-    let rec loop i remaining l a = match l with
-      | []          ->
-        if remaining <> 0 then
-          invalid_argf "Remaining: %d not zero at end of positions." remaining
-        else
-          a (*.0 -> log 1. *)
-      | (p, w) :: t ->
-          if i < p then begin
-            let na = Lp.(a * prob_at ~n:remaining ~k:(k - i) ~m:0) in
-            loop (i + 1) remaining l na
-          end else if i = p then begin
-            let na = Lp.(a * prob_at ~n:remaining ~k:(k - i) ~m:w) in
-            loop (i + 1) (remaining - w) t na
-          end else (* i > p *)
-            invalid_argf "At %d but %d, %d \n" i p w
+    let k = float (g - l + 1) in
+    let n = float (List.fold_left plst ~init:0 ~f:(fun s (_p, w) -> s + w)) in
+    let numerator =
+      Lp.(!n * ((one / constant k) ^ n))
     in
-    loop 0 n plst Lp.one
+    (* Since at the 'missing' points the weight is implicitly 0 ->
+       0! = 1 -> log 0! = log 1 = 0. and we're adding we can skip them. *)
+    let rec loop denominator = function
+      | []           -> Lp.(numerator / denominator)
+      | (_p, w) :: t -> loop Lp.(denominator * !(float w)) t
+    in
+    loop Lp.one plst
 
   (* Hide the actual read length. The bounded logic doesn't always work out so
      to short-circuit those checks set the read size to 1 to calculate the

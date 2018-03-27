@@ -25,6 +25,6 @@ depends: [
   "cmdliner"            { >= "1.0.2" }
   "biocaml"             { >= "0.8.0" }
   "parany"              { >= "3.0.0" }
-
+  "ocephes"             { >= "0.8.2" }
 ]
 
