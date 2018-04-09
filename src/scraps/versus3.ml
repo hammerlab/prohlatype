@@ -62,7 +62,7 @@ let smap =
   List.map j_bl_C ~f:(fun (_, rn, r) -> rn, r)
   |> string_map_of_assoc
 
-module Lp = ParPHMM.LogProbability
+module Lp = Probability.Log10
 
 let describe lst =
   let sorted =

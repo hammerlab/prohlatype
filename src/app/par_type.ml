@@ -108,7 +108,7 @@ let type_
     =
   let commandline = String.concat ~sep:" " (Array.to_list Sys.argv) in
   Option.value_map forward_accuracy_opt ~default:()
-    ~f:(fun fa -> ParPHMM.dx := fa);
+    ~f:(fun fa -> Probability.dx := fa);
   let log_oc, data_oc = setup_oc output output_format in
   let need_read_length =
     to_read_size_dependent

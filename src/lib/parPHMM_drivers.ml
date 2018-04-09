@@ -210,6 +210,32 @@ module Per_read_result = struct
 
 end (* Per_read_result *)
 
+module Coverage_likelihood = struct
+
+  open ParPHMM
+
+  let prob ~l ~g plst =
+    let k = float (g - l + 1) in
+    let n = float (List.fold_left plst ~init:0 ~f:(fun s (_p, w) -> s + w)) in
+    let numerator =
+      Lp.(!n * ((one / constant k) ^ n))
+    in
+    (* Since at the 'missing' points the weight is implicitly 0 ->
+       0! = 1 -> log 0! = log 1 = 0. and we're adding we can skip them. *)
+    let rec loop denominator = function
+      | []           -> Lp.(numerator / denominator)
+      | (_p, w) :: t -> loop Lp.(denominator * !(float w)) t
+    in
+    loop Lp.one plst
+
+  (* Hide the actual read length. The bounded logic doesn't always work out so
+     to short-circuit those checks set the read size to 1 to calculate the
+     likelihood over the entire gene. *)
+  let prob2 ~g l1 l2 =
+    Lp.(prob ~l:1 ~g l1 * prob ~l:1 ~g l2)
+
+end (* Coverage_likelihood *)
+
 module Zygosity_best = struct
 
   type t =
@@ -350,7 +376,7 @@ module Zygosity_mixed = struct
    * likelihoods (all indices of the inner list have the same likelihood:
    * grouped), such that only these values are afterwards exported.
    *)
-  let sorted_insert desired_size l k (current_size, lst) =
+  let sorted_insert desired_size (current_size, lst) k l =
     let insert lst =
       let rec loop acc lst =
         match lst with
@@ -385,7 +411,10 @@ module Zygosity_mixed = struct
           current_size + 1, insert lst
       end
 
-  let best size t =
+  (* The zygosity likelihood is the more descriminative, so even though, we
+     should calculate the coverage likelihood for all possible diploids, we will
+     constrain them by the zygosity likelihood first. *)
+  let best size t ~gene_length =
     let desired_size, nz =
       let open Zygosity_best in
       match size with
@@ -395,7 +424,7 @@ module Zygosity_mixed = struct
     in
     let _cs, res =
       Triangular.Array.foldk_left t.ta ~init:(0, [])
-        ~f:(fun cs_acc k l -> sorted_insert desired_size l k cs_acc)
+        ~f:(sorted_insert desired_size)
     in
     let most_likely = List.rev_map ~f:(fun (l, _n, ijlist) -> (l, ijlist)) res in
     let maxl, _ = List.hd_exn most_likely in
@@ -403,12 +432,6 @@ module Zygosity_mixed = struct
     if maxl = Lp.one then
       []
     else
-      let prob = Lp.probability ~maxl in
-      (* Compute the normalizing constant. *)
-      let ns =
-        let f s l = s +. prob l in
-        Triangular.Array.fold_left t.ta ~init:0. ~f
-      in
       let kinv k =
         Triangular.(Indices.full_upper_inverse t.ta.Array.n k)
       in
@@ -430,21 +453,47 @@ module Zygosity_mixed = struct
                   | Some (0, n) -> a1, (pos, n) :: a2
                   | Some (n, m) -> (pos, n) :: a1, (pos, m) :: a2)
         in
-        i, j, List.rev e1, List.rev e2
+        let r1 = List.rev e1 in
+        let r2 = List.rev e2 in
+        let cl = Coverage_likelihood.prob2 ~g:gene_length r1 r2 in
+        i, j, r1, r2, cl
+      in
+      let with_cov_llhd =
+        List.map most_likely ~f:(fun (l, klst) ->
+          List.map klst ~f:(fun k ->
+            let i, j, r1, r2, cl = lookup_emissions k in
+            l, cl, i, j, r1, r2))
+        |> List.concat
+      in
+      let maxz, maxc, _, _, _, _ = List.hd_exn with_cov_llhd in
+      let prob z c =
+        let maxl = Lp.(maxz * maxc) in
+        Lp.probability ~maxl Lp.(z * c)
+      in
+      let with_p =
+        List.map with_cov_llhd ~f:(fun (z, c, i, j, r1, r2) ->
+            prob z c, z, c, i, j, r1, r2)
+      in
+      let sorted =
+        List.sort with_p
+          ~cmp:(fun (p1, _, _, _, _, _, _) (p2, _, _, _, _, _, _) -> compare p1 p2)
+      in
+      (* Compute the normalizing constant. *)
+      let lowest, _, _, _, _, _, _ = List.hd_exn sorted in
+      let ns =
+        (* lowest ~ 0 - approximate the sum of the rest of the tail *)
+        let tail_size = Triangular.Array.size t.ta - List.length sorted in
+        let init = lowest *. (float tail_size) in
+        List.fold_left sorted ~init
+          ~f:(fun s (p, _, _, _, _, _, _) -> s +. p)
+      in
+      let normalized =
+        List.rev_map sorted ~f:(fun (p, z, c, i, j, r1, r2) ->
+          p /. ns, z, c, i, j, r1, r2)
       in
       match nz with
-      | Some lb ->
-        List.filter_map most_likely ~f:(fun (l, klst) ->
-          let p = prob l /. ns in
-          if p > lb then     (* This isn't necessarily the right notion of zero. *)
-            let ijlst = List.map klst ~f:lookup_emissions in
-            Some (l, p, ijlst)
-          else
-            None)
-      | None ->
-          List.map most_likely ~f:(fun (lp, klst) ->
-            let ijlst = List.map klst ~f:lookup_emissions in
-            (lp, prob lp /. ns, ijlst))
+      | Some lb -> List.filter normalized ~f:(fun (p, _, _, _, _, _, _) -> p > lb)
+      | None    -> normalized
 
   let number_of_reads lst =
     let s = List.fold_left lst ~init:0 ~f:(fun a (_p, w) -> a + w) in
@@ -496,9 +545,10 @@ module Output = struct
     { allele1           : string
     ; allele2           : string
     ; z_llhd            : Lp.t
-    ; prob              : float
     ; read1_emissions   : (int * int) list
     ; read2_emissions   : (int * int) list
+    ; c_llhd            : Lp.t
+    ; prob              : float
     }
   and per_locus =
     { imgt_release  : string
@@ -559,16 +609,16 @@ module Output = struct
     in
     Array.sort ~cmp:cmp_pall per_allele;
     let zygosity =
-      List.map zbest ~f:(fun (l, p, ijlist) ->
-        List.map ijlist ~f:(fun (i, j, read1_emissions, read2_emissions) ->
-            { allele1 = fst allele_arr.(i)
-            ; allele2 = fst allele_arr.(j)
-            ; z_llhd  = l
-            ; prob    = p
-            ; read1_emissions
-            ; read2_emissions
-            }))
-        |> List.concat
+      List.map zbest
+        ~f:(fun (prob, z_llhd, c_llhd, i, j, r1, r2) ->
+              { allele1 = fst allele_arr.(i)
+              ; allele2 = fst allele_arr.(j)
+              ; z_llhd
+              ; c_llhd
+              ; prob
+              ; read1_emissions = r1
+              ; read2_emissions = r2
+              })
     in
     { imgt_release
     ; locus
@@ -618,9 +668,12 @@ module Output = struct
         allele (Lp.to_string ~precision:20 a_llhd) (alters_to_string alters)
     in
     let fprint_zygosity_log_likelihood
-      { allele1; allele2; z_llhd; prob; read1_emissions; read2_emissions } =
-      fprintf oc "%-16s\t%-16s\t%s\t%0.6f\t%0.1f\t%0.1f\t%s\t%s\n"
-        allele1 allele2 (Lp.to_string ~precision:10 z_llhd) prob
+      { allele1; allele2; z_llhd; c_llhd; prob; read1_emissions; read2_emissions } =
+      fprintf oc "%-16s\t%-16s\t%s\t%s\t%0.6f\t%0.1f\t%0.1f\t%s\t%s\n"
+        allele1 allele2
+        (Lp.to_string ~precision:10 z_llhd)
+        (Lp.to_string ~precision:10 c_llhd)
+        prob
         (Zygosity_mixed.number_of_reads read1_emissions)
         (Zygosity_mixed.number_of_reads read2_emissions)
         (Zygosity_mixed.single_emission_to_string read1_emissions)
@@ -632,8 +685,9 @@ module Output = struct
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
         (fun () ->
-          fprintf oc "Zygosity %s:\n%-16s\t%-16s\tlog likelihood\tProb    \t\
-                      # of reads1\t# of reads2\t    E1\t    E2\n"
+          fprintf oc
+            "Zygosity %s:\n%-16s\t%-16s\tEmission llhd\tCoverage llhd\tProb    \
+             \t# of reads1\t# of reads2\t    E1\t    E2\n"
             (show_locus locus)
             "Allele 1" "Allele 2")
         zygosity;
@@ -823,6 +877,7 @@ module Forward (* : Worker *) = struct
     ; proc              : ParPHMM.proc
     ; allele_arr        : (string * MSA.Alteration.t list) array
     ; opt               : output_opt
+    ; gene_length       : int
     }
 
   type final_state = state
@@ -878,6 +933,7 @@ module Forward (* : Worker *) = struct
     ; proc
     ; allele_arr
     ; opt              = conf.output_opt
+    ; gene_length      = Array.length parPHMM_t.emissions_a
     }
 
   let single oc { initial_pt; proc; opt; _} fqi =
@@ -952,9 +1008,10 @@ module Forward (* : Worker *) = struct
 
   let output state oc =
     let ot =
-      let zbest   = Zygosity_mixed.best state.opt.depth.Output.num_zygosities state.zygosity in
-      let pl      = Output.create_per_locus state.imgt_release state.locus state.allele_arr
-                      state.per_allele_lhood zbest in
+      let zbest   = Zygosity_mixed.best state.opt.depth.Output.num_zygosities
+                      state.zygosity ~gene_length:state.gene_length in
+      let pl      = Output.create_per_locus state.imgt_release state.locus
+                      state.allele_arr state.per_allele_lhood zbest in
       let header  =
         { Output.prohlatype_version = Version.version
         ; Output.commandline        = state.commandline } in
@@ -1340,6 +1397,7 @@ module Multiple_loci (* :
     ; allele_arr    : (string * MSA.Alteration.t list) array
     ; likelihood    : Lp.t array
     ; zygosity      : Zygosity_mixed.t
+    ; gene_length   : int
     }
 
   type state =
@@ -1496,7 +1554,8 @@ module Multiple_loci (* :
         in
         let n = Array.length allele_arr in
         let iml = parPHMM_t.ParPHMM.release,parPHMM_t.ParPHMM.locus in
-        iml, proc, allele_arr, n)
+        let gene_length = Array.length parPHMM_t.ParPHMM.emissions_a in
+        iml, proc, allele_arr, n, gene_length)
     in
     let initial_pt = Past_threshold.init conf.past_threshold_filter in
     let forward = Forward.forward oc in
@@ -1505,7 +1564,7 @@ module Multiple_loci (* :
     in
     let single_read read read_errors =
       List.fold_left paa ~init:(initial_pt, [])
-            ~f:(fun (pt, acc) ((_, locus), p, _, _) ->
+            ~f:(fun (pt, acc) ((_, locus), p, _, _, _) ->
                   let r, npt = forward pt p read read_errors in
                   npt, (locus, SingleRead r) :: acc)
       |> snd                                 (* Discard final threshold *)
@@ -1515,7 +1574,7 @@ module Multiple_loci (* :
     let ordinary_paired name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
-          ~f:(fun (pt1, pt2, acc) ((_, locus), p, _, _) ->
+          ~f:(fun (pt1, pt2, acc) ((_, locus), p, _, _, _) ->
                 let result1, npt1 = forward pt1 p rd1 re1 in
                 match most_likely_orientation result1 with
                 | Filtered  m ->
@@ -1532,7 +1591,7 @@ module Multiple_loci (* :
       let incremental_paired name rd1 re1 rd2 re2 =
       let best, rest, _fpt1 =
         List.fold_left paa ~init:([], [], initial_pt)
-          ~f:(fun (best, acc, pt) ((_, locus), p, _, _) ->
+          ~f:(fun (best, acc, pt) ((_, locus), p, _, _, _) ->
                 let result1, npt = forward pt p rd1 re1 in
                 match most_likely_orientation result1 with
                 | Filtered m ->
@@ -1574,12 +1633,13 @@ module Multiple_loci (* :
     in *)
     { commandline = conf.commandline
     ; per_loci =
-      List.map paa ~f:(fun ((release, pl_locus), p, allele_arr, number_alleles) ->
+      List.map paa ~f:(fun ((release, pl_locus), p, allele_arr, number_alleles, gene_length) ->
         { imgt_release = release
         ; pl_locus
         ; allele_arr
         ; likelihood = p.init_global_state ()
-        ; zygosity   = Zygosity_mixed.init number_alleles
+        ; zygosity    = Zygosity_mixed.init number_alleles
+        ; gene_length
         })
     ; per_reads = []
     ; single_read
@@ -1651,7 +1711,8 @@ module Multiple_loci (* :
   let finalize { commandline; opt; per_reads; per_loci; _} =
     let f_pl_lst, zygosities_by_locus_assoc =
       List.map per_loci ~f:(fun pl ->
-        let zb = Zygosity_mixed.best opt.depth.Output.num_zygosities pl.zygosity in
+        let zb = Zygosity_mixed.best opt.depth.Output.num_zygosities
+                    pl.zygosity ~gene_length:pl.gene_length in
         let opl = per_locus_to_output_per_locus pl zb in
         opl, (pl.pl_locus, (zb, pl.allele_arr)))
       |> List.split
@@ -1661,17 +1722,15 @@ module Multiple_loci (* :
       let open Option in
       List.Assoc.get locus zygosities_by_locus_assoc >>= (fun (zlst, aa) ->
         let lopt =
-          List.fold_left zlst ~init:None ~f:(fun s (_, _, ijlist) ->
-            List.fold_left ijlist ~init:s ~f:(fun s (i, j, _nr1, _nr2) ->
-              let li, _pi = Pm.get llhd_and_pos i in
-              let lj, _pj = Pm.get llhd_and_pos j in
-              let l, k = if Lp.(lj <= li) then li, i else lj, j in
-              match s with
-              | None         -> Some (l, (la aa k))
-              | Some (bl, _) -> if Lp.(l <= bl) then s else Some (l, la aa k)))
-              in
-              Option.map lopt ~f:(fun (_likelihood, allele) ->
-                  locus, allele))
+          List.fold_left zlst ~init:None ~f:(fun s (_, _, _, i, j, _, _) ->
+            let li, _pi = Pm.get llhd_and_pos i in
+            let lj, _pj = Pm.get llhd_and_pos j in
+            let l, k = if Lp.(lj <= li) then li, i else lj, j in
+            match s with
+            | None         -> Some (l, (la aa k))
+            | Some (bl, _) -> if Lp.(l <= bl) then s else Some (l, la aa k))
+            in
+            Option.map lopt ~f:(fun (_likelihood, allele) -> locus, allele))
     in
     let f_per_reads =
       List.map per_reads ~f:(fun pr ->
