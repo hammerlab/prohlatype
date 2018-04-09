@@ -513,7 +513,7 @@ module Selectors = struct
     | Number _            -> false
 
   let matching_regex r alts =
-    let p = Re_posix.compile_pat r in
+    let p = Re.Posix.compile_pat r in
     List.filter alts ~f:(fun a -> Re.execp p a.MSA.Parser.allele)
 
   let specific_allele s alts =
