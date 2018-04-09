@@ -1,5 +1,5 @@
 diff --git a/src/app/jbuild b/src/app/jbuild
-index d1dbcc1..2f76554 100644
+index 2e641e1..e15a903 100644
 --- a/src/app/jbuild
 +++ b/src/app/jbuild
 @@ -4,6 +4,7 @@
@@ -7,6 +7,6 @@ index d1dbcc1..2f76554 100644
    ((names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
     (public_names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
 +   (flags (-ccopt -static))
+    (ocamlopt_flags -O3)
     (libraries (threads prohlatype cmdline_options))))
  
- ; TODO: Globs don't seem to work in my current version of jbuilder.

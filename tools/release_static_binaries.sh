@@ -1,13 +1,13 @@
 # in
 # docker run --rm -ti ocaml/opam:alpine_ocaml-4.05.0 bash
 
-export PTAG="0.8.0"
+export PTAG="0.9.0"
 
 cd opam-repository/
 git pull origin master
 
 export OPAMYES="true"
-sudo apk add m4 zip
+sudo apk add m4 pkgconfig libffi-dev zlib-dev
 opam update && opam upgrade
 opam depext ssl
 cd ..
