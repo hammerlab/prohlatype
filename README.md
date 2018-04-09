@@ -4,7 +4,7 @@
 Probabilistic HLA Typing
 ------------------------
 
-Paper: [Prohlatype: A Probabilistic Framework for HLA Typing](https://doi.org/10.1101/244962)
+Paper: [Prohlatype: A Probabilistic Framework for HLA Typing](https://doi.org/10.1101/244962) <sup>[1](#footnote1)</sup>
 
 This project provides a set of tools to calculate the full posterior
 distribution of HLA types given read data.
@@ -107,3 +107,5 @@ one can calculate:
 example of the above. It depends only on `docker`, `wget`, and `git`; it fetches
 the data and runs everything in a docker container
 (see `sh src/scripts/run-example-docker.sh help`).
+
+<a name="footnote1">1:</a> All versions of this software after 0.8.0 incorporate an important coverage likelihood that is not described in the previous paper. At the moment a short addendum describing the approach is in limbo, please contact me by email for a reference.
