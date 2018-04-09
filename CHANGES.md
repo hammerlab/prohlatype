@@ -1,3 +1,10 @@
+Version 0.9.0 (2018-04-09):
+--------------------------
+  - Incorporate a coverage likelihood that corrects for the PHMM emission
+    likelihoods preference. This effectively acts as a regularizer that
+    incorporates more information about how we expect reads to be distributed
+    across a diploid.
+
 Version 0.8.0 (2018-01-08):
 --------------------------
  - First public release. I have arbitrarily chosen version 0.8 to reflect the
