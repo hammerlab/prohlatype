@@ -17,7 +17,7 @@ depends: [
 #  "ocaml"               { >= "4.03" }
   "ocamlfind"           { build }
   "jbuilder"            { build & = "1.0+beta17" }
-  "bisect_ppx"          { build & >= "1.3.2 }
+  "bisect_ppx"          { build & >= "1.3.2" }
   "ppx_deriving"        { >= "4.2.1" }
   "ppx_deriving_yojson" { >= "3.1" }
   "nonstd"              { >= "0.0.3" }
