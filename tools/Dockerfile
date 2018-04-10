@@ -3,10 +3,11 @@ ARG prohlatype_tag
 RUN opam repo add main https://opam.ocaml.org
 RUN opam update --yes
 RUN sudo apt-get update --yes
-RUN sudo apt-get install --yes git libgmp-dev zlib1g-dev
+RUN sudo apt-get install --yes git libgmp-dev zlib1g-dev libffi-dev
 RUN git clone https://github.com/hammerlab/prohlatype.git
 WORKDIR ./prohlatype
 RUN git checkout tags/$prohlatype_tag
+RUN opam install bisect_ppx
 RUN opam pin add -k git prohlatype .
 RUN opam config exec -- make
 RUN ln -s _build/default/src/app/align2fasta.exe align2fasta
