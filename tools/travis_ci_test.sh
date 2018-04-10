@@ -5,7 +5,7 @@ set -e
 git clone https://github.com/ANHIG/IMGTHLA.git
 
 # for test coverage
-${HOME}/opam install bisect_ppx ocveralls parmap oml core_bench qcheck
+${HOME}/opam install ocveralls parmap oml core_bench qcheck
 
 make
 make apps
