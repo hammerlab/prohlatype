@@ -1988,9 +1988,9 @@ let lookup_allele_or_fail t ~allele =
       allele_index
 
 type viterbi_proc =
-  { single  : read:bytes -> read_errors:float array -> viterbi_result
-  ; paired  : read1:bytes -> read_errors1:float array
-            -> read2:bytes -> read_errors2:float array
+  { single  : read:string -> read_errors:float array -> viterbi_result
+  ; paired  : read1:string -> read_errors1:float array
+            -> read2:string -> read_errors2:float array
             -> viterbi_result
   }
 

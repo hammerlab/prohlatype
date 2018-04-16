@@ -1404,9 +1404,9 @@ module Multiple_loci (* :
     { commandline       : string
     ; per_loci          : per_locus list
     ; mutable per_reads : initial_read_info Output.per_read list
-    ; single_read       : bytes -> float array -> Forward.stat pp
-    ; ordinary_paired   : string -> bytes -> float array
-                                 -> bytes -> float array
+    ; single_read       : string -> float array -> Forward.stat pp
+    ; ordinary_paired   : string -> string -> float array
+                                 -> string -> float array
                                  -> Forward.stat pp
     ; opt               : Forward.opt
     }

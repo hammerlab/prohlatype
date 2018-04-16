@@ -881,10 +881,10 @@ let allele_sequences ~reference ~allele =
     Error e
 
 let allele_sequence ?boundary_char ~reference ~allele () =
-  let sep = Option.value_map ~default:B.empty ~f:B.of_character boundary_char in
+  let sep = Option.value_map ~default:String.empty ~f:String.of_character boundary_char in
   allele_sequences ~reference ~allele
   >>| List.map ~f:snd
-  >>| B.concat ~sep
+  >>| String.concat ~sep
 
 let reference_sequence_from_ref_alignment_elements ?boundary_char l =
   begin match boundary_char with

@@ -105,7 +105,7 @@ module Alteration : sig
   val equal_per_segment : per_segment -> per_segment -> bool
   val compare_per_segment : per_segment -> per_segment -> int
   val per_segment_to_string : per_segment -> string
-  val per_segment_list_to_string : per_segment list -> bytes
+  val per_segment_list_to_string : per_segment list -> string
   type t = { allele : string; why : string; distance : float; positions : per_segment list; }
   val to_yojson : t -> Yojson.Safe.json
   val of_yojson : Yojson.Safe.json -> (t, string) result
