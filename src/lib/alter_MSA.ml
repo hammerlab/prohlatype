@@ -495,7 +495,7 @@ end (* Merge *) = struct
     ; al_seq = shift_all_al_els offset al_seq
     }
 
-  type s_seq = bytes MSA.alignment_sequence
+  type s_seq = string MSA.alignment_sequence
 
   type instructions = s_seq instruction list
 
