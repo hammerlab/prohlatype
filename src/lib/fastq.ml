@@ -1,7 +1,7 @@
 
 module Sset = Set.Make (struct type t = string [@@deriving ord] end)
 
-open Core_kernel.Std
+open Core_kernel
 
 let to_stop = function
   | None   -> fun _ -> false

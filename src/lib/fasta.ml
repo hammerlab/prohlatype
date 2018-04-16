@@ -1,5 +1,5 @@
 
-open Core_kernel.Std
+open Core_kernel
 open CFStream
 
 let to_stop = function

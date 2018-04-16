@@ -721,7 +721,7 @@ module Fastq_items = struct
     ksprintf (fun s -> raise (Read_error_parsing s)) fmt
 
   let single_utimed fqi ~k =
-    let open Core_kernel.Std in
+    let open Core_kernel in
     let open Biocaml_unix.Fastq in
     match Fastq.phred_log_probs fqi.qualities with
     | Result.Error e        -> repf "%s" (Error.to_string_hum e)
@@ -733,7 +733,7 @@ module Fastq_items = struct
       (fun () -> single_utimed fqi ~k)
 
   let paired_untimed fq1 fq2 ~k =
-    let open Core_kernel.Std in
+    let open Core_kernel in
     let open Biocaml_unix.Fastq in
     match Fastq.phred_log_probs fq1.qualities with
     | Result.Error e    -> repf "%s" (Error.to_string_hum e)
