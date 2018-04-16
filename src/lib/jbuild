@@ -7,6 +7,7 @@
   (libraries (
       biocaml.unix ocamlgraph nonstd parany sosa threads
       ocephes
+      partition_map
       ppx_deriving_yojson.runtime yojson))
   (preprocess (pps (ppx_deriving.std ppx_deriving_yojson bisect_ppx -conditional)))
   (ocamlopt_flags -O3)

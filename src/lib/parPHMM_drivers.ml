@@ -3,9 +3,10 @@
 open Util
 
 module Pm = Partition_map
+module Pma = Partition_map.Ascending
 
 let max_pm =
-  Pm.fold_values ~init:ParPHMM.Lp.zero
+  Pma.fold_values ~init:ParPHMM.Lp.zero
     ~f:(fun m (l,_p) -> ParPHMM.Lp.max m l)
 
 let higher_value_in_first e1 e2 =
@@ -174,7 +175,7 @@ module Alleles_and_positions = struct
 
   let of_mt lookup_allele depth mt =
     let lg = ParPHMM.largest depth in
-    Pm.fold_indices_and_values mt ~init:[]
+    Pma.fold_indices_and_values mt ~init:[]
         ~f:(fun acc i (lp, pos) -> lg lp (i, pos) acc)
     |> List.map ~f:(fun (llhd, (i, position)) ->
         { allele = lookup_allele i            (* 2nd usually has alterations. *)
@@ -348,9 +349,9 @@ module Zygosity_mixed = struct
     a = d && b = e && c = f && Lp.close_enough l1 l2
 
   let update t llhd_and_pos =
-    let cp = Pm.cpair ~f:fa equal_quadruple llhd_and_pos in
+    let cp = Pma.cpair ~f:fa equal_quadruple llhd_and_pos in
     let net =
-      Pm.fold_set_and_values cp ~init:t.et
+      Pma.fold_set_and_values cp ~init:t.et
         ~f:(fun lst st (sp_pos, f, s, l) ->
               (* Update the Lp Ta, by side-effect. *)
               Pm.Set.iter st ~f:(fun k ->
@@ -512,7 +513,7 @@ module Likelihoods_and_zygosity = struct
   open ParPHMM
 
   let add_ll state_llhd llhd =
-    Pm.iter_set llhd ~f:(fun i (v, _p) ->
+    Pma.iter_set llhd ~f:(fun i (v, _p) ->
       state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
   let add_lz zygosity llhd =
@@ -851,7 +852,7 @@ module Forward (* : Worker *) = struct
 
   open ParPHMM
 
-  type stat = (Lp.t * int) mt
+  type stat = (Lp.t * int) pm
 
   let proc_to_stat proc _rc = proc.per_allele_llhd_and_pos ()
 
@@ -972,10 +973,10 @@ module Forward (* : Worker *) = struct
       in
       Lp.(l1 * l2), p
     in
-    Pm.merge ~eq:Lpr.equal s1 s2 m
+    Pma.merge ~eq:Lpr.equal s1 s2 m
 
   let to_single_pms s =
-    Pm.map s (fun _ _ -> false) ~f:(fun (l,p) -> l, Sp.Single p)
+    Pma.map s (fun _ _ -> false) ~f:(fun (l,p) -> l, Sp.Single p)
 
   let merge oc state rr =
     let pr s = Orientation.most_likely_between s ~take_regular in
@@ -1368,7 +1369,7 @@ module Multiple_loci (* :
    * the read data.  *)
   type initial_read_info =
     { locus         : Nomenclature.locus
-    ; llhd_and_pos  : (Lp.t * int Sp.t) mt
+    ; llhd_and_pos  : (Lp.t * int Sp.t) pm
     ; aaps          : Alleles_and_positions.t pp
     }
 
@@ -1667,7 +1668,7 @@ module Multiple_loci (* :
       sprintf "For %s merging into %s zygosity array read result: %d"
         name
         (Nomenclature.show_locus pl_locus)
-        (Pm.length llhd_and_pos)
+        (Pma.length llhd_and_pos)
     in
     time oc msg (fun () ->
       Likelihoods_and_zygosity.add_ll_and_lz likelihood zygosity llhd_and_pos)
@@ -1723,8 +1724,8 @@ module Multiple_loci (* :
       List.Assoc.get locus zygosities_by_locus_assoc >>= (fun (zlst, aa) ->
         let lopt =
           List.fold_left zlst ~init:None ~f:(fun s (_, _, _, i, j, _, _) ->
-            let li, _pi = Pm.get llhd_and_pos i in
-            let lj, _pj = Pm.get llhd_and_pos j in
+            let li, _pi = Pma.get llhd_and_pos i in
+            let lj, _pj = Pma.get llhd_and_pos j in
             let l, k = if Lp.(lj <= li) then li, i else lj, j in
             match s with
             | None         -> Some (l, (la aa k))

@@ -28,5 +28,6 @@ depends: [
   "parany"              { >= "3.0.0" }
   "ocephes"             { >= "0.8.2" }
   "re"                  { >= "1.7.3" }
+  "partition_map"
 ]
 

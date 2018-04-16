@@ -9,10 +9,13 @@ open Biology
 (* Add a short hand for partition maps and some helper functions for to
    make the code easier. *)
 module Pm = Partition_map
+module Pma = Partition_map.Ascending
+
+type 'a pm = 'a Pma.t
 
 (* In all cases size is really just the number of alleles. *)
 let pm_init_all ~number_alleles v =
-  Pm.init_all_a ~size:number_alleles v
+  Pma.init ~size:number_alleles v
 
 (* Construction
   1. From MSA.Parser.result -> Array of Base.t option 's.
@@ -30,7 +33,7 @@ the alleles.
 *)
 
 type gapped_bases = Base.t option          (* None -> the allele is in a gap. *)
-type base_emissions = (Pm.ascending, gapped_bases) Pm.t
+type base_emissions = gapped_bases pm
 
 type position_map = (MSA.position * int) list
 
@@ -110,24 +113,24 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 let init_state =
-  Array.map ~f:Pm.init_first_d
+  Array.map ~f:Pm.Descending.init_first
 
 (* Add an allele's MSA.Parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   let add_reference_value start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.add reference_arr.(i) arr.(i)
+      arr.(i) <- Pm.Descending.add reference_arr.(i) arr.(i)
     done
   in
   let add_gap start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.add None arr.(i)
+      arr.(i) <- Pm.Descending.add None arr.(i)
     done
   in
   let add_sequence start s =
     String.iteri s ~f:(fun i c ->
       let j = i + start in
-      arr.(j) <- Pm.add (some (Base.of_char c)) arr.(j))
+      arr.(j) <- Pm.Descending.add (some (Base.of_char c)) arr.(j))
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
@@ -162,7 +165,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
   | []           -> ia "Empty sequence!"
 
 let pos_to_string pm =
-  Pm.to_string pm
+  Pm.Descending.to_string pm
     (function | None   -> "none"
               | Some c -> sprintf "some %c" (Base.to_char c))
 
@@ -876,22 +879,20 @@ module SingleViterbiWorkspace (R : Probability.Ring) :
 
 end (* SingleViterbiWorkspace *)
 
-type 'a mt = (Pm.ascending, 'a) Pm.t
-
 (* Create and manage the workspace for the forward pass for multiple alleles.*)
 module MakeMultipleWorkspace (R : Probability.Ring) :
-  (Workspace_intf with type entry = R.t cell mt
-                   and type final_entry = R.t mt
-                   and type final_emission = (R.t * int) mt) = struct
+  (Workspace_intf with type entry = R.t cell pm
+                   and type final_entry = R.t pm
+                   and type final_emission = (R.t * int) pm) = struct
 
-  type entry = R.t cell mt
-  type final_entry = R.t mt
-  type final_emission = (R.t * int) mt
+  type entry = R.t cell pm
+  type final_entry = R.t pm
+  type final_emission = (R.t * int) pm
 
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
-  let pa = Pm.empty_a  (* This is just a place holder that is mutated. *)
+  let pa = Pma.empty  (* This is just a place holder that is mutated. *)
 
   let generate ~ref_length ~read_length =
     { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length pa)
@@ -1347,7 +1348,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
 
   (* Eh... not the best place for it. *)
   let pm_max_cell_by_match =
-    Pm.fold_values ~init:R.zero ~f:(fun m c -> R.max m c.match_)
+    Pma.fold_values ~init:R.zero ~f:(fun m c -> R.max m c.match_)
 
   module W = MakeMultipleWorkspace(R)
 
@@ -1356,7 +1357,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
       ~f:(fun v fpm -> R.max v (pm_max_cell_by_match fpm))
 
   let max_pm_of_ws_row ?range ws r =
-    W.fold_over_row ?range ws r ~init:(R.zero, Pm.empty_a)
+    W.fold_over_row ?range ws r ~init:(R.zero, Pma.empty)
       ~f:(fun (bv,bpm) fpm ->
             let nv = pm_max_cell_by_match fpm in
             if R.(bv < nv) then
@@ -1367,12 +1368,12 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
 
   let median_of_pm apm =
     let values_with_size =
-      Pm.fold_set_and_values apm ~init:[]
+      Pma.fold_set_and_values apm ~init:[]
         ~f:(fun acc st v ->
-              let nv = Partition_map.Set.size st in
+              let nv = Pm.Set.size st in
               insert_sorted ~greater:R.( < ) v nv acc)
     in
-    let n = Pm.size apm in
+    let n = Pma.size apm in
     let m = n / 2 in
     let even = n mod 2 = 0 in
     let rec loop number_seen = function
@@ -1394,7 +1395,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
 
   let maximum_positions_median_match ?range ws r =
     max_pm_of_ws_row ?range ws r
-    |> fun p -> Pm.map p R.close_enough ~f:(fun c -> c.match_)
+    |> fun p -> Pma.map p R.close_enough ~f:(fun c -> c.match_)
     |> median_of_pm
 
   (* offset and emission probabilties
@@ -1425,7 +1426,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
   module Rp = R_p(R)
 
   let pm_max_cell =
-    Pm.fold_values ~init:Fc.zero_cell ~f:Fc.max_cell_by_match
+    Pma.fold_values ~init:Fc.zero_cell ~f:Fc.max_cell_by_match
 
   let max_cell_of_ws_row ?range ws r =
     W.fold_over_row ?range ws r ~init:Fc.zero_cell
@@ -1439,7 +1440,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
     let to_em_set obsp emissions =
-      Pm.map emissions R.close_enough
+      Pma.map emissions R.close_enough
         ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
     let zero_cell_pm = pm_init_all ~number_alleles Fc.zero_cell in
@@ -1449,51 +1450,51 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
       let m2 =
         match base_p with
-        | None    -> Pm.merge ~eq  ems prev_pm r.start         (* Not weighing alleles. *)
-        | Some l  -> let nl = Pm.map l R.close_enough ~f:fst in       (* Drop best pos. *)
-                     Pm.merge3 ~eq nl ems prev_pm (fun base_p emission prev_c ->
+        | None    -> Pma.merge ~eq  ems prev_pm r.start         (* Not weighing alleles. *)
+        | Some l  -> let nl = Pma.map l R.close_enough ~f:fst in       (* Drop best pos. *)
+                     Pma.merge3 ~eq nl ems prev_pm (fun base_p emission prev_c ->
                         r.start ~base_p emission prev_c)
       in
       m2
     in
     let fst_col ws obsp emissions ~i ~k =
-      Pm.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
+      Pma.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
     in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
       let inserts = W.get ws ~i:(i-1) ~k       in
       let deletes = W.get ws ~i       ~k:(k-1) in
       let ems = to_em_set obsp emissions in
-      let r   = Pm.merge4 ~eq ems matches inserts deletes
+      let r   = Pma.merge4 ~eq ems matches inserts deletes
         (fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
       in
       if !debug_ref then begin
         printf "at i: %d k: %d: o:%c,%f e: %s, ems: %s, m: %d, i: %d, d: %d, r: %d \n%s\n%!"
           i k (fst obsp) (snd obsp)
-              (Pm.to_string emissions
+              (Pma.to_string emissions
                   (function
                     | None -> "gap"
                     | Some b -> sprintf "%c" (Base.to_char b)))
-              (Pm.to_string ems (R.to_string ~precision:10))
-              (Pm.length matches)
-              (Pm.length inserts)
-              (Pm.length deletes)
-              (Pm.length r)
-              (Pm.to_string r (cell_to_string R.to_string))
+              (Pma.to_string ems (R.to_string ~precision:10))
+              (Pma.length matches)
+              (Pma.length inserts)
+              (Pma.length deletes)
+              (Pma.length r)
+              (Pma.to_string r (cell_to_string R.to_string))
       end;
       r
     in
-    let end_ ws k = Pm.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
+    let end_ ws k = Pma.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles (R.zero, -1, R.zero) in
       let triple_pm =
         W.foldi_over_final ~range ws ~init
-          ~f:(fun e1 p e2 -> Pm.merge ~eq:Rp.equal3 e1 e2
+          ~f:(fun e1 p e2 -> Pma.merge ~eq:Rp.equal3 e1 e2
                 (fun acc l -> Rp.avatbp acc p l))
       in
-      Pm.map triple_pm Rp.equal ~f:(fun (ls, bp, _bl) -> ls, bp)
+      Pma.map triple_pm Rp.equal ~f:(fun (ls, bp, _bl) -> ls, bp)
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -1922,7 +1923,7 @@ let construct input =
         | None, _ | _, None -> false
         | Some x, Some y    -> Base.equal x y
       in
-      let emissions_a = Array.map (Pm.ascending eq) state_a in
+      let emissions_a = Array.map (Pma.of_descending eq) state_a in
       let alleles =
         (mp.reference, []) :: List.map mp.alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
@@ -1999,7 +2000,7 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
   let allele_index = lookup_allele_or_fail t ~allele in
   let allele_a =
     Array.fold_left t.emissions_a ~init:[] ~f:(fun acc pm ->
-      match Pm.get pm allele_index with
+      match Pma.get pm allele_index with
       | None   -> acc            (* Gap *)
       | Some b -> b :: acc)
     |> List.rev
@@ -2059,7 +2060,7 @@ type proc =
   (* Allocate the right size for global state of the per allele likelihoods. *)
 
   ; single            : ?prev_threshold:Lp.t
-                      -> ?base_p:(Lp.t * int) mt
+                      -> ?base_p:(Lp.t * int) pm
                       (* NOTE: Be careful about passing in a base_p. It could
                          slow down the calculation dramnatically, so have think
                          carefully about whether these values couldn't be
@@ -2080,7 +2081,7 @@ type proc =
      was the best alignment in the loci? These support a mode where we
      want to see how the reads "map" for different loci. *)
 
-  ; per_allele_llhd_and_pos   : unit -> (Lp.t * int) mt
+  ; per_allele_llhd_and_pos   : unit -> (Lp.t * int) pm
   (* If we're not interested in diagnostics, but just the end result, we want
      the per allele likelihood. *)
 
@@ -2101,7 +2102,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   (* Recover allele's base sequence, aka, emission. *)
   let allele_a =
     Array.fold_left t.emissions_a ~init:[] ~f:(fun acc pm ->
-      match Pm.get pm allele_index with
+      match Pma.get pm allele_index with
       | None   -> acc            (* Gap *)
       | Some b -> b :: acc)
     |> List.rev
@@ -2231,7 +2232,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
    at an index where an allele has a gap and consequently has no starting
    likelihood. *)
 let has_gap =
-  Pm.fold_values ~init:false ~f:(fun b gbo ->
+  Pma.fold_values ~init:false ~f:(fun b gbo ->
       match gbo with
       | Some _ -> b
       | None   -> true)
@@ -2254,7 +2255,7 @@ let non_gapped_emissions_arr arr =
 module Splitting_state = struct
 
   type t =
-    { mutable emission_pm   : (Lp.t * int) mt
+    { mutable emission_pm   : (Lp.t * int) pm
     ; mutable max_med_match : Lp.t
     (* The splitting passes incur an etra start/stop emission probability
       that makes them difficult to compare against the normal version.
@@ -2271,14 +2272,14 @@ module Splitting_state = struct
 
   let reset ss =
     ss.emission_pm <-
-      pm_init_all ~number_alleles:(Pm.size ss.emission_pm) (Lp.one, -1);
+      pm_init_all ~number_alleles:(Pma.size ss.emission_pm) (Lp.one, -1);
     ss.max_med_match <- Lp.one;
     ss.scaling <- []
 
   let add_emission ss em mm =
     (* Choose second position, that is the one farther in the match. *)
     let m (l1,_p1) (l2,p2) = Lp.(l1 * l2), p2 in
-    ss.emission_pm <- Pm.merge ~eq:Lpr.equal ss.emission_pm em m;
+    ss.emission_pm <- Pma.merge ~eq:Lpr.equal ss.emission_pm em m;
     ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
@@ -2287,7 +2288,7 @@ module Splitting_state = struct
   let finish ss =
     let pr = List.fold_left ss.scaling ~init:Lp.one
         ~f:Lp.( * ) in
-    ss.emission_pm <- Pm.map ss.emission_pm Lpr.equal
+    ss.emission_pm <- Pma.map ss.emission_pm Lpr.equal
       ~f:(fun (e,p) -> Lp.(e / pr),p)
 
 end (* Splitting_state *)
@@ -2413,7 +2414,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
             0
           else begin
             let _highest_emission, best_pos =
-              Pm.fold_values (per_allele_llhd_and_pos ()) ~init:(Lp.zero, -1)
+              Pma.fold_values (per_allele_llhd_and_pos ()) ~init:(Lp.zero, -1)
                 ~f:(fun (bem, bpos) (em, pos) ->
                       if Lp.is_gap em || not Lp.(bem < em) then
                         (bem, bpos)
