@@ -1,7 +1,6 @@
 (** A utility module where we utilize the bits of an integer.
  *
- * This is the just the common code that is used in Bitvector and
- * Partiotion_Map.Interval.
+ * This is the just the common code that is used in Bitvector.
  *)
 
 let width = Sys.word_size - 1

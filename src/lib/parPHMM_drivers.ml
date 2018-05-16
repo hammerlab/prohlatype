@@ -300,7 +300,7 @@ module Zygosity_mixed = struct
     let rec loop acc remaining = function
       | []                 -> List.rev ((remaining, f, s) :: acc)
       | (ps, fn, sn) :: tl ->
-          let inter, to_add, didnotm = Pm.Set.all_intersections remaining ps in
+          let inter, to_add, didnotm = Pm.Set.intersection_and_differences remaining ps in
           (* Using length as a faster proxy for set... *)
           let li = Pm.Set.length inter in
           let ld = Pm.Set.length didnotm in
@@ -349,7 +349,7 @@ module Zygosity_mixed = struct
     a = d && b = e && c = f && Lp.close_enough l1 l2
 
   let update t llhd_and_pos =
-    let cp = Pma.cpair ~f:fa equal_quadruple llhd_and_pos in
+    let cp = Pma.cpair ~f:fa ~eq:equal_quadruple llhd_and_pos in
     let net =
       Pma.fold_set_and_values cp ~init:t.et
         ~f:(fun lst st (sp_pos, f, s, l) ->
@@ -513,7 +513,7 @@ module Likelihoods_and_zygosity = struct
   open ParPHMM
 
   let add_ll state_llhd llhd =
-    Pma.iter_set llhd ~f:(fun i (v, _p) ->
+    Pma.iter_indices_and_values llhd ~f:(fun i (v, _p) ->
       state_llhd.(i) <- Lp.(state_llhd.(i) * v))
 
   let add_lz zygosity llhd =
@@ -964,7 +964,7 @@ module Forward (* : Worker *) = struct
     state.per_reads <- { Output.name; d } :: state.per_reads
 
   let merge_paired_pms s1 s2 =
-    let m (l1,p1) (l2,p2) =
+    let f (l1,p1) (l2,p2) =
       let p =
         if p1 <= p2 then
           Sp.Paired (p1, p2)
@@ -973,10 +973,10 @@ module Forward (* : Worker *) = struct
       in
       Lp.(l1 * l2), p
     in
-    Pma.merge ~eq:Lpr.equal s1 s2 m
+    Pma.merge ~eq:Lpr.equal s1 s2 ~f
 
   let to_single_pms s =
-    Pma.map s (fun _ _ -> false) ~f:(fun (l,p) -> l, Sp.Single p)
+    Pma.map s ~eq:(fun _ _ -> false) ~f:(fun (l,p) -> l, Sp.Single p)
 
   let merge oc state rr =
     let pr s = Orientation.most_likely_between s ~take_regular in

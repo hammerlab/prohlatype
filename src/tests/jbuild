@@ -24,5 +24,4 @@
     alignment_parsing.exe
     relative_phmm.exe
     tri_logic_is_correct.exe
-    individual/partition_map.exe
   ))))

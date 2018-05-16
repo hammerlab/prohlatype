@@ -113,24 +113,29 @@ let rec position_and_advance sp (pos_map : position_map) =
   | h :: t                                            -> position_and_advance sp t
 
 let init_state =
-  Array.map ~f:Pm.Descending.init_first
+  Array.map ~f:Pm.Descending.singleton
 
 (* Add an allele's MSA.Parser.sequence to the state. *)
 let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
+  let eq o1 o2 = match o1, o2 with
+    | None,    None  -> true
+    | Some b1, Some b2 -> Base.equal b1 b2
+    | _,       _       -> false
+  in
   let add_reference_value start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.Descending.add reference_arr.(i) arr.(i)
+      arr.(i) <- Pm.Descending.add ~eq reference_arr.(i) arr.(i)
     done
   in
   let add_gap start end_ =
     for i = start to end_ - 1 do
-      arr.(i) <- Pm.Descending.add None arr.(i)
+      arr.(i) <- Pm.Descending.add ~eq None arr.(i)
     done
   in
   let add_sequence start s =
     String.iteri s ~f:(fun i c ->
       let j = i + start in
-      arr.(j) <- Pm.Descending.add (some (Base.of_char c)) arr.(j))
+      arr.(j) <- Pm.Descending.add ~eq (some (Base.of_char c)) arr.(j))
   in
   let prefix = sprintf "add_alternate_allele (%s): " allele in
   let ia fmt = invalid_argf ~prefix fmt in
@@ -892,7 +897,7 @@ module MakeMultipleWorkspace (R : Probability.Ring) :
   include CommonWorkspace
   type t = (entry, final_entry, final_emission) w
 
-  let pa = Pma.empty  (* This is just a place holder that is mutated. *)
+  let pa = Pma.empty                    (* This is just a place holder that is mutated. *)
 
   let generate ~ref_length ~read_length =
     { forward   = Array.init 2 (*read_length*) ~f:(fun _ -> Array.make ref_length pa)
@@ -1395,7 +1400,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
 
   let maximum_positions_median_match ?range ws r =
     max_pm_of_ws_row ?range ws r
-    |> fun p -> Pma.map p R.close_enough ~f:(fun c -> c.match_)
+    |> fun p -> Pma.map p ~eq:R.close_enough ~f:(fun c -> c.match_)
     |> median_of_pm
 
   (* offset and emission probabilties
@@ -1440,7 +1445,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
        that large (<100) and there are only 4 bases. So we could be performing
        the same lookup. *)
     let to_em_set obsp emissions =
-      Pma.map emissions R.close_enough
+      Pma.map emissions ~eq:R.close_enough
         ~f:(Option.value_map ~default:R.gap ~f:(Fc.to_match_prob obsp))
     in
     let zero_cell_pm = pm_init_all ~number_alleles Fc.zero_cell in
@@ -1450,15 +1455,15 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
       let prev_pm = if k = 0 then zero_cell_pm else W.get ws ~i:0 ~k:(k-1) in
       let m2 =
         match base_p with
-        | None    -> Pma.merge ~eq  ems prev_pm r.start         (* Not weighing alleles. *)
-        | Some l  -> let nl = Pma.map l R.close_enough ~f:fst in       (* Drop best pos. *)
-                     Pma.merge3 ~eq nl ems prev_pm (fun base_p emission prev_c ->
+        | None    -> Pma.merge ~eq ems prev_pm ~f:r.start      (* Not weighing alleles. *)
+        | Some l  -> let nl = Pma.map l ~eq:R.close_enough ~f:fst in  (* Drop best pos. *)
+                     Pma.merge3 ~eq nl ems prev_pm ~f:(fun base_p emission prev_c ->
                         r.start ~base_p emission prev_c)
       in
       m2
     in
     let fst_col ws obsp emissions ~i ~k =
-      Pma.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) r.fst_col
+      Pma.merge ~eq  (to_em_set obsp emissions) (W.get ws ~i:(i-1) ~k) ~f:r.fst_col
     in
     let middle ws obsp emissions ~i ~k =
       let matches = W.get ws ~i:(i-1) ~k:(k-1) in
@@ -1466,7 +1471,7 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
       let deletes = W.get ws ~i       ~k:(k-1) in
       let ems = to_em_set obsp emissions in
       let r   = Pma.merge4 ~eq ems matches inserts deletes
-        (fun emission_p match_c insert_c delete_c ->
+        ~f:(fun emission_p match_c insert_c delete_c ->
           r.middle emission_p ~insert_c ~delete_c ~match_c)
       in
       if !debug_ref then begin
@@ -1485,16 +1490,16 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
       end;
       r
     in
-    let end_ ws k = Pma.map (W.get ws ~i:(read_length-1) ~k) R.close_enough ~f:r.end_ in
+    let end_ ws k = Pma.map (W.get ws ~i:(read_length-1) ~k) ~eq:R.close_enough ~f:r.end_ in
     let final_e ~range ws =
       (* CAN'T use empty_a since we're merging! *)
       let init = pm_init_all ~number_alleles (R.zero, -1, R.zero) in
       let triple_pm =
         W.foldi_over_final ~range ws ~init
           ~f:(fun e1 p e2 -> Pma.merge ~eq:Rp.equal3 e1 e2
-                (fun acc l -> Rp.avatbp acc p l))
+                ~f:(fun acc l -> Rp.avatbp acc p l))
       in
-      Pma.map triple_pm Rp.equal ~f:(fun (ls, bp, _bl) -> ls, bp)
+      Pma.map triple_pm ~eq:Rp.equal ~f:(fun (ls, bp, _bl) -> ls, bp)
     in
     (*
     let banded ws allele_ems ?prev_row ?cur_row ~i ~k =
@@ -1923,7 +1928,7 @@ let construct input =
         | None, _ | _, None -> false
         | Some x, Some y    -> Base.equal x y
       in
-      let emissions_a = Array.map (Pma.of_descending eq) state_a in
+      let emissions_a = Array.map (Pma.of_descending ~eq) state_a in
       let alleles =
         (mp.reference, []) :: List.map mp.alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
@@ -2278,8 +2283,8 @@ module Splitting_state = struct
 
   let add_emission ss em mm =
     (* Choose second position, that is the one farther in the match. *)
-    let m (l1,_p1) (l2,p2) = Lp.(l1 * l2), p2 in
-    ss.emission_pm <- Pma.merge ~eq:Lpr.equal ss.emission_pm em m;
+    let f (l1,_p1) (l2,p2) = Lp.(l1 * l2), p2 in
+    ss.emission_pm <- Pma.merge ~eq:Lpr.equal ss.emission_pm em ~f;
     ss.max_med_match <- Lp.(ss.max_med_match * mm)
 
   let add_scaling ss v =
@@ -2288,7 +2293,7 @@ module Splitting_state = struct
   let finish ss =
     let pr = List.fold_left ss.scaling ~init:Lp.one
         ~f:Lp.( * ) in
-    ss.emission_pm <- Pma.map ss.emission_pm Lpr.equal
+    ss.emission_pm <- Pma.map ss.emission_pm ~eq:Lpr.equal
       ~f:(fun (e,p) -> Lp.(e / pr),p)
 
 end (* Splitting_state *)
