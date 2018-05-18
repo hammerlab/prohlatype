@@ -8,7 +8,7 @@
           versus
           versus3
           time_phmm))
-   (libraries (cmdliner cmdline_options parmap oml core_bench prohlatype threads))))
+   (libraries (threads cmdliner cmdline_options parmap oml core_bench prohlatype))))
 
 (alias
   ((name scraps)

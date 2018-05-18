@@ -10,7 +10,7 @@
     relative_phmm
     tri_logic_is_correct
     ))
-  (libraries (prohlatype threads cmdliner oml qcheck))
+  (libraries (threads prohlatype cmdliner oml qcheck))
   (preprocess (pps (bisect_ppx -conditional)))
   ))
 
