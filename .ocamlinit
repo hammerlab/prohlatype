@@ -6,8 +6,10 @@
 #require "biocaml.unix"
 #require "parany"
 #require "ppx_deriving_yojson.runtime"
+#require "ocephes"
+#require "partition_map"
 
-#directory "_build/default/src/lib"
+#directory "_build/install/default/lib/prohlatype"
 #load_rec "prohlatype.cma"
 
 open Prohlatype
