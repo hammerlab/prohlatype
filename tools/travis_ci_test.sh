@@ -4,6 +4,9 @@ set -e
 # TODO: pin this to a specific version!
 git clone https://github.com/ANHIG/IMGTHLA.git
 
+# 2018-05-18: We do not need a similar pin for cfstream
+${HOME}opam pin add -k git biocaml https://github.com/biocaml/biocaml.git#3cba7f6cf7dcce0f88678c0cf77dc25efcdd7bce
+
 # for test coverage
 ${HOME}/opam install ocveralls parmap oml core_bench qcheck
 
