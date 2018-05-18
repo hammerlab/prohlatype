@@ -2,7 +2,7 @@
 set -e
 
 # TODO: pin this to a specific version!
-git clone https://github.com/ANHIG/IMGTHLA.git
+git clone https://github.com/ANHIG/IMGTHLA.git#3320
 
 # for test coverage
 ${HOME}/opam install ocveralls parmap oml core_bench qcheck
