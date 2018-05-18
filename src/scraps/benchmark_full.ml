@@ -10,7 +10,7 @@ let time_aggregate ?(seed=11) parPHMM_t reads =
     let read = r.Biocaml_unix.Fastq.sequence in
     let read_errors = unwrap (Fastq.phred_log_probs r.Biocaml_unix.Fastq.qualities) in
     let d =
-      Digest.bytes (sprintf "%s%s%s"
+      Digest.string (sprintf "%s%s%s"
         (Nomenclature.show_locus parPHMM_t.ParPHMM.locus)
         read
         r.Biocaml_unix.Fastq.qualities)

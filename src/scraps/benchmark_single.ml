@@ -16,7 +16,7 @@ let time_individual ?(seed=12) parPHMM_t reads =
   Printf.printf "locus: %s, number alleles: %d, allele_str: %s\n"
     (Nomenclature.show_locus parPHMM_t.ParPHMM.locus)
     (List.length alleles)
-    (Digest.bytes allele_str |> Digest.to_hex);
+    (Digest.string allele_str |> Digest.to_hex);
   List.map alleles ~f:(fun allele ->
     ParPHMM.setup_single_allele_forward_pass ~prealigned_transition_model
       read_length allele parPHMM_t)
@@ -25,7 +25,7 @@ let time_individual ?(seed=12) parPHMM_t reads =
       let read = r.Biocaml_unix.Fastq.sequence in
       let read_errors = unwrap (Fastq.phred_log_probs r.Biocaml_unix.Fastq.qualities) in
       let d =
-        Digest.bytes (sprintf "%s%s%s"
+        Digest.string (sprintf "%s%s%s"
           (Nomenclature.show_locus parPHMM_t.ParPHMM.locus)
           read
           r.Biocaml_unix.Fastq.qualities)
