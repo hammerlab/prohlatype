@@ -6,7 +6,7 @@ dev-repo: "git+https://github.com/hammerlab/prohlatype.git"
 bug-reports: "https://github.com/hammerlab/prohlatype/issues"
 license: "Apache2"
 
-available: [ ocaml-version >= "4.03" ]
+available: [ ocaml-version >= "4.06" ]
 
 build: [
   [ "jbuilder" "subst"] {pinned}
@@ -16,7 +16,7 @@ build: [
 depends: [
 #  "ocaml"               { >= "4.03" }
   "ocamlfind"           { build }
-  "jbuilder"            { build & = "1.0+beta17" }
+  "jbuilder"            { build & = "1.0+beta20" }
   "bisect_ppx"          { build & >= "1.3.2" }
   "ppx_deriving"        { >= "4.2.1" }
   "ppx_deriving_yojson" { >= "3.1" }
@@ -28,6 +28,6 @@ depends: [
   "parany"              { >= "3.0.0" }
   "ocephes"             { >= "0.8.2" }
   "re"                  { >= "1.7.3" }
-  "partition_map"
+  "partition_map"       { >= "0.9.0" }
 ]
 
