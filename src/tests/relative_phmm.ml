@@ -35,7 +35,7 @@ let reads ~n ?fastq () =
 
 let setup_one_read parPHMM_t rd =
   let open ParPHMM in
-  let module Pt = Partition_map in
+  let module Pt = Partition_map.Ascending in
   let pta = setup_single_pass ~prealigned_transition_model read_length parPHMM_t in
   let read = rd.Biocaml_unix.Fastq.sequence in
   let read_errors = unwrap (Fastq.phred_log_probs rd.Biocaml_unix.Fastq.qualities) in

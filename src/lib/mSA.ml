@@ -353,20 +353,45 @@ module Parser = struct
   let report = ref false
 
   let find_header_lines ic =
-    let colon_split = String.split ~on:(`Character ':') in
-    try
-      let rec find_release () =
-        match colon_split (input_line ic) with
-        | [ "IPD-IMGT/HLA Release"; release ] -> find_start release
-        | _ -> find_release ()
-      and find_start release =
-        match colon_split (input_line ic) with
-        | ["Sequences Aligned"; ad ] -> Some (release, ad)
-        | _ -> find_start release
+    let parse_before_3_32 first_line =
+      let colon_split = String.split ~on:(`Character ':') in
+      try
+        let rec find_release line =
+          match colon_split line with
+          | [ "IPD-IMGT/HLA Release"; release ] -> find_start release (input_line ic)
+          | _                                   -> find_release (input_line ic)
+        and find_start release line =
+          match colon_split line with
+          | ["Sequences Aligned"; ad ] -> Some (release, ad)
+          | _                          -> find_start release (input_line ic)
+        in
+        find_release first_line
+      with End_of_file ->
+        None
+    in
+    let parse_after_3_32 first_line =
+      let colon_split_after_number_sign s =
+        String.split ~on:(`Character ':') (String.drop s ~index:1)
       in
-      find_release ()
-    with End_of_file ->
-      None
+      try
+        let rec find_start line =
+          match colon_split_after_number_sign line with
+          | [ " date"; ad ] -> find_release ad (input_line ic)
+          | _               -> find_start (input_line ic)
+        and find_release start line =
+          match colon_split_after_number_sign line with
+          | [ " version"; release ] -> Some (release, start)
+          | _                       -> find_release start (input_line ic)
+        in
+        find_start first_line
+      with End_of_file ->
+        None
+    in
+    let first_line = input_line ic in
+    match first_line.[0] with
+    | None      -> None (* Empty first line! *)
+    | Some '#'  -> parse_after_3_32 first_line
+    | Some _    -> parse_before_3_32 first_line
 
   let from_in_channel sequence_type locus ic =
     let latest_reference_position = ref min_int in
