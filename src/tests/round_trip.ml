@@ -76,9 +76,6 @@ let test_sequences file =
       List.fold_left a_fasta ~init:[] ~f:(fun acc (header, seq) ->
         let allele = List.nth_exn (String.split ~on:(`Character ' ') header) 1 in
         match Ref_graph.sequence gall allele with
-        (* TODO: This should be an Error not an exception! *)
-        | exception Not_found -> printf "Couldn't find sequence for %s\n" allele;
-                                (allele, (seq, "")) :: acc
         | Error msg           -> printf "missing sequence for %s because %s!\n" allele msg;
                                 (allele, (seq, "")) :: acc
         | Ok graph_seq        ->
