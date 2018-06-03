@@ -1,7 +1,6 @@
 
 set -e
 
-# TODO: pin this to a specific version!
 git clone -b 3320 https://github.com/ANHIG/IMGTHLA.git IMGTHLA
 
 # for test coverage
