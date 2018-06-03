@@ -1,6 +1,6 @@
 (jbuild_version 1)
 
-; TODO, Why isn't threads automatically resolved by jbuilder
+; TODO, Why aren't threads automatically resolved by jbuilder
 (executables
   ((names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
    (public_names (align2fasta mhc2gpdf mpjson2tsv multi_par par_type))
