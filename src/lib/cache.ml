@@ -83,9 +83,6 @@ let graph_cache_dir = Filename.concat dir "graphs"
 let graph_no_cache { input; arg } =
   Ref_graph.construct ~arg input
 
-(* TODO: We should add date parsing, so that we can distinguish different
-   graphs, and make sure that we can type against the most recent. Or compare
-   typing across IMGT release dates. *)
 let recent_check to_input to_date arg dateable =
   let file =
     match to_input arg with
