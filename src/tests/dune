@@ -1,0 +1,11 @@
+(executables
+ (names mas_align merged_sensible round_trip allele_distances
+   alignment_parsing relative_phmm tri_logic_is_correct)
+ (libraries threads prohlatype cmdliner oml qcheck)
+ (preprocess
+  (pps bisect_ppx -- -conditional)))
+
+(alias
+ (name tests)
+ (deps mas_align.exe merged_sensible.exe round_trip.exe allele_distances.exe
+   alignment_parsing.exe relative_phmm.exe tri_logic_is_correct.exe))
