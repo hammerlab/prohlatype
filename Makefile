@@ -3,36 +3,36 @@
 default: build
 
 build:
-	jbuilder build
+	dune build
 
 setup:
 	opam install --deps-only ./prohlatype.opam
 
 clean:
-	jbuilder clean
+	dune clean
 
 apps:
-	jbuilder build @apps
+	dune build @apps
 
 scraps:
-	jbuilder build @scraps
+	dune build @scraps
 
 tests:
-	jbuilder build @tests
+	dune build @tests
 
 all:
-	jbuilder build @apps @scraps @tests
+	dune build @apps @scraps @tests
 
 release:
 	patch -p1 < tools/static_patch &&\
-	jbuilder build @apps &&\
+	dune build @apps &&\
 	zip -l prohlatype.zip _build/default/src/app/*.exe
 
 ## Coverage
 
 covered_tests:
 	make clean &&\
-	BISECT_ENABLE=Yes jbuilder build @tests @apps
+	BISECT_ENABLE=Yes dune build @tests @apps
 
 report_dir:
 	mkdir report_dir
