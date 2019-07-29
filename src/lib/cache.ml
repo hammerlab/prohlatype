@@ -38,7 +38,7 @@ let disk_memoize ?dir ?up_to_date ?after_load arg_to_string f =
     else begin
       let file = Filename.concat dir (arg_to_string arg) in
       let save r = match r with
-        | Error e -> r
+        | Error _ -> r
         | Ok ro   ->
             if not (Sys.file_exists dir) then make_full_path dir;
             let o = open_out file in
@@ -132,7 +132,7 @@ let par_phmm_args_to_string {pinput; read_size} =
 let par_phmm_cache_dir =
   Filename.concat dir "parhmm"
 
-let par_phmm_no_cache { pinput; read_size } =
+let par_phmm_no_cache { pinput; _ } =
   ParPHMM.construct pinput
 
 let par_phmm =

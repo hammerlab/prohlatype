@@ -58,7 +58,7 @@ module Wev = We(Pd.Viterbi)
 module Pf = Pd.Parallel(Pd.Forward)
 
 let p_forward ~log_oc ~data_oc read_length_override need_read_length conf
-  number_of_reads specific_reads finish_singles nprocs fastq_file_list =
+  number_of_reads specific_reads _finish_singles nprocs fastq_file_list =
   match read_length_override with
   | None   -> errored Term.exit_status_cli_error
                   "Must specify read size for parallel mode."

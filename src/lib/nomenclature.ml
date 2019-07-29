@@ -17,7 +17,7 @@ let suffix_opt_of_char = function
   | 'C' -> Some C
   | 'A' -> Some A
   | 'Q' -> Some Q
-  | x   -> None
+  | _   -> None
 
 let suffix_to_string = function
   | N -> "N"
@@ -81,7 +81,7 @@ let parse_resolution s =
           | [ a; b ]      -> Ok (Two (a, b), suffix_opt)
           | [ a; b; c]    -> Ok (Three (a, b, c), suffix_opt)
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
-          | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
+          | _lst          -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
 type distance = int * int * int * int
   [@@deriving eq, ord, show]
@@ -297,21 +297,21 @@ end *) = struct
     in
     let insert_above_final s v w so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_final_level s w so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_two_above_final s v w x so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_above_final s w x so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_three_above_final s v w x y so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_two_above_final s w x y so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l

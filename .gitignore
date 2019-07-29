@@ -4,5 +4,6 @@ _build
 *.pdf
 *.native
 *.byte
+*.install
 .cache/
 src/scripts/pre_profile.ml

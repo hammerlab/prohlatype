@@ -214,8 +214,13 @@ let create_compressed_starts t =
  *)
 let output_dot
     ?(human_edges=true)
-    ?(compress_edges=true) ?(compress_start=true)
-  ?(insert_newlines=true) ?short ?max_length fname t =
+    ?(compress_edges=true)
+    ?(compress_start=true)
+    ?(insert_newlines=true)
+    ?short
+    ?max_length
+    fname
+    t =
   let { g; _} = if compress_start then create_compressed_starts t else t in
   let oc = open_out fname in
   let insert_newline = insert_chars ['\n'] in
@@ -250,8 +255,15 @@ let output_dot
   Dot.output_graph oc g;
   close_out oc
 
-let output ?human_edges ?compress_edges ?compress_start ?insert_newlines
-  ?max_length ?(pdf=true) ?(open_=true) ~short fname t =
+let output
+  ?human_edges
+  ?compress_edges
+  ?compress_start 
+  ?max_length
+  ?(pdf=true)
+  ?(open_=true)
+  ~short
+  fname t =
   output_dot ?human_edges ?compress_edges ?compress_start ?max_length ~short
     (fname ^ ".dot") t;
   if pdf then begin
@@ -284,7 +296,7 @@ let relationship pos v =
   | B (p, _) when pos < p                 -> `Before p
   | N (p, _) when pos < p                 -> `Before p
   | B (p, _) when pos = p                 -> `Exact
-  | N (p, s) when pos = p                 -> `Exact
+  | N (p, _) when pos = p                 -> `Exact
   | B _ (*   when pos > p *)              -> `After
   | N (p, s) when pos < end_pos p s       -> `In (p, s)
   | N _ (*p, s) when pos >= end_pos p s*) -> `After
@@ -344,7 +356,7 @@ let add_reference_elems aindex g allele ref_elems =
     | `Started (st, prev) :: tl, Boundary {label; pos } -> add_boundary ~st ~prev ~label ~pos tl
     | `Started (st, prev) :: tl, Sequence {start; s }   -> add_seq ~st ~prev start s tl
     | `Started (_, _) :: _,      Gap _                  -> state       (* ignore gaps *)
-    | `Started (_, _) :: tl,     Start sp               ->
+    | `Started (_, _) :: _tl,    Start sp               ->
         gc "Unexpected second start at %d for %s" sp allele)
   |> List.map ~f:(function
       | `Started _ -> gc "Still have a Started in %s ref" allele
@@ -471,7 +483,7 @@ let add_non_ref aindex g reference
     | `InGap _ as ig     -> ig
     | `AtNext _ as an    -> an
   in
-  let rec advance_until_boundary ~visit ~prev ~next pos label =
+  let advance_until_boundary ~visit ~prev ~next pos label =
     let rec forward node msg =
       loop node (next_reference ~msg node)
     and loop pv nv =
@@ -500,10 +512,10 @@ let add_non_ref aindex g reference
   (* How we close back with the reference *)
   let rec rejoin_after_split ~prev ~next split_pos state ~new_node lst =
     match split_in ~prev ~next ~visit:do_nothing split_pos with
-    | `AfterLast _          -> solo_loop state new_node lst
-    | `InGap (pv, next, ap) -> ref_gap_loop state ~prev:new_node next ap lst
-    | `AtNext (_pv, next)   -> add_allele_edge new_node next;
-                               main_loop state ~prev:new_node ~next lst
+    | `AfterLast _            -> solo_loop state new_node lst
+    | `InGap (_pv, next, ap)  -> ref_gap_loop state ~prev:new_node next ap lst
+    | `AtNext (_pv, next)     -> add_allele_edge new_node next;
+                                 main_loop state ~prev:new_node ~next lst
   (* In the beginning we have not 'Start'ed ->
     Loop through the alignment elemends:
       - discarding Boundaries and Gaps
@@ -518,7 +530,7 @@ let add_non_ref aindex g reference
         begin
           match previous_starts_and_ends with
           | [] -> gc "Failed to find start for %s." allele
-          | ls -> None
+          | _t -> None
         end
       | s :: _        -> gc "Encountered %s in %s instead of Start"
                             (al_el_to_string s) allele
@@ -659,7 +671,7 @@ let add_non_ref aindex g reference
     | Gap {gstart; length} :: t ->
         let open_res = split_in ~prev ~next ~visit:add_allele_edge gstart in begin
         match open_res with
-        | `AfterLast prev         ->
+        | `AfterLast _pre         ->
             solo_loop state next t
         | `InGap (prev, next, _)
         | `AtNext (prev, next)    ->
@@ -765,7 +777,7 @@ let range { bounds; _ } =
   range_pr bounds
 
 let create_by_position g bounds =
-  let st, en = range_pr bounds in
+  let st, _en = range_pr bounds in
   let rec redirects dest num acc =
     if num <= 0 then
       acc
@@ -1007,7 +1019,6 @@ let find_nodes_at_private offset posarr ~pos =
 
 let find_node_at_private ?allele ?ongap ~pos g offset posarr =
   let module M = struct exception Found end in
-  let open Nodes in
   let all_str, test =
     match allele with
     | None   -> "", (fun n -> Nodes.is_seq n && Nodes.inside pos n)
@@ -1065,7 +1076,7 @@ let debug = ref false
 let construct_from_parsed ?(arg=default_construction_arg) r =
   let open MSA in
   let { join_same_sequence; } = arg in
-  let { Parser.align_date; reference; ref_elems; alt_elems} = r in
+  let { Parser.align_date; reference; ref_elems; alt_elems; _} = r in
   let num_alleles = List.length alt_elems in
   let ref_length = List.length ref_elems in
   let g = G.create ~size:(ref_length * num_alleles) () in
@@ -1155,16 +1166,16 @@ let find_position_old ?(next_after=false) t ~allele ~pos =
     fold_along_allele t.g allele ~start ~init:None
       ~f:(fun o v ->
             match v with
-            | S (p, _) when p <= pos                   -> o, `Continue
-            | S (p, _) (*   p > pos *)                 -> next_after o v, `Stop
-            | E p                                      -> next_after o v, `Stop
-            | B (p, _) when p = pos                    -> Some (v, true), `Stop
-            | B (p, _) when p > pos                    -> next_after o v, `Stop
-            | B (p, _) (*   p < pos*)                  -> o, `Continue
-            | N (p, s) when p = pos                    -> Some (v, true), `Stop
-            | N (p, s) when inside_seq p s ~pos        -> Some (v, false), `Stop
-            | N (p, s) when p < pos                    -> o, `Continue
-            | N (p, s)  (* p + String.length s > pos*) -> next_after o v, `Stop)
+            | S (p, _) when p <= pos                    -> o, `Continue
+            | S (_p, _) (*   p > pos *)                 -> next_after o v, `Stop
+            | E _p                                      -> next_after o v, `Stop
+            | B (p, _) when p = pos                     -> Some (v, true), `Stop
+            | B (p, _) when p > pos                     -> next_after o v, `Stop
+            | B (_p, _) (*   p < pos*)                  -> o, `Continue
+            | N (p, _s) when p = pos                    -> Some (v, true), `Stop
+            | N (p, s) when inside_seq p s ~pos         -> Some (v, false), `Stop
+            | N (p, _s) when p < pos                    -> o, `Continue
+            | N (_p,_s)  (* p + String.length s > pos*) -> next_after o v, `Stop)
     |> Option.value_map ~default:(error "%d in a gap" pos)
         ~f:(fun x -> Ok x)
 
@@ -1276,20 +1287,20 @@ let search_through_gap g node ~pos =
     |> List.sort ~cmp:compare (* should be precise about comparing by position. *)
   in
   let back_look =
-    List.find_map preds ~f:(fun (p, n, e) ->
+    List.find_map preds ~f:(fun (_p, n, e) ->
       if Nodes.inside pos n then Some (n, e) else None)
   in
   match back_look with
   | Some v -> Ok v
   | None   -> (* try looking forward again! *)
       let frds =
-        List.fold_left preds ~init:[] ~f:(fun acc (_, n, _) ->
+        List.fold_left preds ~init:[] ~f:(fun _acc (_, n, _) ->
           G.fold_succ_e (fun (_, e, n) l -> (Nodes.position n, n, e) :: l)
             g n [])
         |> List.sort ~cmp:compare
       in
       let forward_look =
-        List.find_map frds ~f:(fun (p, n, e) ->
+        List.find_map frds ~f:(fun (_p, n, e) ->
           if Nodes.inside pos n then Some (n, e) else None)
       in
       match forward_look with

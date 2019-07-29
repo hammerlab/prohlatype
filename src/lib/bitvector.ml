@@ -77,7 +77,7 @@ let flip bv i =
   bv.a.(n) <- bv.a.(n) lxor (1 lsl j)
 
 let clear bv =
-  Array.fill bv.a 0 (bv.last_array_index + 1) 0
+  Array.fill bv.a ~pos:0 ~len:(bv.last_array_index + 1) 0
 
 let iter bv f =
   for n = 0 to bv.last_array_index - 1 do
@@ -136,7 +136,7 @@ let negate_self b =
       (b.mask land (Array.unsafe_get b.a b.last_array_index))
 
 let negate b =
-  let a = Array.map (lnot) b.a in
+  let a = Array.map ~f:(lnot) b.a in
   if b.mask <> 0 then begin
     Array.unsafe_set a b.last_array_index
       (b.mask land (Array.unsafe_get a b.last_array_index))

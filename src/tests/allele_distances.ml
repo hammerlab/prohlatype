@@ -1,6 +1,5 @@
 
 open Prohlatype
-open Common
 
 let funwrap = function
   | Ok o -> o

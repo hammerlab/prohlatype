@@ -87,7 +87,7 @@ let phred_probabilities s =
   let rec loop i =
     if i = n then Ok a else
       Result.bind (Phred_score.of_char s.[i])
-        (fun c -> a.(i) <- Phred_score.to_probability c; loop (i + 1))
+        ~f:(fun c -> a.(i) <- Phred_score.to_probability c; loop (i + 1))
   in
   loop 0
 
@@ -98,12 +98,12 @@ let phred_log_probs s =
   let rec loop i =
     if i = n then Ok a else
       Result.bind (Phred_score.of_char s.[i])
-        (fun c -> a.(i) <- float_of_int (Phred_score.to_int c) /. -10.0;
+        ~f:(fun c -> a.(i) <- float_of_int (Phred_score.to_int c) /. -10.0;
                   loop (i + 1))
   in
   loop 0
 
-let rec same cmp l1 l2 =
+let same cmp l1 l2 =
   let rec single_loop search acc = function
     | []                   -> None, acc
     | h :: t when search h -> (Some h), (List.rev acc) @ t

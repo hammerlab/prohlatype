@@ -53,8 +53,8 @@ let initialize_base_array_and_position_map ref_elems =
   let rec loop lkmp p pp pacc acc = function
     | End _pos :: []              -> Array.concat (List.rev acc),
                                      List.rev ((lkmp, p) :: pacc)
-    | Start pos :: t              -> ia "second start: %d" pos
-    | End pos :: t                -> ia "end with more %d" pos
+    | Start pos :: _t             -> ia "second start: %d" pos
+    | End pos :: _t               -> ia "end with more %d" pos
     | []                          -> ia "list before End"
     | Boundary { pos; _ } :: t    -> loop pos (p + pos - lkmp) pp ((lkmp, p) :: pacc) acc t
     | Sequence { s; start } :: t  -> let l = String.length s in
@@ -110,13 +110,13 @@ let rec position_and_advance sp (pos_map : position_map) =
   | []                                                -> invalid_argf "reached end of sequence map: %d" sp
   | (p1, o1) :: (p2, _) :: _ when p1 <= sp && sp < p2 -> sp - p1 + o1, pos_map
   | (p1, o1) :: []           when p1 <= sp            -> sp - p1 + o1, pos_map
-  | h :: t                                            -> position_and_advance sp t
+  | _h :: t                                           -> position_and_advance sp t
 
 let init_state =
   Array.map ~f:Pm.Descending.singleton
 
 (* Add an allele's MSA.Parser.sequence to the state. *)
-let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
+let add_alternate_allele ~pmap allele allele_instr reference_arr arr =
   let eq o1 o2 = match o1, o2 with
     | None,    None  -> true
     | Some b1, Some b2 -> Base.equal b1 b2
@@ -146,7 +146,7 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
         add_reference_value lp ap
     | Start p :: _                -> ia "second start: %d" p
     | []                          -> ia "didn't End"
-    | End p :: t                  -> ia "end before end: %d." p
+    | End p :: _t                 -> ia "end before end: %d." p
     | Boundary { pos; _ } :: t    ->
         let ap, pmap = position_and_advance pos pmap in
         add_reference_value lp ap;
@@ -165,9 +165,9 @@ let add_alternate_allele ~position_map allele allele_instr reference_arr arr =
         loop pmap fap t
   in
   match allele_instr with
-  | Start s :: t -> loop position_map 0 t
-  | e :: _       -> ia "not at Start : %s" (al_el_to_string e)
-  | []           -> ia "Empty sequence!"
+  | Start _s :: t -> loop pmap 0 t
+  | e :: _        -> ia "not at Start : %s" (al_el_to_string e)
+  | []            -> ia "Empty sequence!"
 
 let pos_to_string pm =
   Pm.Descending.to_string pm
@@ -278,8 +278,8 @@ module Forward_calcations_over_cells (R : Probability.Ring) = struct
     R.max (R.max m i) d
 
   let max2_by_fst a b =
-    let av, al = a in
-    let bv, bl = b in
+    let av, _al = a in
+    let bv, _bl = b in
     if R.(bv <= av) then
       a
     else
@@ -288,7 +288,7 @@ module Forward_calcations_over_cells (R : Probability.Ring) = struct
   let max3_by_fst m i d =
     max2_by_fst (max2_by_fst m i) d
 
-  let g ?(insert_p=Phmm.default_insert_probability) tm read_length =
+  let g ?(insert_p=Phmm.default_insert_probability) tm _read_length =
 
     let open R in                       (* Opening R shadows '+' and '*' below*)
     let open Phmm.TransitionMatrix in
@@ -745,14 +745,14 @@ module SingleWorkspace (R : Probability.Ring) :
     ws.final    <- Array.make ref_length R.zero;
     ws.emission <- init_emission
 
-  let save ws =
+  let [@warning "-32"] save ws =
     let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
     let oc = open_out fname in
     Marshal.to_channel oc ws [];
     close_out oc;
     printf "Saved workspace to %s\n" fname
 
-  let load fname =
+  let [@warning "-32"] load fname =
     let ic = open_in fname in
     let ws : t = Marshal.from_channel ic in
     close_in ic;
@@ -869,14 +869,14 @@ module SingleViterbiWorkspace (R : Probability.Ring) :
     ws.final    <- Array.make ref_length empty_final_entry;
     ws.emission <- empty_final_emission
 
-  let save ws =
+  let [@warning "-32"] save ws =
     let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
     let oc = open_out fname in
     Marshal.to_channel oc ws [];
     close_out oc;
     printf "Saved workspace to %s\n" fname
 
-  let load fname =
+  let [@warning "-32"] load fname =
     let ic = open_in fname in
     let ws : t = Marshal.from_channel ic in
     close_in ic;
@@ -913,14 +913,14 @@ module MakeMultipleWorkspace (R : Probability.Ring) :
     ws.final    <- Array.make ref_length pa;
     ws.emission <- pa
 
-  let save ws =
+  let [@warning "-32"] save ws =
     let fname = Filename.temp_file ~temp_dir:"." "forward_workspace" "" in
     let oc = open_out fname in
     Marshal.to_channel oc ws [];
     close_out oc;
     printf "Saved workspace to %s\n" fname
 
-  let load fname =
+  let [@warning "-32"] load fname =
     let ic = open_in fname in
     let ws : t = Marshal.from_channel ic in
     close_in ic;
@@ -1390,8 +1390,8 @@ module ForwardMultipleGen (R : Probability.Ring) = struct
           else if new_number_seen = m then begin
             if even then
               match t with
-              | []          -> invalid_argf "Didn't find a median after odd midpoint %d values" n
-              | (v1,_) :: _ -> R.((v + v) / (constant 2.))
+              | []            -> invalid_argf "Didn't find a median after odd midpoint %d values" n
+              | (_v1,_) :: _  -> R.((v + v) / (constant 2.))
             else (* not even *)
               v
           end else loop new_number_seen t
@@ -1921,14 +1921,14 @@ let construct input =
       let base_arr, pmap = initialize_base_array_and_position_map mp.ref_elems in
       let state_a = init_state base_arr in
       List.iter mp.alt_elems ~f:(fun a ->
-        add_alternate_allele pmap a.allele a.seq base_arr state_a);
+        add_alternate_allele ~pmap a.allele a.seq base_arr state_a);
       let eq x y =
         match x, y with
         | None,   None      -> true
         | None, _ | _, None -> false
         | Some x, Some y    -> Base.equal x y
       in
-      let emissions_a = Array.map (Pma.of_descending ~eq) state_a in
+      let emissions_a = Array.map ~f:(Pma.of_descending ~eq) state_a in
       let alleles =
         (mp.reference, []) :: List.map mp.alt_elems ~f:(fun a -> a.allele, a.alters)
         |> Array.of_list
@@ -1969,12 +1969,12 @@ let access ?(o=0) rc read read_prob =
   if rc then
     fun i ->
       let i = i + o in
-      complement (String.get_exn read (m - i))
+      complement (String.get_exn read ~index:(m - i))
       , Array.get read_prob (m - i)
   else
     fun i ->
       let i = i + o in
-      String.get_exn read i
+      String.get_exn read ~index:i
       , Array.get read_prob i
 
 (*** Full Forward Pass *)
@@ -2029,21 +2029,21 @@ let setup_single_allele_viterbi_pass ?insert_p ~prealigned_transition_model
       vr2
   in
   let single ~read ~read_errors =
-    let _ = passes.full (access false read read_errors) in
+    let _ = passes.full ~read:(access false read read_errors) in
     let r = result false ws in
-    let _ = passes.full (access true read read_errors) in
+    let _ = passes.full ~read:(access true read read_errors) in
     let c = result true ws in
     most_likely_viterbi r c
   in
   let paired ~read1 ~read_errors1 ~read2 ~read_errors2 =
     let _ = passes.paired
-              (access false read1 read_errors1)
-              (access true read2 read_errors2)
+              ~read1:(access false read1 read_errors1)
+              ~read2:(access true read2 read_errors2)
     in
     let r = result false ws in
     let _ = passes.paired
-              (access true read1 read_errors1)
-              (access false read2 read_errors2)
+              ~read1:(access true read1 read_errors1)
+              ~read2:(access false read2 read_errors2)
     in
     let c = result true ws in
     most_likely_viterbi r c
@@ -2131,11 +2131,11 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
       ~prealigned_transition_model
       ~ref_length ~read_length ws allele_a
   in
-  let single ?prev_threshold ?base_p ~read ~read_errors reverse_complement =
+  let [@warning "-27"] single ?prev_threshold ?base_p ~read ~read_errors reverse_complement =
     (* Ignore base_p for the moment, as I can't think of a good reason to
         implement this logic in the single case. *)
     let read = access reverse_complement read read_errors in
-    pass.full read
+    pass.full ~read
   in
   let per_allele_llhd_and_pos () =
     pm_init_all ~number_alleles:1 (ForwardSLogSpace.W.get_emission ws)
@@ -2154,7 +2154,7 @@ let setup_single_allele_forward_pass ?insert_p ?max_number_mismatches
   3. a function to combine results *)
 let setup_single_pass ?band ?insert_p ?max_number_mismatches
   ~prealigned_transition_model read_length t =
-  let { number_alleles; emissions_a; alleles; _ } = t in
+  let { number_alleles; emissions_a; _ } = t in
   let ref_length = Array.length emissions_a in
   let module F = ForwardMLogSpace in
   let tm =
@@ -2164,7 +2164,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
       Phmm.TransitionMatrix.init ~ref_length read_length
   in
   let r(*, br*) = F.recurrences ?insert_p tm read_length number_alleles in
-  let ws = F.W.generate ref_length read_length in
+  let ws = F.W.generate ~ref_length ~read_length in
   let last_read_index = read_length - 1 in
   let per_allele_llhd_and_pos () = F.W.get_emission ws in
   let maximum_positions_median_match () =
@@ -2207,7 +2207,7 @@ let setup_single_pass ?band ?insert_p ?max_number_mismatches
     ; init_global_state
     }
   in
-  let banded c =
+  let [@warning "-27"] banded c =
     failwith "NI"
     (*
     let single ?prev_threshold rc rd rd_errors =
@@ -2310,7 +2310,7 @@ end (* Splitting_state *)
 
    if number_of_splits doesn't equally divide read_length throw an error.
 *)
-let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
+  let [@warning "-27"] setup_splitting_pass ?band ?insert_p ?max_number_mismatches
   ~prealigned_transition_model read_length number_of_splits t =
   let { number_alleles; emissions_a; alleles; _ } = t in
   let ref_length = Array.length emissions_a in
@@ -2326,7 +2326,7 @@ let setup_splitting_pass ?band ?insert_p ?max_number_mismatches
        parts of the reference-columns of the array, such that as we fill it in,
        we're only seeing the new values. This avoids a costly clearing of the
        space. *)
-    let ws = F.W.generate ref_length eff_read_length in
+    let ws = F.W.generate ~ref_length ~read_length:eff_read_length in
     (* Set the emission and maximum match as references that we update after
        each split run. Only {single} defined below is different between the
        prealigned_transition_model case. *)

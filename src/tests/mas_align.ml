@@ -43,7 +43,7 @@ let merge ?(known=[||]) mp fa =
   let ms = to_map mp in
   let fs = to_map fa in
   let mgd =
-    StringMap.merge ms fs ~f:(fun allele align_seq_o fasta_o ->
+    StringMap.merge ms fs ~f:(fun _allele align_seq_o fasta_o ->
       match (align_seq_o, fasta_o) with
       | None, None      -> assert false
       | None, Some f    -> Some (`JustFasta f)
@@ -68,13 +68,13 @@ let merge ?(known=[||]) mp fa =
     List.iter just_align ~f:(fun (allele,s) -> printf "%s: %s\n" allele s);
     return := 1
   end;
-  let just_diff,rest = List.partition_map rest
+  let just_diff, _rest = List.partition_map rest
     ~f:(function | (a, `Diff d) -> `Fst (a, d) | r -> `Snd r)
   in
   if just_diff <> [] then begin
     printf "Different\n";
     let all_known =
-      List.fold_left just_diff ~init:true ~f:(fun all_ok (allele, (a, f)) ->
+      List.fold_left just_diff ~init:true ~f:(fun _all_ok (allele, (a, f)) ->
         let k = Array.exists ~f:((=) allele) known in
         printf "known: %b %s:\n %s\n" k allele
           (manual_comp_display ~width:100 ~labels:("align: ","fasta: ") a f);

@@ -4,7 +4,7 @@
 open Prohlatype
 open Benchmark_common
 
-let time_aggregate ?(seed=11) parPHMM_t reads =
+let time_aggregate parPHMM_t reads =
   let pta = ParPHMM.setup_single_pass ~prealigned_transition_model read_length parPHMM_t in
   List.map reads ~f:(fun r ->
     let read = r.Biocaml_unix.Fastq.sequence in

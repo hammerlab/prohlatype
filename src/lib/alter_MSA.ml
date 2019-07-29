@@ -114,6 +114,8 @@ end (* Split *)
 
 module Impute : sig
 
+  type blst
+
   val debug : bool ref
 
   val one : bigger:string alignment_sequence
@@ -161,7 +163,6 @@ end (* Impute *) = struct
 
   (* Keep track of the positions that we're imputing into the smaller sequence. *)
   let add_per_segment blst final_end ~start ~end_ ps_acc =
-    let open Alteration in
     let first = (List.hd_exn blst).pos in
     if start = end_ then begin
       let not_start_nor_end = start <> first && start <> final_end in
@@ -180,7 +181,7 @@ end (* Impute *) = struct
     in
     loop [] lst
 
-  let trim_same acc = function
+  let [@warning "-32"] trim_same acc = function
     | []  -> acc
     | h :: _  ->
         match acc with
@@ -470,7 +471,7 @@ end (* Merge *) = struct
   let instruction_to_string_seqless =
     instruction_to_string (fun _ -> "")
 
-  let bounded_results_to_string =
+  let [@warning "-32"] bounded_results_to_string =
     string_of_list ~sep:";"
       ~f:(fun (bm, seq) -> sprintf "(%s, %s)"
             (Boundaries.marker_to_string bm) (short_seq seq))
@@ -509,8 +510,8 @@ end (* Merge *) = struct
     grouped (all_boundaries_before_start_or_end gen) >>= begin fun gblst ->
       grouped (all_boundaries_before_start_or_end nuc) >>= begin fun nblst ->
         let rec need_exon new_boundary_pos acc gl nl = match gl, nl with
-          | ({ label = Exon gx} as gb, gseq) :: gtl
-          , ({ label = Exon nx} as nb, nseq) :: ntl ->
+          | ({ label = Exon gx; _} as gb, gseq) :: gtl
+          , ({ label = Exon nx; _} as nb, nseq) :: ntl ->
             let gss = ref_seq gseq in
             let nss = ref_seq nseq in
             if gx <> nx then
@@ -538,14 +539,14 @@ end (* Merge *) = struct
           | [], _   -> error "Genetic segments ended before nuclear."
           |  _, []  -> error "Nuclear segments ended before genetic."
         and need_intron new_boundary_pos acc gl nl = match gl, nl with
-          | ({ label = Intron gx} as gb, gseq) :: gtl
-          , ({ label = Exon nx}, _) :: _ ->
+          | ({ label = Intron gx; _} as gb, gseq) :: gtl
+          , ({ label = Exon nx; _}, _) :: _ ->
             if gx + 1 <> nx then
               error "Genetic Intron %d doesn't line up with Nuclear exon %d" gx nx
             else
               let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
               need_exon (new_boundary_pos + gb.length) (instr :: acc) gtl nl
-          | ({ label = UTR3 } as gb, gseq) :: [], [] ->
+          | ({ label = UTR3; _ } as gb, gseq) :: [], [] ->
               let instr = FillFromGenetic (new_region gseq new_boundary_pos gb) in
               Ok (List.rev (instr :: acc))                                (* Fin. *)
 
@@ -556,8 +557,8 @@ end (* Merge *) = struct
           |  _, []  -> error "Nuclear segments ended before genetic."
         in
         match gblst, nblst with
-        | ({ label = UTR5 } as gb1, gseq) :: gtl
-        , ({ label = Exon 1}, _) :: _ ->
+        | ({ label = UTR5; _ } as gb1, gseq) :: gtl
+        , ({ label = Exon 1; _}, _) :: _ ->
             need_exon (gb1.length + gb1.position)
               [ FillFromGenetic (new_region gseq gb1.position gb1)] gtl nblst
         | (gb1, _) :: _
@@ -574,7 +575,7 @@ end (* Merge *) = struct
   let strip_start_ends_region r =
     { r with al_seq = strip_start_ends_seq r.al_seq }
 
-  let strip_nuclear_start_ends allele_name instr =
+  let strip_nuclear_start_ends _allele_name instr =
     List.map instr ~f:(fun e ->
       match e with
       | FillFromGenetic _ -> e
@@ -748,7 +749,7 @@ end (* Merge *) = struct
     | _, (e :: _) ->
         error "In %s Asked to split at End not: %s"
           allele_name (al_el_to_string e)
-    | ns, []  -> Ok None
+    | _ns, [] -> Ok None
 
   let check_for_start_ends allele_name has_data ~genetic ~nuclear =
     let rec check ?last_end has_data pss_acc nuclear =
@@ -807,7 +808,7 @@ end (* Merge *) = struct
     let rec n nuc_has_data acc l = match l with
       | [] ->
           error "Mapping instructions for %s, empty!" allele_name
-      | (FillFromGenetic f as h) :: tl when f.bm.label = UTR3 ->
+      | (FillFromGenetic f as h) :: _tl when f.bm.label = UTR3 ->
           Ok (List.rev (h :: acc))                                     (* Fin *)
       | (FillFromGenetic _ as h) :: tl ->
           m nuc_has_data (h :: acc) tl
@@ -815,7 +816,7 @@ end (* Merge *) = struct
           error "Expected a Fill but received: %s"
             (instruction_to_string_seqless e)
     and m nuc_has_data acc l = match l with
-      | MergeFromNuclear { genetic; nuclear } :: tl ->
+      | MergeFromNuclear { genetic; nuclear; _ } :: tl ->
           check_for_start_ends allele_name nuc_has_data ~genetic ~nuclear >>=
             fun (nuc_has_data, pss, nnuclear) ->
               let nacc = MergeFromNuclear { genetic; nuclear = nnuclear; pss} :: acc in
@@ -839,10 +840,10 @@ end (* Merge *) = struct
 
   let exec_instructions l =
     List.map l ~f:(function
-        | FillFromGenetic g                -> region_to_final_al_seq g
-                                              , [region_to_per_segment g]
-        | MergeFromNuclear {nuclear; pss } -> region_to_final_al_seq nuclear
-                                              , pss )
+        | FillFromGenetic g                   -> region_to_final_al_seq g
+                                                 , [region_to_per_segment g]
+        | MergeFromNuclear {nuclear; pss; _ } -> region_to_final_al_seq nuclear
+                                                 , pss )
     |> List.split
     |> fun (instr, pss) ->
         start_before_first_boundary (List.concat instr) >>= fun l ->
@@ -915,7 +916,7 @@ end (* Merge *) = struct
           end
     in
     let cmp alt1 alt2 = compare alt1.allele alt2.allele in
-    loop [] [] [] (List.sort ~cmp nuc.alt_elems) (List.sort ~cmp gen.alt_elems)
+    loop [] [] [] ~nlst:(List.sort ~cmp nuc.alt_elems) ~glst:(List.sort ~cmp gen.alt_elems)
 
   let same_warn_on_just_gen ~igen_mp ~nuc_mp =
     same_and_diff ~gen:igen_mp ~nuc:nuc_mp >>= fun (same, just_gen, _just_nuc) ->
@@ -953,7 +954,7 @@ end (* Merge *) = struct
                 | []  -> cDNA_alter_lst
                 | _   ->
                     let exon_insert = List.exists pss_lst
-                      ~f:(function { Alteration.type_ = Exon _ } -> true | _ -> false)
+                      ~f:(function { Alteration.type_ = Exon _; _ } -> true | _ -> false)
                     in
                     if exon_insert then
                       printf "when same merging %s: exon insert! %s\n"

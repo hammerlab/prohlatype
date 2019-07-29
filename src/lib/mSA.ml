@@ -87,7 +87,7 @@ module Alteration = struct
     ; type_ : Gene_region.t
     ; start : position
     ; end_  : position
-    } [@@deriving eq, ord, show, yojson]
+    } [@@deriving eq, ord, yojson]
 
   let per_segment_to_string p =
     sprintf "[%s:%s:%d,%d)"
@@ -103,7 +103,7 @@ module Alteration = struct
     ; why       : string
     ; distance  : float
     ; positions : per_segment list
-    } [@@deriving show, yojson]
+    } [@@deriving yojson]
 
   let to_string { allele; why; distance; positions } =
     sprintf "%s %s (d: %f) positions: [%s]"
@@ -317,7 +317,7 @@ module Parser = struct
     String.split line ~on:(`Character ' ')
     |> List.filter ~f:((<>) String.empty)
     |> function
-        | s :: _ when String.get s 0 = Some '|' -> Some Dash
+        | s :: _ when String.get s ~index:0 = Some '|' -> Some Dash
         | "AA" :: "codon" :: _  -> Some Dash   (* not modeling this at the moment. *)
         | "gDNA" :: pos :: _    -> Some (Position (GDNA, int_of_string pos))
         | "cDNA" :: pos :: _    -> Some (Position (CDNA, int_of_string pos))
@@ -388,7 +388,7 @@ module Parser = struct
         None
     in
     let first_line = input_line ic in
-    match first_line.[0] with
+    match String.get first_line ~index:0 with
     | None      -> None (* Empty first line! *)
     | Some '#'  -> parse_after_3_32 first_line
     | Some _    -> parse_before_3_32 first_line
@@ -408,7 +408,7 @@ module Parser = struct
         as opposed to the reference, ie gaps advance the position.
 
         So we don't check for: x.ref_ps.position = p as well. *)
-      | Position (st, p)    -> assert (sequence_type = st); x
+      | Position (st, _p)   -> assert (sequence_type = st); x
       | Dash                -> x                             (* ignore dashes *)
       | SeqData (allele, s) ->
           let fold_sequence ~fail_on_same init =
@@ -430,7 +430,7 @@ module Parser = struct
             if !report && new_ps.position <> !latest_reference_position then
               eprintf "position mismatch %d vs %d for %s.\n"
                 !latest_reference_position new_ps.position new_ps.allele_n;
-            Hashtbl.replace x.alt_htbl allele new_ps;
+            Hashtbl.replace x.alt_htbl ~key:allele ~data:new_ps;
             x
           end
     in
@@ -502,13 +502,13 @@ module Parser = struct
                                   { b with label = UTR3}
                                 else
                                   b
-              | rb        -> perrorf "Strangely: parsing gDNA encoded file \
+              | _rb       -> perrorf "Strangely: parsing gDNA encoded file \
                               didn't end in an Intron to replace with UTR."
               end
         in
         let ref_elems = normalized_seq ~boundary_swap reversed.ref_ps in
         let alt_elems =
-          Hashtbl.fold ~init:[] ~f:(fun ~key:all ~data:ps acc ->
+          Hashtbl.fold ~init:[] ~f:(fun ~key:_all ~data:ps acc ->
               if ps.sequence = [] then begin
                 printf "Dropping empty sequence: %s\n" ps.allele_n;
                 acc
@@ -576,7 +576,7 @@ module Parser = struct
   let in_order_invariant l =
     let rec loop = function
       | [] -> Ok ()
-      | h :: [] -> Ok ()
+      | _h :: [] -> Ok ()
       | a :: b :: t ->
           if end_position String.length a > start_position b then
             Error (a, b)
@@ -609,10 +609,10 @@ module Boundaries = struct
   let of_boundary { label; pos } =
     marker ~label ~position:pos
 
-  let to_boundary ?(offset=0) { label; position; } =
+  let to_boundary ?(offset=0) { label; position; _ } =
     Boundary { label = label; pos = position + offset }
 
-  let matches_boundary { label; position; _ } = function
+  let [@warning "-32"] matches_boundary { label; position; _ } = function
     | Boundary b when b.label = label &&  b.pos = position -> true
     | _ -> false
 
@@ -791,9 +791,9 @@ module MakeZip (R : Data_projection) = struct
     let reference_pass_r =
       let in_ref = true in
       Boundaries.(fold (first_boundary_before_start reference)
-        ~start:(fun s p -> Ok s)          (* Nothing to do for reference Start's *)
-        ~end_:(fun s p -> Ok s)             (* Nothing to do for reference End's *)
-        ~boundary:(fun (started, acc, allele_lst) b ->
+        ~start:(fun s _p -> Ok s)          (* Nothing to do for reference Start's *)
+        ~end_:(fun s _p -> Ok s)             (* Nothing to do for reference End's *)
+        ~boundary:(fun (started, _acc, allele_lst) b ->
             let new_state =
               { start_pos = b.pos
               ; end_pos = b.pos
@@ -856,18 +856,18 @@ module AlleleSequences = MakeZip (struct
 
   (* Ignore the in_reference parameter, because we want to create the buffer
      for the allele when it is outside the reference. *)
-  let of_seq ~in_ref started s =
+  let [@warning "-27"] of_seq ~in_ref started s =
     match B.of_native_string s.s with
     | `Error (`wrong_char_at d) ->
         local_errorf "wrong char at %d in %s" d s.s
     | `Ok b ->
         started, b
 
-  let of_gap ~in_ref started g =
+  let [@warning "-27"] of_gap ~in_ref started g =
     started, B.make g.length default_gap_char
 
   (* Boundary markers are added by the allele_sequence function. *)
-  let of_boundary ~in_ref started b =
+  let [@warning "-27"] of_boundary ~in_ref started boundary =
     started, B.empty
 
   let add_seq start_pos (started, buffer) {start; s} =
@@ -983,7 +983,7 @@ module Hamming_distance_projection = struct
     else
       G { started; start_pos; length; mismatches = gap.length }
 
-  let of_boundary ~in_ref started boundary =
+  let [@warning "-27"] of_boundary ~in_ref started boundary =
     B
 
   (* zipping logic makes sure position is inside s *)
@@ -1133,7 +1133,8 @@ module Segments = struct
     in
     loop init (same_pos_and_length_step s1 s2)
 
-  let same_position_print =
+  (* Used for debugging only. *)
+  let [@warning "-32"] same_position_print =
     same_position_fold ~init:() ~f:(fun () s ->
       match s with
       | `Fst e       -> printf "Fst %s \n" (al_el_to_string e)
@@ -1362,7 +1363,7 @@ module Segments = struct
                 , (first_boundary_before_start allele2))
           ~start:(fun state _ -> Ok state)       (* Nothing to do for reference Start's *)
           ~end_:(fun state _ -> Ok state)          (* Nothing to do for reference End's *)
-          ~boundary:(fun (started1, started2, acc, a1, a2) b ->
+          ~boundary:(fun (started1, started2, _acc, a1, a2) b ->
                 let new_state = state_of_boundary ~started1 ~started2 b in
                 adv_alleles new_state [] a1 a2)                      (* reset acc to [] *)
           ~gap:(fun (started1, started2, acc, a1, a2) gap ->

@@ -193,7 +193,7 @@ let forward_gen recurrences ?m ~normalize ~refs ~read read_probs =
   let tm = TransitionMatrix.init ~ref_length read_length in
   let insert_prob = 0.25 in (* There are 4 characters, assume equality. *)
   let p_c_m i k =
-    if String.get_exn read i = String.get_exn refs k then
+    if String.get_exn read ~index:i = String.get_exn refs ~index:k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.
@@ -221,7 +221,7 @@ let forward_gen recurrences ?m ~normalize ~refs ~read read_probs =
   let iter_over = over_row ~init:() ~g:(fun u _ _ _ -> u) in
   let normalize row by =
     if normalize then
-      iter_over row
+      iter_over ~row
         (fun k -> m.(row).(mi k) /. by
                 , m.(row).(ii k) /. by
                 , m.(row).(di k) /. by)
@@ -355,7 +355,7 @@ let recover_path vm =
   | 0 -> prev_match last pos []
   | 1 -> prev_insert last pos []
   | 2 -> prev_delete last pos []
-  | x -> assert false
+  | _ -> assert false
 
 let viterbi ?(normalize=true) ~refs ~read read_probs =
   let vm, _ =
@@ -444,7 +444,7 @@ let backward_gen recurrences ~normalize ~refs ~read read_probs =
   let p_c_m i k =
     if k = ref_length || i = ref_length then
       0.0
-    else if String.get_exn read i = String.get_exn refs k then
+    else if String.get_exn read ~index:i = String.get_exn refs ~index:k then
       1. -. read_probs.(i)
     else
       read_probs.(i) /. 3.
