@@ -154,10 +154,13 @@ type locus =
   | L
   | MICA
   | MICB
+  | N
   | P
   | TAP1
   | TAP2
+  | S
   | T
+  | U
   | V
   | W
   | Y
@@ -191,10 +194,13 @@ let parse_locus = function
   | "L"     -> Ok L
   | "MICA"  -> Ok MICA
   | "MICB"  -> Ok MICB
+  | "N"     -> Ok N
   | "P"     -> Ok P
   | "TAP1"  -> Ok TAP1
   | "TAP2"  -> Ok TAP2
+  | "S"     -> Ok S
   | "T"     -> Ok T
+  | "U"     -> Ok U
   | "V"     -> Ok V
   | "W"     -> Ok W
   | "Y"     -> Ok Y
@@ -429,7 +435,7 @@ end (* Diploid *)
 
 type locus_groups =
   | ClassI      (* A, B, C *)
-  | FullClassI  (* ^ and E, F, G, H, J, K, L, P, T, V, W, Y
+  | FullClassI  (* ^ and E, F, G, H, J, K, L, N; P, S, T, V, W, Y
                  * this isn't the full Class I list but only what IMGT
                  * currently supports. *)
 
@@ -437,5 +443,5 @@ let locus_group_to_loci = function
   | ClassI      -> [ A; B; C ]
   | FullClassI  -> [ A ; B ; C
                    ; E ; F ; G ; H ; J ; K
-                   ; L ; P ; T ; V ; W ; (* TODO: Y *)
+                   ; L ; N ; P ; S ; T ; U ; V ; W ; (* TODO: Y *)
                    ]
