@@ -45,7 +45,7 @@ case "$TEST" in
   mergeB)
     echo testing merging of B
     make tests
-    time _build/default/src/tests/merged_sensible.exe B > merged_B.log
+    time _build/default/src/tests/merged_sensible.exe B
     ;;
   mergeC)
     echo testing merging of C
