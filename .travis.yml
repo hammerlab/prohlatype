@@ -9,7 +9,6 @@ env:
   - OCAML_VERSION=4.06.0 TEST=alleleDiffA
   - OCAML_VERSION=4.06.0 TEST=impute
   - OCAML_VERSION=4.06.0 TEST=mergeA
-  - OCAML_VERSION=4.06.0 TEST=mergeB
   - OCAML_VERSION=4.06.0 TEST=mergeC
 
 cache:
