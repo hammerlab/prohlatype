@@ -70,7 +70,7 @@ let difference_in_non_coding_region g1 g2 =
       | Ok (_, (Two _, _))    -> false
       | Ok (_, (Three _, _))  -> false
       | Ok (_, (Four (a2, b2, c2, d2), _))  ->
-          a1 = a1 && b1 = b2 && c1 = c2 && d1 <> d2
+          a1 = a2 && b1 = b2 && c1 = c2 && d1 <> d2
 
 let test_diff ~merged_seq ~genetic_seq ~nuclear_seq (nuc, gen) =
   let desc = sprintf "%s -> %s" nuc gen in
@@ -149,7 +149,6 @@ let () =
     Alter_MSA.Impute.debug := true;
     Alter_MSA.Merge.debug := true;
     Ref_graph.debug := true;
-    let open Alleles.Input in
     printf "constructing genetic graph\n";
     let genetic_graph_trie = load prefix Distances.Trie `Genetic in
     printf "constructing nuclear graph\n";

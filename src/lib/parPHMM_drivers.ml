@@ -575,7 +575,7 @@ module Output = struct
 
   type 'd format_ =
     | TabSeparated of ('d -> string)
-    | Json of ('d -> Yojson.Safe.json)
+    | Json of ('d -> Yojson.Safe.t)
 
   (* Control how much information to print out. If not specified (ie None) then
      print everything. This makes sense for num_likelihoods and num_per_read
@@ -682,7 +682,7 @@ module Output = struct
     in
     fprintf oc "Prohlatype version: %s\n" header.prohlatype_version;
     fprintf oc "Command Line: %s\n" header.commandline;
-    List.iter per_loci ~f:(fun { locus; per_allele; zygosity} ->
+    List.iter per_loci ~f:(fun { locus; per_allele; zygosity; _} ->
       list_iter_on_non_empty
         fprint_zygosity_log_likelihood
         (fun () ->
@@ -937,19 +937,19 @@ module Forward (* : Worker *) = struct
     ; gene_length      = Array.length parPHMM_t.emissions_a
     }
 
-  let single oc { initial_pt; proc; opt; _} fqi =
+  let single oc { initial_pt; proc; _} fqi =
     let forward pt r re = fst (forward oc pt proc r re) in
     Fastq_items.single oc fqi ~k:(fun name read read_errors ->
       { Output.name; d = Sp.Single (forward initial_pt read read_errors) })
 
   let take_regular = higher_value_in_first
 
-  let paired oc { initial_pt; proc; opt } fq1 fq2 =
+  let paired oc { initial_pt; proc; _ } fq1 fq2 =
     let forward pt r re = fst (forward oc pt proc r re) in
     Fastq_items.paired oc fq1 fq2 ~k:(fun name rd1 re1 rd2 re2 ->
       let r1 = forward initial_pt rd1 re1 in
       match Orientation.most_likely_between r1 ~take_regular with
-      | Filtered m  ->
+      | Filtered _  ->
           let r2 = forward initial_pt rd2 re2 in
           { Output.name; d = Sp.Paired (r1, r2)}
       | Completed (c, _)  ->
@@ -1095,8 +1095,6 @@ module Viterbi :
     }
 
   type final_state = state
-
-  type opt = unit
 
   let init _oc conf ~read_length (parPHMM_t : ParPHMM.t) =
     let { prealigned_transition_model; allele; insert_p; _ } = conf in
@@ -1451,8 +1449,8 @@ module Multiple_loci (* :
       loci, sp
 
   let allele_arr_from_pl per_loci loci =
-    List.find_map per_loci (function
-      | {pl_locus; allele_arr} when pl_locus = loci -> Some allele_arr
+    List.find_map per_loci ~f:(function
+      | {pl_locus; allele_arr; _} when pl_locus = loci -> Some allele_arr
       | _                                           -> None)
     |> Option.value_exn
           ~msg:(sprintf "Missig %s loci!" (Nomenclature.show_locus loci))
@@ -1572,7 +1570,7 @@ module Multiple_loci (* :
       |> List.rev                                (* Restore loci order. *)
       |> fun l -> Single_or_incremental l
     in
-    let ordinary_paired name rd1 re1 rd2 re2 =
+    let ordinary_paired _name rd1 re1 rd2 re2 =
       let _fpt1, _fpt2, res =
         List.fold_left paa ~init:(initial_pt, initial_pt, [])
           ~f:(fun (pt1, pt2, acc) ((_, locus), p, _, _, _) ->
@@ -1889,7 +1887,7 @@ module Parallel (W : Worker) = struct
     time oc "Allocating forward pass workspace"
       (fun () -> W.init oc conf ~read_length pt)
 
-  let across_fastq ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs
+  let across_fastq ~log_oc ~data_oc _conf ?number_of_reads ~specific_reads ~nprocs
       state file =
     try
       let map fqi = W.single log_oc state fqi in
@@ -1899,7 +1897,7 @@ module Parallel (W : Worker) = struct
     with Fastq_items.Read_error_parsing e ->
       fprintf log_oc "%s" e
 
-  let across_paired ~log_oc ~data_oc conf ?number_of_reads ~specific_reads ~nprocs
+  let across_paired ~log_oc ~data_oc _conf ?number_of_reads ~specific_reads ~nprocs
       state file1 file2 =
     let map = function
       | Sp.Single fqi      -> W.single log_oc state fqi

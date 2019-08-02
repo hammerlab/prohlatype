@@ -32,7 +32,7 @@ let index lst =
   let to_allele = Array.of_list (List.sort ~cmp:compare lst) in
   let size, to_index =
     Array.fold_left to_allele ~init:(0, StringMap.empty )
-      ~f:(fun (i, sm) a -> (i + 1, StringMap.add a i sm))
+      ~f:(fun (i, sm) a -> (i + 1, StringMap.add ~key:a ~data:i sm))
   in
   { size; to_index; to_allele }
 
@@ -86,12 +86,12 @@ module CompressNames = struct
           | None    -> `Special a
           | Some li -> `Template (d, li)
         end
-    | _,  l :: _  -> eprintf "Asked to split at penultimate! %d. \
+    | _, _l :: _  -> eprintf "Asked to split at penultimate! %d. \
                               Unexpected List.split_n behavior." n;
                      `Special a
 
 
-  let rec split_all =
+  let split_all =
     let comp = function
       | `Special s        -> `Special s
       | `Template (d, li) -> `Compress (d, [li])
@@ -592,7 +592,7 @@ module Input = struct
   let to_short_fname_prefix = function
     | AlignmentFile { path; _ } ->
         (Filename.chop_extension (Filename.basename path))
-    | MergeFromPrefix { prefix_path; } ->
+    | MergeFromPrefix { prefix_path; _ } ->
         (Filename.basename prefix_path)
 
   let to_string = function
@@ -707,7 +707,7 @@ module Input = struct
         | Some dl -> Alter_MSA.Impute.do_it dl smp
         end
     | MergeFromPrefix
-        { prefix_path; selectors; drop_sv; distance } ->
+        { prefix_path; selectors; distance; _ } ->
           MergeConstruction.do_it prefix_path selectors distance
 
 end (* Input *)

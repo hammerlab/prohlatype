@@ -29,7 +29,7 @@ let expand { hd = {value; length}; tl} =
   in
   loop (expand_rlp value [] length) tl
 
-let rec until_different value =
+let until_different value =
   let rec loop length = function
     | h :: t when h = value -> loop (length + 1) t
     | lst (* when h <> value
@@ -104,7 +104,7 @@ let fold_map2_same_length l1 l2 ~f ~init =
   loop [] nacc (nl1, nl2)
 
 let expand_into_array ~f ~update ret rl =
-  let rec fill_value i length v =
+  let fill_value i length v =
     for j = i to i + length - 1 do ret.(j) <- update ret.(i) v done
   in
   let rec loop i = function

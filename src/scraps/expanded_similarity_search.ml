@@ -83,7 +83,7 @@ let p_nuc_mp =
   let just_xons s =
     Boundaries.grouped s
     |> funwrap
-    |> List.filter ~f:(function (Boundaries.{ label = Exon _ }, _) -> true | _ -> false)
+    |> List.filter ~f:(function (Boundaries.{ label = Exon _; _ }, _) -> true | _ -> false)
     |> Boundaries.ungrouped
   in
   { p_gen_mp with ref_elems = just_xons p_gen_mp.ref_elems
@@ -100,7 +100,7 @@ let mp_and_seqs =
 let print_exon_sequences mp_and_seq =
   let open MSA in
   let open Parser in
-  List.iter mp_and_seq ~f:(fun (mp, seqs, distances) ->
+  List.iter mp_and_seq ~f:(fun (mp, seqs, _distances) ->
     let ref_lst = assoc_exn mp.reference seqs in
     printf "%s\n" mp.reference;
     List.iter ref_lst ~f:(fun (bm, seqs) ->
@@ -311,7 +311,7 @@ let max_dist allele ma =
   match Array.findi ma ~f:(fun (a,_) -> a = allele) with
   | None   -> invalid_argf "Couldn't find %s" allele
   | Some i ->
-      let ca, cd = ma.(i) in
+      let _ca, cd = ma.(i) in
       let ba = ref "" in
       let bd = ref min_int in
       for j = 0 to i - 1 do
@@ -336,7 +336,7 @@ let grand_search seq_lst =
     let ad = all_distances arr in
     alleles, ad, arr)
   in
-  List.iteri all_distances ~f:(fun i (alleles, ad, arr) ->
+  List.iteri all_distances ~f:(fun i (_alleles, ad, arr) ->
     let others = List.filteri all_distances ~f:(fun j _ -> i <> j) in
     List.iter others ~f:(fun (_, bd, brr) ->
       let min_d, a_a, b_a = minimum_of arr brr in
@@ -356,7 +356,7 @@ let grand_search_par seq_lst =
   in
   let print_me =
     Parmap.parmapi
-      (fun i (alleles, ad, arr) ->
+      (fun i (_alleles, ad, arr) ->
         let others = List.filteri all_distances ~f:(fun j _ -> i <> j) in
         List.map others ~f:(fun (_, bd, brr) ->
           let min_d, a_a, b_a = minimum_of arr brr in

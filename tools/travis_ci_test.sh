@@ -1,7 +1,7 @@
 
 set -e
 
-git clone -b 3320 https://github.com/ANHIG/IMGTHLA.git IMGTHLA
+git clone -b 3370 https://github.com/ANHIG/IMGTHLA.git IMGTHLA
 
 # for test coverage
 ${HOME}/opam install ocveralls parmap oml core_bench qcheck

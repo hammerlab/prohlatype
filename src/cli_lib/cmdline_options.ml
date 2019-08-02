@@ -476,7 +476,6 @@ let do_not_finish_singles_flag =
 
 let likelihood_report_size_argument = "likelihood-report-size"
 let likelihood_report_size_arg =
-  let open ParPHMM_drivers.Output in
   let docv = "POSITIVE INTEGER" in
   let doc = "Override the default number of individual allele likelihoods to \
     report. In general, this is $(b,not) the desired outcome; we should \
@@ -684,7 +683,6 @@ let full_class1_loci_str =
 let only_class1_flag = "only-common-class1"
 
 let only_class1_directory_flag =
-  let open Nomenclature in
   let doc = sprintf
     "Consider only the common class I HLA loci (%s) in the passed directory."
       class1_loci_str
@@ -726,7 +724,7 @@ let fp_printer frmt s = match s with
 
 let fp_constructor =
   let is_locus path =
-    recognized_locus path >>= fun l -> Ok (`File path)
+    recognized_locus path >>= fun _l -> Ok (`File path)
   in
   Arg.conv ~docv:"File, prefix or directory"
     (fpd_parser is_locus, fp_printer)
@@ -768,7 +766,7 @@ let fpd_constructor =
     if Sys.is_directory path then
       Ok (`Directory path)
     else
-      recognized_locus path >>= fun l -> Ok (`File path)
+      recognized_locus path >>= fun _l -> Ok (`File path)
   in
   Arg.conv ~docv:"File, prefix or directory"
     (fpd_parser check_dir, fpd_printer)

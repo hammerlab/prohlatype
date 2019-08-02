@@ -50,7 +50,7 @@ module Gene_region = struct
     | Exon n   -> Some (Exon (n + 1))
     | UTR5     -> None
     | UTR3     -> None
-    | Intron n -> None
+    | Intron _ -> None
 
   let to_string = function
     | UTR5     -> "UTR5"

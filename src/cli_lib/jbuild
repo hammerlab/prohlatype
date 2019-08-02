@@ -1,7 +1,0 @@
-(jbuild_version 1)
-
-(library (
-  (name cmdline_options)
-  (synopsis "Command line options for various programs.")
-  (libraries (prohlatype cmdliner))
-  ))

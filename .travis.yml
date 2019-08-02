@@ -9,7 +9,6 @@ env:
   - OCAML_VERSION=4.06.0 TEST=alleleDiffA
   - OCAML_VERSION=4.06.0 TEST=impute
   - OCAML_VERSION=4.06.0 TEST=mergeA
-  - OCAML_VERSION=4.06.0 TEST=mergeB
   - OCAML_VERSION=4.06.0 TEST=mergeC
 
 cache:
@@ -35,7 +34,6 @@ before_install:
 install:
   # Install dependencies
   # 2018-05-18: We do not need a similar pin for cfstream
-  - ${HOME}/opam pin add -k git biocaml https://github.com/biocaml/biocaml.git#3cba7f6cf7dcce0f88678c0cf77dc25efcdd7bce
   - ${HOME}/opam pin add --no-action prohlatype prohlatype.opam
   - ${HOME}/opam install --deps-only prohlatype
 

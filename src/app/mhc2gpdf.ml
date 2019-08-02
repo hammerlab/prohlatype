@@ -53,10 +53,8 @@ let construct
   skip_disk_cache
   max_edge_char_length
   do_not_use_heuristic_for_edges
-  not_compress_edges not_compress_start
-  not_insert_newlines =
-  let open Ref_graph in
-  let open Cache in
+  not_compress_edges
+  not_compress_start =
   let join_same_sequence = (not not_join_same_seq) in
   let option_based_fname, cargs =
     to_filename_and_graph_args
@@ -76,12 +74,14 @@ let construct
   let human_edges = not do_not_use_heuristic_for_edges in
   let compress_edges = not not_compress_edges in
   let compress_start = not not_compress_start in
-  let insert_newlines = not not_insert_newlines in
   match Cache.graph ~skip_disk_cache cargs with
   | Error e  -> errored graph_construction_error "%s" e
   | Ok graph ->
-    let res = Ref_graph.output ~compress_edges ~compress_start ~insert_newlines
-                ~human_edges ?max_length ~short ~pdf ~open_ ofile graph
+    let res = Ref_graph.output 
+                ~human_edges
+                ~compress_edges
+                ~compress_start
+                ?max_length ~short ~pdf ~open_ ofile graph
     in
     if res <> 0 then dot_output_error else 0
 
@@ -140,10 +140,6 @@ let () =
   let do_not_compress_start_flag =
     let doc = "Do not run encode the alleles inside a merged start box." in
     Arg.(value & flag & info ~doc [ do_not_compress_start_flag_str ])
-  in
-  let do_not_insert_newlines_flag =
-    let doc = "Do not insert newlines into a list of alleles." in
-    Arg.(value & flag & info ~doc ["do-not-insert-newline-into-alleles"])
   in
   let construct =
     let doc = "Transform MHC IMGT alignments to pdf graphs." in
@@ -241,7 +237,6 @@ let () =
             $ do_not_use_heuristic_for_edges_flag
             $ do_not_compress_edges_flag
             $ do_not_compress_start_flag
-            $ do_not_insert_newlines_flag
         , info app_name
              ~version
              ~doc

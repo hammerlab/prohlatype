@@ -93,7 +93,7 @@ let test known_differences ~reference file =
   end else
     List.fold_left different ~init:0 ~f:(fun error_code (allele, (fasta, graph_seq)) ->
       let md = manual_diff ~reference ~allele ~file () in
-      let known = Array.mem allele known_differences in
+      let known = Array.mem allele ~set:known_differences in
       let () =
         if md = fasta then
           printf "Known: %b\t%s different and manual matches fasta:\ngraph:\n%s\nmanual:\n%s\n"

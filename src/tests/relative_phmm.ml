@@ -57,7 +57,6 @@ let setup_one_read parPHMM_t rd =
   aggregate_assoc_arr, individual_assoc_arr
 
 let describe individual_assoc aggregate_assoc =
-  let open ParPHMM in
   let mgd = merge_assoc individual_assoc aggregate_assoc
       ~f:(fun allele m -> match m with
             | `First _  -> invalid_argf "Only had individual result for %s\n" allele
@@ -69,7 +68,6 @@ let describe individual_assoc aggregate_assoc =
       printf "%s\t%0.9f\t%0.9f\n" allele il al)
 
 let describe_sorted individual_assoc aggregate_assoc =
-  let open ParPHMM in
   let cmp (al1, l1) (al2, l2) =
     let lc = compare l1 l2 in
     if lc = 0 then
@@ -85,7 +83,7 @@ let describe_sorted individual_assoc aggregate_assoc =
 
 exception TestFailure of string
 
-let test_one_read parPHMM_t loci rn (aggregate_assoc_arr, individual_assoc_arr) =
+let test_one_read _parPHMM_t loci rn (aggregate_assoc_arr, individual_assoc_arr) =
   printf "Testing relative PHMM calculations for: %s in %s \n" rn loci;
   let open ParPHMM in
   let open Oml in

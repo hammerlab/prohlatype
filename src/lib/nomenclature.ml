@@ -17,7 +17,7 @@ let suffix_opt_of_char = function
   | 'C' -> Some C
   | 'A' -> Some A
   | 'Q' -> Some Q
-  | x   -> None
+  | _   -> None
 
 let suffix_to_string = function
   | N -> "N"
@@ -81,7 +81,7 @@ let parse_resolution s =
           | [ a; b ]      -> Ok (Two (a, b), suffix_opt)
           | [ a; b; c]    -> Ok (Three (a, b, c), suffix_opt)
           | [ a; b; c; d] -> Ok (Four (a, b, c, d), suffix_opt)
-          | lst           -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
+          | _lst          -> Error (sprintf "parsed more than 4 ints: %s" without_suffix)
 
 type distance = int * int * int * int
   [@@deriving eq, ord, show]
@@ -154,10 +154,13 @@ type locus =
   | L
   | MICA
   | MICB
+  | N
   | P
   | TAP1
   | TAP2
+  | S
   | T
+  | U
   | V
   | W
   | Y
@@ -191,10 +194,13 @@ let parse_locus = function
   | "L"     -> Ok L
   | "MICA"  -> Ok MICA
   | "MICB"  -> Ok MICB
+  | "N"     -> Ok N
   | "P"     -> Ok P
   | "TAP1"  -> Ok TAP1
   | "TAP2"  -> Ok TAP2
+  | "S"     -> Ok S
   | "T"     -> Ok T
+  | "U"     -> Ok U
   | "V"     -> Ok V
   | "W"     -> Ok W
   | "Y"     -> Ok Y
@@ -297,21 +303,21 @@ end *) = struct
     in
     let insert_above_final s v w so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_final_level s w so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_two_above_final s v w x so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_above_final s w x so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
     in
     let insert_three_above_final s v w x y so l =
       let eq = function
-        | (v, Leaf so)  -> invalid_argf "Nil already specified: %d" v
+        | (v, Leaf _so) -> invalid_argf "Nil already specified: %d" v
         | (v, Level tl) -> v, Level (insert_two_above_final s w x y so tl)
       in
       (insert_by_fst v) ~eq (eq (v, Level [])) l
@@ -429,7 +435,7 @@ end (* Diploid *)
 
 type locus_groups =
   | ClassI      (* A, B, C *)
-  | FullClassI  (* ^ and E, F, G, H, J, K, L, P, T, V, W, Y
+  | FullClassI  (* ^ and E, F, G, H, J, K, L, N; P, S, T, V, W, Y
                  * this isn't the full Class I list but only what IMGT
                  * currently supports. *)
 
@@ -437,5 +443,5 @@ let locus_group_to_loci = function
   | ClassI      -> [ A; B; C ]
   | FullClassI  -> [ A ; B ; C
                    ; E ; F ; G ; H ; J ; K
-                   ; L ; P ; T ; V ; W ; (* TODO: Y *)
+                   ; L ; N ; P ; S ; T ; U ; V ; W ; (* TODO: Y *)
                    ]

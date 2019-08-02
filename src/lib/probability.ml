@@ -26,8 +26,8 @@ module type Ring = sig
   type t
 
   val pp : Format.formatter -> t -> unit
-  val to_yojson : t -> Yojson.Safe.json
-  val of_yojson : Yojson.Safe.json -> (t, string) result
+  val to_yojson : t -> Yojson.Safe.t
+  val of_yojson : Yojson.Safe.t -> (t, string) result
   val to_string : ?precision:int -> t -> string
   val zero : t
   val one  : t
@@ -140,7 +140,7 @@ module RegularFloats = struct
   let times_one_third p =
     p /. 3.
 
-  let probability ?maxl x = x
+  let [@warning "-27"] probability ?maxl x = x
 
 end (* RegularFloats *)
 
