@@ -1,7 +1,7 @@
 # in
-# docker run --rm -ti ocaml/opam:alpine_ocaml-4.05.0 bash
+# docker run --rm -ti ocaml/opam:alpine_ocaml-4.06.0 bash
 
-export PTAG="0.9.0"
+export PTAG="0.9.1"
 
 cd opam-repository/
 git pull origin master

@@ -14,9 +14,8 @@ build: [
 ]
 
 depends: [
-#  "ocaml"               { >= "4.03" }
   "ocamlfind"           { build }
-  "dune"            {build & >= "1.0" }
+  "dune"                {build & >= "1.0" }
   "bisect_ppx"          { build & >= "1.3.2" }
   "ppx_deriving"        { >= "4.2.1" }
   "ppx_deriving_yojson" { >= "3.1" }
@@ -24,7 +23,7 @@ depends: [
   "sosa"                { >= "0.3.0" }
   "ocamlgraph"          { >= "1.8.8" }
   "cmdliner"            { >= "1.0.2" }
-  "biocaml"             { >= "0.8.0" }
+  "biocaml"             { >= "0.9.0" }
   "parany"              { >= "3.0.0" }
   "ocephes"             { >= "0.8.2" }
   "re"                  { >= "1.7.3" }

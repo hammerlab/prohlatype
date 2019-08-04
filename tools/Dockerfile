@@ -1,4 +1,4 @@
-FROM ocaml/opam:ubuntu-16.04_ocaml-4.05.0
+FROM ocaml/opam:ubuntu-16.04_ocaml-4.06.0
 ARG prohlatype_tag
 RUN opam repo add main https://opam.ocaml.org
 RUN opam update --yes

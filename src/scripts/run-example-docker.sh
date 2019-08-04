@@ -23,7 +23,7 @@ EOF
 
 set -e
 
-mothership_docker_image=leonidr/prohlatype:0.9.0
+mothership_docker_image=leonidr/prohlatype:0.9.1
 docker_image=local/prohlatest:latest
 tmp=$PWD/tmp/
 sample_uri=https://raw.githubusercontent.com/hammerlab/prohlatype/master/tools/test_reads.fastq

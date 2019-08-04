@@ -53,7 +53,7 @@ one can calculate:
 
       c. Make sure that you're on the relevant compiler:
 
-          $ opam switch 4.05.0
+          $ opam switch 4.06.0
           $ eval `opam config env`
 
       d. Get source:

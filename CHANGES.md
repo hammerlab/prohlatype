@@ -1,3 +1,7 @@
+Version 0.9.1 (2019-07-30):
+--------------------------
+  - Update code to latest version of Dune, OCaml 4.06.0 and warning guidelines.
+
 Version 0.9.0 (2018-04-09):
 --------------------------
   - Incorporate a coverage likelihood that corrects for the PHMM emission
