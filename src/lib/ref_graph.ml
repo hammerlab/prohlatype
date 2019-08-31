@@ -40,8 +40,7 @@ module Nodes = struct
     p < pos && pos < p + String.length s
 
   let compare_by_position_first n1 n2 =
-    let compare_int (i1 : int) (i2 : int) = Pervasives.compare i1 i2 in
-    let r = compare_int (position n1) (position n2) in
+    let r = Int.compare (position n1) (position n2) in
     if r = 0 then compare n1 n2 else r
 
   let hash = Hashtbl.hash

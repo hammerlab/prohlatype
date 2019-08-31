@@ -1,4 +1,5 @@
 include MoreLabels
+include Nonstd
 module String = Sosa.Native_string
 
 module NList = struct
@@ -12,13 +13,14 @@ module NList = struct
       (k1, f v1 v2))
 
 end (* NList *)
+module List = NList
 
 module NArray = struct
   include Nonstd.Array
 
   let rev a =
     let n = Array.length a in
-    Array.init n (fun i -> Array.unsafe_get a (n - i - 1))
+    Array.init n ~f:(fun i -> Array.unsafe_get a (n - i - 1))
 
   let findi a ~f =
     let n = Array.length a in
@@ -30,10 +32,6 @@ module NArray = struct
     loop 0
 
 end (* NArray *)
-include (Nonstd : module type of Nonstd with module List := NList
-                                         and module Array := NArray)
-
-module List = NList
 module Array = NArray
 
 let invalid_argf ?(prefix="") fmt =

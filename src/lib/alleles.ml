@@ -122,7 +122,7 @@ module CompressNames = struct
 
   let compress_int_list lst =
     let open CompressIntSequencess in
-    match List.sort lst ~cmp:(fun (c1 : int) c2 -> Pervasives.compare c1 c2) with
+    match List.sort lst ~cmp:(fun c1 c2 -> Int.compare c1 c2) with
     | []      -> ""  (* error instead? *)
     | h :: tl ->
         List.fold_left tl ~init:(Just h) ~f:add
